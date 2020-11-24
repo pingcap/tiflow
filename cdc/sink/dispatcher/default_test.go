@@ -16,6 +16,7 @@ package dispatcher
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type DefaultDispatcherSuite struct{}
@@ -23,6 +24,7 @@ type DefaultDispatcherSuite struct{}
 var _ = check.Suite(&DefaultDispatcherSuite{})
 
 func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32

@@ -111,6 +111,21 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
 
+	// pre-flight verification of encoder parameters
+	if err := newEncoder().SetParams(opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	newEncoder1 := newEncoder
+	newEncoder = func() codec.EventBatchEncoder {
+		ret := newEncoder1()
+		err := ret.SetParams(opts)
+		if err != nil {
+			log.Fatal("MQ Encoder could not parse parameters", zap.Error(err))
+		}
+		return ret
+	}
+
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
@@ -404,6 +419,12 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		config.MaxMessageBytes = c
+		opts["max-message-bytes"] = s
+	}
+
+	s = sinkURI.Query().Get("max-batch-size")
+	if s != "" {
+		opts["max-message-bytes"] = s
 	}
 
 	s = sinkURI.Query().Get("compression")
@@ -455,6 +476,16 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	s := sinkURI.Query().Get("protocol")
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
+	}
+	// These two options are not used by Pulsar producer itself, but the encoders
+	s = sinkURI.Query().Get("max-message-bytes")
+	if s != "" {
+		opts["max-message-bytes"] = s
+	}
+
+	s = sinkURI.Query().Get("max-batch-size")
+	if s != "" {
+		opts["max-message-bytes"] = s
 	}
 	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
 	// and it may needs credential.

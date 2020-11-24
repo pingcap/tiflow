@@ -16,6 +16,7 @@ package codec
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type maxwellbatchSuite struct {
@@ -107,6 +108,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 }
 
 func (s *maxwellbatchSuite) TestmaxwellEventBatchCodec(c *check.C) {
+	defer testleak.AfterTest(c)()
 	s.testmaxwellBatchCodec(c, NewMaxwellEventBatchEncoder, NewMaxwellEventBatchDecoder)
 }
 
@@ -115,6 +117,7 @@ var _ = check.Suite(&maxwellcolumnSuite{})
 type maxwellcolumnSuite struct{}
 
 func (s *maxwellcolumnSuite) TestMaxwellFormatCol(c *check.C) {
+	defer testleak.AfterTest(c)()
 	row := &maxwellMessage{
 		Ts:       1,
 		Database: "a",

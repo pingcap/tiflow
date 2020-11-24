@@ -306,7 +306,9 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			NumPartitions:     partitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 		}, false)
-		if err != nil {
+
+		// TODO idenfity the cause of "Topic with this name already exists"
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
 			return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
 	}

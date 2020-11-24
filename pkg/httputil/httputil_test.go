@@ -26,6 +26,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb-tools/pkg/utils"
 )
 
@@ -38,6 +39,7 @@ var _ = check.Suite(&httputilSuite{})
 var httputilServerMsg = "this is httputil test server"
 
 func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
+	defer testleak.AfterTest(c)()
 	port := 8303
 	ctx, cancel := context.WithCancel(context.Background())
 
