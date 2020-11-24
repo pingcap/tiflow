@@ -223,13 +223,13 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 
 	tables := make(map[int64]*model.TableInfo, len(s.tables))
 	for k, v := range s.tables {
-		tables[k] = v.Clone()
+		tables[k] = v
 	}
 	clone.tables = tables
 
 	partitionTable := make(map[int64]*model.TableInfo, len(s.partitionTable))
 	for k, v := range s.partitionTable {
-		partitionTable[k] = v.Clone()
+		partitionTable[k] = v
 	}
 	clone.partitionTable = partitionTable
 
@@ -265,6 +265,7 @@ func (s *schemaSnapshot) GetTableNameByID(id int64) (model.TableName, bool) {
 
 // GetTableIDByName returns the tableID by table schemaName and tableName
 func (s *schemaSnapshot) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
+	// TODO more ease
 	id, ok := s.tableNameToID[model.TableName{
 		Schema: schemaName,
 		Table:  tableName,
@@ -350,11 +351,6 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 	}
 
 	for _, table := range schema.Tables {
-		if pi := table.GetPartitionInfo(); pi != nil {
-			for _, partition := range pi.Definitions {
-				delete(s.partitionTable, partition.ID)
-			}
-		}
 		tableName := s.tables[table.ID].TableName
 		if pi := table.GetPartitionInfo(); pi != nil {
 			for _, partition := range pi.Definitions {
@@ -384,10 +380,13 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 }
 
 func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
-	if _, ok := s.schemas[db.ID]; !ok {
+	originDB, ok := s.schemas[db.ID]
+	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", db.Name, db.ID)
 	}
-	s.schemas[db.ID] = db.Clone()
+	db = db.Clone()
+	db.Tables = originDB.Tables
+	s.schemas[db.ID] = db
 	s.schemaNameToID[db.Name.O] = db.ID
 	return nil
 }
