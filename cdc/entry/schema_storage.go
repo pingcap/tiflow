@@ -218,7 +218,7 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
 	for k, v := range s.schemas {
 		schemas[k] = v.Clone()
-	}
+	}	
 	clone.schemas = schemas
 
 	tables := make(map[int64]*model.TableInfo, len(s.tables))
@@ -265,7 +265,6 @@ func (s *schemaSnapshot) GetTableNameByID(id int64) (model.TableName, bool) {
 
 // GetTableIDByName returns the tableID by table schemaName and tableName
 func (s *schemaSnapshot) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
-	// TODO more ease
 	id, ok := s.tableNameToID[model.TableName{
 		Schema: schemaName,
 		Table:  tableName,
