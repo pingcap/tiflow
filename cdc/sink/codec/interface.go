@@ -42,9 +42,12 @@ type EventBatchEncoder interface {
 	// TODO decouple it out
 	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
+	// Deprecated: Size is deprecated
 	Size() int
 	// Reset reset the kv buffer
 	Reset()
+	// SetParams provides the encoder with more info on the sink
+	SetParams(params map[string]string) error
 }
 
 // MQMessage represents an MQ message to the mqSink
@@ -52,6 +55,11 @@ type MQMessage struct {
 	Key   []byte
 	Value []byte
 	Ts    uint64 // reserved for possible output sorting
+}
+
+// Length returns the expected size of the Kafka message
+func (m *MQMessage) Length() int {
+	return len(m.Key) + len(m.Value)
 }
 
 // NewMQMessage should be used when creating a MQMessage struct.

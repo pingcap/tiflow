@@ -46,11 +46,13 @@ import (
 
 // Sarama configuration options
 var (
-	kafkaAddrs        []string
-	kafkaTopic        string
-	kafkaPartitionNum int32
-	kafkaGroupID      = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
-	kafkaVersion      = "2.4.0"
+	kafkaAddrs           []string
+	kafkaTopic           string
+	kafkaPartitionNum    int32
+	kafkaGroupID         = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
+	kafkaVersion         = "2.4.0"
+	kafkaMaxMessageBytes = math.MaxInt64
+	kafkaMaxBatchSize    = math.MaxInt64
 
 	downstreamURIStr string
 
@@ -71,7 +73,6 @@ func init() {
 	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
-
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -122,6 +123,27 @@ func init() {
 		}
 		kafkaPartitionNum = int32(c)
 	}
+
+	s = upstreamURI.Query().Get("max-message-bytes")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal("invalid max-message-bytes of upstream-uri")
+		}
+		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", c))
+		kafkaMaxMessageBytes = c
+	}
+
+	s = upstreamURI.Query().Get("max-batch-size")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal("invalid max-batch-size of upstream-uri")
+		}
+		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
+		kafkaMaxBatchSize = c
+	}
+
 }
 
 func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
@@ -370,6 +392,8 @@ ClaimMessages:
 		if err != nil {
 			return errors.Trace(err)
 		}
+
+		counter := 0
 		for {
 			tp, hasNext, err := batchDecoder.HasNext()
 			if err != nil {
@@ -378,6 +402,14 @@ ClaimMessages:
 			if !hasNext {
 				break
 			}
+
+			counter++
+			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
+			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
+				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
+					zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
+			}
+
 			switch tp {
 			case model.MqMessageTypeDDL:
 				ddl, err := batchDecoder.NextDDLEvent()
@@ -425,6 +457,11 @@ ClaimMessages:
 				}
 			}
 			session.MarkMessage(message, "")
+		}
+
+		if counter > kafkaMaxBatchSize {
+			log.Fatal("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", kafkaMaxBatchSize),
+				zap.Int("actual-batch-size", counter))
 		}
 	}
 

@@ -241,3 +241,9 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
+
+// SetParams is no-op for now
+func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
+	// no op
+	return nil
+}
