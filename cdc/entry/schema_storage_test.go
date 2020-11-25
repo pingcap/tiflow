@@ -16,7 +16,6 @@ package entry
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 
 	"github.com/google/go-cmp/cmp"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
@@ -781,22 +781,15 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 /*
 TODO: Untested Action:
 
+ActionAddForeignKey                 ActionType = 9
+ActionDropForeignKey                ActionType = 10
 ActionRebaseAutoID                  ActionType = 13
-ActionSetDefaultValue               ActionType = 15
 ActionShardRowID                    ActionType = 16
-ActionModifyTableComment            ActionType = 17
-ActionAddTablePartition             ActionType = 19
-ActionDropTablePartition            ActionType = 20
-ActionModifyTableCharsetAndCollate  ActionType = 22
-ActionTruncateTablePartition        ActionType = 23
-ActionRecoverTable                  ActionType = 25
 ActionLockTable                     ActionType = 27
 ActionUnlockTable                   ActionType = 28
 ActionRepairTable                   ActionType = 29
 ActionSetTiFlashReplica             ActionType = 30
 ActionUpdateTiFlashReplicaStatus    ActionType = 31
-ActionAddPrimaryKey                 ActionType = 32
-ActionDropPrimaryKey                ActionType = 33
 ActionCreateSequence                ActionType = 34
 ActionAlterSequence                 ActionType = 35
 ActionDropSequence                  ActionType = 36
@@ -814,33 +807,56 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	testCases := [][]string{{
-		"create database test_ddl1",                                                             // ActionCreateSchema
-		"create table test_ddl1.simple_test1 (id bigint primary key)",                           // ActionCreateTable
-		"create table test_ddl1.simple_test2 (id bigint)",                                       // ActionCreateTable
-		"create table test_ddl1.simple_test3 (id bigint primary key)",                           // ActionCreateTable
-		"create table test_ddl1.simple_test4 (id bigint primary key)",                           // ActionCreateTable
-		"DROP TABLE test_ddl1.simple_test3",                                                     // ActionDropTable
-		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                         // ActionAddColumn
-		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                       // ActionAddColumn
-		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",           // ActionAddColumns
-		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                            // ActionDropColumn
-		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                   // ActionDropColumns
-		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                     // ActionAddIndex
-		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                      // ActionDropIndex
-		"TRUNCATE test_ddl1.simple_test1",                                                       // ActionTruncateTable
-		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                        // ActionModifySchemaCharsetAndCollate
-		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",           // ActionAddColumns
-		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                     // ActionAddIndex
-		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                           // ActionAlterIndexVisibility
-		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                          // ActionRenameIndex
-		"ALTER TABLE test_ddl1.simple_test2 MODIFY c2 BIGINT",                                   // ActionModifyColumn
-		"CREATE VIEW test_ddl1.view_test2 AS SELECT * FROM test_ddl1.simple_test2 WHERE id > 2", // ActionCreateView
-		"DROP VIEW test_ddl1.view_test2",                                                        // ActionDropView
-		"RENAME TABLE test_ddl1.simple_test2 TO test_ddl1.simple_test5",                         // ActionRenameTable
-		"DROP DATABASE test_ddl1",                                                               // ActionDropSchema
+		"create database test_ddl1",                                                               // ActionCreateSchema
+		"create table test_ddl1.simple_test1 (id bigint primary key)",                             // ActionCreateTable
+		"create table test_ddl1.simple_test2 (id bigint)",                                         // ActionCreateTable
+		"create table test_ddl1.simple_test3 (id bigint primary key)",                             // ActionCreateTable
+		"create table test_ddl1.simple_test4 (id bigint primary key)",                             // ActionCreateTable
+		"DROP TABLE test_ddl1.simple_test3",                                                       // ActionDropTable
+		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                           // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                         // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",             // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                              // ActionDropColumn
+		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                     // ActionDropColumns
+		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                       // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                        // ActionDropIndex
+		"TRUNCATE test_ddl1.simple_test1",                                                         // ActionTruncateTable
+		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                          // ActionModifySchemaCharsetAndCollate
+		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",             // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                       // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                             // ActionAlterIndexVisibility
+		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                            // ActionRenameIndex
+		"ALTER TABLE test_ddl1.simple_test2 MODIFY c2 BIGINT",                                     // ActionModifyColumn
+		"CREATE VIEW test_ddl1.view_test2 AS SELECT * FROM test_ddl1.simple_test2 WHERE id > 2",   // ActionCreateView
+		"DROP VIEW test_ddl1.view_test2",                                                          // ActionDropView
+		"RENAME TABLE test_ddl1.simple_test2 TO test_ddl1.simple_test5",                           // ActionRenameTable
+		"DROP DATABASE test_ddl1",                                                                 // ActionDropSchema
+		"create database test_ddl2",                                                               // ActionCreateSchema
+		"create table test_ddl2.simple_test1 (id bigint primary key, c1 int not null unique key)", // ActionCreateTable
+		`CREATE TABLE test_ddl2.employees  (
+			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+			fname VARCHAR(25) NOT NULL,
+			lname VARCHAR(25) NOT NULL,
+			store_id INT NOT NULL,
+			department_id INT NOT NULL
+		)
 
-	},
-	}
+		PARTITION BY RANGE(id)  (
+			PARTITION p0 VALUES LESS THAN (5),
+			PARTITION p1 VALUES LESS THAN (10),
+			PARTITION p2 VALUES LESS THAN (15),
+			PARTITION p3 VALUES LESS THAN (20)
+		)`, // ActionCreateTable
+		"ALTER TABLE test_ddl2.employees DROP PARTITION p2",                                  // ActionDropTablePartition
+		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", //ActionAddTablePartition
+		"ALTER TABLE test_ddl2.employees TRUNCATE PARTITION p3",                              // ActionTruncateTablePartition
+		"alter table test_ddl2.employees comment='modify comment'",                           // ActionModifyTableComment
+		"alter table test_ddl2.simple_test1 drop primary key",                                // ActionDropPrimaryKey
+		"alter table test_ddl2.simple_test1 add primary key pk(id)",                          // ActionAddPrimaryKey
+		"ALTER TABLE test_ddl2.simple_test1 ALTER id SET DEFAULT 18",                         // ActionSetDefaultValue
+		"ALTER TABLE test_ddl2.simple_test1 CHARACTER SET = utf8mb4",                         // ActionModifyTableCharsetAndCollate
+		// "recover table test_ddl2.employees",                                                  // ActionRecoverTable this ddl can't work on mock tikv
+	}}
 
 	checkSnapsEquals := func(snapA *schemaSnapshot, snapB *schemaSnapshot) {
 		c.Assert(snapA, check.DeepEquals, snapB,
@@ -851,6 +867,9 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		store, err := mockstore.NewMockStore()
 		c.Assert(err, check.IsNil)
 		defer store.Close() //nolint:errcheck
+		ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
+			conf.AlterPrimaryKey = true
+		})
 		session.SetSchemaLease(0)
 		session.DisableStats4Test()
 		domain, err := session.BootstrapSession(store)
@@ -868,9 +887,6 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
 		c.Assert(err, check.IsNil)
 		for _, job := range jobs {
-			if job.Query == "create table test_ddl1.simple_test3 (id bigint primary key)" {
-				println()
-			}
 			err := scheamStorage.HandleDDLJob(job)
 			c.Assert(err, check.IsNil)
 		}
@@ -886,10 +902,6 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 
 			tidySchemaSnapshot(snapFromMeta)
 			tidySchemaSnapshot(snapFromSchemaStore)
-
-			if !reflect.DeepEqual(snapFromMeta, snapFromSchemaStore) {
-				println("!")
-			}
 			// check if the two snapshot are equal.
 			checkSnapsEquals(snapFromMeta, snapFromSchemaStore)
 		}
