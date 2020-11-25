@@ -15,16 +15,16 @@ package cmd
 
 import (
 	"context"
-	"github.com/pingcap/ticdc/pkg/config"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
-	"github.com/pingcap/tidb/config"
+	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -54,7 +54,7 @@ var (
 )
 
 func patchTiDBConf() {
-	config.UpdateGlobal(func(conf *config.Config) {
+	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		// Disable kv client batch send loop introduced by tidb library, which is not used in TiCDC server
 		conf.TiKVClient.MaxBatchSize = 0
 	})
