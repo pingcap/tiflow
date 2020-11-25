@@ -20,9 +20,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
+	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -46,7 +48,15 @@ var (
 	}
 )
 
+func patchTiDBConf() {
+	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
+		// Disable kv client batch send loop introduced by tidb library, which is not used in TiCDC server
+		conf.TiKVClient.MaxBatchSize = 0
+	})
+}
+
 func init() {
+	patchTiDBConf()
 	rootCmd.AddCommand(serverCmd)
 
 	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
