@@ -32,7 +32,7 @@ MAC   := "Darwin"
 PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
-FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'kv_gen')
 CDC_PKG := github.com/pingcap/ticdc
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
 FAILPOINT := bin/failpoint-ctl
@@ -105,6 +105,8 @@ integration_test_build: check_failpoint_ctl
 		-coverpkg=github.com/pingcap/ticdc/... \
 		-o bin/cdc.test github.com/pingcap/ticdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
 integration_test: integration_test_mysql
@@ -143,8 +145,8 @@ check: check-copyright fmt lint check-static tidy errdoc
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
-	grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
@@ -156,7 +158,7 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s
+	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen
 
 clean:
 	go clean -i ./...

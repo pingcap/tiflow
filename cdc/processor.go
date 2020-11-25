@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -61,6 +62,8 @@ const (
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	defaultSyncResolvedBatch = 1024
+
+	schemaStorageGCLag = time.Minute * 20
 )
 
 var (
@@ -86,6 +89,7 @@ type processor struct {
 	globalResolvedTs        uint64
 	localResolvedTs         uint64
 	checkpointTs            uint64
+	globalcheckpointTs      uint64
 	flushCheckpointInterval time.Duration
 
 	ddlPuller       puller.Puller
@@ -664,12 +668,17 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	defer globalResolvedTsNotifier.Close()
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
+		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return
 		}
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
+			// Delay GC to accommodate pullers starting from a startTs that's too small
+			// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
+			gcTime := oracle.GetTimeFromTS(changefeedStatus.CheckpointTs).Add(-schemaStorageGCLag)
+			gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
+			p.schemaStorage.DoGC(gcTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
 		}
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
@@ -697,7 +706,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return
-				case p.output <- model.NewResolvedPolymorphicEvent(0, lastResolvedTs):
+				case p.output <- model.NewResolvedPolymorphicEvent(0, globalResolvedTs):
 					// regionID = 0 means the event is produced by TiCDC
 				}
 			}
@@ -873,6 +882,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				resolvedTs = localResolvedTs
 			}
 			if row.CRTs <= resolvedTs {
+				_ = row.WaitPrepare(ctx)
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
 					zap.String("changefeed", p.changefeedID),
@@ -937,6 +947,16 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			return
 		}
 	}
+
+	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+
+	if replicaInfo.StartTs < globalcheckpointTs {
+		log.Warn("addTable: startTs < checkpoint",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("startTs", replicaInfo.StartTs))
+	}
+
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 	log.Debug("Add table", zap.Int64("tableID", tableID),
 		zap.String("name", tableName),
@@ -973,7 +993,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorterImpl = puller.NewEntrySorter()
-		case model.SortInFile:
+		case model.SortInFile, model.SortUnified:
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				if os.IsNotExist(errors.Cause(err)) {
@@ -987,7 +1007,13 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 					return nil
 				}
 			}
-			sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
+
+			if p.changefeed.Engine == model.SortInFile {
+				sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
+			} else {
+				// Unified Sorter
+				sorterImpl = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
+			}
 		default:
 			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
 			return nil
@@ -1091,6 +1117,17 @@ func (p *processor) sorterConsume(
 			if pEvent == nil {
 				continue
 			}
+
+			pEvent.SetUpFinishedChan()
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case p.mounter.Input() <- pEvent:
+			}
+
 			if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
@@ -1147,14 +1184,6 @@ func (p *processor) pullerConsume(
 			}
 			pEvent := model.NewPolymorphicEvent(rawKV)
 			sorter.AddEntry(ctx, pEvent)
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
-				}
-				return
-			case p.mounter.Input() <- pEvent:
-			}
 		}
 	}
 }
