@@ -61,7 +61,6 @@ func newStorageWithCurVersionCache(storage tidbkv.Storage, cacheKey string) tidb
 		curVersionCache[cacheKey] = &curVersionCacheEntry{
 			ts:          0,
 			lastUpdated: time.Unix(0, 0),
-			mu:          sync.Mutex{},
 		}
 	}
 
