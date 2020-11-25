@@ -36,11 +36,13 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 	r1 := notifier.NewReceiver(-1)
 	r2 := notifier.NewReceiver(-1)
 	r3 := notifier.NewReceiver(-1)
+	finishedCh := make(chan struct{})
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second)
 			notifier.Notify()
 		}
+		close(finishedCh)
 	}()
 	<-r1.C
 	r1.Stop()
@@ -50,7 +52,6 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 	r2.Stop()
 	r3.Stop()
 	c.Assert(len(notifier.receivers), check.Equals, 0)
-	time.Sleep(time.Second)
 	r4 := notifier.NewReceiver(-1)
 	<-r4.C
 	r4.Stop()
@@ -59,6 +60,7 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 	r5 := notifier2.NewReceiver(10 * time.Millisecond)
 	<-r5.C
 	r5.Stop()
+	<-finishedCh // To make the leak checker happy
 }
 
 func (s *notifySuite) TestContinusStop(c *check.C) {
