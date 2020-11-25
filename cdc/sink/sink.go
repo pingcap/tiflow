@@ -55,6 +55,53 @@ type Sink interface {
 	Close() error
 }
 
+var sinkIniterMap = make(map[string]sinkInitFunc)
+
+type sinkInitFunc func(context.Context, model.ChangeFeedID, *url.URL, *filter.Filter, *config.ReplicaConfig, map[string]string, chan error) (Sink, error)
+
+func init() {
+	// register blockhole sink
+	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return newBlackHoleSink(ctx, opts), nil
+	}
+
+	// register mysql sink
+	sinkIniterMap["mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return newMySQLSink(ctx, changefeedID, sinkURI, filter, config, opts)
+	}
+	sinkIniterMap["tidb"] = sinkIniterMap["mysql"]
+	sinkIniterMap["mysql+ssl"] = sinkIniterMap["mysql"]
+	sinkIniterMap["tidb+ssl"] = sinkIniterMap["mysql"]
+
+	// register kafka sink
+	sinkIniterMap["kafka"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
+	}
+	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
+
+	//register pulsar sink
+	sinkIniterMap["pulsar"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
+	}
+	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
+
+	// register local sink
+	sinkIniterMap["local"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
+	}
+
+	// register s3 sink
+	sinkIniterMap["s3"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
+	}
+}
+
 // NewSink creates a new sink with the sink-uri
 func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// parse sinkURI as a URI
@@ -62,20 +109,8 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	switch strings.ToLower(sinkURI.Scheme) {
-	case "blackhole":
-		return newBlackHoleSink(ctx, opts), nil
-	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
-		return newMySQLSink(ctx, changefeedID, sinkURI, filter, config, opts)
-	case "kafka", "kafka+ssl":
-		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
-	case "pulsar", "pulsar+ssl":
-		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
-	case "local":
-		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
-	case "s3":
-		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
-	default:
-		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
+	if newSink, ok := sinkIniterMap[strings.ToLower(sinkURI.Scheme)]; ok {
+		return newSink(ctx, changefeedID, sinkURI, filter, config, opts, errCh)
 	}
+	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 }

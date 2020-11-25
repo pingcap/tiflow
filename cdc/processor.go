@@ -62,6 +62,8 @@ const (
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	defaultSyncResolvedBatch = 1024
+
+	schemaStorageGCLag = time.Minute * 20
 )
 
 var (
@@ -87,6 +89,7 @@ type processor struct {
 	globalResolvedTs        uint64
 	localResolvedTs         uint64
 	checkpointTs            uint64
+	globalcheckpointTs      uint64
 	flushCheckpointInterval time.Duration
 
 	ddlPuller       puller.Puller
@@ -665,12 +668,17 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	defer globalResolvedTsNotifier.Close()
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
+		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return
 		}
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
+			// Delay GC to accommodate pullers starting from a startTs that's too small
+			// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
+			gcTime := oracle.GetTimeFromTS(changefeedStatus.CheckpointTs).Add(-schemaStorageGCLag)
+			gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
+			p.schemaStorage.DoGC(gcTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
 		}
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
@@ -939,6 +947,16 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			return
 		}
 	}
+
+	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+
+	if replicaInfo.StartTs < globalcheckpointTs {
+		log.Warn("addTable: startTs < checkpoint",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("startTs", replicaInfo.StartTs))
+	}
+
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 	log.Debug("Add table", zap.Int64("tableID", tableID),
 		zap.String("name", tableName),
