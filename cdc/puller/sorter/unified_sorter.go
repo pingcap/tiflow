@@ -15,9 +15,6 @@ package sorter
 
 import (
 	"context"
-	"go.uber.org/zap"
-	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -150,16 +147,4 @@ func tableNameFromCtx(ctx context.Context) string {
 		return sorter.tableName
 	}
 	return ""
-}
-
-func init() {
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		for range ticker.C {
-			failpoint.Inject("sorterDebug", func() {
-				log.Info("Unified Sorter: open file statistics", zap.Int64("num-open-fd", atomic.LoadInt64(&openFDCount)))
-			})
-		}
-	}()
-
 }
