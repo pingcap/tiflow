@@ -856,6 +856,24 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		"ALTER TABLE test_ddl2.simple_test1 ALTER id SET DEFAULT 18",                         // ActionSetDefaultValue
 		"ALTER TABLE test_ddl2.simple_test1 CHARACTER SET = utf8mb4",                         // ActionModifyTableCharsetAndCollate
 		// "recover table test_ddl2.employees",                                                  // ActionRecoverTable this ddl can't work on mock tikv
+
+		"DROP TABLE test_ddl2.employees",
+		`CREATE TABLE test_ddl2.employees2  (
+			id INT NOT NULL,
+			fname VARCHAR(25) NOT NULL,
+			lname VARCHAR(25) NOT NULL,
+			store_id INT NOT NULL,
+			department_id INT NOT NULL
+		)
+
+		PARTITION BY RANGE(id)  (
+			PARTITION p0 VALUES LESS THAN (5),
+			PARTITION p1 VALUES LESS THAN (10),
+			PARTITION p2 VALUES LESS THAN (15),
+			PARTITION p3 VALUES LESS THAN (20)
+		)`,
+		"ALTER TABLE test_ddl2.employees2 CHARACTER SET = utf8mb4",
+		"DROP DATABASE test_ddl2",
 	}}
 
 	checkSnapsEquals := func(snapA *schemaSnapshot, snapB *schemaSnapshot) {
