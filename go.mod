@@ -24,41 +24,29 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-<<<<<<< HEAD
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/pingcap/br v0.0.0-20200907090854-8a4cd9e0abd1
-=======
 	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v0.0.0-20200923023944-7456456854e4
->>>>>>> ad1354b... optimization: Unified Sorter (#972)
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200917111840-a15ef68f753d
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/kvproto v0.0.0-20200909045102-2ac90648531b
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
-<<<<<<< HEAD
 	github.com/pingcap/parser v0.0.0-20200921063432-e220cfcfd026
 	github.com/pingcap/tidb v1.1.0-beta.0.20200921080130-30cfb6af225c
-=======
-	github.com/pingcap/parser v0.0.0-20200924053142-5d7e8ebf605e
-	github.com/pingcap/tidb v1.1.0-beta.0.20200927065602-486e473a86e9
->>>>>>> ad1354b... optimization: Unified Sorter (#972)
 	github.com/pingcap/tidb-tools v4.0.6-0.20200828085514-03575b185007+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
-<<<<<<< HEAD
 	github.com/tikv/pd v1.1.0-beta.0.20200907080620-6830f5bb92a2
-=======
-	github.com/tikv/pd v1.1.0-beta.0.20200907085700-5b04bec39b99
 	github.com/tinylib/msgp v1.1.2
->>>>>>> ad1354b... optimization: Unified Sorter (#972)
 	github.com/uber-go/atomic v1.3.2
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
