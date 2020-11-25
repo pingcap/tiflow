@@ -48,10 +48,10 @@ var (
 )
 
 func patchTiDBConf() {
-	conf := config.NewConfig()
-	// Disable kv client batch send loop introduced by tidb library, which is not used in TiCDC server
-	conf.TiKVClient.MaxBatchSize = 0
-	config.StoreGlobalConfig(conf)
+	config.UpdateGlobal(func(conf *config.Config) {
+		// Disable kv client batch send loop introduced by tidb library, which is not used in TiCDC server
+		conf.TiKVClient.MaxBatchSize = 0
+	})
 }
 
 func init() {
