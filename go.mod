@@ -16,6 +16,7 @@ require (
 	github.com/golang/protobuf v1.3.4
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/btree v1.0.0
+	github.com/google/go-cmp v0.5.4
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
@@ -24,13 +25,10 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-	github.com/mattn/go-shellwords v1.0.3
-	github.com/pingcap/br v0.0.0-20200907090854-8a4cd9e0abd1
 	github.com/mackerelio/go-osstat v0.1.0
-	github.com/mattn/go-colorable v0.1.7 // indirect
-	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/philhofer/fwd v1.0.0 // indirect
+	github.com/pingcap/br v0.0.0-20200907090854-8a4cd9e0abd1
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200917111840-a15ef68f753d
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
