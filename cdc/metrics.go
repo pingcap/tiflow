@@ -14,6 +14,7 @@
 package cdc
 
 import (
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -37,5 +38,6 @@ func init() {
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
+	sorter.InitMetrics(registry)
 	initProcessorMetrics(registry)
 }

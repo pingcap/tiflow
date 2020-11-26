@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/pkg/config"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -36,6 +37,11 @@ var (
 	gcTTL         int64
 	logFile       string
 	logLevel      string
+	// variables for unified sorter
+	numConcurrentWorker  int
+	chunkSizeLimit       uint64
+	maxMemoryPressure    int
+	maxMemoryConsumption uint64
 
 	ownerFlushInterval     time.Duration
 	processorFlushInterval time.Duration
@@ -67,6 +73,12 @@ func init() {
 	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
 	serverCmd.Flags().DurationVar(&ownerFlushInterval, "owner-flush-interval", time.Millisecond*200, "owner flushes changefeed status interval")
 	serverCmd.Flags().DurationVar(&processorFlushInterval, "processor-flush-interval", time.Millisecond*100, "processor flushes task status interval")
+
+	serverCmd.Flags().IntVar(&numConcurrentWorker, "sorter-num-concurrent-worker", 8, "sorter concurrency level")
+	serverCmd.Flags().Uint64Var(&chunkSizeLimit, "sorter-chunk-size-limit", 1024*1024*1024, "size of heaps for sorting")
+	serverCmd.Flags().IntVar(&maxMemoryPressure, "sorter-max-memory-percentage", 90, "system memory usage threshold for forcing in-disk sort")
+	serverCmd.Flags().Uint64Var(&maxMemoryConsumption, "sorter-max-memory-consumption", 16*1024*1024*1024, "maximum memory consumption of in-memory sort")
+
 	addSecurityFlags(serverCmd.Flags(), true /* isServer */)
 }
 
@@ -80,6 +92,13 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
+
+	config.SetSorterConfig(&config.SorterConfig{
+		NumConcurrentWorker:  numConcurrentWorker,
+		ChunkSizeLimit:       chunkSizeLimit,
+		MaxMemoryPressure:    maxMemoryPressure,
+		MaxMemoryConsumption: maxMemoryConsumption,
+	})
 
 	version.LogVersionInfo()
 	opts := []cdc.ServerOption{
