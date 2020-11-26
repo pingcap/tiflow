@@ -317,7 +317,6 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 	var versionByte [8]byte
 	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
 	keyBuf.Write(versionByte[:])
-	//keyBuf.Write(keyLenByte[:])
 	keyBuf.Write(key)
 	valueBuf := new(bytes.Buffer)
 	valueBuf.Write(value)
