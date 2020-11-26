@@ -524,11 +524,8 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if p.statusModRevision == modRevision && !taskStatus.SomeOperationsUnapplied() {
 				return false, nil
 			}
+			// task will be stopped in capture task handler, do nothing
 			if taskStatus.AdminJobType.IsStopState() {
-				err := p.stop(ctx)
-				if err != nil {
-					return false, backoff.Permanent(errors.Trace(err))
-				}
 				return false, backoff.Permanent(cerror.ErrAdminStopProcessor.GenWithStackByArgs())
 			}
 			toRemove, err := p.handleTables(ctx, taskStatus)
