@@ -14,12 +14,11 @@
 package sorter
 
 import (
-	"go.uber.org/zap"
-	"sync/atomic"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
+	"sync/atomic"
 )
 
 type memoryBackEnd struct {

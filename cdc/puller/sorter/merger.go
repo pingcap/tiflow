@@ -16,8 +16,6 @@ package sorter
 import (
 	"container/heap"
 	"context"
-	"github.com/pingcap/ticdc/pkg/util"
-	"go.uber.org/zap"
 	"math"
 	"strings"
 	"time"
@@ -25,6 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent) error {
