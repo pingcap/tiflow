@@ -35,6 +35,8 @@ import (
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
+	// DefaultMaxMessageBytes sets the default value for max-message-bytes
+	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
 )
 
 type column struct {
@@ -297,9 +299,16 @@ func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent
 
 // JSONEventBatchEncoder encodes the events into the byte of a batch into.
 type JSONEventBatchEncoder struct {
-	keyBuf            *bytes.Buffer
-	valueBuf          *bytes.Buffer
-	supportMixedBuild bool // TODO decouple this out
+	// TODO remove deprecated fields
+	keyBuf            *bytes.Buffer // Deprecated: only used for MixedBuild for now
+	valueBuf          *bytes.Buffer // Deprecated: only used for MixedBuild for now
+	supportMixedBuild bool          // TODO decouple this out
+
+	messageBuf   []*MQMessage
+	curBatchSize int
+	// configs
+	maxKafkaMessageSize int
+	maxBatchSize        int
 }
 
 // SetMixedBuildSupport is used by CDC Log
@@ -363,11 +372,37 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
 
-	d.valueBuf.Write(valueLenByte[:])
-	d.valueBuf.Write(value)
+		d.valueBuf.Write(valueLenByte[:])
+		d.valueBuf.Write(value)
+	} else {
+		if len(d.messageBuf) == 0 ||
+			d.curBatchSize >= d.maxBatchSize ||
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
+
+			versionHead := make([]byte, 8)
+			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
+
+			d.messageBuf = append(d.messageBuf, NewMQMessage(versionHead, nil, 0))
+			d.curBatchSize = 0
+		}
+
+		message := d.messageBuf[len(d.messageBuf)-1]
+		message.Key = append(message.Key, keyLenByte[:]...)
+		message.Key = append(message.Key, key...)
+		message.Value = append(message.Value, valueLenByte[:]...)
+		message.Value = append(message.Value, value...)
+
+		if message.Length() > d.maxKafkaMessageSize {
+			// `len(d.messageBuf) == 1` is implied
+			log.Warn("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
+				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
+		}
+		d.curBatchSize++
+	}
 	return EncoderNoOperation, nil
 }
 
@@ -413,20 +448,17 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 
 // Build implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
-	if d.valueBuf.Len() == 0 {
-		return nil
+	if d.supportMixedBuild {
+		if d.valueBuf.Len() == 0 {
+			return nil
+		}
+		ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+		return []*MQMessage{ret}
 	}
 
-	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
-
-	if !d.supportMixedBuild {
-		d.keyBuf.Reset()
-		d.valueBuf.Reset()
-		var versionByte [8]byte
-		binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
-		d.keyBuf.Write(versionByte[:])
-	}
-	return []*MQMessage{ret}
+	ret := d.messageBuf
+	d.messageBuf = make([]*MQMessage, 0)
+	return ret
 }
 
 // MixedBuild implements the EventBatchEncoder interface
@@ -479,6 +511,31 @@ func (d *JSONEventBatchEncoder) Size() int {
 func (d *JSONEventBatchEncoder) Reset() {
 	d.keyBuf.Reset()
 	d.valueBuf.Reset()
+}
+
+// SetParams reads relevant parameters for Open Protocol
+func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
+	var err error
+	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
+		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
+		if err != nil {
+			// TODO add error code
+			return errors.Trace(err)
+		}
+	} else {
+		d.maxKafkaMessageSize = DefaultMaxMessageBytes
+	}
+
+	if maxBatchSize, ok := params["max-batch-size"]; ok {
+		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
+		if err != nil {
+			// TODO add error code
+			return errors.Trace(err)
+		}
+	} else {
+		d.maxBatchSize = 4096
+	}
+	return nil
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.

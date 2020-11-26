@@ -32,7 +32,7 @@ const (
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-canal.yml
 type KafkaDockerEnv struct {
-	framework.KafkaDockerEnv
+	framework.DockerEnv
 }
 
 // NewKafkaDockerEnv creates a new KafkaDockerEnv
@@ -57,7 +57,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		file = dockerComposeFile
 	}
 
-	return &KafkaDockerEnv{KafkaDockerEnv: framework.KafkaDockerEnv{
+	return &KafkaDockerEnv{DockerEnv: framework.DockerEnv{
 		DockerComposeOperator: framework.DockerComposeOperator{
 			FileName:      file,
 			Controller:    controllerContainerName,

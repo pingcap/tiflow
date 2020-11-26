@@ -16,6 +16,7 @@ package regionspan
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type regionSuite struct{}
@@ -23,6 +24,7 @@ type regionSuite struct{}
 var _ = check.Suite(&regionSuite{})
 
 func (s *regionSuite) TestCheckRegionsLeftCover(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cases := []struct {
 		regions []*metapb.Region
 		span    ComparableSpan

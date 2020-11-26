@@ -37,3 +37,4 @@ ignore:
   - "*.toml"
   - "*.md"
   - "docs/.*"
+  - "testing_utils/.*"

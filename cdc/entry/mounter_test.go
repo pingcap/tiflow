@@ -469,22 +469,27 @@ func (cs *mountTxnsSuite) testLargeInteger(c *check.C, newRowFormat bool) {
 }
 
 func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
+		defer testleak.AfterTest(c)()
 	cs.testInsertPkNotHandle(c, true)
 	cs.testInsertPkNotHandle(c, false)
 }
 func (cs *mountTxnsSuite) TestIncompleteRow(c *check.C) {
+		defer testleak.AfterTest(c)()
 	cs.testIncompleteRow(c, true)
 	cs.testIncompleteRow(c, false)
 }
 func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
+		defer testleak.AfterTest(c)()
 	cs.testInsertPkIsHandle(c, true)
 	cs.testInsertPkIsHandle(c, false)
 }
 func (cs *mountTxnsSuite) TestUk(c *check.C) {
+		defer testleak.AfterTest(c)()
 	cs.testUk(c, true)
 	cs.testUk(c, false)
 }
 func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
+		defer testleak.AfterTest(c)()
 	cs.testLargeInteger(c, true)
 	cs.testLargeInteger(c, false)
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/pingcap/ticdc/integration/framework/avro"
 	"github.com/pingcap/ticdc/integration/framework/canal"
+	"github.com/pingcap/ticdc/integration/framework/mysql"
 	"github.com/pingcap/ticdc/integration/tests"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -75,6 +76,37 @@ func testCanalJSON() {
 	runTests(testCases, env)
 }
 
+func testMySQL() {
+	env := mysql.NewDockerEnv(*dockerComposeFile)
+	task := &mysql.SingleTableTask{TableName: "test"}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		tests.NewUnsignedCase(task),
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
+func testMySQLWithCheckingOldvValue() {
+	env := mysql.NewDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
+	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		tests.NewUnsignedCase(task),
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
 func runTests(cases []framework.Task, env framework.Environment) {
 	log.SetLevel(zapcore.DebugLevel)
 	env.Setup()
@@ -97,6 +129,10 @@ func main() {
 		testCanal()
 	} else if *testProtocol == "canalJson" {
 		testCanalJSON()
+	} else if *testProtocol == "mysql" {
+		testMySQL()
+	} else if *testProtocol == "simple-mysql-checking-old-value" {
+		testMySQLWithCheckingOldvValue()
 	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}

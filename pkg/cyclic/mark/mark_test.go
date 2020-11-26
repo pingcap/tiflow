@@ -17,15 +17,17 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type markSuit struct{}
+type markSuite struct{}
 
-var _ = check.Suite(&markSuit{})
+var _ = check.Suite(&markSuite{})
 
 func Test(t *testing.T) { check.TestingT(t) }
 
-func (s *markSuit) TestIsMarkTable(c *check.C) {
+func (s *markSuite) TestIsMarkTable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		schema, table string
 		isMarkTable   bool
