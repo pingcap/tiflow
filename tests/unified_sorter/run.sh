@@ -22,7 +22,6 @@ function run() {
     run_sql "CREATE DATABASE unified_sort;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=unified_sort
 
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug=return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
