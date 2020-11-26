@@ -815,14 +815,17 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		"DROP TABLE test_ddl1.simple_test3",                                                       // ActionDropTable
 		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                           // ActionAddColumn
 		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                         // ActionAddColumn
-		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",             // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL",                                  // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test1 ADD c4 INT NOT NULL",                                  // ActionAddColumns
 		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                              // ActionDropColumn
-		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                     // ActionDropColumns
+		"ALTER TABLE test_ddl1.simple_test1 DROP c2",                                              // ActionDropColumns
+		"ALTER TABLE test_ddl1.simple_test1 DROP c3",                                              // ActionDropColumns
 		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                       // ActionAddIndex
 		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                        // ActionDropIndex
 		"TRUNCATE test_ddl1.simple_test1",                                                         // ActionTruncateTable
 		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                          // ActionModifySchemaCharsetAndCollate
-		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",             // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL",                                  // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test2 ADD c2 INT NOT NULL",                                  // ActionAddColumns
 		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                       // ActionAddIndex
 		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                             // ActionAlterIndexVisibility
 		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                            // ActionRenameIndex
@@ -882,7 +885,7 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 	}
 
 	testOneGroup := func(tc []string) {
-		store, err := mockstore.NewMockStore()
+		store, err := mockstore.NewMockTikvStore()
 		c.Assert(err, check.IsNil)
 		defer store.Close() //nolint:errcheck
 		ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
