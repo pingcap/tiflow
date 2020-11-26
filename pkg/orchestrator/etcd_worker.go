@@ -19,17 +19,23 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
 type EtcdWorker struct {
 	client *etcd.Client
 	reactor Reactor
+	state ReactorState
+	rawState map[string][]byte
+	prefix string
+	revision int64
 }
 
-func NewEtcdWorker(client *etcd.Client, reactor Reactor) (*EtcdWorker, error) {
+func NewEtcdWorker(client *etcd.Client, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		client:  client,
 		reactor: reactor,
+		state: initState,
 	}, nil
 }
 
@@ -54,8 +60,24 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string) error {
 			continue
 		}
 
+		worker.revision = response.Header.GetRevision()
+
+		isUpdated := false
 		for _, event := range response.Events {
 			err := worker.handleEvent(ctx, event)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			isUpdated = true
+		}
+
+		if isUpdated {
+			nextState, err := worker.reactor.Tick(ctx, worker.state)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			err = worker.applyUpdate(ctx, nextState.GetPatches())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -63,6 +85,25 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string) error {
 	}
 }
 
-func (worker *EtcdWorker) handleEvent(ctx context.Context, event *clientv3.Event) error {
+func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
+	switch event.Type {
+	case mvccpb.PUT:
+		worker.state.Update(event.Kv.Key, event.Kv.Value)
+		worker.rawState[string(event.Kv.Key)] = event.Kv.Value
+	case mvccpb.DELETE:
+		worker.state.Update(event.Kv.Key, nil)
+		delete(worker.rawState, string(event.Kv.Key))
+	}
+	return nil
+}
 
+func (worker *EtcdWorker) applyUpdate(ctx context.Context, patches []*DataPatch) error {
+	for {
+		worker.client.Txn(ctx).If(clientv3.ModRevision())
+
+		resp, err := worker.client.Get(ctx, worker.prefix, clientv3.WithPrefix())
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 }

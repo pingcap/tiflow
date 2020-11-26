@@ -16,5 +16,17 @@ package orchestrator
 import "context"
 
 type Reactor interface {
-	Tick(ctx context.Context, state interface{}) (nextState interface{}, err error)
+	Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error)
+}
+
+type patchFunc = func (old []byte) (newValue []byte, err error)
+
+type DataPatch struct {
+	key []byte
+	fun patchFunc
+}
+
+type ReactorState interface {
+	Update(key []byte, value []byte)
+	GetPatches() []*DataPatch
 }
