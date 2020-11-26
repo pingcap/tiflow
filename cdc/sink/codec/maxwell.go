@@ -17,12 +17,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"strconv"
 
 	"github.com/pingcap/errors"
 	model2 "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/tikv/pd/pkg/tsoutil"
 )
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation
@@ -36,7 +38,7 @@ type maxwellMessage struct {
 	Database string                 `json:"database"`
 	Table    string                 `json:"table"`
 	Type     string                 `json:"type"`
-	Ts       uint64                 `json:"ts"`
+	Ts       int64                  `json:"ts"`
 	Xid      int                    `json:"xid,omitempty"`
 	Xoffset  int                    `json:"xoffset,omitempty"`
 	Position string                 `json:"position,omitempty"`
@@ -92,30 +94,92 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Type:      model.MqMessageTypeRow,
 	}
 	value := &maxwellMessage{
-		Ts:       e.CommitTs,
+		Ts:       000000000,
 		Database: e.Table.Schema,
 		Table:    e.Table.Table,
 		Data:     make(map[string]interface{}),
 		Old:      make(map[string]interface{}),
 	}
 
+	physicalTime, _ := tsoutil.ParseTS(e.CommitTs)
+	value.Ts = physicalTime.Unix()
 	if e.PreColumns == nil {
 		value.Type = "insert"
 		for _, v := range e.Columns {
-			value.Data[v.Name] = v.Value
+			switch v.Type {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+				if v.Value != nil {
+					str := string(v.Value.([]byte))
+					if v.Flag.IsBinary() {
+						str = strconv.Quote(str)
+						str = str[1 : len(str)-1]
+					}
+					value.Data[v.Name] = str
+				} else {
+					value.Data[v.Name] = nil
+				}
+			default:
+				value.Data[v.Name] = v.Value
+			}
 		}
 	} else if e.IsDelete() {
 		value.Type = "delete"
 		for _, v := range e.PreColumns {
-			value.Old[v.Name] = v.Value
+			switch v.Type {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+				if v.Value != nil {
+					str := string(v.Value.([]byte))
+					if v.Flag.IsBinary() {
+						str = strconv.Quote(str)
+						str = str[1 : len(str)-1]
+					}
+					value.Old[v.Name] = str
+				} else {
+					value.Old[v.Name] = nil
+				}
+			default:
+				value.Old[v.Name] = v.Value
+			}
 		}
 	} else {
 		value.Type = "update"
 		for _, v := range e.Columns {
-			value.Data[v.Name] = v.Value
+			switch v.Type {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+				if v.Value != nil {
+					str := string(v.Value.([]byte))
+					if v.Flag.IsBinary() {
+						str = strconv.Quote(str)
+						str = str[1 : len(str)-1]
+					}
+					value.Data[v.Name] = str
+				} else {
+					value.Data[v.Name] = nil
+				}
+			default:
+				value.Data[v.Name] = v.Value
+			}
 		}
 		for _, v := range e.PreColumns {
-			value.Old[v.Name] = v.Value
+			switch v.Type {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+				if v.Value != nil {
+					str := string(v.Value.([]byte))
+					if v.Flag.IsBinary() {
+						str = strconv.Quote(str)
+						str = str[1 : len(str)-1]
+					}
+					if value.Data[v.Name] != str {
+						value.Old[v.Name] = str
+					}
+				} else if value.Data[v.Name] != nil && v.Value == nil {
+					value.Old[v.Name] = nil
+				}
+			default:
+				if value.Data[v.Name] != v.Value {
+					value.Old[v.Name] = v.Value
+				}
+			}
 		}
 	}
 	return key, value
@@ -123,28 +187,17 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	keyMsg, valueMsg := rowEventToMaxwellMessage(e)
-	key, err := keyMsg.Encode()
-	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
-	}
+	_, valueMsg := rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()
 	if err != nil {
 		return EncoderNoOperation, errors.Trace(err)
 	}
-
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
-
-	d.valueBuf.Write(valueLenByte[:])
 	d.valueBuf.Write(value)
 
-	d.batchSize += 1
+	d.batchSize++
 	return EncoderNoOperation, nil
 }
 
@@ -233,6 +286,7 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
+// DDL message unresolved tso
 func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	keyMsg, valueMsg := ddlEventtoMaxwellMessage(e)
 	key, err := keyMsg.Encode()
@@ -251,12 +305,8 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 	keyBuf := new(bytes.Buffer)
 	var versionByte [8]byte
 	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
-	keyBuf.Write(versionByte[:])
-	keyBuf.Write(keyLenByte[:])
 	keyBuf.Write(key)
-
 	valueBuf := new(bytes.Buffer)
-	valueBuf.Write(valueLenByte[:])
 	valueBuf.Write(value)
 	return NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs), nil
 }
@@ -341,7 +391,6 @@ func (b *MaxwellEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) 
 // decode
 func maxwellMessageToRowEvent(key *mqMessageKey, value *maxwellMessage) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
-	e.CommitTs = value.Ts
 	e.Table = &model.TableName{
 		Schema: key.Schema,
 		Table:  key.Table,
