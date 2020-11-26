@@ -16,7 +16,6 @@ package sorter
 import (
 	"container/heap"
 	"context"
-	"github.com/pingcap/ticdc/pkg/util"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
