@@ -192,7 +192,6 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	if err != nil {
 		return EncoderNoOperation, errors.Trace(err)
 	}
-	_, valueMsg = rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()
 	if err != nil {
 		return EncoderNoOperation, errors.Trace(err)
