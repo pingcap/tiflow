@@ -56,21 +56,6 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder EventBatchDecoder, cs []*model.DDLEvent) {
-		index := 0
-		for {
-			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
-			if !hasNext {
-				break
-			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeDDL)
-			ddl, err := decoder.NextDDLEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(ddl, check.DeepEquals, cs[index])
-			index++
-		}
-	}
 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
@@ -98,10 +83,6 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 			c.Assert(msg, check.NotNil)
-
-			decoder, err := newDecoder(msg.Key, msg.Value)
-			c.Assert(err, check.IsNil)
-			checkDDLDecoder(decoder, cs)
 		}
 
 	}
