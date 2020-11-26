@@ -22,7 +22,9 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
+	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
+	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v0.0.0-20200921112226-ee2e962f5e4b
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201029093017-5a7df2af2ac7
@@ -38,6 +40,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
 	github.com/tikv/pd v1.1.0-beta.0.20200921100508-9ee41c4144f3
+	github.com/tinylib/msgp v1.1.2
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547

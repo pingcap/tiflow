@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -523,11 +524,8 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if p.statusModRevision == modRevision && !taskStatus.SomeOperationsUnapplied() {
 				return false, nil
 			}
+			// task will be stopped in capture task handler, do nothing
 			if taskStatus.AdminJobType.IsStopState() {
-				err := p.stop(ctx)
-				if err != nil {
-					return false, backoff.Permanent(errors.Trace(err))
-				}
 				return false, backoff.Permanent(cerror.ErrAdminStopProcessor.GenWithStackByArgs())
 			}
 			toRemove, err := p.handleTables(ctx, taskStatus)
@@ -705,7 +703,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return
-				case p.output <- model.NewResolvedPolymorphicEvent(0, lastResolvedTs):
+				case p.output <- model.NewResolvedPolymorphicEvent(0, globalResolvedTs):
 					// regionID = 0 means the event is produced by TiCDC
 				}
 			}
@@ -881,6 +879,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				resolvedTs = localResolvedTs
 			}
 			if row.CRTs <= resolvedTs {
+				_ = row.WaitPrepare(ctx)
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
 					zap.String("changefeed", p.changefeedID),
@@ -991,7 +990,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorterImpl = puller.NewEntrySorter()
-		case model.SortInFile:
+		case model.SortInFile, model.SortUnified:
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				if os.IsNotExist(errors.Cause(err)) {
@@ -1005,7 +1004,13 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 					return nil
 				}
 			}
-			sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
+
+			if p.changefeed.Engine == model.SortInFile {
+				sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
+			} else {
+				// Unified Sorter
+				sorterImpl = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
+			}
 		default:
 			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
 			return nil
@@ -1109,6 +1114,17 @@ func (p *processor) sorterConsume(
 			if pEvent == nil {
 				continue
 			}
+
+			pEvent.SetUpFinishedChan()
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case p.mounter.Input() <- pEvent:
+			}
+
 			if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
@@ -1165,14 +1181,6 @@ func (p *processor) pullerConsume(
 			}
 			pEvent := model.NewPolymorphicEvent(rawKV)
 			sorter.AddEntry(ctx, pEvent)
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
-				}
-				return
-			case p.mounter.Input() <- pEvent:
-			}
 		}
 	}
 }

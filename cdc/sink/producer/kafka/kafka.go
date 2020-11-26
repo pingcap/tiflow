@@ -44,6 +44,9 @@ type Config struct {
 	ClientID        string
 	Credential      *security.Credential
 	// TODO support SASL authentication
+
+	// control whether to create topic and verify partition number
+	TopicPreProcess bool
 }
 
 // NewKafkaConfig returns a default Kafka configuration
@@ -54,6 +57,7 @@ func NewKafkaConfig() Config {
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
+		TopicPreProcess:   true,
 	}
 }
 
@@ -128,6 +132,8 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 		}
 	}
 	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-k.closeCh:
 		return nil
 	default:
@@ -256,10 +262,62 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
+// kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't
+// exit, creates it automatically.
+func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Config) (int32, error) {
+	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	defer func() {
+		err := admin.Close()
+		if err != nil {
+			log.Warn("close admin client failed", zap.Error(err))
+		}
+	}()
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	partitionNum := config.PartitionNum
+	topicDetail, exist := topics[topic]
+	if exist {
+		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+		if partitionNum == 0 {
+			partitionNum = topicDetail.NumPartitions
+		} else if partitionNum < topicDetail.NumPartitions {
+			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
+		} else if partitionNum > topicDetail.NumPartitions {
+			return 0, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
+		}
+	} else {
+		if partitionNum == 0 {
+			partitionNum = 4
+			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
+		}
+		log.Info("create a topic", zap.String("topic", topic),
+			zap.Int32("partition_num", partitionNum),
+			zap.Int16("replication_factor", config.ReplicationFactor))
+		err := admin.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     partitionNum,
+			ReplicationFactor: config.ReplicationFactor,
+		}, false)
+		// TODO idenfity the cause of "Topic with this name already exists"
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+	}
+
+	return partitionNum, nil
+}
+
+var newSaramaConfigImpl = newSaramaConfig
+
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
-	cfg, err := newSaramaConfig(ctx, config)
+	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -275,48 +333,14 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	// get partition number or create topic automatically
-	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	topics, err := admin.ListTopics()
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 	partitionNum := config.PartitionNum
-	topicDetail, exist := topics[topic]
-	if exist {
-		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
-		if partitionNum == 0 {
-			partitionNum = topicDetail.NumPartitions
-		} else if partitionNum < topicDetail.NumPartitions {
-			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
-		} else if partitionNum > topicDetail.NumPartitions {
-			return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
-		}
-	} else {
-		if partitionNum == 0 {
-			partitionNum = 4
-			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
-		}
-		log.Info("create a topic", zap.String("topic", topic), zap.Int32("partition_num", partitionNum), zap.Int16("replication_factor", config.ReplicationFactor))
-		err := admin.CreateTopic(topic, &sarama.TopicDetail{
-			NumPartitions:     partitionNum,
-			ReplicationFactor: config.ReplicationFactor,
-		}, false)
-
-		// TODO idenfity the cause of "Topic with this name already exists"
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	if config.TopicPreProcess {
+		partitionNum, err = kafkaTopicPreProcess(topic, address, config, cfg)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	err = admin.Close()
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 	notifier := new(notify.Notifier)
 	k := &kafkaSaramaProducer{
 		asyncClient:  asyncClient,
