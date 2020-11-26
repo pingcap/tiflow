@@ -49,6 +49,8 @@ func interestingGoroutines() (gs []string) {
 		"google.golang.org/grpc.(*ccBalancerWrapper).watcher",
 		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
 		"go.etcd.io/etcd/v3/pkg/logutil.(*MergeLogger).outputLoop",
+		// library used by sarama, ref: https://github.com/rcrowley/go-metrics/pull/266
+		"github.com/rcrowley/go-metrics.(*meterArbiter).tick",
 	}
 	shouldIgnore := func(stack string) bool {
 		if stack == "" {
