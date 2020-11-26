@@ -17,13 +17,12 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
+	"io/ioutil"
+	"net/http"
+	"time"
 
 	"github.com/pingcap/ticdc/integration/framework"
 )

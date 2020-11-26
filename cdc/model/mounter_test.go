@@ -55,6 +55,7 @@ func (s *mounterSuite) TestPolymorphicEventPrepare(c *check.C) {
 	c.Assert(polyEvent.WaitPrepare(ctx), check.IsNil)
 
 	polyEvent = NewPolymorphicEvent(&RawKVEntry{OpType: OpTypePut})
+	polyEvent.SetUpFinishedChan()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -67,6 +68,7 @@ func (s *mounterSuite) TestPolymorphicEventPrepare(c *check.C) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	polyEvent = NewPolymorphicEvent(&RawKVEntry{OpType: OpTypePut})
+	polyEvent.SetUpFinishedChan()
 	cancel()
 	err := polyEvent.WaitPrepare(cctx)
 	c.Assert(err, check.Equals, context.Canceled)
