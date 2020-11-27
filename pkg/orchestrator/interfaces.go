@@ -21,6 +21,13 @@ type Reactor interface {
 
 type patchFunc = func (old []byte) (newValue []byte, err error)
 
+type EtcdTryAgain struct {
+}
+
+func (e *EtcdTryAgain) Error() string {
+	return "EtcdTryAgain"
+}
+
 type DataPatch struct {
 	key []byte
 	fun patchFunc

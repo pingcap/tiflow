@@ -99,7 +99,37 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 
 func (worker *EtcdWorker) applyUpdate(ctx context.Context, patches []*DataPatch) error {
 	for {
-		worker.client.Txn(ctx).If(clientv3.ModRevision())
+		cmps := make([]clientv3.Cmp, 0)
+		ops := make([]clientv3.Op, 0)
+
+		for _, patch := range patches {
+			old, ok := worker.rawState[string(patch.key)]
+
+			// make sure someone else has not updated the key after the last snapshot
+			if ok {
+				cmp := clientv3.Compare(clientv3.ModRevision(string(patch.key)), "<=", worker.revision)
+				cmps = append(cmps, cmp)
+			}
+
+			value, err := patch.fun(old)
+			if err != nil {
+				if _, ok := errors.Cause(err).(*EtcdTryAgain); ok {
+					continue
+				}
+				return errors.Trace(err)
+			}
+
+			var op clientv3.Op
+			if value != nil {
+			 	op = clientv3.OpPut(string(patch.key), string(value))
+			} else {
+				op = clientv3.OpDelete(string(patch.key))
+			}
+			ops = append(ops, op)
+		}
+		
+		resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
+
 
 		resp, err := worker.client.Get(ctx, worker.prefix, clientv3.WithPrefix())
 		if err != nil {
