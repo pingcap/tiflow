@@ -162,6 +162,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		require.Equal(t, err, context.Canceled)
 	}()
 
+	mockTableID := int64(999)
 	preRegions, _, err := pdCli.ScanRegions(context.Background(), nil, nil, 10000)
 	require.NoError(t, err)
 
@@ -179,7 +180,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 					splitKey = append(splitKey, 0)
 				}
 				splitKeys := [][]byte{splitKey}
-				_, err := splitStore.SplitRegions(context.Background(), splitKeys, false)
+				_, err := splitStore.SplitRegions(context.Background(), splitKeys, false, &mockTableID)
 				require.NoError(t, err)
 			}
 
