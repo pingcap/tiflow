@@ -999,7 +999,7 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 		cacheArgs := make([]interface{}, 0)
 		last := false
 		for i, val := range vals {
-			cacheCount += 1
+			cacheCount++
 			if i == len(vals)-1 || cacheCount >= batchSize {
 				last = true
 			}
@@ -1036,9 +1036,9 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 	}
 	for i, column := range columnNames {
 		if i == len(columnNames)-1 {
-			builder.WriteString("`" + model.EscapeName(column) + "`=?")
+			builder.WriteString("`" + quotes.EscapeName(column) + "`=?")
 		} else {
-			builder.WriteString("`" + model.EscapeName(column) + "`=?,")
+			builder.WriteString("`" + quotes.EscapeName(column) + "`=?,")
 		}
 	}
 

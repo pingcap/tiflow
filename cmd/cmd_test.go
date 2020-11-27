@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 )
@@ -31,6 +32,7 @@ type decodeFileSuite struct{}
 var _ = check.Suite(&decodeFileSuite{})
 
 func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `
@@ -99,6 +101,7 @@ polling-time = 5
 }
 
 func (s *decodeFileSuite) TestAndWriteExampleTOML(c *check.C) {
+	defer testleak.AfterTest(c)()
 	content := `
 # 指定配置文件中涉及的库名、表名是否为大小写敏感的
 # 该配置会同时影响 filter 和 sink 相关配置，默认为 true
@@ -133,9 +136,9 @@ dispatchers = [
 	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
 # 对于 MQ 类的 Sink，可以指定消息的协议格式
-# 协议目前支持 default, canal 两种，default 为 ticdc-open-protocol
+# 协议目前支持 default, canal, avro 和 maxwell 四种，default 为 ticdc-open-protocol
 # For MQ Sinks, you can configure the protocol of the messages sending to MQ
-# Currently the protocol support default and canal
+# Currently the protocol support default, canal, avro and maxwell. Default is ticdc-open-protocol
 protocol = "default"
 
 [cyclic-replication]
@@ -183,6 +186,7 @@ sync-ddl = true
 }
 
 func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `filter-case-insensitive = true`
