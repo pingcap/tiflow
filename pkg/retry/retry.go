@@ -15,6 +15,7 @@ package retry
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -35,4 +36,29 @@ func Run(initialInterval time.Duration, maxRetries uint64, f func() error) error
 		}
 		return err
 	}, retryCfg)
+}
+
+// RunWithInfiniteRetry retries the specified function indefinitely, until a backoff.PermanentError is encountered.
+// notifyFunc will be called each time before sleeping with the total elapsed time.
+func RunWithInfiniteRetry(initialInterval time.Duration, f func() error, notifyFunc func(elapsed time.Duration)) error {
+	cfg := backoff.NewExponentialBackOff()
+	cfg.InitialInterval = 10 * time.Millisecond
+	cfg.MaxElapsedTime = math.MaxInt64
+	cfg.MaxInterval = math.MaxInt64
+
+	startTime := time.Now()
+	err := backoff.Retry(func() error {
+		err := f()
+		switch errors.Cause(err) {
+		case context.Canceled, context.DeadlineExceeded:
+			err = backoff.Permanent(err)
+		}
+
+		if _, ok := err.(*backoff.PermanentError); !ok {
+			notifyFunc(time.Since(startTime))
+		}
+		return err
+	}, cfg)
+
+	return err
 }

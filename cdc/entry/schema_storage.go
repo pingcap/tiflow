@@ -15,7 +15,7 @@ package entry
 
 import (
 	"context"
-	"math"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -692,13 +692,7 @@ func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnap
 
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
 	// DDL puller lagging too much.
-	cfg := backoff.NewExponentialBackOff()
-	cfg.InitialInterval = 10 * time.Millisecond
-	cfg.MaxElapsedTime = math.MaxInt64
-	cfg.MaxInterval = math.MaxInt64
-
-	startTime := time.Now()
-	err := backoff.Retry(func() error {
+	err := retry.RunWithInfiniteRetry(10*time.Millisecond, func() error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
@@ -710,12 +704,12 @@ func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnap
 			return backoff.Permanent(err)
 		}
 
-		if time.Since(startTime) >= 5*time.Minute {
+		return err
+	}, func(elapsed time.Duration) {
+		if elapsed >= 5*time.Minute {
 			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
 		}
-
-		return err
-	}, cfg)
+	})
 
 	switch e := err.(type) {
 	case *backoff.PermanentError:
