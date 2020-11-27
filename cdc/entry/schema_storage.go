@@ -15,6 +15,7 @@ package entry
 
 import (
 	"context"
+	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -689,7 +690,9 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 // GetSnapshot returns the snapshot which of ts is specified
 func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
-	err := retry.Run(10*time.Millisecond, 25,
+	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
+	// DDL puller lagging too much.
+	err := retry.Run(10*time.Millisecond, math.MaxInt64,
 		func() error {
 			select {
 			case <-ctx.Done():
