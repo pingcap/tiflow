@@ -32,7 +32,7 @@ require (
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v0.0.0-20200923023944-7456456854e4
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20200917111840-a15ef68f753d
+	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/kvproto v0.0.0-20200916031750-f9473f2c5379
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
