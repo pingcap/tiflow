@@ -102,5 +102,6 @@ function sql_test() {
 
 trap stop_tidb_cluster EXIT
 prepare $*
+sleep 600
 sql_test $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
