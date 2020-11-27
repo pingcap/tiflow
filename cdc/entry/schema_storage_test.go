@@ -973,7 +973,7 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	defer txn.Rollback()
+	defer txn.Rollback() //nolint:errcheck
 	txnMeta := timeta.NewMeta(txn)
 
 	jobs, err := txnMeta.GetAllHistoryDDLJobs()

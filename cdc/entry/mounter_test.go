@@ -245,7 +245,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	}
 
 	ver, err := store.CurrentVersion()
-	c.Assert(ok, check.IsTrue)
+	c.Assert(err, check.IsNil)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	mounter := NewMounter(scheamStorage, 1, false).(*mounterImpl)
 	mounter.tz = time.Local
@@ -373,7 +373,7 @@ func prepareCheckSQL(c *check.C, tableName string, cols []*model.Column) (string
 func walkTableSpanInStore(c *check.C, store tidbkv.Storage, tableID int64, f func(key []byte, value []byte)) {
 	txn, err := store.Begin()
 	c.Assert(err, check.IsNil)
-	defer txn.Rollback()
+	defer txn.Rollback() //nolint:errcheck
 	tableSpan := regionspan.GetTableSpan(tableID, false)
 	kvIter, err := txn.Iter(tableSpan.Start, tableSpan.End)
 	c.Assert(err, check.IsNil)
