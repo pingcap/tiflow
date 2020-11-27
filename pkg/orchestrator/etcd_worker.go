@@ -60,6 +60,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string) error {
 			continue
 		}
 
+		if worker.revision >= response.Header.GetRevision() {
+			continue
+		}
 		worker.revision = response.Header.GetRevision()
 
 		isUpdated := false
@@ -77,7 +80,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string) error {
 				return errors.Trace(err)
 			}
 
-			err = worker.applyUpdate(ctx, nextState.GetPatches())
+			err = worker.applyUpdates(ctx, nextState.GetPatches())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -97,7 +100,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 	return nil
 }
 
-func (worker *EtcdWorker) applyUpdate(ctx context.Context, patches []*DataPatch) error {
+func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch) error {
 	for {
 		cmps := make([]clientv3.Cmp, 0)
 		ops := make([]clientv3.Op, 0)
@@ -127,11 +130,27 @@ func (worker *EtcdWorker) applyUpdate(ctx context.Context, patches []*DataPatch)
 			}
 			ops = append(ops, op)
 		}
-		
+
 		resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		worker.revision = resp.Header.GetRevision()
+		if resp.Succeeded {
+			for _, op := range ops {
+				if op.IsPut() {
+					worker.rawState[string(op.KeyBytes())] = op.ValueBytes()
+				} else if op.IsDelete() {
+					delete(worker.rawState, string(op.KeyBytes()))
+				}
+			}
+			return nil
+		}
+
+		getResp, err := worker.client.Get(ctx, worker.prefix, clientv3.WithPrefix())
 
 
-		resp, err := worker.client.Get(ctx, worker.prefix, clientv3.WithPrefix())
 		if err != nil {
 			return errors.Trace(err)
 		}
