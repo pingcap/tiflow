@@ -210,7 +210,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	c.Assert(err, check.IsNil)
 	defer store.Close() //nolint:errcheck
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
-
+		// we can update the tidb config here
 	})
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
