@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -690,22 +689,34 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 // GetSnapshot returns the snapshot which of ts is specified
 func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
+
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
 	// DDL puller lagging too much.
-	err := retry.Run(10*time.Millisecond, math.MaxInt64,
-		func() error {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			default:
-			}
-			var err error
-			snap, err = s.getSnapshot(ts)
-			if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
-				return backoff.Permanent(err)
-			}
-			return err
-		})
+	cfg := backoff.NewExponentialBackOff()
+	cfg.InitialInterval = 10 * time.Millisecond
+	cfg.MaxElapsedTime = math.MaxInt64
+	cfg.MaxInterval = math.MaxInt64
+
+	startTime := time.Now()
+	err := backoff.Retry(func() error {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		default:
+		}
+		var err error
+		snap, err = s.getSnapshot(ts)
+		if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
+			return backoff.Permanent(err)
+		}
+
+		if time.Since(startTime) >= 5*time.Minute {
+			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
+		}
+
+		return err
+	}, cfg)
+
 	switch e := err.(type) {
 	case *backoff.PermanentError:
 		return nil, e.Err
