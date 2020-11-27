@@ -42,7 +42,7 @@ func Run(initialInterval time.Duration, maxRetries uint64, f func() error) error
 // notifyFunc will be called each time before sleeping with the total elapsed time.
 func RunWithInfiniteRetry(initialInterval time.Duration, f func() error, notifyFunc func(elapsed time.Duration)) error {
 	cfg := backoff.NewExponentialBackOff()
-	cfg.InitialInterval = 10 * time.Millisecond
+	cfg.InitialInterval = initialInterval
 	cfg.MaxElapsedTime = math.MaxInt64
 	cfg.MaxInterval = math.MaxInt64
 
