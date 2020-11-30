@@ -114,7 +114,7 @@ func CreateStorage(pdAddr string) (storage kv.Storage, err error) {
 }
 
 func mustGetTimestamp(t require.TestingT, storage kv.Storage) uint64 {
-	ts, err := storage.GetOracle().GetTimestamp(context.Background())
+	ts, err := storage.GetOracle().GetTimestamp(context.Background(), nil)
 	require.NoError(t, err)
 
 	return ts
