@@ -15,7 +15,6 @@ package entry
 
 import (
 	"context"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
