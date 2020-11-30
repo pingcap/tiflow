@@ -924,7 +924,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
-		log.Panic("SinkFlushDMLPanic")
+		log.Fatal("SinkFlushDMLPanic")
 	})
 	failpoint.Inject("MySQLSinkExecDMLError", func() {
 		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
