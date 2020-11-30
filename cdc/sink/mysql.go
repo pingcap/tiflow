@@ -770,7 +770,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 	ctx context.Context, dmls *preparedDMLs, maxRetries uint64, bucket int,
 ) error {
 	if len(dmls.sqls) != len(dmls.values) {
-		log.Fatal("unexpected number of sqls and values",
+		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}
@@ -924,7 +924,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
-		log.Fatal("SinkFlushDMLPanic")
+		log.Panic("SinkFlushDMLPanic")
 	})
 	failpoint.Inject("MySQLSinkExecDMLError", func() {
 		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
