@@ -876,11 +876,6 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		"DROP DATABASE test_ddl2",
 	}}
 
-	checkSnapsEquals := func(snapA *schemaSnapshot, snapB *schemaSnapshot) {
-		c.Assert(snapA, check.DeepEquals, snapB,
-			check.Commentf("%s", cmp.Diff(snapA, snapB, cmp.AllowUnexported(schemaSnapshot{}, model.TableInfo{}))))
-	}
-
 	testOneGroup := func(tc []string) {
 		store, err := mockstore.NewMockStore()
 		c.Assert(err, check.IsNil)
@@ -920,8 +915,8 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 
 			tidySchemaSnapshot(snapFromMeta)
 			tidySchemaSnapshot(snapFromSchemaStore)
-			// check if the two snapshot are equal.
-			checkSnapsEquals(snapFromMeta, snapFromSchemaStore)
+			c.Assert(snapFromMeta, check.DeepEquals, snapFromSchemaStore,
+				check.Commentf("%s", cmp.Diff(snapFromMeta, snapFromSchemaStore, cmp.AllowUnexported(schemaSnapshot{}, model.TableInfo{}))))
 		}
 	}
 
@@ -975,10 +970,10 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 
 	store := domain.GetDomain(s.(sessionctx.Context)).Store()
 	txn, err := store.Begin()
-
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	defer txn.Rollback() //nolint:errcheck
 	txnMeta := timeta.NewMeta(txn)
 
 	jobs, err := txnMeta.GetAllHistoryDDLJobs()
