@@ -121,7 +121,7 @@ func newMqSink(
 		ret := newEncoder1()
 		err := ret.SetParams(opts)
 		if err != nil {
-			log.Fatal("MQ Encoder could not parse parameters", zap.Error(err))
+			log.Panic("MQ Encoder could not parse parameters", zap.Error(err))
 		}
 		return ret
 	}
