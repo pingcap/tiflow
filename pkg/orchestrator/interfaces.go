@@ -24,8 +24,15 @@ type patchFunc = func (old []byte) (newValue []byte, err error)
 type EtcdTryAgain struct {
 }
 
+type EtcdIgnore struct {
+}
+
 func (e *EtcdTryAgain) Error() string {
 	return "EtcdTryAgain"
+}
+
+func (e *EtcdIgnore) Error() string {
+	return "EtcdIgnore"
 }
 
 type DataPatch struct {

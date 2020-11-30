@@ -15,6 +15,8 @@ package orchestrator
 
 import (
 	"context"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -101,6 +103,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 }
 
 func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch) error {
+	outer:
 	for {
 		cmps := make([]clientv3.Cmp, 0)
 		ops := make([]clientv3.Op, 0)
@@ -116,8 +119,12 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 
 			value, err := patch.fun(old)
 			if err != nil {
-				if _, ok := errors.Cause(err).(*EtcdTryAgain); ok {
+				switch errors.Cause(err).(type) {
+				case *EtcdTryAgain:
+					continue outer
+				case *EtcdIgnore:
 					continue
+				default:
 				}
 				return errors.Trace(err)
 			}
@@ -136,8 +143,9 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 			return errors.Trace(err)
 		}
 
-		worker.revision = resp.Header.GetRevision()
 		if resp.Succeeded {
+			worker.revision = resp.Header.GetRevision()
+			log.Debug("EtcdWorker: transaction succeeded", zap.Reflect("ops", ops))
 			for _, op := range ops {
 				if op.IsPut() {
 					worker.rawState[string(op.KeyBytes())] = op.ValueBytes()
@@ -148,11 +156,17 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 			return nil
 		}
 
-		getResp, err := worker.client.Get(ctx, worker.prefix, clientv3.WithPrefix())
-
-
-		if err != nil {
-			return errors.Trace(err)
+		log.Debug("EtcdWorker: transaction aborted, try again")
+		for _, patch := range patches {
+			getResp, err := worker.client.Get(ctx, string(patch.key))
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if len(getResp.Kvs) > 0 {
+				worker.rawState[string(patch.key)] = getResp.Kvs[0].Value
+			} else {
+				delete(worker.rawState, string(patch.key))
+			}
 		}
 	}
 }
