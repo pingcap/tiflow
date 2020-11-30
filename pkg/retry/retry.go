@@ -44,7 +44,6 @@ func RunWithInfiniteRetry(initialInterval time.Duration, f func() error, notifyF
 	cfg := backoff.NewExponentialBackOff()
 	cfg.InitialInterval = initialInterval
 	cfg.MaxElapsedTime = math.MaxInt64
-	cfg.MaxInterval = math.MaxInt64
 
 	startTime := time.Now()
 	err := backoff.Retry(func() error {
