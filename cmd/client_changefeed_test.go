@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +28,9 @@ type clientChangefeedSuite struct{}
 var _ = check.Suite(&clientChangefeedSuite{})
 
 func (s *clientChangefeedSuite) TestVerifyChangefeedParams(c *check.C) {
-	ctx := context.Background()
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	cmd := &cobra.Command{}
 
 	dir := c.MkDir()
