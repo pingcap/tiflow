@@ -34,7 +34,7 @@ type SingleTableTask struct {
 }
 
 // Skip impl framework.Task interface
-func (c *SingleTableTask) Skip() bool {
+func (a *SingleTableTask) Skip() bool {
 	return false
 }
 

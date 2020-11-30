@@ -46,6 +46,10 @@ type dummyTask struct {
 	test *testing.T
 }
 
+func (t *dummyTask) Skip() bool {
+	return false
+}
+
 func (t *dummyTask) Prepare(taskContext *framework.TaskContext) error {
 	return nil
 }

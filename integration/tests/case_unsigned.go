@@ -31,8 +31,8 @@ func NewUnsignedCase(task framework.Task) *UnsignedCase {
 }
 
 // Skip impl framework.Task interface
-func (c *UnsignedCase) Skip() bool {
-	switch c.Task.(type) {
+func (s *UnsignedCase) Skip() bool {
+	switch s.Task.(type) {
 	case *canal.SingleTableTask: //now canal adapter can not deal with unsigned int greater than int max
 		return true
 	}
