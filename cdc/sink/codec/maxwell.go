@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"strconv"
 
 	"github.com/pingcap/errors"
 	model2 "github.com/pingcap/parser/model"
@@ -107,16 +106,13 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		value.Type = "insert"
 		for _, v := range e.Columns {
 			switch v.Type {
-			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-				if v.Value != nil {
-					str := string(v.Value.([]byte))
-					if v.Flag.IsBinary() {
-						str = strconv.Quote(str)
-						str = str[1 : len(str)-1]
-					}
-					value.Data[v.Name] = str
-				} else {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+				if v.Value == nil {
 					value.Data[v.Name] = nil
+				} else if v.Flag.IsBinary() {
+					value.Data[v.Name] = v.Value
+				} else {
+					value.Data[v.Name] = string(v.Value.([]byte))
 				}
 			default:
 				value.Data[v.Name] = v.Value
@@ -126,16 +122,13 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		value.Type = "delete"
 		for _, v := range e.PreColumns {
 			switch v.Type {
-			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-				if v.Value != nil {
-					str := string(v.Value.([]byte))
-					if v.Flag.IsBinary() {
-						str = strconv.Quote(str)
-						str = str[1 : len(str)-1]
-					}
-					value.Old[v.Name] = str
-				} else {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+				if v.Value == nil {
 					value.Old[v.Name] = nil
+				} else if v.Flag.IsBinary() {
+					value.Old[v.Name] = v.Value
+				} else {
+					value.Old[v.Name] = string(v.Value.([]byte))
 				}
 			default:
 				value.Old[v.Name] = v.Value
@@ -145,16 +138,13 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		value.Type = "update"
 		for _, v := range e.Columns {
 			switch v.Type {
-			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-				if v.Value != nil {
-					str := string(v.Value.([]byte))
-					if v.Flag.IsBinary() {
-						str = strconv.Quote(str)
-						str = str[1 : len(str)-1]
-					}
-					value.Data[v.Name] = str
-				} else {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+				if v.Value == nil {
 					value.Data[v.Name] = nil
+				} else if v.Flag.IsBinary() {
+					value.Data[v.Name] = v.Value
+				} else {
+					value.Data[v.Name] = string(v.Value.([]byte))
 				}
 			default:
 				value.Data[v.Name] = v.Value
@@ -162,18 +152,17 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		}
 		for _, v := range e.PreColumns {
 			switch v.Type {
-			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-				if v.Value != nil {
-					str := string(v.Value.([]byte))
-					if v.Flag.IsBinary() {
-						str = strconv.Quote(str)
-						str = str[1 : len(str)-1]
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+				if v.Value == nil {
+					if value.Data[v.Name] != nil {
+						value.Old[v.Name] = nil
+					} else {
+						continue
 					}
-					if value.Data[v.Name] != str {
-						value.Old[v.Name] = str
-					}
-				} else if value.Data[v.Name] != nil && v.Value == nil {
-					value.Old[v.Name] = nil
+				} else if v.Flag.IsBinary() {
+					value.Old[v.Name] = v.Value
+				} else {
+					value.Old[v.Name] = string(v.Value.([]byte))
 				}
 			default:
 				if value.Data[v.Name] != v.Value {
@@ -204,7 +193,7 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	d.valueBuf.Write(value)
 
 	d.batchSize++
-	return EncoderNoOperation, nil
+	return EncoderNeedAsyncWrite, nil
 }
 
 // SetParams is no-op for Maxwell for now
