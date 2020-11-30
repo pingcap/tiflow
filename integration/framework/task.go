@@ -27,6 +27,7 @@ import (
 type Task interface {
 	Name() string
 	GetCDCProfile() *CDCProfile
+	Skip() bool
 	Prepare(taskContext *TaskContext) error
 	Run(taskContext *TaskContext) error
 }

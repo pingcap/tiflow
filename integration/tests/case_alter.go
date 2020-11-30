@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // AlterCase is base impl of test case for alter operation
@@ -31,6 +32,17 @@ func NewAlterCase(task framework.Task) *AlterCase {
 	return &AlterCase{
 		Task: task,
 	}
+}
+
+// Skip impl framework.Task interface
+func (c *AlterCase) Skip() bool {
+	switch x := c.Task.(type) {
+	case *canal.SingleTableTask:
+		if !x.UseJSON { // basic implementation can not grantee ddl dml sequence, so can not pass
+			return true
+		}
+	}
+	return false
 }
 
 // Name impl framework.Task interface

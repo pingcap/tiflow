@@ -32,7 +32,38 @@ var dockerComposeFile = flag.String("docker-compose-file", "", "the path of the 
 func testAvro() {
 	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
 	task := &avro.SingleTableTask{TableName: "test"}
-	testCases := []framework.Task{
+	runTests(casesList(task), env)
+}
+
+func testCanal() {
+	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=false"}
+	task := &canal.SingleTableTask{TableName: "test"}
+	runTests(casesList(task), env)
+}
+
+func testCanalJSON() {
+	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
+	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
+	runTests(casesList(task), env)
+}
+
+func testMySQL() {
+	env := mysql.NewDockerEnv(*dockerComposeFile)
+	task := &mysql.SingleTableTask{TableName: "test"}
+	runTests(casesList(task), env)
+}
+
+func testMySQLWithCheckingOldvValue() {
+	env := mysql.NewDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
+	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
+	runTests(casesList(task), env)
+}
+
+func casesList(task framework.Task) []framework.Task {
+	return []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
@@ -40,71 +71,6 @@ func testAvro() {
 		tests.NewCompositePKeyCase(task),
 		tests.NewAlterCase(task), // this case is slow, so put it last
 	}
-
-	runTests(testCases, env)
-}
-
-func testCanal() {
-	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
-	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=false"}
-	task := &canal.SingleTableTask{TableName: "test"}
-	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
-		tests.NewCompositePKeyCase(task),
-		//tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
-	}
-
-	runTests(testCases, env)
-}
-
-func testCanalJSON() {
-	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
-	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
-	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
-	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
-		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
-	}
-
-	runTests(testCases, env)
-}
-
-func testMySQL() {
-	env := mysql.NewDockerEnv(*dockerComposeFile)
-	task := &mysql.SingleTableTask{TableName: "test"}
-	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
-		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
-	}
-
-	runTests(testCases, env)
-}
-
-func testMySQLWithCheckingOldvValue() {
-	env := mysql.NewDockerEnv(*dockerComposeFile)
-	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
-	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
-	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
-		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
-	}
-
-	runTests(testCases, env)
 }
 
 func runTests(cases []framework.Task, env framework.Environment) {
@@ -112,6 +78,9 @@ func runTests(cases []framework.Task, env framework.Environment) {
 	env.Setup()
 
 	for i := range cases {
+		if cases[i].Skip() {
+			continue
+		}
 		env.RunTest(cases[i])
 		if i < len(cases)-1 {
 			env.Reset()

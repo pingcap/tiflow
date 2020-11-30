@@ -31,6 +31,11 @@ type SingleTableTask struct {
 	UseJSON   bool
 }
 
+// Skip impl framework.Task interface
+func (c *SingleTableTask) Skip() bool {
+	return false
+}
+
 // Name implements Task
 func (c *SingleTableTask) Name() string {
 	log.Warn("SingleTableTask should be embedded in another Task")

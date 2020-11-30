@@ -15,6 +15,7 @@ package tests
 
 import (
 	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // UnsignedCase is base impl of test case for unsigned int type data
@@ -27,6 +28,15 @@ func NewUnsignedCase(task framework.Task) *UnsignedCase {
 	return &UnsignedCase{
 		Task: task,
 	}
+}
+
+// Skip impl framework.Task interface
+func (c *UnsignedCase) Skip() bool {
+	switch c.Task.(type) {
+	case *canal.SingleTableTask: //now canal adapter can not deal with unsigned int greater than int max
+		return true
+	}
+	return false
 }
 
 // Name impl framework.Task interface
