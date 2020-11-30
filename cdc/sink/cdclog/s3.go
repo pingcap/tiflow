@@ -201,7 +201,7 @@ type s3Sink struct {
 
 	prefix string
 
-	storage *storage.S3Storage
+	storage storage.ExternalStorage
 
 	logMeta *logMeta
 
@@ -355,8 +355,14 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	}
 	// we should set this to true, since br set it by default in parseBackend
 	s3.ForcePathStyle = true
-
-	s3storage, err := storage.NewS3Storage(s3, false)
+	backend := &backup.StorageBackend{
+		Backend: &backup.StorageBackend_S3{S3: s3},
+	}
+	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
+		SendCredentials: false,
+		SkipCheckPath:   false,
+		HTTPClient:      nil,
+	})
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
 	}
