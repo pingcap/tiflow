@@ -52,7 +52,7 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 		if len(txns) == 0 || txns[len(txns)-1].StartTs != row.StartTs {
 			// fail-fast check
 			if len(txns) != 0 && txns[len(txns)-1].CommitTs > row.CommitTs {
-				log.Fatal("the commitTs of the emit row is less than the received row",
+				log.Panic("the commitTs of the emit row is less than the received row",
 					zap.Stringer("table", row.Table),
 					zap.Uint64("emit row startTs", row.StartTs),
 					zap.Uint64("emit row commitTs", row.CommitTs),
