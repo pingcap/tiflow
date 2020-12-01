@@ -1145,12 +1145,8 @@ func (p *processor) sorterConsume(
 			}
 			sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 			if pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
-<<<<<<< HEAD
-				log.Fatal("The CRTs of event is not expected, please report a bug",
-=======
 				log.Panic("The CRTs of event is not expected, please report a bug",
 					util.ZapFieldChangefeed(ctx),
->>>>>>> 425c185... *: refine capture and changefeed field in log (#1135)
 					zap.String("model", "sorter"),
 					zap.Uint64("globalResolvedTs", sinkResolvedTs),
 					zap.Uint64("resolvedTs", lastResolvedTs),
