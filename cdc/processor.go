@@ -442,8 +442,8 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 		if ddlRawKV == nil {
 			continue
 		}
+		failpoint.Inject("processorDDLResolved", func() {})
 		if ddlRawKV.OpType == model.OpTypeResolved {
-			failpoint.Inject("processorDDLResolved", func() {})
 			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			p.localResolvedNotifier.Notify()
 		}
