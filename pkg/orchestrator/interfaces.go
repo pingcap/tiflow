@@ -13,7 +13,10 @@
 
 package orchestrator
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 type Reactor interface {
 	Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error)
@@ -21,19 +24,10 @@ type Reactor interface {
 
 type patchFunc = func (old []byte) (newValue []byte, err error)
 
-type EtcdTryAgain struct {
-}
-
-type EtcdIgnore struct {
-}
-
-func (e *EtcdTryAgain) Error() string {
-	return "EtcdTryAgain"
-}
-
-func (e *EtcdIgnore) Error() string {
-	return "EtcdIgnore"
-}
+var (
+	EtcdTryAgain = errors.New("EtcdTryAgain")
+	EtcdIgnore = errors.New("EtcdIgnore")
+)
 
 type DataPatch struct {
 	key []byte
