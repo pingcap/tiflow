@@ -689,20 +689,28 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 // GetSnapshot returns the snapshot which of ts is specified
 func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
-	err := retry.Run(10*time.Millisecond, 25,
-		func() error {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			default:
-			}
-			var err error
-			snap, err = s.getSnapshot(ts)
-			if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
-				return backoff.Permanent(err)
-			}
-			return err
-		})
+
+	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
+	// DDL puller lagging too much.
+	err := retry.RunWithInfiniteRetry(10*time.Millisecond, func() error {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		default:
+		}
+		var err error
+		snap, err = s.getSnapshot(ts)
+		if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
+			return backoff.Permanent(err)
+		}
+
+		return err
+	}, func(elapsed time.Duration) {
+		if elapsed >= 5*time.Minute {
+			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
+		}
+	})
+
 	switch e := err.(type) {
 	case *backoff.PermanentError:
 		return nil, e.Err

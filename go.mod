@@ -31,11 +31,11 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
-	github.com/pingcap/kvproto v0.0.0-20201120081251-756b1447ba12
+	github.com/pingcap/kvproto v0.0.0-20201130052818-5dfa7b1325a3
 	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
 	github.com/pingcap/parser v0.0.0-20201123080035-8f4c6ab94e11
-	github.com/pingcap/tidb v1.1.0-beta.0.20201125083154-afaf38fdc82d
-	github.com/pingcap/tidb-tools v4.0.5-0.20200820092506-34ea90c93237+incompatible
+	github.com/pingcap/tidb v1.1.0-beta.0.20201130072759-1c8fb2bd2d06
+	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
@@ -55,5 +55,3 @@ require (
 	google.golang.org/grpc v1.27.1
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-replace github.com/pingcap/tidb-tools => github.com/pingcap/tidb-tools v4.0.0-beta.0.20200921090810-52b9534ff3d5+incompatible
