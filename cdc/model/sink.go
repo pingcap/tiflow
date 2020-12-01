@@ -277,7 +277,7 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 
 	if len(pkeyCols) == 0 {
 		// TODO redact the message
-		log.Fatal("Cannot find handle key columns, bug?", zap.Reflect("event", r))
+		log.Panic("Cannot find handle key columns, bug?", zap.Reflect("event", r))
 	}
 
 	return pkeyCols
@@ -421,7 +421,7 @@ type SingleTableTxn struct {
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
-		log.Fatal("unexpected row change event",
+		log.Panic("unexpected row change event",
 			zap.Uint64("startTs of txn", t.StartTs),
 			zap.Uint64("commitTs of txn", t.CommitTs),
 			zap.Any("table of txn", t.Table),

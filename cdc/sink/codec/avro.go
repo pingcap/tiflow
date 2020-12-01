@@ -356,7 +356,7 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeYear:
 		return "long", nil
 	default:
-		log.Fatal("Unknown MySql type", zap.Reflect("mysql-type", col.Type))
+		log.Panic("Unknown MySql type", zap.Reflect("mysql-type", col.Type))
 		return "", errors.New("Unknown Mysql type")
 	}
 }
@@ -440,7 +440,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 				return string(val), "string", nil
 			}
 		}
-		log.Fatal("Avro could not process text-like type", zap.Reflect("col", col))
+		log.Panic("Avro could not process text-like type", zap.Reflect("col", col))
 		return nil, "", errors.New("Unknown datum type")
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil
