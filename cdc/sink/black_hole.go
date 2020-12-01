@@ -61,7 +61,7 @@ func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs ui
 		b.lastAccumulated = accumulated
 		return int(batchSize), nil
 	})
-	b.statistics.PrintStatus()
+	b.statistics.PrintStatus(ctx)
 	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
 	return resolvedTs, err
 }

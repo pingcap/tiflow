@@ -194,7 +194,7 @@ func (o *Owner) newChangeFeed(
 	info *model.ChangeFeedInfo,
 	checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
-		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
+		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
 		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
 		if err != nil {
@@ -522,7 +522,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 			if filter.ChangefeedFastFailError(err) {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
-					zap.Error(err), zap.String("changefeedid", changeFeedID))
+					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
 				err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
 				if err != nil {
@@ -1257,7 +1257,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
-				log.Info("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
+				log.Info("cleanup stale task", zap.String("capture-id", captureID), zap.String("changefeed", changeFeedID))
 			}
 		}
 	}
