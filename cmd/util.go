@@ -22,7 +22,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -39,7 +38,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -215,22 +214,11 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	return nil
 }
 
-func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) error {
-	resp, err := cli.Client.Get(ctx, tikv.GcSavedSafePoint)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if resp.Count == 0 {
+func verifyStartTs(ctx context.Context, startTs uint64) error {
+	if disableGCSafePointCheck {
 		return nil
 	}
-	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if startTs < safePoint {
-		return errors.Errorf("startTs %d less than gcSafePoint %d", startTs, safePoint)
-	}
-	return nil
+	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
 }
 
 func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {

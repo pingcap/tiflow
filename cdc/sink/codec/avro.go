@@ -163,6 +163,12 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return sum
 }
 
+// SetParams is no-op for now
+func (a *AvroEventBatchEncoder) SetParams(params map[string]string) error {
+	// no op
+	return nil
+}
+
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
 	schemaGen := func() (string, error) {
 		schema, err := ColumnInfoToAvroSchema(table.Table, cols)
@@ -350,7 +356,7 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeYear:
 		return "long", nil
 	default:
-		log.Fatal("Unknown MySql type", zap.Reflect("mysql-type", col.Type))
+		log.Panic("Unknown MySql type", zap.Reflect("mysql-type", col.Type))
 		return "", errors.New("Unknown Mysql type")
 	}
 }
@@ -434,7 +440,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 				return string(val), "string", nil
 			}
 		}
-		log.Fatal("Avro could not process text-like type", zap.Reflect("col", col))
+		log.Panic("Avro could not process text-like type", zap.Reflect("col", col))
 		return nil, "", errors.New("Unknown datum type")
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil

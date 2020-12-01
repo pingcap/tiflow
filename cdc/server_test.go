@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type serverOptionSuite struct{}
@@ -22,6 +23,7 @@ type serverOptionSuite struct{}
 var _ = check.Suite(&serverOptionSuite{})
 
 func (s *serverOptionSuite) TestNewServer(c *check.C) {
+	defer testleak.AfterTest(c)()
 	svr, err := NewServer()
 	c.Assert(err, check.ErrorMatches, ".*empty PD address")
 	c.Assert(svr, check.IsNil)

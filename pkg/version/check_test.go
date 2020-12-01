@@ -24,6 +24,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/pkg/tempurl"
 )
@@ -56,6 +57,7 @@ func (m *mockPDClient) ServeHTTP(resp http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
+	defer testleak.AfterTest(c)()
 	mock := mockPDClient{
 		Client: nil,
 	}
@@ -119,6 +121,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 }
 
 func (s *checkSuite) TestCompareVersion(c *check.C) {
+	defer testleak.AfterTest(c)()
 	c.Assert(semver.New("4.0.0-rc").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 	c.Assert(semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
@@ -137,6 +140,7 @@ func (s *checkSuite) TestCompareVersion(c *check.C) {
 }
 
 func (s *checkSuite) TestReleaseSemver(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cases := []struct{ releaseVersion, releaseSemver string }{
 		{"None", ""},
 		{"HEAD", ""},

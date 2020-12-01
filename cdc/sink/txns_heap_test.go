@@ -16,6 +16,7 @@ package sink
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type TxnsHeapSuite struct{}
@@ -23,6 +24,7 @@ type TxnsHeapSuite struct{}
 var _ = check.Suite(&TxnsHeapSuite{})
 
 func (s TxnsHeapSuite) TestTxnsHeap(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		txnsMap  map[model.TableID][]*model.SingleTableTxn
 		expected []*model.SingleTableTxn

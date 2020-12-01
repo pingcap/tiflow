@@ -76,7 +76,7 @@ func (s *dispatcherSwitcher) matchDispatcher(row *model.RowChangedEvent) Dispatc
 		}
 		return rule.Dispatcher
 	}
-	log.Fatal("the dispatch rule must cover all tables")
+	log.Panic("the dispatch rule must cover all tables")
 	return nil
 }
 

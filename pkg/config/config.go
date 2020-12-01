@@ -25,8 +25,9 @@ import (
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
-	CaseSensitive:  true,
-	EnableOldValue: false,
+	CaseSensitive:    true,
+	EnableOldValue:   false,
+	CheckGCSafePoint: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -49,14 +50,15 @@ var defaultReplicaConfig = &ReplicaConfig{
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive  bool             `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue bool             `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate bool             `toml:"force-replicate" json:"force-replicate"`
-	Filter         *FilterConfig    `toml:"filter" json:"filter"`
-	Mounter        *MounterConfig   `toml:"mounter" json:"mounter"`
-	Sink           *SinkConfig      `toml:"sink" json:"sink"`
-	Cyclic         *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
-	Scheduler      *SchedulerConfig `toml:"scheduler" json:"scheduler"`
+	CaseSensitive    bool             `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool             `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool             `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool             `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	Filter           *FilterConfig    `toml:"filter" json:"filter"`
+	Mounter          *MounterConfig   `toml:"mounter" json:"mounter"`
+	Sink             *SinkConfig      `toml:"sink" json:"sink"`
+	Cyclic           *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
+	Scheduler        *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -95,13 +97,13 @@ func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	str, err := c.Marshal()
 	if err != nil {
-		log.Fatal("failed to marshal replica config",
+		log.Panic("failed to marshal replica config",
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	clone := new(ReplicaConfig)
 	err = clone.Unmarshal([]byte(str))
 	if err != nil {
-		log.Fatal("failed to unmarshal replica config",
+		log.Panic("failed to unmarshal replica config",
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	return clone
