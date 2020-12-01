@@ -885,7 +885,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			if row.CRTs <= resolvedTs {
 				_ = row.WaitPrepare(ctx)
-				log.Fatal("The CRTs must be greater than the resolvedTs",
+				log.Panic("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
 					zap.String("changefeed", p.changefeedID),
 					zap.Uint64("resolvedTs", resolvedTs),
@@ -1145,7 +1145,7 @@ func (p *processor) sorterConsume(
 			}
 			sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 			if pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
-				log.Fatal("The CRTs of event is not expected, please report a bug",
+				log.Panic("The CRTs of event is not expected, please report a bug",
 					util.ZapFieldChangefeed(ctx),
 					zap.String("model", "sorter"),
 					zap.Uint64("globalResolvedTs", sinkResolvedTs),

@@ -99,11 +99,9 @@ func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.V
 }
 
 // GetSnapshotMeta returns tidb meta information
+// TODO: Simplify the signature of this function
 func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
-	snapshot, err := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrGetStoreSnapshot, err)
-	}
+	snapshot := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
 	return meta.NewSnapshotMeta(snapshot), nil
 }
 
