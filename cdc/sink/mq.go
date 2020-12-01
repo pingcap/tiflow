@@ -212,7 +212,7 @@ flushLoop:
 		return 0, errors.Trace(err)
 	}
 	k.checkpointTs = resolvedTs
-	k.statistics.PrintStatus()
+	k.statistics.PrintStatus(ctx)
 	return k.checkpointTs, nil
 }
 
