@@ -16,7 +16,6 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
-	"go.uber.org/zap/zapcore"
 	"regexp"
 	"strconv"
 	"testing"
@@ -30,26 +29,28 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	testEtcdKeyPrefix = "/cdc_etcd_worker_test"
-	numGroups = 100
+	numGroups         = 100
 	numValuesPerGroup = 100
 )
+
 func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&etcdWorkerSuite{})
 
 type etcdWorkerSuite struct {
 	etcdServer *embed.Etcd
-	endpoints []string
+	endpoints  []string
 }
 
 type simpleReactor struct {
 	state *simpleReactorState
-	id int
+	id    int
 }
 
 func (s *simpleReactor) Tick(_ context.Context, state ReactorState) (nextState ReactorState, err error) {
@@ -93,14 +94,14 @@ func (s *simpleReactor) Tick(_ context.Context, state ReactorState) (nextState R
 type delta struct {
 	old int
 	new int
-	i1 int
-	i2 int
+	i1  int
+	i2  int
 }
 
 type simpleReactorState struct {
-	values [][]int
-	sum int
-	deltas []*delta
+	values  [][]int
+	sum     int
+	deltas  []*delta
 	patches []*DataPatch
 }
 
@@ -114,16 +115,16 @@ func (s *simpleReactorState) Get(i1, i2 int) int {
 
 func (s *simpleReactorState) Inc(i1, i2 int) {
 	patch := &DataPatch{
-		key: []byte(testEtcdKeyPrefix + "/" + strconv.Itoa(i1)),
-		fun: func(old []byte) ([]byte, error) {
-			var oldJson []int
-			err := json.Unmarshal(old, &oldJson)
+		Key: []byte(testEtcdKeyPrefix + "/" + strconv.Itoa(i1)),
+		Fun: func(old []byte) ([]byte, error) {
+			var oldJSON []int
+			err := json.Unmarshal(old, &oldJSON)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 
-			oldJson[i2]++
-			return json.Marshal(oldJson)
+			oldJSON[i2]++
+			return json.Marshal(oldJSON)
 		},
 	}
 
@@ -132,8 +133,8 @@ func (s *simpleReactorState) Inc(i1, i2 int) {
 
 func (s *simpleReactorState) SetSum(sum int) {
 	patch := &DataPatch{
-		key: []byte(testEtcdKeyPrefix + "/sum"),
-		fun: func(_ []byte) ([]byte, error) {
+		Key: []byte(testEtcdKeyPrefix + "/sum"),
+		Fun: func(_ []byte) ([]byte, error) {
 			return []byte(strconv.Itoa(sum)), nil
 		},
 	}
@@ -142,8 +143,6 @@ func (s *simpleReactorState) SetSum(sum int) {
 }
 
 func (s *simpleReactorState) Update(key []byte, value []byte) {
-	// log.Info("Update", zap.ByteString("key", key), zap.ByteString("value", value))
-
 	subMatches := keyParseRegexp.FindSubmatch(key)
 	if len(subMatches) != 2 {
 		log.Panic("illegal Etcd key", zap.ByteString("key", key))
@@ -207,11 +206,11 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 		return etcd.Wrap(rawCli, map[string]prometheus.Counter{})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	cli := newClient()
-	_, err := cli.Put(ctx, testEtcdKeyPrefix + "/sum", "0")
+	_, err := cli.Put(ctx, testEtcdKeyPrefix+"/sum", "0")
 	c.Check(err, check.IsNil)
 
 	initArray := make([]int, numValuesPerGroup)
@@ -219,12 +218,12 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 	c.Check(err, check.IsNil)
 
 	for i := 0; i < numGroups; i++ {
-		_ , err := cli.Put(ctx, testEtcdKeyPrefix + "/" + strconv.Itoa(i), string(jsonStr))
+		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/"+strconv.Itoa(i), string(jsonStr))
 		c.Check(err, check.IsNil)
 	}
 
 	errg, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < numValuesPerGroup + 1; i++ {
+	for i := 0; i < numValuesPerGroup+1; i++ {
 		finalI := i
 		errg.Go(func() error {
 			values := make([][]int, numGroups)
@@ -254,10 +253,9 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 				return errors.Trace(err)
 			}
 
-			return errors.Trace(etcdWorker.Run(ctx, testEtcdKeyPrefix, 10 * time.Millisecond))
+			return errors.Trace(etcdWorker.Run(ctx, testEtcdKeyPrefix, 10*time.Millisecond))
 		})
 	}
-
 
 	err = errg.Wait()
 	if err != nil && (errors.Cause(err) == context.DeadlineExceeded || errors.Cause(err) == context.Canceled) {

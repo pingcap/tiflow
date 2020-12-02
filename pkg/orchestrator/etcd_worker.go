@@ -24,25 +24,28 @@ import (
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
+// EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
-	client *etcd.Client
-	reactor Reactor
-	state ReactorState
-	rawState map[string][]byte
+	client         *etcd.Client
+	reactor        Reactor
+	state          ReactorState
+	rawState       map[string][]byte
 	pendingUpdates []*clientv3.Event
-	prefix string
-	revision int64
+	revision       int64
 }
 
+// NewEtcdWorker returns a new EtcdWorker
 func NewEtcdWorker(client *etcd.Client, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
 	return &EtcdWorker{
-		client:  client,
-		reactor: reactor,
-		state: initState,
+		client:   client,
+		reactor:  reactor,
+		state:    initState,
 		rawState: make(map[string][]byte),
 	}, nil
 }
 
+// Run starts the EtcdWorker event loop.
+// A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval time.Duration) error {
 	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -59,20 +62,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval 
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if len(pendingPatches) > 0 {
-				// ignore the timer if there are patches unapplied to Etcd
-				continue
-			}
-
-			nextState, err := worker.reactor.Tick(ctx, worker.state)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			worker.state = nextState
-			pendingPatches = nextState.GetPatches()
-
 		case response = <-watchCh:
-			if err := response.Err() ; err != nil {
+			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
 
@@ -96,15 +87,13 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval 
 		if len(pendingPatches) > 0 {
 			err := worker.applyUpdates(ctx, pendingPatches)
 			if err != nil {
-				if errors.Cause(err) == EtcdTryAgain {
+				if errors.Cause(err) == ErrEtcdTryAgain {
 					continue
 				}
 				return errors.Trace(err)
 			}
 			pendingPatches = pendingPatches[:0]
-		}
-
-		if len(pendingPatches) == 0 {
+		} else {
 			for _, event := range worker.pendingUpdates {
 				worker.state.Update(event.Kv.Key, event.Kv.Value)
 			}
@@ -162,18 +151,18 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 		ops := make([]clientv3.Op, 0)
 
 		for _, patch := range patches {
-			old, ok := worker.rawState[string(patch.key)]
+			old, ok := worker.rawState[string(patch.Key)]
 
 			// make sure someone else has not updated the key after the last snapshot
 			if ok {
-				cmp := clientv3.Compare(clientv3.ModRevision(string(patch.key)), "<", worker.revision + 1)
+				cmp := clientv3.Compare(clientv3.ModRevision(string(patch.Key)), "<", worker.revision+1)
 				cmps = append(cmps, cmp)
 			}
 
-			value, err := patch.fun(old)
+			value, err := patch.Fun(old)
 
 			if err != nil {
-				if errors.Cause(err) == EtcdIgnore {
+				if errors.Cause(err) == ErrEtcdIgnore {
 					continue
 				}
 				return errors.Trace(err)
@@ -181,9 +170,9 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 
 			var op clientv3.Op
 			if value != nil {
-			 	op = clientv3.OpPut(string(patch.key), string(value))
+				op = clientv3.OpPut(string(patch.Key), string(value))
 			} else {
-				op = clientv3.OpDelete(string(patch.key))
+				op = clientv3.OpDelete(string(patch.Key))
 			}
 			ops = append(ops, op)
 		}
@@ -209,6 +198,6 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 		}
 
 		log.Debug("EtcdWorker: transaction aborted, try again")
-		return EtcdTryAgain
+		return ErrEtcdTryAgain
 	}
 }

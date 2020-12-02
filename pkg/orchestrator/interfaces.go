@@ -18,23 +18,35 @@ import (
 	"errors"
 )
 
+// Reactor is a stateful transform of states.
+// It models Owner and Processor, which reacts according to updates in Etcd.
 type Reactor interface {
 	Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error)
 }
 
-type patchFunc = func (old []byte) (newValue []byte, err error)
-
 var (
-	EtcdTryAgain = errors.New("EtcdTryAgain")
-	EtcdIgnore = errors.New("EtcdIgnore")
+	// ErrEtcdTryAgain is used by a PatchFunc to force a transaction abort.
+	ErrEtcdTryAgain = errors.New("ErrEtcdTryAgain")
+	// ErrEtcdIgnore is used by a PatchFunc to signal that the reactor no longer wishes to update Etcd.
+	ErrEtcdIgnore = errors.New("ErrEtcdIgnore")
 )
 
+// PatchFunc should be a pure function that returns a new value given the old value.
+// The function is called each time the EtcdWorker initiates an Etcd transaction.
+type PatchFunc = func(old []byte) (newValue []byte, err error)
+
+// DataPatch represents an update to a given Etcd key
 type DataPatch struct {
-	key []byte
-	fun patchFunc
+	Key []byte
+	Fun PatchFunc
 }
 
+// ReactorState models e Etcd state of a reactor
 type ReactorState interface {
+	// Update is called by EtcdWorker to notify the Reactor of a latest change to the Etcd state.
 	Update(key []byte, value []byte)
+
+	// GetPatches is called by EtcdWorker, and should return a slice of data patches that represents the changes
+	// that a Reactor wants to apply to Etcd.
 	GetPatches() []*DataPatch
 }
