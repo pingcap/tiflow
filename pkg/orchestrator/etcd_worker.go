@@ -15,10 +15,10 @@ package orchestrator
 
 import (
 	"context"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
+	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
@@ -39,12 +39,16 @@ func NewEtcdWorker(client *etcd.Client, reactor Reactor, initState ReactorState)
 		client:  client,
 		reactor: reactor,
 		state: initState,
+		rawState: make(map[string][]byte),
 	}, nil
 }
 
-func (worker *EtcdWorker) Run(ctx context.Context, prefix string) error {
+func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval time.Duration) error {
 	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	ticker := time.NewTicker(timerInterval)
+	defer ticker.Stop()
 
 	watchCh := worker.client.Watch(ctx1, prefix, clientv3.WithPrefix())
 	var pendingPatches []*DataPatch
@@ -54,26 +58,38 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case response = <-watchCh:
-		}
+		case <-ticker.C:
+			if len(pendingPatches) > 0 {
+				// ignore the timer if there are patches unapplied to Etcd
+				continue
+			}
 
-		if err := response.Err() ; err != nil {
-			return errors.Trace(err)
-		}
-
-		if response.IsProgressNotify() {
-			continue
-		}
-
-		if worker.revision >= response.Header.GetRevision() {
-			continue
-		}
-		worker.revision = response.Header.GetRevision()
-
-		for _, event := range response.Events {
-			err := worker.handleEvent(ctx, event)
+			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			worker.state = nextState
+			pendingPatches = nextState.GetPatches()
+
+		case response = <-watchCh:
+			if err := response.Err() ; err != nil {
+				return errors.Trace(err)
+			}
+
+			if response.IsProgressNotify() {
+				continue
+			}
+
+			if worker.revision >= response.Header.GetRevision() {
+				continue
+			}
+			worker.revision = response.Header.GetRevision()
+
+			for _, event := range response.Events {
+				err := worker.handleEvent(ctx, event)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 
@@ -125,6 +141,21 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 	return nil
 }
 
+func (worker *EtcdWorker) syncRawState(ctx context.Context, prefix string) error {
+	resp, err := worker.client.Get(ctx, prefix, clientv3.WithPrefix())
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	worker.rawState = make(map[string][]byte)
+	for _, kv := range resp.Kvs {
+		worker.rawState[string(kv.Key)] = kv.Value
+	}
+
+	worker.revision = resp.Header.Revision
+	return nil
+}
+
 func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch) error {
 	for {
 		cmps := make([]clientv3.Cmp, 0)
@@ -135,7 +166,7 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 
 			// make sure someone else has not updated the key after the last snapshot
 			if ok {
-				cmp := clientv3.Compare(clientv3.ModRevision(string(patch.key)), "<=", worker.revision)
+				cmp := clientv3.Compare(clientv3.ModRevision(string(patch.key)), "<", worker.revision + 1)
 				cmps = append(cmps, cmp)
 			}
 
@@ -164,12 +195,14 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 
 		if resp.Succeeded {
 			worker.revision = resp.Header.GetRevision()
-			log.Debug("EtcdWorker: transaction succeeded", zap.Reflect("ops", ops))
+			log.Debug("EtcdWorker: transaction succeeded")
 			for _, op := range ops {
 				if op.IsPut() {
 					worker.rawState[string(op.KeyBytes())] = op.ValueBytes()
+					worker.state.Update(op.KeyBytes(), op.ValueBytes())
 				} else if op.IsDelete() {
 					delete(worker.rawState, string(op.KeyBytes()))
+					worker.state.Update(op.KeyBytes(), nil)
 				}
 			}
 			return nil
