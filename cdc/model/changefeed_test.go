@@ -172,8 +172,9 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			CheckGCSafePoint: true,
 			CaseSensitive:    true,
+			EnableOldValue:   true,
+			CheckGCSafePoint: true,
 		},
 	}
 

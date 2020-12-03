@@ -80,13 +80,6 @@ func (e *DockerEnv) RunTest(task Task) {
 		log.Fatal("RunTest: cannot connect to upstream database", zap.Error(err))
 	}
 
-	_, err = upstream.Exec("set @@global.tidb_enable_clustered_index=0")
-	if err != nil {
-		log.Info("tidb_enable_clustered_index not supported.")
-	} else {
-		time.Sleep(2 * time.Second)
-	}
-
 	downstream, err := sql.Open("mysql", DownstreamDSN)
 	if err != nil {
 		log.Fatal("RunTest: cannot connect to downstream database", zap.Error(err))
