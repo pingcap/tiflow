@@ -361,7 +361,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
-		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", newStatus))
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", newStatus))
 	}
 
 	for tableID := range cleanedTables {
@@ -389,7 +389,7 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
-		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", status))
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", status))
 	}
 	return nil
 }
@@ -525,13 +525,15 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 		case model.MoveTableStatusDeleted:
 			// add table to target capture
 			status, exist := cloneStatus(job.To)
+			replicaInfo := job.TableReplicaInfo.Clone()
+			replicaInfo.StartTs = c.status.CheckpointTs
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
-				c.orphanTables[tableID] = job.TableReplicaInfo.StartTs
+				c.orphanTables[tableID] = replicaInfo.StartTs
 				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
 				continue
 			}
-			status.AddTable(tableID, job.TableReplicaInfo, job.TableReplicaInfo.StartTs)
+			status.AddTable(tableID, replicaInfo, c.status.CheckpointTs)
 			job.Status = model.MoveTableStatusFinished
 			delete(c.moveTableJobs, tableID)
 			log.Info("handle the move job, add table to the target capture", zap.Reflect("job", job))
@@ -605,7 +607,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 	if len(c.ddlJobHistory) == 0 {
-		log.Fatal("ddl job history can not be empty in changefeed when should to execute DDL")
+		log.Panic("ddl job history can not be empty in changefeed when should to execute DDL")
 	}
 	todoDDLJob := c.ddlJobHistory[0]
 
@@ -800,7 +802,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 		if appliedTs != math.MaxUint64 {
 			log.Debug("some operation is still unapplied",
-				zap.String("captureID", captureID),
+				zap.String("capture-id", captureID),
 				zap.Uint64("appliedTs", appliedTs),
 				zap.Stringer("status", status))
 		}

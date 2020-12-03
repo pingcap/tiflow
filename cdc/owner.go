@@ -194,8 +194,13 @@ func (o *Owner) newChangeFeed(
 	info *model.ChangeFeedInfo,
 	checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
-		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
-
+		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
+	if info.Config.CheckGCSafePoint {
+		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
@@ -204,7 +209,10 @@ func (o *Owner) newChangeFeed(
 		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
 	})
 
-	kvStore := util.KVStorageFromCtx(ctx)
+	kvStore, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -517,7 +525,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 			if filter.ChangefeedFastFailError(err) {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
-					zap.Error(err), zap.String("changefeedid", changeFeedID))
+					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
 				err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
 				if err != nil {
@@ -976,12 +984,18 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	go func() {
+		if err := o.watchCampaignKey(ctx); err != nil {
+			cancel()
+		}
+	}()
+
 	if err := o.throne(ctx); err != nil {
 		return err
 	}
 
-	ctx1, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
 	changedFeeds := o.watchFeedChange(ctx1)
 
 	ticker := time.NewTicker(tickTime)
@@ -995,7 +1009,10 @@ loop:
 			close(o.done)
 			break loop
 		case <-ctx.Done():
-			return ctx.Err()
+			// FIXME: cancel the context doesn't ensure all resources are destructed, is it reasonable?
+			// Anyway we just break loop here to ensure the following destruction.
+			err = ctx.Err()
+			break loop
 		case <-changedFeeds:
 		case <-ticker.C:
 		}
@@ -1018,6 +1035,37 @@ loop:
 	}
 
 	return err
+}
+
+// watchCampaignKey watches the aliveness of campaign owner key in etcd
+func (o *Owner) watchCampaignKey(ctx context.Context) error {
+	key := fmt.Sprintf("%s/%x", kv.CaptureOwnerKey, o.session.Lease())
+restart:
+	resp, err := o.etcdClient.Client.Get(ctx, key)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	if resp.Count == 0 {
+		return cerror.ErrOwnerCampaignKeyDeleted.GenWithStackByArgs()
+	}
+	// watch the key change from the next revision relatived to the current
+	wch := o.etcdClient.Client.Watch(ctx, key, clientv3.WithRev(resp.Header.Revision+1))
+	for resp := range wch {
+		err := resp.Err()
+		if err != nil {
+			if err != mvcc.ErrCompacted {
+				log.Error("watch owner campaign key failed, restart the watcher", zap.Error(err))
+			}
+			goto restart
+		}
+		for _, ev := range resp.Events {
+			if ev.Type == clientv3.EventTypeDelete {
+				log.Warn("owner campaign key deleted", zap.String("key", key))
+				return cerror.ErrOwnerCampaignKeyDeleted.GenWithStackByArgs()
+			}
+		}
+	}
+	return nil
 }
 
 func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
@@ -1177,6 +1225,11 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 			captureIDs[captureID] = struct{}{}
 		}
 
+		log.Debug("cleanUpStaleTasks",
+			zap.Reflect("statuses", statuses),
+			zap.Reflect("positions", positions),
+			zap.Reflect("workloads", workloads))
+
 		for captureID := range captureIDs {
 			if _, ok := active[captureID]; !ok {
 				status, ok1 := statuses[captureID]
@@ -1207,7 +1260,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
-				log.Info("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
+				log.Info("cleanup stale task", zap.String("capture-id", captureID), zap.String("changefeed", changeFeedID))
 			}
 		}
 	}

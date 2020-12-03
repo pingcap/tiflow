@@ -22,10 +22,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	parsemodel "github.com/pingcap/parser/model"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
@@ -233,14 +233,14 @@ func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
-		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		f.logMeta.Names[ddl.TableInfo.TableID] = quotes.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 		err := f.flushLogMeta()
 		if err != nil {
 			return err
 		}
 	case parsemodel.ActionRenameTable:
 		delete(f.logMeta.Names, ddl.PreTableInfo.TableID)
-		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		f.logMeta.Names[ddl.TableInfo.TableID] = quotes.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 		err := f.flushLogMeta()
 		if err != nil {
 			return err

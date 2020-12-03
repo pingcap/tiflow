@@ -978,7 +978,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			log.Fatal("tikv reported duplicated request to the same region, which is not expected",
+			log.Panic("tikv reported duplicated request to the same region, which is not expected",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
 			return nil
 		} else if compatibility := innerErr.GetCompatibility(); compatibility != nil {
@@ -1404,7 +1404,7 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
-							log.Fatal("The CommitTs must be greater than the resolvedTs",
+							log.Panic("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMITTED"),
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
@@ -1422,7 +1422,7 @@ func (s *eventFeedSession) singleEventFeed(
 					case cdcpb.Event_COMMIT:
 						metricPullEventCommitCounter.Inc()
 						if entry.CommitTs <= lastResolvedTs {
-							log.Fatal("The CommitTs must be greater than the resolvedTs",
+							log.Panic("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMIT"),
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),

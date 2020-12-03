@@ -15,9 +15,11 @@ package util
 
 import (
 	"context"
+	"github.com/pingcap/errors"
 	"time"
 
 	"github.com/pingcap/tidb/kv"
+	"go.uber.org/zap"
 )
 
 type ctxKey string
@@ -85,12 +87,12 @@ func TimezoneFromCtx(ctx context.Context) *time.Location {
 }
 
 // KVStorageFromCtx returns a tikv store
-func KVStorageFromCtx(ctx context.Context) kv.Storage {
+func KVStorageFromCtx(ctx context.Context) (kv.Storage, error) {
 	store, ok := ctx.Value(ctxKeyKVStorage).(kv.Storage)
 	if !ok {
-		return nil
+		return nil, errors.Errorf("context can not find the value associated with key: %s", ctxKeyKVStorage)
 	}
-	return store
+	return store, nil
 }
 
 // SetOwnerInCtx returns a new child context with the owner flag set.
@@ -117,4 +119,15 @@ func ChangefeedIDFromCtx(ctx context.Context) string {
 // PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
 func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
+}
+
+// ZapFieldCapture returns a zap field containing capture address
+// TODO: log redact for capture address
+func ZapFieldCapture(ctx context.Context) zap.Field {
+	return zap.String("capture", CaptureAddrFromCtx(ctx))
+}
+
+// ZapFieldChangefeed returns a zap field containing changefeed id
+func ZapFieldChangefeed(ctx context.Context) zap.Field {
+	return zap.String("changefeed", ChangefeedIDFromCtx(ctx))
 }

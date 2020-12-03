@@ -16,6 +16,7 @@ package framework
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -31,19 +32,40 @@ const (
 	DownstreamDSN = "root@tcp(127.0.0.1:5000)/"
 )
 
-// KafkaDockerEnv represents the docker-compose service
-type KafkaDockerEnv struct {
+// DockerEnv represents the docker-compose service
+type DockerEnv struct {
 	DockerComposeOperator
 }
 
 // Reset implements Environment
-func (e *KafkaDockerEnv) Reset() {
-	e.TearDown()
-	e.Setup()
+func (e *DockerEnv) Reset() {
+	stdout, err := e.ExecInController(`/cdc cli unsafe reset --no-confirm --pd="http://upstream-pd:2379"`)
+	if err != nil {
+		log.Fatal("ResetEnv: cannot reset the cdc cluster", zap.ByteString("stdout", stdout), zap.Error(err))
+	}
+	log.Info("ResetEnv: reset the cdc cluster", zap.ByteString("stdout", stdout))
+
+	upstream, err := sql.Open("mysql", UpstreamDSN)
+	if err != nil {
+		log.Fatal("ResetEnv: cannot connect to upstream database", zap.Error(err))
+	}
+	defer upstream.Close()
+	if err := dropAllSchemas(upstream); err != nil {
+		log.Fatal("ResetEnv: error found when dropping all schema", zap.Error(err))
+	}
+
+	downstream, err := sql.Open("mysql", DownstreamDSN)
+	if err != nil {
+		log.Fatal("ResetEnv: cannot connect to downstream database", zap.Error(err))
+	}
+	defer downstream.Close()
+	if err := dropAllSchemas(downstream); err != nil {
+		log.Fatal("ResetEnv: error found when dropping all schema", zap.Error(err))
+	}
 }
 
 // RunTest implements Environment
-func (e *KafkaDockerEnv) RunTest(task Task) {
+func (e *DockerEnv) RunTest(task Task) {
 	cmdLine := "/cdc " + task.GetCDCProfile().String()
 	bytes, err := e.ExecInController(cmdLine)
 	if err != nil {
@@ -56,13 +78,6 @@ func (e *KafkaDockerEnv) RunTest(task Task) {
 	upstream, err := sql.Open("mysql", UpstreamDSN)
 	if err != nil {
 		log.Fatal("RunTest: cannot connect to upstream database", zap.Error(err))
-	}
-
-	_, err = upstream.Exec("set @@global.tidb_enable_clustered_index=0")
-	if err != nil {
-		log.Info("tidb_enable_clustered_index not supported.")
-	} else {
-		time.Sleep(2 * time.Second)
 	}
 
 	downstream, err := sql.Open("mysql", DownstreamDSN)
@@ -100,6 +115,39 @@ func (e *KafkaDockerEnv) RunTest(task Task) {
 }
 
 // SetListener implements Environment. Currently unfinished, will be used to monitor Kafka output
-func (e *KafkaDockerEnv) SetListener(states interface{}, listener MqListener) {
+func (e *DockerEnv) SetListener(states interface{}, listener MqListener) {
 	// TODO
+}
+
+var systemSchema = map[string]struct{}{
+	"INFORMATION_SCHEMA": {},
+	"METRICS_SCHEMA":     {},
+	"PERFORMANCE_SCHEMA": {},
+	"mysql":              {},
+}
+
+func dropAllSchemas(db *sql.DB) error {
+	result, err := db.Query("show databases;")
+	if err != nil {
+		return err
+	}
+	var schemaNames []string
+	var schema string
+	for result.Next() {
+		err := result.Scan(&schema)
+		if err != nil {
+			return err
+		}
+		schemaNames = append(schemaNames, schema)
+	}
+	for _, schema := range schemaNames {
+		if _, ok := systemSchema[schema]; ok {
+			continue
+		}
+		_, err := db.Exec(fmt.Sprintf("drop database %s;", schema))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
