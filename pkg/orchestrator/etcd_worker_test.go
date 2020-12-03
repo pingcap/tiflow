@@ -35,9 +35,9 @@ import (
 
 const (
 	testEtcdKeyPrefix    = "/cdc_etcd_worker_test"
-	numGroups            = 100
-	numValuesPerGroup    = 100
-	totalTicksPerReactor = 1000
+	numGroups            = 10
+	numValuesPerGroup    = 5
+	totalTicksPerReactor = 100
 )
 
 func Test(t *testing.T) { check.TestingT(t) }

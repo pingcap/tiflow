@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
@@ -206,7 +205,6 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 
 		if resp.Succeeded {
 			worker.revision = resp.Header.GetRevision()
-			log.Debug("EtcdWorker: transaction succeeded")
 			for _, op := range ops {
 				if op.IsPut() {
 					worker.rawState[string(op.KeyBytes())] = op.ValueBytes()
@@ -219,7 +217,6 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 			return nil
 		}
 
-		log.Debug("EtcdWorker: transaction aborted, try again")
 		return ErrEtcdTryAgain
 	}
 }
