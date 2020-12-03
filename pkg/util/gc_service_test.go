@@ -18,6 +18,7 @@ import (
 	"math"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 )
 
@@ -30,6 +31,7 @@ var _ = check.Suite(&gcServiceSuite{
 })
 
 func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60) //nolint:errcheck
 	err := CheckSafetyOfStartTs(ctx, s.pdCli, 50)

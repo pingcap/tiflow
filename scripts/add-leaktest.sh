@@ -29,6 +29,11 @@ for i in $@; do
     goimports -w $i
     gofmt -w $i
   fi
-echo $i
   rm -f $i~
 done
+
+if [ `git --no-pager diff | wc -c` -ne 0 ]; then
+  echo "Please ensure leak test is added in all unit tests"
+  git --no-pager diff
+  exit 1
+fi
