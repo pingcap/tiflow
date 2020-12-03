@@ -80,6 +80,7 @@ func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, opts map[string]
 		statistics:    NewStatistics(ctx, "blackhole", opts),
 		clientConn:    conn,
 		clientRequest: request,
+		txnCache:      common.NewUnresolvedTxnCache(),
 	}
 }
 
@@ -292,7 +293,6 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 				err = clintSendDataWithRetry(b, entryBuilder)
 				log.Info("send data success!")
 
-
 			}
 		}
 	}
@@ -351,8 +351,8 @@ func getRowDataByClomns(colums []*model.Column, rowdataBuilder dsgpb.RowData) ds
 }
 
 func clintSendDataWithRetry(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
-	return retry.Run(10 * time.Millisecond,10, func() error {
-		return clintSendData(b,entryBuilder)
+	return retry.Run(10*time.Millisecond, 10, func() error {
+		return clintSendData(b, entryBuilder)
 	})
 }
 func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
@@ -380,12 +380,12 @@ func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
 		//	return errors.Trace(err)
 		//}
 	}
-	resp,err:=b.clientRequest.Recv()
-	if err!= nil{
-		return  errors.Trace(err)
+	resp, err := b.clientRequest.Recv()
+	if err != nil {
+		return errors.Trace(err)
 	}
-	if *resp.ReplyType == dsgpb.ReplyType_ERROR{
-		return errors.Errorf("failed to send data: %s",resp.ErrorMsg)
+	if *resp.ReplyType == dsgpb.ReplyType_ERROR {
+		return errors.Errorf("failed to send data: %s", resp.ErrorMsg)
 	}
 	return nil
 }
