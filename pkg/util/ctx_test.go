@@ -15,11 +15,9 @@ package util
 
 import (
 	"context"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/store/mockstore"
 	"go.uber.org/zap"
 )
 
@@ -105,10 +103,10 @@ func (s *ctxValueSuite) TestTableInfoNotSet(c *check.C) {
 
 func (s *ctxValueSuite) TestShouldReturnKVStorage(c *check.C) {
 	defer testleak.AfterTest(c)()
-	kvStorage := newMockStorage()
+	kvStorage, _ := mockstore.NewMockStore()
 	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
-	kvStorage, err := KVStorageFromCtx(ctx)
-	c.Assert(kvStorage.Name(), check.Equals, "KVMockStorage")
+	kvStorage2, err := KVStorageFromCtx(ctx)
+	c.Assert(kvStorage2, check.DeepEquals, kvStorage)
 	c.Assert(err, check.IsNil)
 }
 
@@ -123,69 +121,6 @@ func (s *ctxValueSuite) TestKVStorageNotSet(c *check.C) {
 	kvStorage, err = KVStorageFromCtx(ctx)
 	c.Assert(kvStorage, check.IsNil)
 	c.Assert(err, check.NotNil)
-}
-
-type mockStorage struct {
-}
-
-func (s *mockStorage) Begin() (kv.Transaction, error) {
-	return nil, nil
-}
-
-func (s *mockStorage) BeginWithStartTS(startTS uint64) (kv.Transaction, error) {
-	return nil, nil
-}
-
-func (s *mockStorage) Close() error {
-	return nil
-}
-
-func (s *mockStorage) UUID() string {
-	return ""
-}
-
-func (s *mockStorage) CurrentVersion() (kv.Version, error) {
-	return kv.Version{}, nil
-}
-
-func (s *mockStorage) GetMPPClient() kv.MPPClient {
-	return nil
-}
-func (s *mockStorage) GetClient() kv.Client {
-	return nil
-}
-
-func (s *mockStorage) GetOracle() oracle.Oracle {
-	return nil
-}
-
-func (s *mockStorage) SupportDeleteRange() (supported bool) {
-	return false
-}
-
-func (s *mockStorage) Name() string {
-	return "KVMockStorage"
-}
-
-func (s *mockStorage) Describe() string {
-	return "KVMockStorage is a mock Store implementation, only for unittests in KV package"
-}
-
-func (s *mockStorage) ShowStatus(ctx context.Context, key string) (interface{}, error) {
-	return nil, nil
-}
-
-func (s *mockStorage) GetMemCache() kv.MemManager {
-	return nil
-}
-
-func (s *mockStorage) GetSnapshot(ver kv.Version) kv.Snapshot {
-	return nil
-}
-
-// newMockStorage creates a new mockStorage.
-func newMockStorage() kv.Storage {
-	return &mockStorage{}
 }
 
 func (s *ctxValueSuite) TestZapFieldWithContext(c *check.C) {
