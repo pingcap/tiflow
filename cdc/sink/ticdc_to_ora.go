@@ -26,7 +26,6 @@ import (
 	gbackoff "google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/keepalive"
 	"net/url"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -227,7 +226,7 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 
 			//循环多个事务
 			for _, singleTableTxn := range singleTableTxns {
-				//todo
+				//todo 事务的排序
 				rows := singleTableTxn.Rows
 				if len(rows[0].PreColumns) == 0 {
 					//insert
@@ -240,10 +239,10 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 					eventTypeValue = 3
 				}
 
-				schemaName = rows[0].Table.Schema
-				tableName = rows[0].Table.Table
+				schemaName = singleTableTxn.Table.Schema
+				tableName = singleTableTxn.Table.Table
 				//事务号
-				batchID = strconv.FormatUint(rows[0].StartTs, 20)
+				batchID = fmt.Sprintf("%d:%d", singleTableTxn.StartTs,singleTableTxn.CommitTs)
 
 				entryBuilder := &dsgpb.Entry{}
 				headerBuilder := &dsgpb.Header{}
@@ -293,6 +292,9 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 
 				log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
 				err = clintSendDataWithRetry(b, entryBuilder)
+				if err != nil {
+					return resolvedTs, errors.Trace(err)
+				}
 				log.Info("send data success!")
 
 			}
@@ -357,7 +359,6 @@ func clintSendDataWithRetry(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) erro
 	})
 }
 func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
-
 	err := b.clientRequest.Send(entryBuilder)
 	if err != nil {
 		return errors.Trace(err)
