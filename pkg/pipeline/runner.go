@@ -15,11 +15,12 @@ package pipeline
 
 import (
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/context"
 	"go.uber.org/zap"
 )
 
 type runner interface {
-	run(ctx Context) error
+	run(ctx context.Context) error
 	getOutputCh() chan *Message
 	getNode() Node
 	getName() string
@@ -41,22 +42,22 @@ func newNodeRunner(name string, node Node, previous runner) *nodeRunner {
 	}
 }
 
-func (r *nodeRunner) run(ctx Context) error {
-	ctx = withOutputCh(ctx, r.outputCh)
+func (r *nodeRunner) run(ctx context.Context) error {
+	nodeCtx := newNodeContext(ctx, nil, r.outputCh)
+	defer close(r.outputCh)
 	defer func() {
-		err := r.node.Destroy(ctx)
+		err := r.node.Destroy(nodeCtx)
 		if err != nil {
 			log.Error("found an error when stopping node", zap.String("node name", r.name), zap.Error(err))
 		}
-		close(r.outputCh)
 	}()
-	err := r.node.Init(ctx)
+	err := r.node.Init(nodeCtx)
 	if err != nil {
 		return err
 	}
 	// TODO: We can add monitoring for execution time and channel length here uniformly
 	for msg := range r.previous.getOutputCh() {
-		err := r.node.Receive(withMessage(ctx, msg))
+		err := r.node.Receive(withMessage(nodeCtx, msg))
 		if err != nil {
 			return err
 		}
@@ -82,7 +83,7 @@ func (h headRunner) getName() string {
 	return "header"
 }
 
-func (h headRunner) run(ctx Context) error {
+func (h headRunner) run(ctx context.Context) error {
 	panic("unreachable")
 }
 

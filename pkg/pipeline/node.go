@@ -15,44 +15,18 @@ package pipeline
 
 // Node represents a handle unit for the message stream in pipeline
 type Node interface {
-	Init(ctx Context) error
+	// Init initializes the node
+	// when the pipeline is started, this function will be called in order
+	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
+	// but it will panic if you try to call the `ctx.Message()`
+	Init(ctx NodeContext) error
 	// Receive receives the message from the previous node
-	Receive(ctx Context) error
-	Destroy(ctx Context) error
-}
-
-type concurrentNodeGroup struct {
-	nodeGroup    []Node
-	currentIndex int
-}
-
-// NewConcurrentNodeGroup returns a concurrent node group
-func NewConcurrentNodeGroup(nodes ...Node) Node {
-	return &concurrentNodeGroup{
-		nodeGroup: nodes,
-	}
-}
-
-func (cng *concurrentNodeGroup) Init(ctx Context) error {
-	for _, node := range cng.nodeGroup {
-		if err := node.Init(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (cng *concurrentNodeGroup) Receive(ctx Context) error {
-	err := cng.nodeGroup[cng.currentIndex].Receive(ctx)
-	cng.currentIndex = (cng.currentIndex + 1) % len(cng.nodeGroup)
-	return err
-}
-
-func (cng *concurrentNodeGroup) Destroy(ctx Context) error {
-	for _, node := range cng.nodeGroup {
-		if err := node.Destroy(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+	// when the node receives a message, this function will be called
+	// you can call `ctx.Message()` to receive the message
+	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
+	Receive(ctx NodeContext) error
+	// Destory frees the resources in this node
+	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
+	// but it will panic if you try to call the `ctx.Message()`
+	Destroy(ctx NodeContext) error
 }

@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/context"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +33,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new pipeline
-func NewPipeline(ctx Context) *Pipeline {
+func NewPipeline(ctx context.Context) (context.Context, *Pipeline) {
 	header := make(headRunner, 4)
 	runners := make([]runner, 0, 16)
 	runners = append(runners, header)
@@ -40,15 +41,19 @@ func NewPipeline(ctx Context) *Pipeline {
 		header:  header,
 		runners: runners,
 	}
+	ctx = context.WatchThrow(ctx, func(err error) {
+		p.addError(err)
+		p.close()
+	})
 	go func() {
 		<-ctx.Done()
 		p.close()
 	}()
-	return p
+	return ctx, p
 }
 
 // AppendNode appends the node to the pipeline
-func (p *Pipeline) AppendNode(ctx Context, name string, node Node) {
+func (p *Pipeline) AppendNode(ctx context.Context, name string, node Node) {
 	lastRunner := p.runners[len(p.runners)-1]
 	runner := newNodeRunner(name, node, lastRunner)
 	p.runners = append(p.runners, runner)
@@ -56,7 +61,7 @@ func (p *Pipeline) AppendNode(ctx Context, name string, node Node) {
 	go p.driveRunner(ctx, lastRunner, runner)
 }
 
-func (p *Pipeline) driveRunner(ctx Context, previousRunner, runner runner) {
+func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runner) {
 	defer p.runnersWg.Done()
 	defer blackhole(previousRunner)
 	err := runner.run(ctx)
