@@ -15,6 +15,9 @@ package orchestrator
 
 import (
 	"context"
+	"go.uber.org/zap"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -34,22 +37,24 @@ type EtcdWorker struct {
 	// revision is the Etcd revision of the latest event received from Etcd
 	// (which has not necessarily been applied to the ReactorState)
 	revision int64
+	prefix string
 }
 
 // NewEtcdWorker returns a new EtcdWorker
-func NewEtcdWorker(client *etcd.Client, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
+func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		client:   client,
 		reactor:  reactor,
 		state:    initState,
 		rawState: make(map[string][]byte),
+		prefix: prefix,
 	}, nil
 }
 
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
-func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval time.Duration) error {
-	err := worker.syncRawState(ctx, prefix)
+func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) error {
+	err := worker.syncRawState(ctx, worker.prefix)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -60,7 +65,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval 
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchCh := worker.client.Watch(ctx1, prefix, clientv3.WithPrefix())
+	watchCh := worker.client.Watch(ctx1, worker.prefix, clientv3.WithPrefix())
 	var pendingPatches []*DataPatch
 
 	for {
@@ -226,4 +231,10 @@ func (worker *EtcdWorker) doNormalExit(_ context.Context) error {
 	worker.revision = 0
 	worker.pendingUpdates = worker.pendingUpdates[:0]
 	return nil
+}
+
+func (worker *EtcdWorker) removePrefix(key string) string {
+	if strings.Index(key, worker.prefix) != 0 {
+		log.Panic("prefix not found", zap.String("key", key), zap.String("prefix", worker.prefix))
+	}
 }
