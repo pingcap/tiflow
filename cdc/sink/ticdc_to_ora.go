@@ -17,7 +17,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/pingcap/errors"
-	DSGEntryProtocol "github.com/pingcap/ticdc/proto/dsg"
+	"github.com/pingcap/ticdc/cdc/sink/common"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/retry"
+	dsgpb "github.com/pingcap/ticdc/proto/dsg"
 	"google.golang.org/grpc"
 	gbackoff "google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/keepalive"
@@ -40,10 +43,9 @@ const (
 // newBlackHoleSink creates a block hole sink
 func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, opts map[string]string) *ticdcToOraclSink {
 
-	address := sinkURI.Host
 	//address := "192.168.198.48:9099"
 	conn, err := grpc.Dial(
-		address,
+		sinkURI.Host,
 		grpc.WithInsecure(),
 		grpc.WithInitialWindowSize(grpcInitialWindowSize),
 		grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
@@ -67,9 +69,9 @@ func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, opts map[string]
 		fmt.Print(err)
 		return nil
 	}
-	client := DSGEntryProtocol.NewDsgTicdcStreamingClient(conn)
+	client := dsgpb.NewDSGTiCDCStreamingClient(conn)
 	grpcCtx := context.Background()
-	request, err := client.DsgTicdcStreamingRequest(grpcCtx)
+	request, err := client.DSGTiCDCStreamingRequest(grpcCtx)
 	if err != nil {
 		fmt.Print(err)
 		return nil
@@ -86,19 +88,24 @@ type ticdcToOraclSink struct {
 	checkpointTs    uint64
 	accumulated     uint64
 	lastAccumulated uint64
+	filter          *filter.Filter
+	txnCache        *common.UnresolvedTxnCache
 	clientConn      *grpc.ClientConn
-	clientRequest   DSGEntryProtocol.DsgTicdcStreaming_DsgTicdcStreamingRequestClient
+	clientRequest   dsgpb.DSGTiCDCStreaming_DSGTiCDCStreamingRequestClient
 }
 
 var curCookies []*model.RowChangedEvent
 
 func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 
+	count := b.txnCache.Append(b.filter, rows...)
+	b.statistics.AddRowsCount(count)
+
 	var eventTypeValue int32
 	var schemaName string
 	var tableName string
 	var batchID string
-	var colType string
+	//var colType string
 
 	if len(rows) == 0 {
 		return nil
@@ -118,115 +125,29 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 
 		schemaName = rows[0].Table.Schema
 		tableName = rows[0].Table.Table
+		//事务号
 		batchID = strconv.FormatUint(rows[0].StartTs, 20)
 	}
 	checkpointTs := atomic.LoadUint64(&b.checkpointTs)
 
-	entryBuilder := &DSGEntryProtocol.Entry{}
-	headerBuilder := &DSGEntryProtocol.Header{}
-	rowdataListBuilder := &DSGEntryProtocol.RowDataList{}
+	entryBuilder := &dsgpb.Entry{}
+	headerBuilder := &dsgpb.Header{}
+	rowdataListBuilder := &dsgpb.RowDataList{}
 
 	for _, row := range rows {
-		rowdataBuilder := &DSGEntryProtocol.RowData{}
+		var rowdataBuilder dsgpb.RowData
 		if eventTypeValue == 2 {
 			//insert
-			for _, column := range row.Columns {
-				columnBuilder := &DSGEntryProtocol.Column{}
-				columnBuilder.ColName = &column.Name
-				columnValue := model.ColumnValueString(column.Value)
-				columnBuilder.ColValue = &columnValue
-				//27个
-				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
-					colType = "integer"
-				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
-					colType = "string"
-				} else if column.Type == 10 || column.Type == 14 {
-					colType = "date"
-				} else if column.Type == 7 || column.Type == 12 {
-					colType = "datetime"
-				} else if column.Type == 11 {
-					colType = "time"
-				} else if column.Type == 13 {
-					colType = "year"
-				}
-				columnBuilder.ColType = &colType
-				rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
-			}
+			rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
 		} else if eventTypeValue == 4 {
 			//delete
-			for _, column := range row.PreColumns {
-				if column != nil {
-					columnBuilder := &DSGEntryProtocol.Column{}
-					columnBuilder.ColName = &column.Name
-					columnValue := model.ColumnValueString(column.Value)
-					columnBuilder.ColValue = &columnValue
-					if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
-						colType = "integer"
-					} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
-						colType = "string"
-					} else if column.Type == 10 || column.Type == 14 {
-						colType = "date"
-					} else if column.Type == 7 || column.Type == 12 {
-						colType = "datetime"
-					} else if column.Type == 11 {
-						colType = "time"
-					} else if column.Type == 13 {
-						colType = "year"
-					}
-					columnBuilder.ColType = &colType
-					rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
-				}
-			}
+			rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
 		} else if eventTypeValue == 3 {
 			//update
 			//after
-			for _, column := range row.Columns {
-				columnBuilder := &DSGEntryProtocol.Column{}
-				columnBuilder.ColName = &column.Name
-				columnValue := model.ColumnValueString(column.Value)
-				columnBuilder.ColValue = &columnValue
-				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
-					colType = "integer"
-				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
-					colType = "string"
-				} else if column.Type == 10 || column.Type == 14 {
-					colType = "date"
-				} else if column.Type == 7 || column.Type == 12 {
-					colType = "datetime"
-				} else if column.Type == 11 {
-					colType = "time"
-				} else if column.Type == 13 {
-					colType = "year"
-				}
-				columnBuilder.ColType = &colType
-				colFlag := int32(0)
-				columnBuilder.ColFlags = &colFlag
-				rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
-			}
+			rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
 			//before
-			for _, column := range row.PreColumns {
-				columnBuilder := &DSGEntryProtocol.Column{}
-				columnBuilder.ColName = &column.Name
-				columnValue := model.ColumnValueString(column.Value)
-				columnBuilder.ColValue = &columnValue
-				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
-					colType = "integer"
-				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
-					colType = "string"
-				} else if column.Type == 10 || column.Type == 14 {
-					colType = "date"
-				} else if column.Type == 7 || column.Type == 12 {
-					colType = "datetime"
-				} else if column.Type == 11 {
-					colType = "time"
-				} else if column.Type == 13 {
-					colType = "year"
-				}
-				columnBuilder.ColType = &colType
-				colFlag := int32(1)
-				columnBuilder.ColFlags = &colFlag
-				rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
-			}
+			rowdataBuilder = getRowDataByClomns(row.PreColumns, rowdataBuilder)
 		}
 
 		if row.CommitTs <= checkpointTs {
@@ -237,14 +158,14 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 		log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
 
 		log.Info("show rowdataBuilder ", zap.Reflect("e", rowdataBuilder))
-		rowdataListBuilder.RowDatas = append(rowdataListBuilder.RowDatas, rowdataBuilder)
+		rowdataListBuilder.RowDatas = append(rowdataListBuilder.RowDatas, &rowdataBuilder)
 		log.Info("rowdataList size ", zap.Reflect("size :", len(rowdataListBuilder.RowDatas)))
 
 	}
 
 	headerBuilder.SchemaName = &schemaName
 	headerBuilder.TableName = &tableName
-	eventType := DSGEntryProtocol.EventType(eventTypeValue)
+	eventType := dsgpb.EventType(eventTypeValue)
 	headerBuilder.EventType = &eventType
 	entryBuilder.Header = headerBuilder
 
@@ -252,17 +173,18 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 	var batchCountNo = int32(len(rows))
 	entryBuilder.BatchCountNo = &batchCountNo
 
-	var entry = DSGEntryProtocol.EntryType(4)
+	var entry = dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
 	entryBuilder.EntryType = &entry
 	log.Info("show rowdataListBuilder ", zap.Reflect("e", rowdataListBuilder))
-	bytes1, err := rowdataListBuilder.Marshal()
+	rowdataListBuilderBytes, err := rowdataListBuilder.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	entryBuilder.StoreValue = bytes1
+	entryBuilder.StoreValue = rowdataListBuilderBytes
 
 	log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
-	err = b.clientRequest.Send(entryBuilder)
+	err = clintSendDataWithRetry(b, entryBuilder)
+	/*err = b.clientRequest.Send(entryBuilder)
 	if err != nil {
 		log.Warn("the connection to dsg server is broken")
 		_, err2 := b.clientRequest.CloseAndRecv()
@@ -280,17 +202,100 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 		if err != nil {
 			return errors.Trace(err)
 		}
-	}
+	}*/
 	log.Info("send data success!")
 
-	rowsCount := len(rows)
-	atomic.AddUint64(&b.accumulated, uint64(rowsCount))
-	b.statistics.AddRowsCount(rowsCount)
 	return nil
 }
 
 func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+
+	var eventTypeValue int32
+	var schemaName string
+	var tableName string
+	var batchID string
+
 	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
+	resolvedTxnsMap := b.txnCache.Resolved(resolvedTs)
+
+	if len(resolvedTxnsMap) != 0 {
+		//循环多张表
+		for _, singleTableTxns := range resolvedTxnsMap {
+
+			//循环多个事务
+			for _, singleTableTxn := range singleTableTxns {
+				//todo
+				rows := singleTableTxn.Rows
+				if len(rows[0].PreColumns) == 0 {
+					//insert
+					eventTypeValue = 2
+				} else if len(rows[0].Columns) == 0 {
+					//delete
+					eventTypeValue = 4
+				} else {
+					//update
+					eventTypeValue = 3
+				}
+
+				schemaName = rows[0].Table.Schema
+				tableName = rows[0].Table.Table
+				//事务号
+				batchID = strconv.FormatUint(rows[0].StartTs, 20)
+
+				entryBuilder := &dsgpb.Entry{}
+				headerBuilder := &dsgpb.Header{}
+				rowdataListBuilder := &dsgpb.RowDataList{}
+
+				for _, row := range rows {
+					var rowdataBuilder dsgpb.RowData
+					if eventTypeValue == 2 {
+						//insert
+						rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+					} else if eventTypeValue == 4 {
+						//delete
+						rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+					} else if eventTypeValue == 3 {
+						//update
+						//after
+						rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+						//before
+						rowdataBuilder = getRowDataByClomns(row.PreColumns, rowdataBuilder)
+					}
+
+					log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
+
+					log.Info("show rowdataBuilder ", zap.Reflect("e", rowdataBuilder))
+					rowdataListBuilder.RowDatas = append(rowdataListBuilder.RowDatas, &rowdataBuilder)
+					log.Info("rowdataList size ", zap.Reflect("size :", len(rowdataListBuilder.RowDatas)))
+				}
+
+				headerBuilder.SchemaName = &schemaName
+				headerBuilder.TableName = &tableName
+				eventType := dsgpb.EventType(eventTypeValue)
+				headerBuilder.EventType = &eventType
+				entryBuilder.Header = headerBuilder
+
+				entryBuilder.BatchID = &batchID
+				var batchCountNo = int32(len(rows))
+				entryBuilder.BatchCountNo = &batchCountNo
+
+				var entry = dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
+				entryBuilder.EntryType = &entry
+				log.Info("show rowdataListBuilder ", zap.Reflect("e", rowdataListBuilder))
+				rowdataListBuilderBytes, err := rowdataListBuilder.Marshal()
+				if err != nil {
+					return resolvedTs, errors.Trace(err)
+				}
+				entryBuilder.StoreValue = rowdataListBuilderBytes
+
+				log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
+				err = clintSendDataWithRetry(b, entryBuilder)
+				log.Info("send data success!")
+
+
+			}
+		}
+	}
 	return resolvedTs, nil
 }
 
@@ -311,5 +316,76 @@ func (b *ticdcToOraclSink) Initialize(ctx context.Context, tableInfo []*model.Si
 }
 
 func (b *ticdcToOraclSink) Close() error {
+	return nil
+}
+
+func getRowDataByClomns(colums []*model.Column, rowdataBuilder dsgpb.RowData) dsgpb.RowData {
+
+	var colType string
+
+	for _, column := range colums {
+		columnBuilder := &dsgpb.Column{}
+		columnBuilder.ColName = &column.Name
+		columnValue := model.ColumnValueString(column.Value)
+		columnBuilder.ColValue = &columnValue
+		if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
+			colType = "integer"
+		} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
+			colType = "string"
+		} else if column.Type == 10 || column.Type == 14 {
+			colType = "date"
+		} else if column.Type == 7 || column.Type == 12 {
+			colType = "datetime"
+		} else if column.Type == 11 {
+			colType = "time"
+		} else if column.Type == 13 {
+			colType = "year"
+		}
+		columnBuilder.ColType = &colType
+		colFlag := int32(1)
+		columnBuilder.ColFlags = &colFlag
+		rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
+	}
+
+	return rowdataBuilder
+}
+
+func clintSendDataWithRetry(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
+	return retry.Run(10 * time.Millisecond,10, func() error {
+		return clintSendData(b,entryBuilder)
+	})
+}
+func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
+
+	err := b.clientRequest.Send(entryBuilder)
+	if err != nil {
+		return errors.Trace(err)
+		//log.Warn("the connection to dsg server is broken")
+		////_, err2 := b.clientRequest.CloseAndRecv()
+		////todo
+		//err := b.clientRequest.CloseSend()
+		//_, err2 := b.clientRequest.Recv()
+		//if err2 != nil {
+		//	log.Warn("error when close the connection", zap.Error(err2))
+		//}
+		//client := DSGEntryProtocol.NewDSGTiCDCStreamingClient(b.clientConn)
+		//grpcCtx := context.Background()
+		//request, err := client.DSGTiCDCStreamingRequest(grpcCtx)
+		//if err != nil {
+		//	return errors.Trace(err)
+		//}
+		//b.clientRequest = request
+		//err = b.clientRequest.Send(entryBuilder)
+		//if err != nil {
+		//	return errors.Trace(err)
+		//}
+	}
+	resp,err:=b.clientRequest.Recv()
+	if err!= nil{
+		return  errors.Trace(err)
+	}
+	if *resp.ReplyType == dsgpb.ReplyType_ERROR{
+		return errors.Errorf("failed to send data: %s",resp.ErrorMsg)
+	}
 	return nil
 }

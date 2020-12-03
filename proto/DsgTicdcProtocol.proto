@@ -1,20 +1,28 @@
 syntax = "proto2";
 
+package dsgpb;
 option java_multiple_files = true;
-option java_package = "com.publics.protocol";
-option java_outer_classname = "DsgTicdcProtocol";
+option java_package = "com.dsg.protocol";
+option java_outer_classname = "DSGTiCDCProtocol";
 option optimize_for = SPEED;
 
-import "DSGEntryProtocol.proto";
+import "EntryProtocol.proto";
 
 // The greeting service definition.
-service DsgTicdcStreaming {
+service DSGTiCDCStreaming {
   // Streams a many greetings
-  rpc DsgTicdcStreamingRequest (stream Entry) returns (DsgTicdcStreamingReply) {}
+  rpc DSGTiCDCStreamingRequest (stream Entry) returns (stream DSGTiCDCStreamingReply) {}
+}
+
+
+enum ReplyType {
+	SUCCESS = 0;
+	ERROR   = 1;
 }
 
 // The response message containing the greetings
-message DsgTicdcStreamingReply {
-  required int32 code = 1;
-  optional string message = 2;
+message DSGTiCDCStreamingReply {
+  required ReplyType replyType = 1;
+  optional string batchID = 2;
+  optional string errorMsg = 3;
 }
