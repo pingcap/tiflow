@@ -14,12 +14,12 @@
 package orchestrator
 
 import (
-	"github.com/pingcap/log"
+	"encoding/json"
 	"reflect"
 
-	"encoding/json"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 

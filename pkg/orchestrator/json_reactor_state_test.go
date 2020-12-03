@@ -15,15 +15,15 @@ package orchestrator
 
 import (
 	"context"
-	"github.com/pingcap/log"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.etcd.io/etcd/clientv3"
-	"golang.org/x/sync/errgroup"
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 var _ = check.Suite(&jsonReactorStateSuite{})
