@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/filter"
+	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
 	dsgpb "github.com/pingcap/ticdc/proto/dsg"
 	"google.golang.org/grpc"
@@ -41,7 +42,7 @@ const (
 )
 
 // newBlackHoleSink creates a block hole sink
-func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, opts map[string]string) *ticdcToOraclSink {
+func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, filter *tifilter.Filter, opts map[string]string) *ticdcToOraclSink {
 
 	//address := "192.168.198.48:9099"
 	conn, err := grpc.Dial(
@@ -80,6 +81,7 @@ func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, opts map[string]
 		statistics:    NewStatistics(ctx, "blackhole", opts),
 		clientConn:    conn,
 		clientRequest: request,
+		filter:        filter,
 		txnCache:      common.NewUnresolvedTxnCache(),
 	}
 }
