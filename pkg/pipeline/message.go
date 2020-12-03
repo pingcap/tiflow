@@ -21,8 +21,10 @@ type MessageType int
 const (
 	// MessageTypeUnknown is unknown message type
 	MessageTypeUnknown MessageType = iota
-	// MessageTypeRowChangedEvent is the row changed event message type
-	MessageTypeRowChangedEvent
+	// MessageTypeCommand is command message type
+	MessageTypeCommand
+	// MessageTypePolymorphicEvent is the row changed event message type
+	MessageTypePolymorphicEvent
 )
 
 // Message is a vehicle for transferring information between nodes
@@ -30,13 +32,41 @@ type Message struct {
 	// TODO add more kind of messages
 	// Tp is the type of Message
 	Tp MessageType
-	// RowChangedEvent represents the row change event
-	RowChangedEvent *model.RowChangedEvent
+	// Command is the command in this message
+	Command *Command
+	// PolymorphicEvent represents the row change event
+	PolymorphicEvent *model.PolymorphicEvent
 }
 
-// SetRowChangedEvent sets the message to RowChangedEvent
-func (m *Message) SetRowChangedEvent(row *model.RowChangedEvent) *Message {
-	m.Tp = MessageTypeRowChangedEvent
-	m.RowChangedEvent = row
-	return m
+// PolymorphicEventMessage creates the message of PolymorphicEvent
+func PolymorphicEventMessage(event *model.PolymorphicEvent) *Message {
+	return &Message{
+		Tp:               MessageTypePolymorphicEvent,
+		PolymorphicEvent: event,
+	}
+}
+
+// CommandMessage creates the message of Command
+func CommandMessage(command *Command) *Message {
+	return &Message{
+		Tp:      MessageTypeCommand,
+		Command: command,
+	}
+}
+
+// CommandType is the type of Command
+type CommandType int
+
+const (
+	// CommandTypeUnknown is unknown message type
+	CommandTypeUnknown CommandType = iota
+	// CommandTypeShouldStop means the table pipeline should stop soon
+	CommandTypeShouldStop
+	// CommandTypeStopped means the table pipeline is stopped
+	CommandTypeStopped
+)
+
+// Command is the command about table pipeline
+type Command struct {
+	Tp CommandType
 }

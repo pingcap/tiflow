@@ -17,32 +17,38 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/pkg/config"
+	pd "github.com/tikv/pd/client"
 )
 
 // Context contains some read-only parameters and provide control for the pipeline life cycle
 type Context interface {
-	// ReplicaConfig returns the replica config
-	ReplicaConfig() *config.ReplicaConfig
+	context.Context
+	Vars() *ContextVars
+
 	// Message returns the message sent by the previous node
 	Message() *Message
 	// SendToNextNode sends the message to the next node
 	SendToNextNode(msg *Message)
 
-	// StdContext returns a std context
-	StdContext() context.Context
-	// Done returns a channel like context.Context.Done
-	Done() <-chan struct{}
-
 	Throw(error)
 }
 
+// ContextVars contains some vars which can be used to anywhere in a pipeline
+type ContextVars struct {
+	PDClient      pd.Client
+	SchemaStorage *entry.SchemaStorage
+	Config        *config.ReplicaConfig
+}
+
 type baseContext struct {
+	context.Context
 	parent Context
 }
 
-func (ctx baseContext) ReplicaConfig() *config.ReplicaConfig {
-	return ctx.parent.ReplicaConfig()
+func (ctx baseContext) Vars() *ContextVars {
+	return ctx.parent.Vars()
 }
 
 func (ctx baseContext) Message() *Message {
@@ -53,28 +59,58 @@ func (ctx baseContext) SendToNextNode(msg *Message) {
 	ctx.parent.SendToNextNode(msg)
 }
 
-func (ctx baseContext) Done() <-chan struct{} {
-	return ctx.parent.Done()
+func (ctx baseContext) Throw(err error) {
+	ctx.parent.Throw(err)
 }
 
-func (ctx baseContext) StdContext() context.Context {
-	return ctx.parent.StdContext()
+func (ctx baseContext) Deadline() (deadline time.Time, ok bool) {
+	if ctx.Context == nil {
+		return ctx.parent.Deadline()
+	}
+	return ctx.Context.Deadline()
+}
+
+func (ctx baseContext) Done() <-chan struct{} {
+	if ctx.Context == nil {
+		return ctx.parent.Done()
+	}
+	return ctx.Context.Done()
+}
+
+func (ctx baseContext) Err() error {
+	if ctx.Context == nil {
+		return ctx.parent.Err()
+	}
+	return ctx.Context.Err()
+}
+
+func (ctx baseContext) Value(key interface{}) interface{} {
+	if ctx.Context == nil {
+		return ctx.parent.Value(key)
+	}
+	return ctx.Context.Value(key)
 }
 
 type rootContext struct {
 	baseContext
-	config  *config.ReplicaConfig
-	closeCh chan struct{}
+	vars         *ContextVars
+	errorHandler func(error)
 }
 
 // NewRootContext returns a new root context
-func NewRootContext(config *config.ReplicaConfig) (Context, context.CancelFunc) {
-	ctx := &rootContext{
-		baseContext: baseContext{},
-		config:      config,
-		closeCh:     make(chan struct{}),
+func NewRootContext(ctx context.Context, vars *ContextVars, errorHandler func(error)) (Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	pCtx := &rootContext{
+		baseContext: baseContext{
+			Context: ctx,
+		},
+		vars: vars,
+		errorHandler: func(err error) {
+			cancel()
+			errorHandler(err)
+		},
 	}
-	return ctx, func() { ctx.cancel() }
+	return pCtx, cancel
 }
 
 func (ctx *rootContext) Message() *Message {
@@ -85,25 +121,8 @@ func (ctx *rootContext) SendToNextNode(msg *Message) {
 	panic("unreachable")
 }
 
-func (ctx *rootContext) ReplicaConfig() *config.ReplicaConfig {
-	return ctx.config
-}
-func (ctx *rootContext) Done() <-chan struct{} {
-	return ctx.closeCh
-}
-
-func (ctx *rootContext) StdContext() context.Context {
-	return cancelStdContext{
-		closeCh: ctx.closeCh,
-	}
-}
-
-func (ctx *rootContext) cancel() {
-	defer func() {
-		// Avoid panic because repeated close channel
-		recover() //nolint:errcheck
-	}()
-	close(ctx.closeCh)
+func (ctx *rootContext) Throw(err error) {
+	ctx.errorHandler(err)
 }
 
 type messageContext struct {
@@ -141,24 +160,4 @@ func withOutputCh(ctx Context, outputCh chan *Message) Context {
 		},
 		outputCh: outputCh,
 	}
-}
-
-type cancelStdContext struct {
-	closeCh chan struct{}
-}
-
-func (ctx cancelStdContext) Deadline() (deadline time.Time, ok bool) {
-	return time.Time{}, false
-}
-
-func (ctx cancelStdContext) Done() <-chan struct{} {
-	return ctx.closeCh
-}
-
-func (ctx cancelStdContext) Err() error {
-	return nil
-}
-
-func (ctx cancelStdContext) Value(key interface{}) interface{} {
-	return nil
 }
