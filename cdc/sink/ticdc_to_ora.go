@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 	gbackoff "google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/keepalive"
+	"io"
 	"net/url"
 	"sync/atomic"
 	"time"
@@ -242,7 +243,7 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 				schemaName = singleTableTxn.Table.Schema
 				tableName = singleTableTxn.Table.Table
 				//事务号
-				batchID = fmt.Sprintf("%d:%d", singleTableTxn.StartTs,singleTableTxn.CommitTs)
+				batchID = fmt.Sprintf("%d:%d", singleTableTxn.StartTs, singleTableTxn.CommitTs)
 
 				entryBuilder := &dsgpb.Entry{}
 				headerBuilder := &dsgpb.Header{}
@@ -252,16 +253,16 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 					var rowdataBuilder dsgpb.RowData
 					if eventTypeValue == 2 {
 						//insert
-						rowdataBuilder = getRowDataByClomns(0,row.Columns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
 					} else if eventTypeValue == 4 {
 						//delete
-						rowdataBuilder = getRowDataByClomns(0,row.Columns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
 					} else if eventTypeValue == 3 {
 						//update
 						//after
-						rowdataBuilder = getRowDataByClomns(0,row.Columns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
 						//before
-						rowdataBuilder = getRowDataByClomns(1,row.PreColumns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(1, row.PreColumns, rowdataBuilder)
 					}
 
 					log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
@@ -291,7 +292,7 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 				entryBuilder.StoreValue = rowdataListBuilderBytes
 
 				log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
-				err = clintSendDataWithRetry(b, entryBuilder)
+				err = clintSendDataWithRetry(ctx, b, entryBuilder)
 				if err != nil {
 					return resolvedTs, errors.Trace(err)
 				}
@@ -323,7 +324,7 @@ func (b *ticdcToOraclSink) Close() error {
 	return nil
 }
 
-func getRowDataByClomns(colFlag int32,colums []*model.Column, rowdataBuilder dsgpb.RowData) dsgpb.RowData {
+func getRowDataByClomns(colFlag int32, colums []*model.Column, rowdataBuilder dsgpb.RowData) dsgpb.RowData {
 
 	var colType string
 
@@ -353,34 +354,37 @@ func getRowDataByClomns(colFlag int32,colums []*model.Column, rowdataBuilder dsg
 	return rowdataBuilder
 }
 
-func clintSendDataWithRetry(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
+func (b *ticdcToOraclSink) resetConn(ctx context.Context) error {
+	log.Warn("the connection to dsg server is broken")
+	err := b.clientRequest.CloseSend()
+	if err != nil {
+		log.Warn("found an error when close the grpc conn", zap.Error(err))
+	}
+
+	client := dsgpb.NewDSGTiCDCStreamingClient(b.clientConn)
+	request, err := client.DSGTiCDCStreamingRequest(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	b.clientRequest = request
+	return nil
+}
+
+func clintSendDataWithRetry(ctx context.Context, b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
 	return retry.Run(10*time.Millisecond, 10, func() error {
-		return clintSendData(b, entryBuilder)
+		err := clintSendData(b, entryBuilder)
+		if errors.Cause(err) == io.EOF {
+			if err := b.resetConn(ctx); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
 	})
 }
 func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
 	err := b.clientRequest.Send(entryBuilder)
 	if err != nil {
 		return errors.Trace(err)
-		//log.Warn("the connection to dsg server is broken")
-		////_, err2 := b.clientRequest.CloseAndRecv()
-		////todo
-		//err := b.clientRequest.CloseSend()
-		//_, err2 := b.clientRequest.Recv()
-		//if err2 != nil {
-		//	log.Warn("error when close the connection", zap.Error(err2))
-		//}
-		//client := DSGEntryProtocol.NewDSGTiCDCStreamingClient(b.clientConn)
-		//grpcCtx := context.Background()
-		//request, err := client.DSGTiCDCStreamingRequest(grpcCtx)
-		//if err != nil {
-		//	return errors.Trace(err)
-		//}
-		//b.clientRequest = request
-		//err = b.clientRequest.Send(entryBuilder)
-		//if err != nil {
-		//	return errors.Trace(err)
-		//}
 	}
 	resp, err := b.clientRequest.Recv()
 	if err != nil {
