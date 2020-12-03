@@ -103,7 +103,6 @@ func (s *ctxValueSuite) TestTableInfoNotSet(c *check.C) {
 	c.Assert(tableName, check.Equals, "")
 }
 
-
 func (s *ctxValueSuite) TestShouldReturnKVStorage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	kvStorage := newMockStorage()
