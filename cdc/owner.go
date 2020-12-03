@@ -177,8 +177,6 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 }
 
 func (o *Owner) addOrphanTable(cid model.CaptureID, tableID model.TableID, startTs model.Ts) {
-	o.l.Lock()
-	defer o.l.Unlock()
 	if cf, ok := o.changeFeeds[cid]; ok {
 		cf.orphanTables[tableID] = startTs
 	} else {
@@ -1189,7 +1187,7 @@ func (o *Owner) writeDebugInfo(w io.Writer) {
 }
 
 // cleanUpStaleTasks cleans up the task status which does not associated
-// with an active processor.
+// with an active processor. This function is not thread safe.
 //
 // When a new owner is elected, it does not know the events occurs before, like
 // processor deletion. In this case, the new owner should check if the task
@@ -1365,6 +1363,8 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures map[model.Cap
 	//    from step-1, however other capture may crash just after step-2 returns
 	//    and before step-1 starts, the longer time gap between step-2 to step-1,
 	//    missing a crashed capture is more likey to happen.
+	o.l.Lock()
+	defer o.l.Unlock()
 	return errors.Trace(o.cleanUpStaleTasks(ctx))
 }
 
