@@ -52,20 +52,10 @@ func (m *maxwellMessage) Encode() ([]byte, error) {
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
-// Decode decodes the message from bytes
-func (m *maxwellMessage) Decode(data []byte) error {
-	return cerror.WrapError(cerror.ErrMaxwellDecodeFailed, json.Unmarshal(data, m))
-}
-
 // Encode encodes the message to bytes
 func (m *DdlMaxwellMessage) Encode() ([]byte, error) {
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
-}
-
-// Decode the message from bytes
-func (m *DdlMaxwellMessage) Decode(data []byte) error {
-	return cerror.WrapError(cerror.ErrMaxwellDecodeFailed, json.Unmarshal(data, m))
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
@@ -160,9 +150,15 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 						continue
 					}
 				} else if v.Flag.IsBinary() {
-					value.Old[v.Name] = v.Value
+					if value.Data[v.Name] != v.Value {
+						value.Old[v.Name] = v.Value
+					}
+
 				} else {
-					value.Old[v.Name] = string(v.Value.([]byte))
+					if value.Data[v.Name] != string(v.Value.([]byte)) {
+						value.Old[v.Name] = string(v.Value.([]byte))
+					}
+
 				}
 			default:
 				if value.Data[v.Name] != v.Value {
@@ -344,134 +340,6 @@ func NewMaxwellEventBatchEncoder() EventBatchEncoder {
 	}
 	batch.Reset()
 	return batch
-}
-
-func (b *MaxwellEventBatchDecoder) decodeNextKey() error {
-	keyLen := binary.BigEndian.Uint64(b.keyBytes[:8])
-	key := b.keyBytes[8 : keyLen+8]
-	msgKey := new(mqMessageKey)
-	err := msgKey.Decode(key)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	b.nextKey = msgKey
-	b.nextKeyLen = keyLen
-	return nil
-}
-
-func (b *MaxwellEventBatchDecoder) hasNext() bool {
-	return false
-}
-
-// MaxwellEventBatchDecoder decodes the byte of a batch into the original messages.
-type MaxwellEventBatchDecoder struct {
-	keyBytes   []byte
-	valueBytes []byte
-	nextKey    *mqMessageKey
-	nextKeyLen uint64
-}
-
-// HasNext implements the EventBatchDecoder interface
-func (b *MaxwellEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
-	if !b.hasNext() {
-		return 0, false, nil
-	}
-	if err := b.decodeNextKey(); err != nil {
-		return 0, false, err
-	}
-	return b.nextKey.Type, true, nil
-}
-
-// decode
-func maxwellMessageToRowEvent(key *mqMessageKey, value *maxwellMessage) *model.RowChangedEvent {
-	e := new(model.RowChangedEvent)
-	e.Table = &model.TableName{
-		Schema: key.Schema,
-		Table:  key.Table,
-	}
-	if key.Partition != nil {
-		e.Table.TableID = *key.Partition
-		e.Table.IsPartition = true
-	}
-	if value.Old == nil {
-		for k, v := range value.Data {
-			for _, n := range e.Columns {
-				n.Name = k
-				n.Value = v
-				n.Type = 3
-
-			}
-		}
-	}
-
-	return e
-}
-
-// NextResolvedEvent implements the EventBatchDecoder interface
-func (b *MaxwellEventBatchDecoder) NextResolvedEvent() (uint64, error) {
-	// For maxwell now, there is no such a corresponding type to ResolvedEvent so far.
-	// Therefore the event is ignored.
-	return 0, nil
-}
-
-// NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *MaxwellEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if b.nextKey == nil {
-		if err := b.decodeNextKey(); err != nil {
-			return nil, err
-		}
-	}
-	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeRow {
-		return nil, cerror.ErrMaxwellInvalidData.GenWithStack("row event message not found")
-	}
-	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
-	value := b.valueBytes[8 : valueLen+8]
-	b.valueBytes = b.valueBytes[valueLen+8:]
-	rowMsg := new(maxwellMessage)
-	if err := rowMsg.Decode(value); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	rowEvent := maxwellMessageToRowEvent(b.nextKey, rowMsg)
-	b.nextKey = nil
-	return rowEvent, nil
-}
-
-// NextDDLEvent implements the EventBatchDecoder interface
-func (b *MaxwellEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if b.nextKey == nil {
-		if err := b.decodeNextKey(); err != nil {
-			return nil, err
-		}
-	}
-	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeDDL {
-		return nil, cerror.ErrMaxwellInvalidData.GenWithStack("ddl event message not found")
-	}
-	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
-	value := b.valueBytes[8 : valueLen+8]
-	b.valueBytes = b.valueBytes[valueLen+8:]
-	ddlMsg := new(mqMessageDDL)
-	if err := ddlMsg.Decode(value); err != nil {
-		return nil, errors.Trace(err)
-	}
-	ddlEvent := mqMessageToDDLEvent(b.nextKey, ddlMsg)
-	b.nextKey = nil
-	return ddlEvent, nil
-}
-
-// NewMaxwellEventBatchDecoder creates a new JSONEventBatchDecoder.
-func NewMaxwellEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, error) {
-	version := binary.BigEndian.Uint64(key[:8])
-	key = key[8:]
-	if version != BatchVersion1 {
-		return nil, cerror.ErrMaxwellInvalidData.GenWithStack("unexpected key format version")
-	}
-	return &MaxwellEventBatchDecoder{
-		keyBytes:   key,
-		valueBytes: value,
-	}, nil
 }
 
 //ddl typecode from parser/model/ddl.go
