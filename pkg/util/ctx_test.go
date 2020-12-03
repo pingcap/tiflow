@@ -146,7 +146,7 @@ func (s *mockStorage) UUID() string {
 }
 
 func (s *mockStorage) CurrentVersion() (kv.Version, error) {
-	return kv.Version{1}, nil
+	return kv.Version{}, nil
 }
 
 func (s *mockStorage) GetMPPClient() kv.MPPClient {
