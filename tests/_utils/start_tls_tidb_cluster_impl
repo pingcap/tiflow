@@ -88,6 +88,8 @@ EOF
 # tidb server config file
 cat - > "$OUT_DIR/tidb-config-tls.toml" <<EOF
 split-table = true
+alter-primary-key = true
+new_collations_enabled_on_first_bootstrap = true
 [security]
 ssl-ca = "$TLS_DIR/ca.pem"
 ssl-cert = "$TLS_DIR/server.pem"
@@ -135,4 +137,4 @@ done
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
     --ssl-ca=$TLS_DIR/ca.pem \
     --ssl-cert=$TLS_DIR/server.pem \
-    --ssl-key=$TLS_DIR/server-key.pem || echo "tidb_enable_clustered_index not supports"
+    --ssl-key=$TLS_DIR/server-key.pem
