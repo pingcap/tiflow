@@ -26,12 +26,15 @@ import (
 
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
-	client         *etcd.Client
-	reactor        Reactor
-	state          ReactorState
+	client  *etcd.Client
+	reactor Reactor
+	state   ReactorState
+	// rawState is the local cache of the latest Etcd state.
 	rawState       map[string][]byte
 	pendingUpdates []*clientv3.Event
-	revision       int64
+	// revision is the Etcd revision of the latest event received from Etcd
+	// (which has not necessarily been applied to the ReactorState)
+	revision int64
 }
 
 // NewEtcdWorker returns a new EtcdWorker
@@ -47,6 +50,11 @@ func NewEtcdWorker(client *etcd.Client, reactor Reactor, initState ReactorState)
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval time.Duration) error {
+	err := worker.syncRawState(ctx, prefix)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -62,21 +70,27 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval 
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			// There is no new event to handle on timer ticks, so we have nothing here.
 		case response = <-watchCh:
+			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
+
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
 
+			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
 				continue
 			}
 
+			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
 
 			for _, event := range response.Events {
+				// handleEvent will apply the event to our internal `rawState`.
 				err := worker.handleEvent(ctx, event)
 				if err != nil {
 					return errors.Trace(err)
@@ -85,6 +99,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval 
 		}
 
 		if len(pendingPatches) > 0 {
+			// Here we have some patches yet to be uploaded to Etcd.
 			err := worker.applyUpdates(ctx, pendingPatches)
 			if err != nil {
 				if errors.Cause(err) == ErrEtcdTryAgain {
@@ -92,14 +107,21 @@ func (worker *EtcdWorker) Run(ctx context.Context, prefix string, timerInterval 
 				}
 				return errors.Trace(err)
 			}
+			// If we are here, all patches have been successfully applied to Etcd.
+			// `applyUpdates` is all-or-none, so in case of success, we should clear all the pendingPatches.
 			pendingPatches = pendingPatches[:0]
 		} else {
+			// We are safe to update the ReactorState only if there is no pending patch.
 			for _, event := range worker.pendingUpdates {
 				worker.state.Update(event.Kv.Key, event.Kv.Value)
 			}
 
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
+				if errors.Cause(err) == ErrReactorFinished {
+					// prepare for normal exit
+					return errors.Trace(worker.doNormalExit(ctx))
+				}
 				return errors.Trace(err)
 			}
 			worker.state = nextState
@@ -200,4 +222,11 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 		log.Debug("EtcdWorker: transaction aborted, try again")
 		return ErrEtcdTryAgain
 	}
+}
+
+func (worker *EtcdWorker) doNormalExit(_ context.Context) error {
+	worker.rawState = nil
+	worker.revision = 0
+	worker.pendingUpdates = worker.pendingUpdates[:0]
+	return nil
 }

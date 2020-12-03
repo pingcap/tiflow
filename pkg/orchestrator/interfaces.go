@@ -29,6 +29,8 @@ var (
 	ErrEtcdTryAgain = errors.New("ErrEtcdTryAgain")
 	// ErrEtcdIgnore is used by a PatchFunc to signal that the reactor no longer wishes to update Etcd.
 	ErrEtcdIgnore = errors.New("ErrEtcdIgnore")
+	// ErrReactorFinished is used by reactor to signal a **normal** exit.
+	ErrReactorFinished = errors.New("ErrReactorFinished")
 )
 
 // PatchFunc should be a pure function that returns a new value given the old value.

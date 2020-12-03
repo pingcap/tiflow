@@ -34,9 +34,10 @@ import (
 )
 
 const (
-	testEtcdKeyPrefix = "/cdc_etcd_worker_test"
-	numGroups         = 100
-	numValuesPerGroup = 100
+	testEtcdKeyPrefix    = "/cdc_etcd_worker_test"
+	numGroups            = 100
+	numValuesPerGroup    = 100
+	totalTicksPerReactor = 1000
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -49,11 +50,17 @@ type etcdWorkerSuite struct {
 }
 
 type simpleReactor struct {
-	state *simpleReactorState
-	id    int
+	state     *simpleReactorState
+	tickCount int
+	id        int
 }
 
 func (s *simpleReactor) Tick(_ context.Context, state ReactorState) (nextState ReactorState, err error) {
+	if s.tickCount >= totalTicksPerReactor {
+		return nil, ErrReactorFinished
+	}
+	s.tickCount++
+
 	newState := state.(*simpleReactorState)
 	if newState == nil {
 		return s.state, nil
@@ -206,7 +213,7 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 		return etcd.Wrap(rawCli, map[string]prometheus.Counter{})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	cli := newClient()
@@ -244,11 +251,6 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 			}
 
 			etcdWorker, err := NewEtcdWorker(newClient(), reactor, initState)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			err = etcdWorker.syncRawState(ctx, testEtcdKeyPrefix)
 			if err != nil {
 				return errors.Trace(err)
 			}
