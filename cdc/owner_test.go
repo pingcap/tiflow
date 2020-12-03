@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"sync"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
@@ -852,7 +852,6 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 }
 
 func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
-	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	addr := "127.0.0.1:12034"
@@ -879,7 +878,8 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 		err = s.client.PutTaskWorkload(ctx, changefeed, captureID, &model.TaskWorkload{})
 		c.Assert(err, check.IsNil)
 	}
-	s.client.SaveChangeFeedInfo(ctx, &model.ChangeFeedInfo{}, changefeed)
+	err = s.client.SaveChangeFeedInfo(ctx, &model.ChangeFeedInfo{}, changefeed)
+	c.Assert(err, check.IsNil)
 
 	_, captureList, err := s.client.GetCaptures(ctx)
 	c.Assert(err, check.IsNil)
@@ -916,4 +916,8 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(workloads), check.Equals, 1)
 	c.Assert(workloads, check.HasKey, capture.info.ID)
+
+	err = capture.session.Close()
+	c.Assert(err, check.IsNil)
+	s.TearDownTest(c)
 }
