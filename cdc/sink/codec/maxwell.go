@@ -92,23 +92,7 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 
 	physicalTime, _ := tsoutil.ParseTS(e.CommitTs)
 	value.Ts = physicalTime.Unix()
-	if e.PreColumns == nil {
-		value.Type = "insert"
-		for _, v := range e.Columns {
-			switch v.Type {
-			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-				if v.Value == nil {
-					value.Data[v.Name] = nil
-				} else if v.Flag.IsBinary() {
-					value.Data[v.Name] = v.Value
-				} else {
-					value.Data[v.Name] = string(v.Value.([]byte))
-				}
-			default:
-				value.Data[v.Name] = v.Value
-			}
-		}
-	} else if e.IsDelete() {
+	if e.IsDelete() {
 		value.Type = "delete"
 		for _, v := range e.PreColumns {
 			switch v.Type {
@@ -125,7 +109,6 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 			}
 		}
 	} else {
-		value.Type = "update"
 		for _, v := range e.Columns {
 			switch v.Type {
 			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
@@ -140,31 +123,37 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 				value.Data[v.Name] = v.Value
 			}
 		}
-		for _, v := range e.PreColumns {
-			switch v.Type {
-			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-				if v.Value == nil {
-					if value.Data[v.Name] != nil {
-						value.Old[v.Name] = nil
+		if e.PreColumns == nil {
+			value.Type = "insert"
+		} else {
+			value.Type = "update"
+			for _, v := range e.PreColumns {
+				switch v.Type {
+				case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+					if v.Value == nil {
+						if value.Data[v.Name] != nil {
+							value.Old[v.Name] = nil
+						} else {
+							continue
+						}
+					} else if v.Flag.IsBinary() {
+						if value.Data[v.Name] != v.Value {
+							value.Old[v.Name] = v.Value
+						}
+
 					} else {
-						continue
+						if value.Data[v.Name] != string(v.Value.([]byte)) {
+							value.Old[v.Name] = string(v.Value.([]byte))
+						}
+
 					}
-				} else if v.Flag.IsBinary() {
+				default:
 					if value.Data[v.Name] != v.Value {
 						value.Old[v.Name] = v.Value
 					}
-
-				} else {
-					if value.Data[v.Name] != string(v.Value.([]byte)) {
-						value.Old[v.Name] = string(v.Value.([]byte))
-					}
-
-				}
-			default:
-				if value.Data[v.Name] != v.Value {
-					value.Old[v.Name] = v.Value
 				}
 			}
+
 		}
 	}
 	return key, value
