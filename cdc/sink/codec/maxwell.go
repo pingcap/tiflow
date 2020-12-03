@@ -42,7 +42,7 @@ type maxwellMessage struct {
 	Xoffset  int                    `json:"xoffset,omitempty"`
 	Position string                 `json:"position,omitempty"`
 	Gtid     string                 `json:"gtid,omitempty"`
-	Data     map[string]interface{} `json:"data"`
+	Data     map[string]interface{} `json:"data,omitempty"`
 	Old      map[string]interface{} `json:"old,omitempty"`
 }
 
