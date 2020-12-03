@@ -104,109 +104,109 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 	count := b.txnCache.Append(b.filter, rows...)
 	b.statistics.AddRowsCount(count)
 
-	var eventTypeValue int32
-	var schemaName string
-	var tableName string
-	var batchID string
-	//var colType string
-
-	if len(rows) == 0 {
-		return nil
-	} else {
-		log.Info("PreColumns: ", zap.Any("", rows[0].PreColumns))
-		log.Info("Columns: ", zap.Any("", rows[0].Columns))
-		if len(rows[0].PreColumns) == 0 {
-			//insert
-			eventTypeValue = 2
-		} else if len(rows[0].Columns) == 0 {
-			//delete
-			eventTypeValue = 4
-		} else {
-			//update
-			eventTypeValue = 3
-		}
-
-		schemaName = rows[0].Table.Schema
-		tableName = rows[0].Table.Table
-		//事务号
-		batchID = strconv.FormatUint(rows[0].StartTs, 20)
-	}
-	checkpointTs := atomic.LoadUint64(&b.checkpointTs)
-
-	entryBuilder := &dsgpb.Entry{}
-	headerBuilder := &dsgpb.Header{}
-	rowdataListBuilder := &dsgpb.RowDataList{}
-
-	for _, row := range rows {
-		var rowdataBuilder dsgpb.RowData
-		if eventTypeValue == 2 {
-			//insert
-			rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
-		} else if eventTypeValue == 4 {
-			//delete
-			rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
-		} else if eventTypeValue == 3 {
-			//update
-			//after
-			rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
-			//before
-			rowdataBuilder = getRowDataByClomns(row.PreColumns, rowdataBuilder)
-		}
-
-		if row.CommitTs <= checkpointTs {
-			log.Fatal("The CommitTs must be greater than the checkpointTs",
-				zap.Uint64("CommitTs", row.CommitTs),
-				zap.Uint64("checkpointTs", checkpointTs))
-		}
-		log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
-
-		log.Info("show rowdataBuilder ", zap.Reflect("e", rowdataBuilder))
-		rowdataListBuilder.RowDatas = append(rowdataListBuilder.RowDatas, &rowdataBuilder)
-		log.Info("rowdataList size ", zap.Reflect("size :", len(rowdataListBuilder.RowDatas)))
-
-	}
-
-	headerBuilder.SchemaName = &schemaName
-	headerBuilder.TableName = &tableName
-	eventType := dsgpb.EventType(eventTypeValue)
-	headerBuilder.EventType = &eventType
-	entryBuilder.Header = headerBuilder
-
-	entryBuilder.BatchID = &batchID
-	var batchCountNo = int32(len(rows))
-	entryBuilder.BatchCountNo = &batchCountNo
-
-	var entry = dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
-	entryBuilder.EntryType = &entry
-	log.Info("show rowdataListBuilder ", zap.Reflect("e", rowdataListBuilder))
-	rowdataListBuilderBytes, err := rowdataListBuilder.Marshal()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	entryBuilder.StoreValue = rowdataListBuilderBytes
-
-	log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
-	err = clintSendDataWithRetry(b, entryBuilder)
-	/*err = b.clientRequest.Send(entryBuilder)
-	if err != nil {
-		log.Warn("the connection to dsg server is broken")
-		_, err2 := b.clientRequest.CloseAndRecv()
-		if err2 != nil {
-			log.Warn("error when close the connection", zap.Error(err2))
-		}
-		client := DSGEntryProtocol.NewDsgTicdcStreamingClient(b.clientConn)
-		grpcCtx := context.Background()
-		request, err := client.DsgTicdcStreamingRequest(grpcCtx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		b.clientRequest = request
-		err = b.clientRequest.Send(entryBuilder)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}*/
-	log.Info("send data success!")
+	//var eventTypeValue int32
+	//var schemaName string
+	//var tableName string
+	//var batchID string
+	////var colType string
+	//
+	//if len(rows) == 0 {
+	//	return nil
+	//} else {
+	//	log.Info("PreColumns: ", zap.Any("", rows[0].PreColumns))
+	//	log.Info("Columns: ", zap.Any("", rows[0].Columns))
+	//	if len(rows[0].PreColumns) == 0 {
+	//		//insert
+	//		eventTypeValue = 2
+	//	} else if len(rows[0].Columns) == 0 {
+	//		//delete
+	//		eventTypeValue = 4
+	//	} else {
+	//		//update
+	//		eventTypeValue = 3
+	//	}
+	//
+	//	schemaName = rows[0].Table.Schema
+	//	tableName = rows[0].Table.Table
+	//	//事务号
+	//	batchID = strconv.FormatUint(rows[0].StartTs, 20)
+	//}
+	//checkpointTs := atomic.LoadUint64(&b.checkpointTs)
+	//
+	//entryBuilder := &dsgpb.Entry{}
+	//headerBuilder := &dsgpb.Header{}
+	//rowdataListBuilder := &dsgpb.RowDataList{}
+	//
+	//for _, row := range rows {
+	//	var rowdataBuilder dsgpb.RowData
+	//	if eventTypeValue == 2 {
+	//		//insert
+	//		rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+	//	} else if eventTypeValue == 4 {
+	//		//delete
+	//		rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+	//	} else if eventTypeValue == 3 {
+	//		//update
+	//		//after
+	//		rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+	//		//before
+	//		rowdataBuilder = getRowDataByClomns(row.PreColumns, rowdataBuilder)
+	//	}
+	//
+	//	if row.CommitTs <= checkpointTs {
+	//		log.Fatal("The CommitTs must be greater than the checkpointTs",
+	//			zap.Uint64("CommitTs", row.CommitTs),
+	//			zap.Uint64("checkpointTs", checkpointTs))
+	//	}
+	//	log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
+	//
+	//	log.Info("show rowdataBuilder ", zap.Reflect("e", rowdataBuilder))
+	//	rowdataListBuilder.RowDatas = append(rowdataListBuilder.RowDatas, &rowdataBuilder)
+	//	log.Info("rowdataList size ", zap.Reflect("size :", len(rowdataListBuilder.RowDatas)))
+	//
+	//}
+	//
+	//headerBuilder.SchemaName = &schemaName
+	//headerBuilder.TableName = &tableName
+	//eventType := dsgpb.EventType(eventTypeValue)
+	//headerBuilder.EventType = &eventType
+	//entryBuilder.Header = headerBuilder
+	//
+	//entryBuilder.BatchID = &batchID
+	//var batchCountNo = int32(len(rows))
+	//entryBuilder.BatchCountNo = &batchCountNo
+	//
+	//var entry = dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
+	//entryBuilder.EntryType = &entry
+	//log.Info("show rowdataListBuilder ", zap.Reflect("e", rowdataListBuilder))
+	//rowdataListBuilderBytes, err := rowdataListBuilder.Marshal()
+	//if err != nil {
+	//	return errors.Trace(err)
+	//}
+	//entryBuilder.StoreValue = rowdataListBuilderBytes
+	//
+	//log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
+	//err = clintSendDataWithRetry(b, entryBuilder)
+	///*err = b.clientRequest.Send(entryBuilder)
+	//if err != nil {
+	//	log.Warn("the connection to dsg server is broken")
+	//	_, err2 := b.clientRequest.CloseAndRecv()
+	//	if err2 != nil {
+	//		log.Warn("error when close the connection", zap.Error(err2))
+	//	}
+	//	client := DSGEntryProtocol.NewDsgTicdcStreamingClient(b.clientConn)
+	//	grpcCtx := context.Background()
+	//	request, err := client.DsgTicdcStreamingRequest(grpcCtx)
+	//	if err != nil {
+	//		return errors.Trace(err)
+	//	}
+	//	b.clientRequest = request
+	//	err = b.clientRequest.Send(entryBuilder)
+	//	if err != nil {
+	//		return errors.Trace(err)
+	//	}
+	//}*/
+	//log.Info("send data success!")
 
 	return nil
 }
@@ -253,16 +253,16 @@ func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs
 					var rowdataBuilder dsgpb.RowData
 					if eventTypeValue == 2 {
 						//insert
-						rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(0,row.Columns, rowdataBuilder)
 					} else if eventTypeValue == 4 {
 						//delete
-						rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(0,row.Columns, rowdataBuilder)
 					} else if eventTypeValue == 3 {
 						//update
 						//after
-						rowdataBuilder = getRowDataByClomns(row.Columns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(0,row.Columns, rowdataBuilder)
 						//before
-						rowdataBuilder = getRowDataByClomns(row.PreColumns, rowdataBuilder)
+						rowdataBuilder = getRowDataByClomns(1,row.PreColumns, rowdataBuilder)
 					}
 
 					log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
@@ -321,7 +321,7 @@ func (b *ticdcToOraclSink) Close() error {
 	return nil
 }
 
-func getRowDataByClomns(colums []*model.Column, rowdataBuilder dsgpb.RowData) dsgpb.RowData {
+func getRowDataByClomns(colFlag int32,colums []*model.Column, rowdataBuilder dsgpb.RowData) dsgpb.RowData {
 
 	var colType string
 
@@ -344,7 +344,6 @@ func getRowDataByClomns(colums []*model.Column, rowdataBuilder dsgpb.RowData) ds
 			colType = "year"
 		}
 		columnBuilder.ColType = &colType
-		colFlag := int32(1)
 		columnBuilder.ColFlags = &colFlag
 		rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
 	}
