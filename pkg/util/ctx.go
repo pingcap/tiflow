@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/kv"
+	"go.uber.org/zap"
 )
 
 type ctxKey string
@@ -117,4 +118,15 @@ func ChangefeedIDFromCtx(ctx context.Context) string {
 // PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
 func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
+}
+
+// ZapFieldCapture returns a zap field containing capture address
+// TODO: log redact for capture address
+func ZapFieldCapture(ctx context.Context) zap.Field {
+	return zap.String("capture", CaptureAddrFromCtx(ctx))
+}
+
+// ZapFieldChangefeed returns a zap field containing changefeed id
+func ZapFieldChangefeed(ctx context.Context) zap.Field {
+	return zap.String("changefeed", ChangefeedIDFromCtx(ctx))
 }
