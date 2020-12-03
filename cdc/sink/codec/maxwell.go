@@ -133,8 +133,6 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 					if v.Value == nil {
 						if value.Data[v.Name] != nil {
 							value.Old[v.Name] = nil
-						} else {
-							continue
 						}
 					} else if v.Flag.IsBinary() {
 						if value.Data[v.Name] != v.Value {
