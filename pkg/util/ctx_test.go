@@ -15,9 +15,13 @@ package util
 
 import (
 	"context"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tidb/store/mockstore"
+	"go.uber.org/zap"
+>>>>>>> c819472... *:some helper functions add error return value and add some unit tests in ctx_test.go (#1154)
 )
 
 type ctxValueSuite struct{}
@@ -33,6 +37,8 @@ func (s *ctxValueSuite) TestShouldReturnCaptureID(c *check.C) {
 func (s *ctxValueSuite) TestCaptureIDNotSet(c *check.C) {
 	defer testleak.AfterTest(c)()
 	c.Assert(CaptureAddrFromCtx(context.Background()), check.Equals, "")
+	captureAddr := CaptureAddrFromCtx(context.Background())
+	c.Assert(captureAddr, check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyCaptureAddr, 1321)
 	c.Assert(CaptureAddrFromCtx(ctx), check.Equals, "")
 }
@@ -46,6 +52,67 @@ func (s *ctxValueSuite) TestShouldReturnChangefeedID(c *check.C) {
 func (s *ctxValueSuite) TestChangefeedIDNotSet(c *check.C) {
 	defer testleak.AfterTest(c)()
 	c.Assert(ChangefeedIDFromCtx(context.Background()), check.Equals, "")
+	changefeedID := ChangefeedIDFromCtx(context.Background())
+	c.Assert(changefeedID, check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
-	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "")
+	changefeedID = ChangefeedIDFromCtx(ctx)
+	c.Assert(changefeedID, check.Equals, "")
+}
+
+func (s *ctxValueSuite) TestShouldReturnTimezone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	tz, _ := getTimezoneFromZonefile("UTC")
+	ctx := PutTimezoneInCtx(context.Background(), tz)
+	tz = TimezoneFromCtx(ctx)
+	c.Assert(tz.String(), check.Equals, "UTC")
+}
+
+func (s *ctxValueSuite) TestTimezoneNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
+	tz := TimezoneFromCtx(context.Background())
+	c.Assert(tz, check.IsNil)
+	ctx := context.WithValue(context.Background(), ctxKeyTimezone, 1321)
+	tz = TimezoneFromCtx(ctx)
+	c.Assert(tz, check.IsNil)
+}
+
+func (s *ctxValueSuite) TestShouldReturnTableInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := PutTableInfoInCtx(context.Background(), 1321, "ello")
+	tableID, tableName := TableIDFromCtx(ctx)
+	c.Assert(tableID, check.Equals, int64(1321))
+	c.Assert(tableName, check.Equals, "ello")
+}
+
+func (s *ctxValueSuite) TestTableInfoNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
+	tableID, tableName := TableIDFromCtx(context.Background())
+	c.Assert(tableID, check.Equals, int64(0))
+	c.Assert(tableName, check.Equals, "")
+	ctx := context.WithValue(context.Background(), ctxKeyTableID, 1321)
+	tableID, tableName = TableIDFromCtx(ctx)
+	c.Assert(tableID, check.Equals, int64(0))
+	c.Assert(tableName, check.Equals, "")
+}
+
+func (s *ctxValueSuite) TestShouldReturnKVStorage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	kvStorage, _ := mockstore.NewMockStore()
+	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
+	kvStorage2, err := KVStorageFromCtx(ctx)
+	c.Assert(kvStorage2, check.DeepEquals, kvStorage)
+	c.Assert(err, check.IsNil)
+}
+
+func (s *ctxValueSuite) TestKVStorageNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
+	//Context not set value
+	kvStorage, err := KVStorageFromCtx(context.Background())
+	c.Assert(kvStorage, check.IsNil)
+	c.Assert(err, check.NotNil)
+	//Type of value is not kv.Storage
+	ctx := context.WithValue(context.Background(), ctxKeyKVStorage, 1321)
+	kvStorage, err = KVStorageFromCtx(ctx)
+	c.Assert(kvStorage, check.IsNil)
+	c.Assert(err, check.NotNil)
 }

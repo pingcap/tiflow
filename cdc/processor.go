@@ -180,7 +180,10 @@ func newProcessor(
 
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	kvStorage := util.KVStorageFromCtx(ctx)
+	kvStorage, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ddlPuller := puller.NewPuller(pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
@@ -978,7 +981,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
-		kvStorage := util.KVStorageFromCtx(ctx)
+		kvStorage, err := util.KVStorageFromCtx(ctx)
+		if err != nil {
+			p.errCh <- err
+			return nil
+		}
 		plr := puller.NewPuller(p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
