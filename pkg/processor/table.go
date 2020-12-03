@@ -6,24 +6,21 @@ import (
 )
 
 type TablePipeline struct {
-	localCheckpointTs model.Ts
-	localResolvedTs   model.Ts
+	p *pipeline.Pipeline
 }
 
-func (t *TablePipeline) LocalResolvedTs() model.Ts {
-
-}
-
-func (t *TablePipeline) LocalCheckpointTs() model.Ts {
+func (t *TablePipeline) ResolvedTs() model.Ts {
 
 }
 
-func (t *TablePipeline) AsyncStop() (stopped bool, checkpointTs model.Ts) {
-
+func (t *TablePipeline) AsyncStop() {
+	t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{pipeline.CommandTypeShouldStop}))
 }
 
 func NewTablePipeline(ctx pipeline.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) *TablePipeline {
 	p := pipeline.NewPipeline(ctx)
 
-	return p
+	return &TablePipeline{
+		p: p,
+	}
 }
