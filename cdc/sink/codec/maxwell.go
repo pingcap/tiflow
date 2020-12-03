@@ -159,22 +159,12 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	keyMsg, valueMsg := rowEventToMaxwellMessage(e)
-	key, err := keyMsg.Encode()
-	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
-	}
+	_, valueMsg := rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()
 	if err != nil {
 		return EncoderNoOperation, errors.Trace(err)
 	}
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	var valueLenByte [8]byte
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
 	d.valueBuf.Write(value)
-
 	d.batchSize++
 	return EncoderNeedAsyncWrite, nil
 }
@@ -281,11 +271,7 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 		return nil, errors.Trace(err)
 	}
 
-	keyBuf := new(bytes.Buffer)
-	keyBuf.Write(key)
-	valueBuf := new(bytes.Buffer)
-	valueBuf.Write(value)
-	return NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs), nil
+	return NewMQMessage(key, value, e.CommitTs), nil
 }
 
 // Build implements the EventBatchEncoder interface

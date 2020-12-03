@@ -40,10 +40,7 @@ var _ = check.Suite(&maxwellbatchSuite{
 	}}},
 })
 
-//func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
 func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder) {
-	/*checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
-	}*/
 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
