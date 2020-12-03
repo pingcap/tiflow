@@ -14,8 +14,8 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
-	"go.uber.org/zap"
 	"log"
 	"strings"
 	"time"
@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.uber.org/zap"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -33,11 +34,16 @@ type EtcdWorker struct {
 	state   ReactorState
 	// rawState is the local cache of the latest Etcd state.
 	rawState       map[string][]byte
-	pendingUpdates []*clientv3.Event
+	pendingUpdates []*etcdUpdate
 	// revision is the Etcd revision of the latest event received from Etcd
 	// (which has not necessarily been applied to the ReactorState)
 	revision int64
-	prefix string
+	prefix   string
+}
+
+type etcdUpdate struct {
+	key   []byte
+	value []byte
 }
 
 // NewEtcdWorker returns a new EtcdWorker
@@ -47,14 +53,14 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 		reactor:  reactor,
 		state:    initState,
 		rawState: make(map[string][]byte),
-		prefix: prefix,
+		prefix:   normalizePrefix(prefix),
 	}, nil
 }
 
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) error {
-	err := worker.syncRawState(ctx, worker.prefix)
+	err := worker.syncRawState(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -104,7 +110,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 
 		if len(pendingPatches) > 0 {
 			// Here we have some patches yet to be uploaded to Etcd.
-			err := worker.applyUpdates(ctx, pendingPatches)
+			err := worker.applyPatches(ctx, pendingPatches)
 			if err != nil {
 				if errors.Cause(err) == ErrEtcdTryAgain {
 					continue
@@ -112,14 +118,15 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 				return errors.Trace(err)
 			}
 			// If we are here, all patches have been successfully applied to Etcd.
-			// `applyUpdates` is all-or-none, so in case of success, we should clear all the pendingPatches.
+			// `applyPatches` is all-or-none, so in case of success, we should clear all the pendingPatches.
 			pendingPatches = pendingPatches[:0]
 		} else {
 			// We are safe to update the ReactorState only if there is no pending patch.
-			for _, event := range worker.pendingUpdates {
-				worker.state.Update(event.Kv.Key, event.Kv.Value)
+			for _, update := range worker.pendingUpdates {
+				worker.state.Update(worker.removePrefixBytes(update.key), update.value)
 			}
 
+			worker.pendingUpdates = worker.pendingUpdates[:0]
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
 				if errors.Cause(err) == ErrReactorFinished {
@@ -137,27 +144,23 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
 	switch event.Type {
 	case mvccpb.PUT:
-		if value, ok := worker.rawState[string(event.Kv.Key)]; ok {
-			if string(value) == string(event.Kv.Value) {
-				// no change, ignored
-				return nil
-			}
-		}
-		worker.pendingUpdates = append(worker.pendingUpdates, event)
+		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
+			key:   event.Kv.Key,
+			value: event.Kv.Value,
+		})
 		worker.rawState[string(event.Kv.Key)] = event.Kv.Value
 	case mvccpb.DELETE:
-		if _, ok := worker.rawState[string(event.Kv.Key)]; !ok {
-			// no change, ignored
-			return nil
-		}
-		worker.pendingUpdates = append(worker.pendingUpdates, event)
+		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
+			key:   event.Kv.Key,
+			value: event.Kv.Value,
+		})
 		delete(worker.rawState, string(event.Kv.Key))
 	}
 	return nil
 }
 
-func (worker *EtcdWorker) syncRawState(ctx context.Context, prefix string) error {
-	resp, err := worker.client.Get(ctx, prefix, clientv3.WithPrefix())
+func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
+	resp, err := worker.client.Get(ctx, worker.prefix, clientv3.WithPrefix())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -171,17 +174,17 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context, prefix string) error
 	return nil
 }
 
-func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch) error {
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
 	for {
 		cmps := make([]clientv3.Cmp, 0)
 		ops := make([]clientv3.Op, 0)
 
 		for _, patch := range patches {
-			old, ok := worker.rawState[string(patch.Key)]
+			old, ok := worker.rawState[worker.prefix+string(patch.Key)]
 
 			// make sure someone else has not updated the key after the last snapshot
 			if ok {
-				cmp := clientv3.Compare(clientv3.ModRevision(string(patch.Key)), "<", worker.revision+1)
+				cmp := clientv3.Compare(clientv3.ModRevision(worker.prefix+string(patch.Key)), "<", worker.revision+1)
 				cmps = append(cmps, cmp)
 			}
 
@@ -196,9 +199,9 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 
 			var op clientv3.Op
 			if value != nil {
-				op = clientv3.OpPut(string(patch.Key), string(value))
+				op = clientv3.OpPut(worker.prefix+string(patch.Key), string(value))
 			} else {
-				op = clientv3.OpDelete(string(patch.Key))
+				op = clientv3.OpDelete(worker.prefix + string(patch.Key))
 			}
 			ops = append(ops, op)
 		}
@@ -213,10 +216,16 @@ func (worker *EtcdWorker) applyUpdates(ctx context.Context, patches []*DataPatch
 			for _, op := range ops {
 				if op.IsPut() {
 					worker.rawState[string(op.KeyBytes())] = op.ValueBytes()
-					worker.state.Update(op.KeyBytes(), op.ValueBytes())
+					worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
+						key:   op.KeyBytes(),
+						value: op.ValueBytes(),
+					})
 				} else if op.IsDelete() {
 					delete(worker.rawState, string(op.KeyBytes()))
-					worker.state.Update(op.KeyBytes(), nil)
+					worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
+						key:   op.KeyBytes(),
+						value: nil,
+					})
 				}
 			}
 			return nil
@@ -233,8 +242,19 @@ func (worker *EtcdWorker) doNormalExit(_ context.Context) error {
 	return nil
 }
 
-func (worker *EtcdWorker) removePrefix(key string) string {
-	if strings.Index(key, worker.prefix) != 0 {
-		log.Panic("prefix not found", zap.String("key", key), zap.String("prefix", worker.prefix))
+func (worker *EtcdWorker) removePrefixBytes(key []byte) []byte {
+	if bytes.Index(key, []byte(worker.prefix)) != 0 {
+		log.Panic("prefix not found", zap.ByteString("key", key), zap.String("prefix", worker.prefix))
 	}
+	return bytes.TrimPrefix(key, []byte(worker.prefix))
+}
+
+// normalizePrefix adds a slash to the beginning of `prefix` if none is present,
+// and removes a trailing slash, if one is present.
+func normalizePrefix(prefix string) string {
+	ret := prefix
+	if !strings.HasPrefix(prefix, "/") {
+		ret = "/" + prefix
+	}
+	return strings.TrimSuffix(ret, "/")
 }

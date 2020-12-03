@@ -29,7 +29,6 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -113,7 +112,7 @@ type simpleReactorState struct {
 }
 
 var (
-	keyParseRegexp = regexp.MustCompile(regexp.QuoteMeta(testEtcdKeyPrefix) + `/(.+)`)
+	keyParseRegexp = regexp.MustCompile(`/(.+)`)
 )
 
 func (s *simpleReactorState) Get(i1, i2 int) int {
@@ -122,7 +121,7 @@ func (s *simpleReactorState) Get(i1, i2 int) int {
 
 func (s *simpleReactorState) Inc(i1, i2 int) {
 	patch := &DataPatch{
-		Key: []byte(testEtcdKeyPrefix + "/" + strconv.Itoa(i1)),
+		Key: []byte("/" + strconv.Itoa(i1)),
 		Fun: func(old []byte) ([]byte, error) {
 			var oldJSON []int
 			err := json.Unmarshal(old, &oldJSON)
@@ -140,7 +139,7 @@ func (s *simpleReactorState) Inc(i1, i2 int) {
 
 func (s *simpleReactorState) SetSum(sum int) {
 	patch := &DataPatch{
-		Key: []byte(testEtcdKeyPrefix + "/sum"),
+		Key: []byte("/sum"),
 		Fun: func(_ []byte) ([]byte, error) {
 			return []byte(strconv.Itoa(sum)), nil
 		},
@@ -196,7 +195,6 @@ func (s *simpleReactorState) GetPatches() []*DataPatch {
 }
 
 func (s *etcdWorkerSuite) SetUpTest(c *check.C) {
-	log.SetLevel(zapcore.DebugLevel)
 	dir := c.MkDir()
 	url, etcdServer, err := etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
@@ -250,12 +248,12 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 				patches: nil,
 			}
 
-			etcdWorker, err := NewEtcdWorker(newClient(), reactor, initState)
+			etcdWorker, err := NewEtcdWorker(newClient(), testEtcdKeyPrefix, reactor, initState)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
-			return errors.Trace(etcdWorker.Run(ctx, testEtcdKeyPrefix, 10*time.Millisecond))
+			return errors.Trace(etcdWorker.Run(ctx, 10*time.Millisecond))
 		})
 	}
 
