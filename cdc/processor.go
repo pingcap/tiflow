@@ -198,6 +198,19 @@ func newProcessor(
 	sinkEmittedResolvedNotifier := new(notify.Notifier)
 	localResolvedNotifier := new(notify.Notifier)
 	localCheckpointTsNotifier := new(notify.Notifier)
+	sinkEmittedResolvedReceiver, err := sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	localResolvedReceiver, err := localResolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	localCheckpointTsReceiver, err := localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -218,14 +231,14 @@ func newProcessor(
 		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
-		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		sinkEmittedResolvedReceiver: sinkEmittedResolvedReceiver,
 
 		localResolvedNotifier: localResolvedNotifier,
-		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		localResolvedReceiver: localResolvedReceiver,
 
 		checkpointTs:              checkpointTs,
 		localCheckpointTsNotifier: localCheckpointTsNotifier,
-		localCheckpointTsReceiver: localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond),
+		localCheckpointTsReceiver: localCheckpointTsReceiver,
 
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
@@ -666,9 +679,12 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		lastResolvedTs           uint64
 		watchKey                 = kv.GetEtcdKeyJob(p.changefeedID)
 		globalResolvedTsNotifier = new(notify.Notifier)
-		globalResolvedTsReceiver = globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	)
 	defer globalResolvedTsNotifier.Close()
+	globalResolvedTsReceiver, err := globalResolvedTsNotifier.NewReceiver(1 * time.Second)
+	if err != nil {
+		return err
+	}
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
 		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)

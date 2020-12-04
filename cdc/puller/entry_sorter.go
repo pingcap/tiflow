@@ -111,7 +111,10 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			}
 		}
 	})
-	receiver := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
+	receiver, err := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
+	if err != nil {
+		return err
+	}
 	defer es.resolvedNotifier.Close()
 	errg.Go(func() error {
 		var sorted []*model.PolymorphicEvent
