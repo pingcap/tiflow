@@ -32,8 +32,4 @@ for i in $@; do
   rm -f $i~
 done
 
-if [ `git --no-pager diff | wc -c` -ne 0 ]; then
-  echo "Please ensure leak test is added in all unit tests"
-  git --no-pager diff
-  exit 1
-fi
+git --no-pager diff --exit-code
