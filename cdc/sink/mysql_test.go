@@ -27,12 +27,14 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"golang.org/x/sync/errgroup"
 )
@@ -958,6 +960,136 @@ func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
 	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
 	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
 	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
+}
+
+func (s MySQLSinkSuite) TestNewMySQLSink(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// configure test db
+			db, mock, err := sqlmock.New()
+			c.Assert(err, check.IsNil)
+			columns := []string{"Variable_name", "Value"}
+			mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+				sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+			)
+			mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+				sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+			)
+			mock.ExpectClose()
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
+			WithArgs(1, "test", 2, "test").
+			WillReturnResult(sqlmock.NewResult(2, 2))
+		mock.ExpectCommit()
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t2`(`a`,`b`) VALUES (?,?),(?,?)").
+			WithArgs(1, "test", 2, "test").
+			WillReturnResult(sqlmock.NewResult(2, 2))
+		mock.ExpectCommit()
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConn
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
+
+	rows := []*model.RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  5,
+			CommitTs: 6,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 3},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  3,
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  3,
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+	}
+
+	err = sink.EmitRowChangedEvents(ctx, rows...)
+	c.Assert(err, check.IsNil)
+
+	err = retry.Run(time.Millisecond*20, 10, func() error {
+		ts, err := sink.FlushRowChangedEvents(ctx, uint64(2))
+		c.Assert(err, check.IsNil)
+		if ts < uint64(2) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
+		}
+		return nil
+	})
+	c.Assert(err, check.IsNil)
+
+	err = retry.Run(time.Millisecond*20, 10, func() error {
+		ts, err := sink.FlushRowChangedEvents(ctx, uint64(4))
+		c.Assert(err, check.IsNil)
+		if ts < uint64(4) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
+		}
+		return nil
+	})
+	c.Assert(err, check.IsNil)
+
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
 }
 
 /*

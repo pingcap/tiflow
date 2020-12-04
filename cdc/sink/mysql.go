@@ -467,6 +467,22 @@ func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string)
 	return params, nil
 }
 
+var getDBConnImpl = getDBConn
+
+func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
+	}
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+	}
+	return db, nil
+}
+
 // newMySQLSink creates a new MySQL sink using schema storage
 func newMySQLSink(
 	ctx context.Context,
@@ -476,8 +492,6 @@ func newMySQLSink(
 	replicaConfig *config.ReplicaConfig,
 	opts map[string]string,
 ) (Sink, error) {
-	var db *sql.DB
-
 	opts[OptChangefeedID] = changefeedID
 	params, err := parseSinkURI(ctx, sinkURI, opts)
 	if err != nil {
@@ -511,10 +525,9 @@ func newMySQLSink(
 	if params.timezone != "" {
 		dsn.Params["time_zone"] = params.timezone
 	}
-	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+	testDB, err := getDBConnImpl(ctx, dsn.FormatDSN())
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+		return nil, err
 	}
 	defer testDB.Close()
 
@@ -522,15 +535,9 @@ func newMySQLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	db, err = sql.Open("mysql", dsnStr)
+	db, err := getDBConnImpl(ctx, dsnStr)
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
-	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+		return nil, err
 	}
 
 	log.Info("Start mysql sink")
