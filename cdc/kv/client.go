@@ -271,6 +271,28 @@ func (rl *regionEventFeedLimiters) getLimiter(regionID uint64) *rate.Limiter {
 	return limiter
 }
 
+// CDCKVClient is an interface to receives kv changed logs from TiKV
+type CDCKVClient interface {
+	EventFeed(
+		ctx context.Context,
+		span regionspan.ComparableSpan,
+		ts uint64,
+		enableOldValue bool,
+		lockResolver txnutil.LockResolver,
+		isPullerInit PullerInitialization,
+		eventCh chan<- *model.RegionFeedEvent,
+	) error
+	Close() error
+}
+
+// NewCDCKVClient is the constructor of CDC KV client
+var NewCDCKVClient func(
+	ctx context.Context,
+	pd pd.Client,
+	kvStorage tikv.Storage,
+	credential *security.Credential,
+) CDCKVClient = NewCDCClient
+
 // CDCClient to get events from TiKV
 type CDCClient struct {
 	pd         pd.Client
@@ -290,7 +312,7 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c *CDCClient, err error) {
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
