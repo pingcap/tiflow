@@ -213,91 +213,19 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 
 func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 
-	var eventTypeValue int32
-	var schemaName string
-	var tableName string
-	var batchID string
-
 	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
 	resolvedTxnsMap := b.txnCache.Resolved(resolvedTs)
 
 	if len(resolvedTxnsMap) != 0 {
 		//循环多张表
 		for _, singleTableTxns := range resolvedTxnsMap {
-
 			//循环多个事务
 			for _, singleTableTxn := range singleTableTxns {
 				//todo 事务的排序
-				rows := singleTableTxn.Rows
-				if len(rows[0].PreColumns) == 0 {
-					//insert
-					eventTypeValue = 2
-				} else if len(rows[0].Columns) == 0 {
-					//delete
-					eventTypeValue = 4
-				} else {
-					//update
-					eventTypeValue = 3
-				}
-
-				schemaName = singleTableTxn.Table.Schema
-				tableName = singleTableTxn.Table.Table
-				//事务号
-				batchID = fmt.Sprintf("%d:%d", singleTableTxn.StartTs, singleTableTxn.CommitTs)
-
-				entryBuilder := &dsgpb.Entry{}
-				headerBuilder := &dsgpb.Header{}
-				rowdataListBuilder := &dsgpb.RowDataList{}
-
-				for _, row := range rows {
-					var rowdataBuilder dsgpb.RowData
-					if eventTypeValue == 2 {
-						//insert
-						rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
-					} else if eventTypeValue == 4 {
-						//delete
-						rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
-					} else if eventTypeValue == 3 {
-						//update
-						//after
-						rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
-						//before
-						rowdataBuilder = getRowDataByClomns(1, row.PreColumns, rowdataBuilder)
-					}
-
-					log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
-
-					log.Info("show rowdataBuilder ", zap.Reflect("e", rowdataBuilder))
-					rowdataListBuilder.RowDatas = append(rowdataListBuilder.RowDatas, &rowdataBuilder)
-					log.Info("rowdataList size ", zap.Reflect("size :", len(rowdataListBuilder.RowDatas)))
-				}
-
-				headerBuilder.SchemaName = &schemaName
-				headerBuilder.TableName = &tableName
-				eventType := dsgpb.EventType(eventTypeValue)
-				headerBuilder.EventType = &eventType
-				entryBuilder.Header = headerBuilder
-
-				entryBuilder.BatchID = &batchID
-				var batchCountNo = int32(len(rows))
-				entryBuilder.BatchCountNo = &batchCountNo
-
-				var entry = dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
-				entryBuilder.EntryType = &entry
-				log.Info("show rowdataListBuilder ", zap.Reflect("e", rowdataListBuilder))
-				rowdataListBuilderBytes, err := rowdataListBuilder.Marshal()
+				err := analysisRowsAndSend(b, ctx, singleTableTxn)
 				if err != nil {
 					return resolvedTs, errors.Trace(err)
 				}
-				entryBuilder.StoreValue = rowdataListBuilderBytes
-
-				log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
-				err = clintSendDataWithRetry(ctx, b, entryBuilder)
-				if err != nil {
-					return resolvedTs, errors.Trace(err)
-				}
-				log.Info("send data success!")
-
 			}
 		}
 	}
@@ -381,6 +309,7 @@ func clintSendDataWithRetry(ctx context.Context, b *ticdcToOraclSink, entryBuild
 		return nil
 	})
 }
+
 func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
 	err := b.clientRequest.Send(entryBuilder)
 	if err != nil {
@@ -392,6 +321,133 @@ func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
 	}
 	if *resp.ReplyType == dsgpb.ReplyType_ERROR {
 		return errors.Errorf("failed to send data: %s", resp.ErrorMsg)
+	}
+	return nil
+}
+
+//将事务中不同dml类型的rows拆分
+func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.RowChangedEvent, error) {
+	resMap := make(map[string][]*model.RowChangedEvent)
+	var insertRows []*model.RowChangedEvent
+	var updateRows []*model.RowChangedEvent
+	var deleteRows []*model.RowChangedEvent
+
+	rows := singleTableTxn.Rows
+	for _, row := range rows {
+		if len(row.PreColumns) == 0 {
+			//insert
+			insertRows = append(insertRows, row)
+		} else if len(row.Columns) == 0 {
+			//delete
+			deleteRows = append(deleteRows, row)
+		} else {
+			//update
+			updateRows = append(updateRows, row)
+		}
+	}
+	resMap ["I"] = insertRows
+	resMap ["U"] = updateRows
+	resMap ["D"] = deleteRows
+
+	return resMap, nil
+}
+
+//将事务中拆分出的rows发送至server端
+func send(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.SingleTableTxn, rows []*model.RowChangedEvent, eventTypeValue int32) error {
+
+	var schemaName string
+	var tableName string
+	var batchID string
+
+	schemaName = singleTableTxn.Table.Schema
+	tableName = singleTableTxn.Table.Table
+	//事务号
+	batchID = fmt.Sprintf("%d:%d:%d", singleTableTxn.StartTs, singleTableTxn.CommitTs, eventTypeValue)
+
+	entryBuilder := &dsgpb.Entry{}
+	headerBuilder := &dsgpb.Header{}
+	rowdataListBuilder := &dsgpb.RowDataList{}
+
+	for _, row := range rows {
+		var rowdataBuilder dsgpb.RowData
+		if eventTypeValue == 2 {
+			//insert
+			rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
+		} else if eventTypeValue == 4 {
+			//delete
+			rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
+		} else if eventTypeValue == 3 {
+			//update
+			//after
+			rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
+			//before
+			rowdataBuilder = getRowDataByClomns(1, row.PreColumns, rowdataBuilder)
+		}
+
+		log.Info("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
+
+		log.Info("show rowdataBuilder ", zap.Reflect("e", rowdataBuilder))
+		rowdataListBuilder.RowDatas = append(rowdataListBuilder.RowDatas, &rowdataBuilder)
+		log.Info("rowdataList size ", zap.Reflect("size :", len(rowdataListBuilder.RowDatas)))
+	}
+
+	headerBuilder.SchemaName = &schemaName
+	headerBuilder.TableName = &tableName
+	eventType := dsgpb.EventType(eventTypeValue)
+	headerBuilder.EventType = &eventType
+	entryBuilder.Header = headerBuilder
+
+	entryBuilder.BatchID = &batchID
+	var batchCountNo = int32(len(rows))
+	entryBuilder.BatchCountNo = &batchCountNo
+
+	var entry = dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
+	entryBuilder.EntryType = &entry
+	log.Info("show rowdataListBuilder ", zap.Reflect("e", rowdataListBuilder))
+	rowdataListBuilderBytes, err := rowdataListBuilder.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	entryBuilder.StoreValue = rowdataListBuilderBytes
+
+	log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
+	err = clintSendDataWithRetry(ctx, b, entryBuilder)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("send data success!")
+
+	return nil
+}
+
+func analysisRowsAndSend(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.SingleTableTxn) error {
+
+	var eventTypeValue int32
+
+	rowsMap, err := analysisRows(singleTableTxn)
+	if err != nil {
+		return err
+	}
+	for dmlType, rows := range rowsMap {
+		if dmlType == "I" {
+			eventTypeValue = 2
+			err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
+			if err != nil {
+				return err
+			}
+		} else if dmlType == "U" {
+			eventTypeValue = 3
+			err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
+			if err != nil {
+				return err
+			}
+		} else if dmlType == "D" {
+			eventTypeValue = 4
+			err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
