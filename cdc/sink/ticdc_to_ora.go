@@ -375,7 +375,7 @@ func send(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.Single
 			rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
 		} else if eventTypeValue == 4 {
 			//delete
-			rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
+			rowdataBuilder = getRowDataByClomns(0, row.PreColumns, rowdataBuilder)
 		} else if eventTypeValue == 3 {
 			//update
 			//after
