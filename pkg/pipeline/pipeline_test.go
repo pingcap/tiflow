@@ -15,14 +15,16 @@ package pipeline
 
 import (
 	"errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+
+	"github.com/pingcap/check"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
