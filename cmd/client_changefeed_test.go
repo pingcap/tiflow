@@ -45,4 +45,8 @@ enable-old-value = false
 	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
+
+	sinkURI = ""
+	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil)
+	c.Assert(err, check.NotNil)
 }
