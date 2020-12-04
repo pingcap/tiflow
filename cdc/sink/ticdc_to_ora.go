@@ -305,6 +305,14 @@ func clintSendDataWithRetry(ctx context.Context, b *ticdcToOraclSink, entryBuild
 			if err := b.resetConn(ctx); err != nil {
 				return errors.Trace(err)
 			}
+
+			heart := &dsgpb.Entry{}
+			var entry = dsgpb.EntryType(dsgpb.EntryType_HEARTBEAT)
+			entryBuilder.EntryType = &entry
+			err := clintSendData(b, heart)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		return nil
 	})
@@ -426,7 +434,7 @@ func analysisRowsAndSend(b *ticdcToOraclSink, ctx context.Context, singleTableTx
 
 	rowsMap, err := analysisRows(singleTableTxn)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	for dmlType, rows := range rowsMap {
 		if dmlType == "I" {
@@ -434,7 +442,7 @@ func analysisRowsAndSend(b *ticdcToOraclSink, ctx context.Context, singleTableTx
 			if rows != nil {
 				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
 				if err != nil {
-					return err
+					return errors.Trace(err)
 				}
 			}
 		} else if dmlType == "U" {
@@ -442,7 +450,7 @@ func analysisRowsAndSend(b *ticdcToOraclSink, ctx context.Context, singleTableTx
 				eventTypeValue = 3
 				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
 				if err != nil {
-					return err
+					return errors.Trace(err)
 				}
 			}
 		} else if dmlType == "D" {
@@ -450,7 +458,7 @@ func analysisRowsAndSend(b *ticdcToOraclSink, ctx context.Context, singleTableTx
 				eventTypeValue = 4
 				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
 				if err != nil {
-					return err
+					return errors.Trace(err)
 				}
 			}
 		}
