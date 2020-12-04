@@ -431,21 +431,27 @@ func analysisRowsAndSend(b *ticdcToOraclSink, ctx context.Context, singleTableTx
 	for dmlType, rows := range rowsMap {
 		if dmlType == "I" {
 			eventTypeValue = 2
-			err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
-			if err != nil {
-				return err
+			if rows != nil {
+				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
+				if err != nil {
+					return err
+				}
 			}
 		} else if dmlType == "U" {
-			eventTypeValue = 3
-			err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
-			if err != nil {
-				return err
+			if rows != nil {
+				eventTypeValue = 3
+				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
+				if err != nil {
+					return err
+				}
 			}
 		} else if dmlType == "D" {
-			eventTypeValue = 4
-			err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
-			if err != nil {
-				return err
+			if rows != nil {
+				eventTypeValue = 4
+				err := send(b, ctx, singleTableTxn, rows, eventTypeValue)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
