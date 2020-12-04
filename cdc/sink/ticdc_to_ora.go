@@ -308,7 +308,7 @@ func clintSendDataWithRetry(ctx context.Context, b *ticdcToOraclSink, entryBuild
 
 			heart := &dsgpb.Entry{}
 			var entry = dsgpb.EntryType(dsgpb.EntryType_HEARTBEAT)
-			entryBuilder.EntryType = &entry
+			heart.EntryType = &entry
 			err := clintSendData(b, heart)
 			if err != nil {
 				return errors.Trace(err)
