@@ -25,9 +25,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,8 +44,6 @@ func Test(t *testing.T) { check.TestingT(t) }
 var _ = check.Suite(&etcdWorkerSuite{})
 
 type etcdWorkerSuite struct {
-	etcdServer *embed.Etcd
-	endpoints  []string
 }
 
 type simpleReactor struct {
@@ -194,27 +192,34 @@ func (s *simpleReactorState) GetPatches() []*DataPatch {
 	return ret
 }
 
-func (s *etcdWorkerSuite) SetUpTest(c *check.C) {
+func setUpTest(c *check.C) (func() *etcd.Client, func()) {
 	dir := c.MkDir()
-	url, etcdServer, err := etcd.SetupEmbedEtcd(dir)
+	url, server, err := etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	s.etcdServer = etcdServer
-	s.endpoints = []string{url.String()}
+	endpoints := []string{url.String()}
+	return func() *etcd.Client {
+			rawCli, err := clientv3.NewFromURLs(endpoints)
+			c.Check(err, check.IsNil)
+			return etcd.Wrap(rawCli, map[string]prometheus.Counter{})
+		}, func() {
+			server.Close()
+		}
 
-	log.Debug("Set up embedded etcd", zap.Strings("endpoints", s.endpoints))
 }
 
 func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
-	newClient := func() *etcd.Client {
-		rawCli, err := clientv3.NewFromURLs(s.endpoints)
-		c.Check(err, check.IsNil)
-		return etcd.Wrap(rawCli, map[string]prometheus.Counter{})
-	}
-
+	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
+	newClient, closer := setUpTest(c)
+	defer closer()
+
 	cli := newClient()
+	defer func() {
+		_ = cli.Unwrap().Close()
+	}()
+
 	_, err := cli.Put(ctx, testEtcdKeyPrefix+"/sum", "0")
 	c.Check(err, check.IsNil)
 
@@ -248,7 +253,12 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 				patches: nil,
 			}
 
-			etcdWorker, err := NewEtcdWorker(newClient(), testEtcdKeyPrefix, reactor, initState)
+			cli := newClient()
+			defer func() {
+				_ = cli.Unwrap().Close()
+			}()
+
+			etcdWorker, err := NewEtcdWorker(cli, testEtcdKeyPrefix, reactor, initState)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -262,5 +272,86 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 		return
 	}
 	c.Check(err, check.IsNil)
+}
 
+type intReactorState struct {
+	val       int
+	isUpdated bool
+}
+
+func (s *intReactorState) Update(_ []byte, value []byte) {
+	var err error
+	s.val, err = strconv.Atoi(string(value))
+	if err != nil {
+		log.Panic("intReactorState", zap.Error(err))
+	}
+	s.isUpdated = true
+}
+
+func (s *intReactorState) GetPatches() []*DataPatch {
+	return []*DataPatch{}
+}
+
+type linearizabilityReactor struct {
+	state    *intReactorState
+	expected int
+}
+
+func (r *linearizabilityReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
+	r.state = state.(*intReactorState)
+	if r.state.isUpdated {
+		if r.state.val != r.expected {
+			log.Panic("linearizability check failed", zap.Int("expected", r.expected), zap.Int("actual", r.state.val))
+		}
+		r.expected++
+	}
+	if r.state.val == 1999 {
+		return nil, ErrReactorFinished
+	}
+	r.state.isUpdated = false
+	return r.state, nil
+}
+
+func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	newClient, closer := setUpTest(c)
+	defer closer()
+
+	cli0 := newClient()
+	cli := newClient()
+	for i := 0; i < 1000; i++ {
+		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/lin", strconv.Itoa(i))
+		c.Assert(err, check.IsNil)
+	}
+
+	reactor, err := NewEtcdWorker(cli0, testEtcdKeyPrefix+"/lin", &linearizabilityReactor{
+		state:    nil,
+		expected: 999,
+	}, &intReactorState{
+		val:       0,
+		isUpdated: false,
+	})
+	c.Assert(err, check.IsNil)
+	errg := &errgroup.Group{}
+	errg.Go(func() error {
+		return reactor.Run(ctx, 10*time.Millisecond)
+	})
+
+	time.Sleep(500 * time.Millisecond)
+	for i := 999; i < 2000; i++ {
+		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/lin", strconv.Itoa(i))
+		c.Assert(err, check.IsNil)
+	}
+
+	err = errg.Wait()
+	c.Assert(err, check.IsNil)
+
+	err = cli.Unwrap().Close()
+	c.Assert(err, check.IsNil)
+	err = cli0.Unwrap().Close()
+	c.Assert(err, check.IsNil)
 }

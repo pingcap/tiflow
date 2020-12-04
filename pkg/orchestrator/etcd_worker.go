@@ -60,6 +60,8 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) error {
+	defer worker.cleanUp()
+
 	err := worker.syncRawState(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -130,8 +132,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
 				if errors.Cause(err) == ErrReactorFinished {
-					// prepare for normal exit
-					return errors.Trace(worker.doNormalExit(ctx))
+					// normal exit
+					return nil
 				}
 				return errors.Trace(err)
 			}
@@ -235,11 +237,10 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 	}
 }
 
-func (worker *EtcdWorker) doNormalExit(_ context.Context) error {
+func (worker *EtcdWorker) cleanUp() {
 	worker.rawState = nil
 	worker.revision = 0
 	worker.pendingUpdates = worker.pendingUpdates[:0]
-	return nil
 }
 
 func (worker *EtcdWorker) removePrefixBytes(key []byte) []byte {
