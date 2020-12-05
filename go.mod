@@ -55,3 +55,8 @@ require (
 	google.golang.org/grpc v1.27.1
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+replace (
+	github.com/codahale/hdrhistogram v1.0.1 => github.com/HdrHistogram/hdrhistogram-go v1.0.1
+	github.com/uber-go/atomic v1.7.0 => go.uber.org/atomic v1.7.0
+)
