@@ -205,7 +205,8 @@ func (n *errorNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx, _ := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.NewContext(stdCtx.Background(), &context.Vars{})
+	defer cancel()
 	ctx, p := NewPipeline(ctx)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &errorNode{c: c})
@@ -283,7 +284,8 @@ func (n *throwNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx, _ := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.NewContext(stdCtx.Background(), &context.Vars{})
+	defer cancel()
 	ctx, p := NewPipeline(ctx)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
