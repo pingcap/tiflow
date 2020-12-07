@@ -1,27 +1,36 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package processor
 
 import (
 	"context"
-	"strconv"
-	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"go.uber.org/zap"
 )
 
 type pullerNode struct {
 	credential *security.Credential
 	kvStorage  tidbkv.Storage
 	limitter   *puller.BlurResourceLimitter
+	tableName  string
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
@@ -32,17 +41,18 @@ func newPullerNode(
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	limitter *puller.BlurResourceLimitter,
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo) pipeline.Node {
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
 	return &pullerNode{
 		credential:  credential,
 		kvStorage:   kvStorage,
 		limitter:    limitter,
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
+		tableName:   tableName,
 	}
 }
 
-func (n *pullerNode) Init(ctx pipeline.Context) error {
+func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	// start table puller
 	enableOldValue := ctx.Vars().Config.EnableOldValue
 	spans := make([]regionspan.Span, 0, 2)
@@ -52,22 +62,9 @@ func (n *pullerNode) Init(ctx pipeline.Context) error {
 		spans = append(spans, regionspan.GetTableSpan(n.replicaInfo.MarkTableID, enableOldValue))
 	}
 
-	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
-		if name, ok := ctx.Vars().SchemaStorage.GetLastSnapshot().GetTableNameByID(n.tableID); ok {
-			tableName = name.QuoteString()
-			return nil
-		}
-		return errors.Errorf("failed to get table name, fallback to use table id: %d", n.tableID)
-	})
-	if err != nil {
-		log.Warn("get table name for metric", zap.Error(err))
-		tableName = strconv.Itoa(int(n.tableID))
-	}
-
-	plr := puller.NewPuller(ctx.Vars().PDClient, n.credential, n.kvStorage, n.replicaInfo.StartTs, spans, n.limitter, enableOldValue)
-	ctxC, cancel := context.WithCancel(ctx)
-	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, tableName)
+	ctxC, cancel := context.WithCancel(ctx.StdContext())
+	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
+	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage, n.replicaInfo.StartTs, spans, n.limitter, enableOldValue)
 	go func() {
 		err := plr.Run(ctxC)
 		if errors.Cause(err) != context.Canceled {
@@ -93,13 +90,13 @@ func (n *pullerNode) Init(ctx pipeline.Context) error {
 }
 
 // Receive receives the message from the previous node
-func (n *pullerNode) Receive(ctx pipeline.Context) error {
+func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 	// just forward any messages to the next node
 	ctx.SendToNextNode(ctx.Message())
 	return nil
 }
 
-func (n *pullerNode) Destroy(ctx pipeline.Context) error {
+func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
 	n.cancel()
 	return nil
 }

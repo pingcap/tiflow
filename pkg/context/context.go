@@ -24,6 +24,7 @@ import (
 // Vars contains some vars which can be used to anywhere in a pipeline
 type Vars struct {
 	// TODO add more vars
+	CaptureAddr   string
 	PDClient      pd.Client
 	SchemaStorage *entry.SchemaStorage
 	Config        *config.ReplicaConfig

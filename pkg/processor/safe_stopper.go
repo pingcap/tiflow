@@ -1,9 +1,21 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package processor
 
 import (
-	"errors"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 )
 
@@ -12,19 +24,25 @@ type safeStopperNode struct {
 	shouldStop bool
 }
 
-func (n *safeStopperNode) Init(ctx pipeline.Context) error {
+func newSafeStopperNode(targetTs model.Ts) pipeline.Node {
+	return &safeStopperNode{
+		targetTs: targetTs,
+	}
+}
+
+func (n *safeStopperNode) Init(ctx pipeline.NodeContext) error {
 	// do nothing
 	return nil
 }
 
 // Receive receives the message from the previous node
-func (n *safeStopperNode) Receive(ctx pipeline.Context) error {
+func (n *safeStopperNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		if n.handlePolymorphicEvent(ctx, msg.PolymorphicEvent) {
 			ctx.SendToNextNode(pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopped}))
-			return errors.New("") // TODO using pkg error
+			return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 		}
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeShouldStop {
@@ -38,7 +56,7 @@ func (n *safeStopperNode) Receive(ctx pipeline.Context) error {
 	return nil
 }
 
-func (n *safeStopperNode) handlePolymorphicEvent(ctx pipeline.Context, event *model.PolymorphicEvent) (shouldExit bool) {
+func (n *safeStopperNode) handlePolymorphicEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) (shouldExit bool) {
 	if event == nil {
 		return false
 	}
@@ -60,7 +78,7 @@ func (n *safeStopperNode) handlePolymorphicEvent(ctx pipeline.Context, event *mo
 	return false
 }
 
-func (n *safeStopperNode) Destroy(ctx pipeline.Context) error {
+func (n *safeStopperNode) Destroy(ctx pipeline.NodeContext) error {
 	// do nothing
 	return nil
 }

@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package processor
 
 import (
@@ -16,9 +29,18 @@ type sorterNode struct {
 	sortEngine model.SortEngine
 	sortDir    string
 	sorter     puller.EventSorter
+	tableName  string
 }
 
-func (n *sorterNode) Init(ctx pipeline.Context) error {
+func newSorterNode(sortEngine model.SortEngine, sortDir string, tableName string) pipeline.Node {
+	return &sorterNode{
+		sortEngine: sortEngine,
+		sortDir:    sortDir,
+		tableName:  tableName,
+	}
+}
+
+func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	var sorter puller.EventSorter
 	switch n.sortEngine {
 	case model.SortInMemory:
@@ -40,12 +62,12 @@ func (n *sorterNode) Init(ctx pipeline.Context) error {
 			sorter = puller.NewFileSorter(n.sortDir)
 		} else {
 			// Unified Sorter
-			sorter = psorter.NewUnifiedSorter(n.sortDir, tableName, util.CaptureAddrFromCtx(ctx))
+			sorter = psorter.NewUnifiedSorter(n.sortDir, n.tableName, ctx.Vars().CaptureAddr)
 		}
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
 	}
-	go ctx.Throw(sorter.Run(ctx))
+	go ctx.Throw(sorter.Run(ctx.StdContext()))
 	go func() {
 		for {
 			select {
@@ -60,18 +82,18 @@ func (n *sorterNode) Init(ctx pipeline.Context) error {
 }
 
 // Receive receives the message from the previous node
-func (n *sorterNode) Receive(ctx pipeline.Context) error {
+func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
-		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+		n.sorter.AddEntry(ctx.StdContext(), msg.PolymorphicEvent)
 	default:
 		ctx.SendToNextNode(msg)
 	}
 	return nil
 }
 
-func (n *sorterNode) Destroy(ctx pipeline.Context) error {
+func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	// TODO: check is the sorter should be destroyed
 	return nil
 }
