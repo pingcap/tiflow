@@ -282,58 +282,6 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	ctx, p := NewPipeline(ctx)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
-	p.AppendNode(ctx, "check node", &checkNode{
-		c: c,
-		expected: []*Message{
-			PolymorphicEventMessage(&model.PolymorphicEvent{
-				Row: &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema: "init function is called in echo node",
-					},
-				},
-			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
-				Row: &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema: "I am built by test function",
-						Table:  "CC1",
-					},
-				},
-			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
-				Row: &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema: "ECHO: I am built by test function",
-						Table:  "ECHO: CC1",
-					},
-				},
-			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
-				Row: &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema: "I am built by test function",
-						Table:  "DD2",
-					},
-				},
-			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
-				Row: &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema: "ECHO: I am built by test function",
-						Table:  "ECHO: DD2",
-					},
-				},
-			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
-				Row: &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema: "destory function is called in echo node",
-					},
-				},
-			}),
-		},
-	})
-
 	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
