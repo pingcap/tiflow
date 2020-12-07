@@ -263,12 +263,11 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	}
 
 	newMode = cyclic.RelaxSQLMode(oldMode)
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	err = rows.Close()
-	return cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	return nil
 }
 
 var _ Sink = &mysqlSink{}

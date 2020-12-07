@@ -988,24 +988,6 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	changefeed := "test-changefeed"
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
-	c.Assert(err, check.IsNil)
-	rc := config.GetDefaultReplicaConfig()
-	rc.Cyclic = &config.CyclicConfig{
-		Enable:          true,
-		ReplicaID:       1,
-		FilterReplicaID: []uint64{2},
-	}
-	f, err := filter.NewFilter(rc)
-	c.Assert(err, check.IsNil)
-	cyclicConfig, err := rc.Cyclic.Marshal()
-	c.Assert(err, check.IsNil)
-	opts := map[string]string{
-		mark.OptCyclicConfig: cyclicConfig,
-	}
-	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
-	c.Assert(err, check.IsNil)
 
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -1025,7 +1007,7 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
 				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 		mock.ExpectExec("SET sql_mode = 'ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE';").
-			WillReturnResult(sqlmock.NewResult(1, 1))
+			WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectClose()
 		return db, nil
 	}
@@ -1034,6 +1016,25 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 	defer func() {
 		getDBConnImpl = backupGetDBConn
 	}()
+
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	rc.Cyclic = &config.CyclicConfig{
+		Enable:          true,
+		ReplicaID:       1,
+		FilterReplicaID: []uint64{2},
+	}
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	cyclicConfig, err := rc.Cyclic.Marshal()
+	c.Assert(err, check.IsNil)
+	opts := map[string]string{
+		mark.OptCyclicConfig: cyclicConfig,
+	}
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
+	c.Assert(err, check.IsNil)
 
 	// TODO: remove this line after https://github.com/pingcap/ticdc/issues/1169 is fixed
 	time.Sleep(time.Millisecond * 500)
