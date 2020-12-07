@@ -46,7 +46,7 @@ func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 			continue
 		}
 		if col.Flag.IsHandleKey() {
-			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
+			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value, col.Flag)))
 		}
 	}
 	return int32(r.hasher.Sum32() % uint32(r.partitionNum))

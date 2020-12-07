@@ -14,6 +14,7 @@
 package model
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strconv"
 
@@ -292,7 +293,7 @@ type Column struct {
 }
 
 // ColumnValueString returns the string representation of the column value
-func ColumnValueString(c interface{}) string {
+func ColumnValueString(c interface{}, flag ColumnFlagType) string {
 	var data string
 	switch v := c.(type) {
 	case nil:
@@ -328,7 +329,11 @@ func ColumnValueString(c interface{}) string {
 	case string:
 		data = v
 	case []byte:
-		data = string(v)
+		if flag.IsBinary() {
+			data = base64.StdEncoding.EncodeToString(v)
+		} else {
+			data = string(v)
+		}
 	default:
 		data = fmt.Sprintf("%v", v)
 	}
