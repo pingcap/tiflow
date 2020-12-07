@@ -13,151 +13,53 @@
 
 package pipeline
 
-import (
-	"context"
-	"time"
+import "github.com/pingcap/ticdc/pkg/context"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/pkg/config"
-	pd "github.com/tikv/pd/client"
-)
-
-// Context contains some read-only parameters and provide control for the pipeline life cycle
-type Context interface {
+// NodeContext contains some read-only parameters and provide control for the pipeline life cycle
+type NodeContext interface {
 	context.Context
-	Vars() *ContextVars
 
 	// Message returns the message sent by the previous node
 	Message() *Message
 	// SendToNextNode sends the message to the next node
 	SendToNextNode(msg *Message)
-
-	Throw(error)
 }
 
-// ContextVars contains some vars which can be used to anywhere in a pipeline
-type ContextVars struct {
-	PDClient      pd.Client
-	SchemaStorage *entry.SchemaStorage
-	Config        *config.ReplicaConfig
-}
-
-type baseContext struct {
+type nodeContext struct {
 	context.Context
-	parent Context
+	msg      *Message
+	outputCh chan *Message
 }
 
-func (ctx baseContext) Vars() *ContextVars {
-	return ctx.parent.Vars()
-}
-
-func (ctx baseContext) Message() *Message {
-	return ctx.parent.Message()
-}
-
-func (ctx baseContext) SendToNextNode(msg *Message) {
-	ctx.parent.SendToNextNode(msg)
-}
-
-func (ctx baseContext) Throw(err error) {
-	ctx.parent.Throw(err)
-}
-
-func (ctx baseContext) Deadline() (deadline time.Time, ok bool) {
-	if ctx.Context == nil {
-		return ctx.parent.Deadline()
+func newNodeContext(ctx context.Context, msg *Message, outputCh chan *Message) NodeContext {
+	return &nodeContext{
+		Context:  ctx,
+		msg:      msg,
+		outputCh: outputCh,
 	}
-	return ctx.Context.Deadline()
 }
 
-func (ctx baseContext) Done() <-chan struct{} {
-	if ctx.Context == nil {
-		return ctx.parent.Done()
-	}
-	return ctx.Context.Done()
+func (ctx *nodeContext) Message() *Message {
+	return ctx.msg
 }
 
-func (ctx baseContext) Err() error {
-	if ctx.Context == nil {
-		return ctx.parent.Err()
-	}
-	return ctx.Context.Err()
-}
-
-func (ctx baseContext) Value(key interface{}) interface{} {
-	if ctx.Context == nil {
-		return ctx.parent.Value(key)
-	}
-	return ctx.Context.Value(key)
-}
-
-type rootContext struct {
-	baseContext
-	vars         *ContextVars
-	errorHandler func(error)
-}
-
-// NewRootContext returns a new root context
-func NewRootContext(ctx context.Context, vars *ContextVars, errorHandler func(error)) (Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(ctx)
-	pCtx := &rootContext{
-		baseContext: baseContext{
-			Context: ctx,
-		},
-		vars: vars,
-		errorHandler: func(err error) {
-			cancel()
-			errorHandler(err)
-		},
-	}
-	return pCtx, cancel
-}
-
-func (ctx *rootContext) Message() *Message {
-	panic("unreachable")
-}
-
-func (ctx *rootContext) SendToNextNode(msg *Message) {
-	panic("unreachable")
-}
-
-func (ctx *rootContext) Throw(err error) {
-	ctx.errorHandler(err)
+func (ctx *nodeContext) SendToNextNode(msg *Message) {
+	// The header channel should never be blocked
+	ctx.outputCh <- msg
 }
 
 type messageContext struct {
-	baseContext
+	NodeContext
 	message *Message
 }
 
-func withMessage(ctx Context, msg *Message) Context {
+func withMessage(ctx NodeContext, msg *Message) NodeContext {
 	return messageContext{
-		baseContext: baseContext{
-			parent: ctx,
-		},
-		message: msg,
+		NodeContext: ctx,
+		message:     msg,
 	}
 }
 
 func (ctx messageContext) Message() *Message {
 	return ctx.message
-}
-
-type outputChContext struct {
-	baseContext
-	outputCh chan *Message
-}
-
-func (ctx *outputChContext) SendToNextNode(msg *Message) {
-	// The header channel should never be blocked
-	ctx.outputCh <- msg
-}
-
-func withOutputCh(ctx Context, outputCh chan *Message) Context {
-	return &outputChContext{
-		baseContext: baseContext{
-			parent: ctx,
-		},
-		outputCh: outputCh,
-	}
 }

@@ -34,7 +34,6 @@ Related changes
 
  - Need to cherry-pick to the release branch
  - Need to update the documentation
- - Need to update the `tidb-cdc/cdc-ansible`
 
 ### Release note
 
