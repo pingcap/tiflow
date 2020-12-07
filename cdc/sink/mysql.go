@@ -252,7 +252,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	// Must relax sql mode to support cyclic replication, as downstream may have
 	// extra columns (not null and no default value).
-	if s.cyclic == nil {
+	if s.cyclic == nil || !s.cyclic.Enabled() {
 		return nil
 	}
 	var oldMode, newMode string
