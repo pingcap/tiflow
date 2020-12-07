@@ -82,6 +82,9 @@ func WatchThrow(ctx Context, f func(error)) Context {
 }
 
 func (ctx *throwContext) Throw(err error) {
+	if err == nil {
+		return
+	}
 	ctx.f(err)
 	ctx.Context.Throw(err)
 }

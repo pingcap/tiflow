@@ -62,6 +62,7 @@ func (s *contextSuite) TestThrow(c *check.C) {
 		c.Assert(err.Error(), check.Equals, "mock error")
 		cancel()
 	})
+	ctx.Throw(nil)
 	ctx.Throw(errors.New("mock error"))
 	<-ctx.Done()
 }
