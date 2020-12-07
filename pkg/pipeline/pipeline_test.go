@@ -154,7 +154,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 		},
 	})
 
-	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -162,7 +162,8 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 			},
 		},
 	}))
-	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	c.Assert(err, check.IsNil)
+	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -170,6 +171,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 			},
 		},
 	}))
+	c.Assert(err, check.IsNil)
 	cancel()
 	errs := p.Wait()
 	c.Assert(len(errs), check.Equals, 0)
@@ -228,7 +230,7 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 		},
 	})
 
-	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -236,6 +238,9 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 			},
 		},
 	}))
+	c.Assert(err, check.IsNil)
+	// this line may be return an error because the pipeline maybe closed before this line was executed
+	//nolint:errcheck
 	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -282,7 +287,7 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	ctx, p := NewPipeline(ctx)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
-	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -290,6 +295,9 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 			},
 		},
 	}))
+	c.Assert(err, check.IsNil)
+	// this line may be return an error because the pipeline maybe closed before this line was executed
+	//nolint:errcheck
 	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{

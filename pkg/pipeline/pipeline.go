@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/context"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -30,6 +31,8 @@ type Pipeline struct {
 	runnersWg sync.WaitGroup
 	errors    []error
 	errorsMu  sync.Mutex
+	closeMu   sync.Mutex
+	isClosed  bool
 }
 
 // NewPipeline creates a new pipeline
@@ -73,9 +76,15 @@ func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runne
 }
 
 // SendToFirstNode sends the message to the first node
-func (p *Pipeline) SendToFirstNode(msg *Message) {
+func (p *Pipeline) SendToFirstNode(msg *Message) error {
+	p.closeMu.Lock()
+	defer p.closeMu.Unlock()
+	if p.isClosed {
+		return cerror.ErrSendToClosedPipeline.GenWithStackByArgs()
+	}
 	// The header channel should never be blocked
 	p.header <- msg
+	return nil
 }
 
 func (p *Pipeline) close() {
@@ -83,6 +92,9 @@ func (p *Pipeline) close() {
 		// Avoid panic because repeated close channel
 		recover() //nolint:errcheck
 	}()
+	p.closeMu.Lock()
+	defer p.closeMu.Unlock()
+	p.isClosed = true
 	close(p.header)
 }
 

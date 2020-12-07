@@ -18,7 +18,7 @@ type Node interface {
 	// Init initializes the node
 	// when the pipeline is started, this function will be called in order
 	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
-	// but it will panic if you try to call the `ctx.Message()`
+	// but it will return nil if you try to call the `ctx.Message()`
 	Init(ctx NodeContext) error
 	// Receive receives the message from the previous node
 	// when the node receives a message, this function will be called
@@ -27,6 +27,6 @@ type Node interface {
 	Receive(ctx NodeContext) error
 	// Destory frees the resources in this node
 	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
-	// but it will panic if you try to call the `ctx.Message()`
+	// but it will return nil if you try to call the `ctx.Message()`
 	Destroy(ctx NodeContext) error
 }
