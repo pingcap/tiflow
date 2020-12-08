@@ -133,6 +133,14 @@ check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
 
+<<<<<<< HEAD
+=======
+check-leaktest-added:
+	GO111MODULE=off go get golang.org/x/tools/cmd/goimports
+	@echo "check leak test added in all unit tests"
+	./scripts/add-leaktest.sh $(TEST_FILES)
+
+>>>>>>> 2c68a26... Makefile: fix goimports not found in leak test check (#1180)
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
