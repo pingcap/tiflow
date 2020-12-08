@@ -21,7 +21,8 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-// Vars contains some vars which can be used to anywhere in a pipeline
+// Vars contains some vars which can be used anywhere in a pipeline
+// All field in Vars should be READ-ONLY and THREAD-SAFE
 type Vars struct {
 	// TODO add more vars
 	PDClient      pd.Client
@@ -34,7 +35,7 @@ type Vars struct {
 type Context interface {
 
 	// Vars return the `Vars` store by the root context created by `NewContext`
-	// Note that the `Vars` should be READ-ONLY
+	// Note that the `Vars` should be READ-ONLY and THREAD-SAFE
 	// The root node and all its children node share one pointer of `Vars`
 	// So any modification of `Vars` will cause all other family nodes to change.
 	Vars() *Vars
