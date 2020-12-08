@@ -265,11 +265,11 @@ func getRowDataByClomns(colFlag int32, colums []*model.Column, rowdataBuilder ds
 		if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
 			colType = "integer"
 		} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
-			if column.Flag.IsBinary() {
-				colType = "blob"
-			} else {
-				colType = "string"
-			}
+			//if column.Flag.IsBinary() {
+			//	colType = "blob"
+			//} else {
+			colType = "string"
+			//}
 		} else if column.Type == 10 || column.Type == 14 {
 			colType = "date"
 		} else if column.Type == 7 || column.Type == 12 {
@@ -278,6 +278,12 @@ func getRowDataByClomns(colFlag int32, colums []*model.Column, rowdataBuilder ds
 			colType = "time"
 		} else if column.Type == 13 {
 			colType = "year"
+		} else if column.Type == 249 || column.Type == 250 || column.Type == 251 || column.Type == 252 {
+			if column.Flag.IsBinary() {
+				colType = "blob"
+			} else {
+				colType = "clob"
+			}
 		}
 		columnBuilder.ColType = &colType
 		columnBuilder.ColFlags = &colFlag
