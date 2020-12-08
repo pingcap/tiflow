@@ -255,9 +255,10 @@ func (b *ticdcToOraclSink) Close() error {
 
 func getRowDataByClomns(colFlag int32, colums []*model.Column, rowdataBuilder dsgpb.RowData) dsgpb.RowData {
 
-	var colType string
+	//var colType string
 
 	for _, column := range colums {
+		colType := string("")
 		columnBuilder := &dsgpb.Column{}
 		columnBuilder.ColName = &column.Name
 		columnValue := model.ColumnValueString(column.Value, column.Flag)
