@@ -801,15 +801,18 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 }
 
 func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
-	ctx := context.Background()
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
 		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	cctx, cancel := context.WithCancel(ctx)
-	owner, err := NewOwner(cctx, nil, &security.Credential{}, capture.session,
+	ctx1, cancel1 := context.WithCancel(ctx)
+	owner, err := NewOwner(ctx1, nil, &security.Credential{}, capture.session,
 		DefaultCDCGCSafePointTTL, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
@@ -818,9 +821,9 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := owner.watchCampaignKey(cctx)
+		err := owner.watchCampaignKey(ctx1)
 		c.Assert(cerror.ErrOwnerCampaignKeyDeleted.Equal(err), check.IsTrue)
-		cancel()
+		cancel1()
 	}()
 	// ensure the watch loop has started
 	time.Sleep(time.Millisecond * 100)
@@ -831,8 +834,8 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	wg.Wait()
 
 	// check key is deleted before watch loop starts
-	cctx, cancel = context.WithCancel(ctx)
-	err = owner.watchCampaignKey(cctx)
+	ctx1, cancel1 = context.WithCancel(ctx)
+	err = owner.watchCampaignKey(ctx1)
 	c.Assert(cerror.ErrOwnerCampaignKeyDeleted.Equal(err), check.IsTrue)
 
 	// check the watch routine can be canceled
@@ -841,11 +844,14 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := owner.watchCampaignKey(cctx)
+		err := owner.watchCampaignKey(ctx1)
 		c.Assert(err, check.IsNil)
 	}()
 	// ensure the watch loop has started
 	time.Sleep(time.Millisecond * 100)
-	cancel()
+	cancel1()
 	wg.Wait()
+
+	err = capture.etcdClient.Close()
+	c.Assert(err, check.IsNil)
 }

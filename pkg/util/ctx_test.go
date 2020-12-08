@@ -104,6 +104,7 @@ func (s *ctxValueSuite) TestTableInfoNotSet(c *check.C) {
 func (s *ctxValueSuite) TestShouldReturnKVStorage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	kvStorage, _ := mockstore.NewMockStore()
+	defer kvStorage.Close()
 	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
 	kvStorage2, err := KVStorageFromCtx(ctx)
 	c.Assert(kvStorage2, check.DeepEquals, kvStorage)
