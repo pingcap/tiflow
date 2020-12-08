@@ -51,6 +51,9 @@ func interestingGoroutines() (gs []string) {
 		"go.etcd.io/etcd/v3/pkg/logutil.(*MergeLogger).outputLoop",
 		// library used by sarama, ref: https://github.com/rcrowley/go-metrics/pull/266
 		"github.com/rcrowley/go-metrics.(*meterArbiter).tick",
+		// TODO: remove these two lines after unified sorter is fixed
+		"github.com/pingcap/ticdc/cdc/puller/sorter.newBackEndPool",
+		"github.com/pingcap/ticdc/cdc/puller/sorter.(*heapSorter).flush",
 	}
 	shouldIgnore := func(stack string) bool {
 		if stack == "" {

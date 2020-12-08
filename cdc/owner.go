@@ -207,7 +207,10 @@ func (o *Owner) newChangeFeed(
 		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
 	})
 
-	kvStore := util.KVStorageFromCtx(ctx)
+	kvStore, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)

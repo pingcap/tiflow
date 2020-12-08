@@ -62,6 +62,11 @@ type ResolvedSpan struct {
 	ResolvedTs uint64
 }
 
+// String implements fmt.Stringer interface.
+func (rs *ResolvedSpan) String() string {
+	return fmt.Sprintf("span: %si, resolved-ts: %d", rs.Span, rs.ResolvedTs)
+}
+
 // RawKVEntry notify the KV operator
 type RawKVEntry struct {
 	OpType OpType `msg:"op_type"`
