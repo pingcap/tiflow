@@ -134,7 +134,7 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 		return fmt.Sprintf("INSERT IGNORE INTO accounts_seq%d (id, counter, sequence, startts) VALUES %s", tableID, strings.Join(args, ","))
 	}
 
-	prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
+	_ = prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
 	return nil
 }
 
@@ -251,7 +251,7 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 		return fmt.Sprintf("INSERT IGNORE INTO accounts%d (id, balance, startts) VALUES %s", tableID, strings.Join(args, ","))
 	}
 
-	prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
+	_ = prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
 	return nil
 }
 
@@ -325,8 +325,7 @@ func prepareImpl(
 				if err != nil {
 					log.Panic("exec failed", zap.String("query", batchInsertSQL), zap.Error(err))
 				}
-				log.Info(fmt.Sprintf("insert %d takes %s", batchSize, time.Now().Sub(start)), zap.String("query", batchInsertSQL))
-				return nil
+				log.Info(fmt.Sprintf("insert %d takes %s", batchSize, time.Since(start)), zap.String("query", batchInsertSQL))
 			}
 		})
 	}
@@ -335,7 +334,7 @@ func prepareImpl(
 		ch <- i * batchSize
 	}
 	close(ch)
-	errg.Wait()
+	_ = errg.Wait()
 	return nil
 }
 
@@ -479,7 +478,7 @@ func run(
 						}
 						verifyCancel()
 						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
-						if err := tests[i].verify(ctx, downstreamDB, accounts, tableID, downstream); err != nil {
+						if err := tests[i].verify(verifyCtx, downstreamDB, accounts, tableID, downstream); err != nil {
 							log.Panic("downstream verify fails", zap.Error(err))
 						}
 						verifyCancel()
@@ -498,7 +497,7 @@ func run(
 				if err != nil {
 					return errors.Trace(err)
 				}
-				defer tx.Rollback()
+				defer func() { _ = tx.Rollback() }()
 
 				for i := range tests {
 					err := tests[i].workload(workloadCtx, tx, accounts, tableID)
@@ -524,5 +523,5 @@ func run(
 			}
 		})
 	}
-	errg.Wait()
+	_ = errg.Wait()
 }
