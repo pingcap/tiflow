@@ -14,7 +14,7 @@
 package model
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 
@@ -330,7 +330,7 @@ func ColumnValueString(c interface{}, flag ColumnFlagType) string {
 		data = v
 	case []byte:
 		if flag.IsBinary() {
-			data = base64.StdEncoding.EncodeToString(v)
+			data = hex.EncodeToString(v)
 		} else {
 			data = string(v)
 		}
