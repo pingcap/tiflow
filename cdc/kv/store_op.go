@@ -15,7 +15,6 @@ package kv
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"sync"
 	"time"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
+	"go.uber.org/zap"
 )
 
 const (
@@ -61,7 +61,6 @@ func newStorageWithCurVersionCache(storage tidbkv.Storage, cacheKey string) tidb
 		curVersionCache[cacheKey] = &curVersionCacheEntry{
 			ts:          0,
 			lastUpdated: time.Unix(0, 0),
-			mu:          sync.Mutex{},
 		}
 	}
 
@@ -100,11 +99,9 @@ func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.V
 }
 
 // GetSnapshotMeta returns tidb meta information
+// TODO: Simplify the signature of this function
 func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
-	snapshot, err := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrGetStoreSnapshot, err)
-	}
+	snapshot := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
 	return meta.NewSnapshotMeta(snapshot), nil
 }
 

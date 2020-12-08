@@ -8,7 +8,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.development
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
       - ./docker/config:/config
     command:
@@ -134,7 +134,7 @@ services:
     image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -43,13 +44,15 @@ type clientSuite struct {
 var _ = check.Suite(&clientSuite{})
 
 func (s *clientSuite) TestNewClose(c *check.C) {
-	cluster := mocktikv.NewCluster(mocktikv.MustNewMVCCStore())
+	defer testleak.AfterTest(c)()
+	store := mocktikv.MustNewMVCCStore()
+	defer store.Close() //nolint:errcheck
+	cluster := mocktikv.NewCluster(store)
 	pdCli := mocktikv.NewPDClient(cluster)
+	defer pdCli.Close() //nolint:errcheck
 
-	cli, err := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
-	c.Assert(err, check.IsNil)
-
-	err = cli.Close()
+	cli := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
+	err := cli.Close()
 	c.Assert(err, check.IsNil)
 }
 
@@ -125,6 +128,8 @@ func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.St
 
 // Use etcdSuite to workaround the race. See comments of `TestConnArray`.
 func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	wg := &sync.WaitGroup{}
@@ -141,6 +146,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(1, "localhost:1")
 	cluster.AddStore(2, addr)
@@ -148,8 +154,8 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient, err := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	c.Assert(err, check.IsNil)
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	defer cdcClient.Close() //nolint:errcheck
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -199,6 +205,8 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 }
 
 func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
@@ -214,21 +222,23 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
+	defer pdClient.Close() //nolint:errcheck
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(2, addr)
 	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient, err := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	c.Assert(err, check.IsNil)
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 
@@ -280,8 +290,7 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient, err := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	c.Assert(err, check.IsNil)
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	eventCh := make(chan *model.RegionFeedEvent, 10)
@@ -295,6 +304,8 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 // is not a thread-safe operation and it must be called before any gRPC functions
 // ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
 func (s *etcdSuite) TestConnArray(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	addr := "127.0.0.1:2379"
 	ca, err := newConnArray(context.TODO(), 2, addr, &security.Credential{})
 	c.Assert(err, check.IsNil)

@@ -20,15 +20,17 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type markSuit struct{}
+type markSuite struct{}
 
-var _ = check.Suite(&markSuit{})
+var _ = check.Suite(&markSuite{})
 
 func TestCyclic(t *testing.T) { check.TestingT(t) }
 
-func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
+func (s *markSuite) TestFilterAndReduceTxns(c *check.C) {
+	defer testleak.AfterTest(c)()
 	rID := mark.CyclicReplicaIDCol
 	testCases := []struct {
 		input     map[model.TableID][]*model.SingleTableTxn
