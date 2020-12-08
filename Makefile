@@ -135,6 +135,7 @@ check-copyright:
 	@./scripts/check-copyright.sh
 
 check-leaktest-added:
+	GO111MODULE=off go get golang.org/x/tools/cmd/goimports
 	@echo "check leak test added in all unit tests"
 	./scripts/add-leaktest.sh $(TEST_FILES)
 
