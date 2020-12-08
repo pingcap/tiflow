@@ -63,7 +63,7 @@ func waitEntriesReceived(ctx context.Context, currentNum *int32, expectedNum int
 			return
 		default:
 			num := atomic.LoadInt32(currentNum)
-			//log.Info("-", zap.Int32("-", num))
+			// log.Info("-", zap.Int32("-", num))
 			if num >= expectedNum {
 				return
 			}

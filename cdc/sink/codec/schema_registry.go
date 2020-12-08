@@ -83,7 +83,6 @@ func NewAvroSchemaManager(
 		return nil, errors.Trace(err)
 	}
 	resp, err := httpCli.Do(req)
-
 	if err != nil {
 		return nil, errors.Annotate(
 			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Test connection to Schema Registry failed")

@@ -112,7 +112,7 @@ type CDCEtcdClient struct {
 	Client *etcd.Client
 }
 
-//NewCDCEtcdClient returns a new CDCEtcdClient
+// NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context, cli *clientv3.Client) CDCEtcdClient {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	metrics := map[string]prometheus.Counter{
@@ -643,7 +643,6 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		resp, err := c.Client.Txn(ctx).If(writeCmp).Then(
 			clientv3.OpPut(key, value),
 		).Commit()
-
 		if err != nil {
 			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}

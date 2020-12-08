@@ -53,19 +53,30 @@ func (s *cyclicSuite) TestIsTablePaired(c *check.C) {
 		isParied bool
 	}{
 		{[]model.TableName{}, true},
-		{[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_1"}},
-			true},
-		{[]model.TableName{{Schema: "a", Table: "a"}},
-			false},
-		{[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
-			{Schema: "a", Table: "a"}},
-			true},
-		{[]model.TableName{
-			{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
-			{Schema: mark.SchemaName, Table: "repl_mark_a_b"},
-			{Schema: "a", Table: "a"},
-			{Schema: "a", Table: "b"}},
-			true},
+		{
+			[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_1"}},
+			true,
+		},
+		{
+			[]model.TableName{{Schema: "a", Table: "a"}},
+			false,
+		},
+		{
+			[]model.TableName{
+				{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
+				{Schema: "a", Table: "a"},
+			},
+			true,
+		},
+		{
+			[]model.TableName{
+				{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
+				{Schema: mark.SchemaName, Table: "repl_mark_a_b"},
+				{Schema: "a", Table: "a"},
+				{Schema: "a", Table: "b"},
+			},
+			true,
+		},
 	}
 
 	for _, test := range tests {

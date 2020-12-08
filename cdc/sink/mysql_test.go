@@ -118,7 +118,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -139,7 +140,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  3,
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 			},
 		},
@@ -187,7 +189,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -198,7 +201,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  3,
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -209,7 +213,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  5,
 							CommitTs: 6,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 			},
 			2: {
@@ -222,7 +227,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
@@ -233,7 +239,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  3,
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
@@ -244,7 +251,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  5,
 							CommitTs: 6,
 							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						}},
+						},
+					},
 				},
 			},
 		},
@@ -373,7 +381,8 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			},
 			exportedOutputReplicaIDs: []uint64{1, 1, 1},
 			maxTxnRow:                2,
-		}}
+		},
+	}
 	ctx := context.Background()
 
 	notifier := new(notify.Notifier)

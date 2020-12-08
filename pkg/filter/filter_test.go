@@ -76,30 +76,36 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 		ignoreTxnStartTs []uint64
 		rules            []string
 	}{
-		{cases: []struct {
-			schema string
-			table  string
-			ts     uint64
-			ignore bool
-		}{{"sns", "ttta", 1, true},
-			{"ecom", "aabb", 2, false},
-			{"sns", "log", 3, true},
-			{"sns", "log", 4, true},
-			{"ecom", "test", 5, true},
-			{"test", "test", 6, true},
-			{"ecom", "log", 6, false}},
+		{
+			cases: []struct {
+				schema string
+				table  string
+				ts     uint64
+				ignore bool
+			}{
+				{"sns", "ttta", 1, true},
+				{"ecom", "aabb", 2, false},
+				{"sns", "log", 3, true},
+				{"sns", "log", 4, true},
+				{"ecom", "test", 5, true},
+				{"test", "test", 6, true},
+				{"ecom", "log", 6, false},
+			},
 			ignoreTxnStartTs: []uint64{1, 3},
 			rules:            []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
-		{cases: []struct {
-			schema string
-			table  string
-			ts     uint64
-			ignore bool
-		}{{"S", "D1", 1, true},
-			{"S", "Da", 1, false},
-			{"S", "Db", 1, false},
-			{"S", "Daa", 1, false}},
+		{
+			cases: []struct {
+				schema string
+				table  string
+				ts     uint64
+				ignore bool
+			}{
+				{"S", "D1", 1, true},
+				{"S", "Da", 1, false},
+				{"S", "Db", 1, false},
+				{"S", "Daa", 1, false},
+			},
 			ignoreTxnStartTs: []uint64{},
 			rules:            []string{"*.*", "!S.D[!a-d]"},
 		},
@@ -144,30 +150,36 @@ func (s *filterSuite) TestShouldIgnoreDDL(c *check.C) {
 			ignore  bool
 		}
 		rules []string
-	}{{cases: []struct {
-		schema  string
-		table   string
-		ddlType model.ActionType
-		ignore  bool
-	}{{"sns", "", model.ActionCreateSchema, false},
-		{"sns", "", model.ActionDropSchema, false},
-		{"sns", "", model.ActionModifySchemaCharsetAndCollate, false},
-		{"ecom", "", model.ActionCreateSchema, false},
-		{"ecom", "aa", model.ActionCreateTable, false},
-		{"ecom", "", model.ActionCreateSchema, false},
-		{"test", "", model.ActionCreateSchema, true}},
+	}{{
+		cases: []struct {
+			schema  string
+			table   string
+			ddlType model.ActionType
+			ignore  bool
+		}{
+			{"sns", "", model.ActionCreateSchema, false},
+			{"sns", "", model.ActionDropSchema, false},
+			{"sns", "", model.ActionModifySchemaCharsetAndCollate, false},
+			{"ecom", "", model.ActionCreateSchema, false},
+			{"ecom", "aa", model.ActionCreateTable, false},
+			{"ecom", "", model.ActionCreateSchema, false},
+			{"test", "", model.ActionCreateSchema, true},
+		},
 		rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
-	}, {cases: []struct {
-		schema  string
-		table   string
-		ddlType model.ActionType
-		ignore  bool
-	}{{"sns", "", model.ActionCreateSchema, false},
-		{"sns", "", model.ActionDropSchema, false},
-		{"sns", "", model.ActionModifySchemaCharsetAndCollate, false},
-		{"sns", "aa", model.ActionCreateTable, true},
-		{"sns", "C1", model.ActionCreateTable, false},
-		{"sns", "", model.ActionCreateTable, true}},
+	}, {
+		cases: []struct {
+			schema  string
+			table   string
+			ddlType model.ActionType
+			ignore  bool
+		}{
+			{"sns", "", model.ActionCreateSchema, false},
+			{"sns", "", model.ActionDropSchema, false},
+			{"sns", "", model.ActionModifySchemaCharsetAndCollate, false},
+			{"sns", "aa", model.ActionCreateTable, true},
+			{"sns", "C1", model.ActionCreateTable, false},
+			{"sns", "", model.ActionCreateTable, true},
+		},
 		rules: []string{"sns.C1"},
 	}}
 	for _, ftc := range testCases {

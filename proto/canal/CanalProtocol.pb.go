@@ -5,16 +5,19 @@ package com_alibaba_otter_canal_protocol
 
 import (
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ = proto.Marshal
-var _ = fmt.Errorf
-var _ = math.Inf
+var (
+	_ = proto.Marshal
+	_ = fmt.Errorf
+	_ = math.Inf
+)
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -59,7 +62,7 @@ func (Compression) EnumDescriptor() ([]byte, []int) {
 type PacketType int32
 
 const (
-	//compatible
+	// compatible
 	PacketType_PACKAGETYPECOMPATIBLEPROTO2 PacketType = 0
 	PacketType_HANDSHAKE                   PacketType = 1
 	PacketType_CLIENTAUTHENTICATION        PacketType = 2
@@ -146,9 +149,11 @@ func (*Packet) ProtoMessage()    {}
 func (*Packet) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{0}
 }
+
 func (m *Packet) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Packet) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Packet.Marshal(b, m, deterministic)
@@ -161,12 +166,15 @@ func (m *Packet) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Packet) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Packet.Merge(m, src)
 }
+
 func (m *Packet) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Packet) XXX_DiscardUnknown() {
 	xxx_messageInfo_Packet.DiscardUnknown(m)
 }
@@ -178,11 +186,13 @@ type isPacket_MagicNumberPresent interface {
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
+
 type isPacket_VersionPresent interface {
 	isPacket_VersionPresent()
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
+
 type isPacket_CompressionPresent interface {
 	isPacket_CompressionPresent()
 	MarshalTo([]byte) (int, error)
@@ -192,9 +202,11 @@ type isPacket_CompressionPresent interface {
 type Packet_MagicNumber struct {
 	MagicNumber int32 `protobuf:"varint,1,opt,name=magic_number,json=magicNumber,proto3,oneof" json:"magic_number,omitempty"`
 }
+
 type Packet_Version struct {
 	Version int32 `protobuf:"varint,2,opt,name=version,proto3,oneof" json:"version,omitempty"`
 }
+
 type Packet_Compression struct {
 	Compression Compression `protobuf:"varint,4,opt,name=compression,proto3,enum=com.alibaba.otter.canal.protocol.Compression,oneof" json:"compression,omitempty"`
 }
@@ -209,12 +221,14 @@ func (m *Packet) GetMagicNumberPresent() isPacket_MagicNumberPresent {
 	}
 	return nil
 }
+
 func (m *Packet) GetVersionPresent() isPacket_VersionPresent {
 	if m != nil {
 		return m.VersionPresent
 	}
 	return nil
 }
+
 func (m *Packet) GetCompressionPresent() isPacket_CompressionPresent {
 	if m != nil {
 		return m.CompressionPresent
@@ -280,9 +294,11 @@ func (*HeartBeat) ProtoMessage()    {}
 func (*HeartBeat) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{1}
 }
+
 func (m *HeartBeat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *HeartBeat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_HeartBeat.Marshal(b, m, deterministic)
@@ -295,12 +311,15 @@ func (m *HeartBeat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *HeartBeat) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_HeartBeat.Merge(m, src)
 }
+
 func (m *HeartBeat) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *HeartBeat) XXX_DiscardUnknown() {
 	xxx_messageInfo_HeartBeat.DiscardUnknown(m)
 }
@@ -340,9 +359,11 @@ func (*Handshake) ProtoMessage()    {}
 func (*Handshake) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{2}
 }
+
 func (m *Handshake) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Handshake) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Handshake.Marshal(b, m, deterministic)
@@ -355,12 +376,15 @@ func (m *Handshake) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Handshake) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Handshake.Merge(m, src)
 }
+
 func (m *Handshake) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Handshake) XXX_DiscardUnknown() {
 	xxx_messageInfo_Handshake.DiscardUnknown(m)
 }
@@ -443,9 +467,11 @@ func (*ClientAuth) ProtoMessage()    {}
 func (*ClientAuth) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{3}
 }
+
 func (m *ClientAuth) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ClientAuth) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ClientAuth.Marshal(b, m, deterministic)
@@ -458,12 +484,15 @@ func (m *ClientAuth) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *ClientAuth) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ClientAuth.Merge(m, src)
 }
+
 func (m *ClientAuth) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ClientAuth) XXX_DiscardUnknown() {
 	xxx_messageInfo_ClientAuth.DiscardUnknown(m)
 }
@@ -475,6 +504,7 @@ type isClientAuth_NetReadTimeoutPresent interface {
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
+
 type isClientAuth_NetWriteTimeoutPresent interface {
 	isClientAuth_NetWriteTimeoutPresent()
 	MarshalTo([]byte) (int, error)
@@ -484,6 +514,7 @@ type isClientAuth_NetWriteTimeoutPresent interface {
 type ClientAuth_NetReadTimeout struct {
 	NetReadTimeout int32 `protobuf:"varint,3,opt,name=net_read_timeout,json=netReadTimeout,proto3,oneof" json:"net_read_timeout,omitempty"`
 }
+
 type ClientAuth_NetWriteTimeout struct {
 	NetWriteTimeout int32 `protobuf:"varint,4,opt,name=net_write_timeout,json=netWriteTimeout,proto3,oneof" json:"net_write_timeout,omitempty"`
 }
@@ -497,6 +528,7 @@ func (m *ClientAuth) GetNetReadTimeoutPresent() isClientAuth_NetReadTimeoutPrese
 	}
 	return nil
 }
+
 func (m *ClientAuth) GetNetWriteTimeoutPresent() isClientAuth_NetWriteTimeoutPresent {
 	if m != nil {
 		return m.NetWriteTimeoutPresent
@@ -586,9 +618,11 @@ func (*Ack) ProtoMessage()    {}
 func (*Ack) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{4}
 }
+
 func (m *Ack) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Ack) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Ack.Marshal(b, m, deterministic)
@@ -601,12 +635,15 @@ func (m *Ack) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Ack) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Ack.Merge(m, src)
 }
+
 func (m *Ack) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Ack) XXX_DiscardUnknown() {
 	xxx_messageInfo_Ack.DiscardUnknown(m)
 }
@@ -668,9 +705,11 @@ func (*ClientAck) ProtoMessage()    {}
 func (*ClientAck) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{5}
 }
+
 func (m *ClientAck) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ClientAck) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ClientAck.Marshal(b, m, deterministic)
@@ -683,12 +722,15 @@ func (m *ClientAck) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *ClientAck) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ClientAck.Merge(m, src)
 }
+
 func (m *ClientAck) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ClientAck) XXX_DiscardUnknown() {
 	xxx_messageInfo_ClientAck.DiscardUnknown(m)
 }
@@ -732,9 +774,11 @@ func (*Sub) ProtoMessage()    {}
 func (*Sub) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{6}
 }
+
 func (m *Sub) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Sub) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Sub.Marshal(b, m, deterministic)
@@ -747,12 +791,15 @@ func (m *Sub) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Sub) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Sub.Merge(m, src)
 }
+
 func (m *Sub) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Sub) XXX_DiscardUnknown() {
 	xxx_messageInfo_Sub.DiscardUnknown(m)
 }
@@ -796,9 +843,11 @@ func (*Unsub) ProtoMessage()    {}
 func (*Unsub) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{7}
 }
+
 func (m *Unsub) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Unsub) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Unsub.Marshal(b, m, deterministic)
@@ -811,12 +860,15 @@ func (m *Unsub) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Unsub) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Unsub.Merge(m, src)
 }
+
 func (m *Unsub) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Unsub) XXX_DiscardUnknown() {
 	xxx_messageInfo_Unsub.DiscardUnknown(m)
 }
@@ -875,9 +927,11 @@ func (*Get) ProtoMessage()    {}
 func (*Get) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{8}
 }
+
 func (m *Get) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Get) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Get.Marshal(b, m, deterministic)
@@ -890,12 +944,15 @@ func (m *Get) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Get) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Get.Merge(m, src)
 }
+
 func (m *Get) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Get) XXX_DiscardUnknown() {
 	xxx_messageInfo_Get.DiscardUnknown(m)
 }
@@ -907,11 +964,13 @@ type isGet_TimeoutPresent interface {
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
+
 type isGet_UnitPresent interface {
 	isGet_UnitPresent()
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
+
 type isGet_AutoAckPresent interface {
 	isGet_AutoAckPresent()
 	MarshalTo([]byte) (int, error)
@@ -921,9 +980,11 @@ type isGet_AutoAckPresent interface {
 type Get_Timeout struct {
 	Timeout int64 `protobuf:"varint,4,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
 }
+
 type Get_Unit struct {
 	Unit int32 `protobuf:"varint,5,opt,name=unit,proto3,oneof" json:"unit,omitempty"`
 }
+
 type Get_AutoAck struct {
 	AutoAck bool `protobuf:"varint,6,opt,name=auto_ack,json=autoAck,proto3,oneof" json:"auto_ack,omitempty"`
 }
@@ -938,12 +999,14 @@ func (m *Get) GetTimeoutPresent() isGet_TimeoutPresent {
 	}
 	return nil
 }
+
 func (m *Get) GetUnitPresent() isGet_UnitPresent {
 	if m != nil {
 		return m.UnitPresent
 	}
 	return nil
 }
+
 func (m *Get) GetAutoAckPresent() isGet_AutoAckPresent {
 	if m != nil {
 		return m.AutoAckPresent
@@ -1017,9 +1080,11 @@ func (*Messages) ProtoMessage()    {}
 func (*Messages) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{9}
 }
+
 func (m *Messages) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Messages) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Messages.Marshal(b, m, deterministic)
@@ -1032,12 +1097,15 @@ func (m *Messages) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Messages) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Messages.Merge(m, src)
 }
+
 func (m *Messages) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Messages) XXX_DiscardUnknown() {
 	xxx_messageInfo_Messages.DiscardUnknown(m)
 }
@@ -1078,9 +1146,11 @@ func (*Dump) ProtoMessage()    {}
 func (*Dump) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{10}
 }
+
 func (m *Dump) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Dump) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Dump.Marshal(b, m, deterministic)
@@ -1093,12 +1163,15 @@ func (m *Dump) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Dump) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Dump.Merge(m, src)
 }
+
 func (m *Dump) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Dump) XXX_DiscardUnknown() {
 	xxx_messageInfo_Dump.DiscardUnknown(m)
 }
@@ -1167,9 +1240,11 @@ func (*ClientRollback) ProtoMessage()    {}
 func (*ClientRollback) Descriptor() ([]byte, []int) {
 	return fileDescriptor_638f57be23f1b015, []int{11}
 }
+
 func (m *ClientRollback) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ClientRollback) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ClientRollback.Marshal(b, m, deterministic)
@@ -1182,12 +1257,15 @@ func (m *ClientRollback) XXX_Marshal(b []byte, deterministic bool) ([]byte, erro
 		return b[:n], nil
 	}
 }
+
 func (m *ClientRollback) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ClientRollback.Merge(m, src)
 }
+
 func (m *ClientRollback) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ClientRollback) XXX_DiscardUnknown() {
 	xxx_messageInfo_ClientRollback.DiscardUnknown(m)
 }
@@ -1381,6 +1459,7 @@ func (m *Packet_MagicNumber) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
+
 func (m *Packet_Version) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1393,6 +1472,7 @@ func (m *Packet_Version) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x10
 	return len(dAtA) - i, nil
 }
+
 func (m *Packet_Compression) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1405,6 +1485,7 @@ func (m *Packet_Compression) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x20
 	return len(dAtA) - i, nil
 }
+
 func (m *HeartBeat) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1504,6 +1585,7 @@ func (m *Handshake_CommunicationEncoding) MarshalToSizedBuffer(dAtA []byte) (int
 	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
+
 func (m *ClientAuth) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1601,6 +1683,7 @@ func (m *ClientAuth_NetReadTimeout) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	dAtA[i] = 0x18
 	return len(dAtA) - i, nil
 }
+
 func (m *ClientAuth_NetWriteTimeout) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1613,6 +1696,7 @@ func (m *ClientAuth_NetWriteTimeout) MarshalToSizedBuffer(dAtA []byte) (int, err
 	dAtA[i] = 0x20
 	return len(dAtA) - i, nil
 }
+
 func (m *Ack) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1668,6 +1752,7 @@ func (m *Ack_ErrorCode) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
+
 func (m *ClientAck) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1895,6 +1980,7 @@ func (m *Get_Timeout) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x20
 	return len(dAtA) - i, nil
 }
+
 func (m *Get_Unit) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1907,6 +1993,7 @@ func (m *Get_Unit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x28
 	return len(dAtA) - i, nil
 }
+
 func (m *Get_AutoAck) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1924,6 +2011,7 @@ func (m *Get_AutoAck) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x30
 	return len(dAtA) - i, nil
 }
+
 func (m *Messages) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2025,6 +2113,7 @@ func (m *Dump_Timestamp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x18
 	return len(dAtA) - i, nil
 }
+
 func (m *ClientRollback) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2082,6 +2171,7 @@ func encodeVarintCanalProtocol(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+
 func (m *Packet) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2119,6 +2209,7 @@ func (m *Packet_MagicNumber) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.MagicNumber))
 	return n
 }
+
 func (m *Packet_Version) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2128,6 +2219,7 @@ func (m *Packet_Version) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.Version))
 	return n
 }
+
 func (m *Packet_Compression) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2137,6 +2229,7 @@ func (m *Packet_Compression) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.Compression))
 	return n
 }
+
 func (m *HeartBeat) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2187,6 +2280,7 @@ func (m *Handshake_CommunicationEncoding) Size() (n int) {
 	n += 1 + l + sovCanalProtocol(uint64(l))
 	return n
 }
+
 func (m *ClientAuth) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2237,6 +2331,7 @@ func (m *ClientAuth_NetReadTimeout) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.NetReadTimeout))
 	return n
 }
+
 func (m *ClientAuth_NetWriteTimeout) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2246,6 +2341,7 @@ func (m *ClientAuth_NetWriteTimeout) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.NetWriteTimeout))
 	return n
 }
+
 func (m *Ack) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2274,6 +2370,7 @@ func (m *Ack_ErrorCode) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.ErrorCode))
 	return n
 }
+
 func (m *ClientAck) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2386,6 +2483,7 @@ func (m *Get_Timeout) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.Timeout))
 	return n
 }
+
 func (m *Get_Unit) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2395,6 +2493,7 @@ func (m *Get_Unit) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.Unit))
 	return n
 }
+
 func (m *Get_AutoAck) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2404,6 +2503,7 @@ func (m *Get_AutoAck) Size() (n int) {
 	n += 2
 	return n
 }
+
 func (m *Messages) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2456,6 +2556,7 @@ func (m *Dump_Timestamp) Size() (n int) {
 	n += 1 + sovCanalProtocol(uint64(m.Timestamp))
 	return n
 }
+
 func (m *ClientRollback) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2482,9 +2583,11 @@ func (m *ClientRollback) Size() (n int) {
 func sovCanalProtocol(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
+
 func sozCanalProtocol(x uint64) (n int) {
 	return sovCanalProtocol(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+
 func (m *Packet) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2652,6 +2755,7 @@ func (m *Packet) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *HeartBeat) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2744,6 +2848,7 @@ func (m *HeartBeat) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Handshake) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2883,6 +2988,7 @@ func (m *Handshake) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ClientAuth) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3158,6 +3264,7 @@ func (m *ClientAuth) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Ack) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3264,6 +3371,7 @@ func (m *Ack) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ClientAck) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3401,6 +3509,7 @@ func (m *ClientAck) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Sub) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3551,6 +3660,7 @@ func (m *Sub) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Unsub) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3701,6 +3811,7 @@ func (m *Unsub) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Get) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3899,6 +4010,7 @@ func (m *Get) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Messages) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4004,6 +4116,7 @@ func (m *Messages) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Dump) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4129,6 +4242,7 @@ func (m *Dump) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ClientRollback) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4266,6 +4380,7 @@ func (m *ClientRollback) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func skipCanalProtocol(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0

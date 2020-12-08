@@ -228,7 +228,7 @@ func (o *Owner) newChangeFeed(
 	}
 
 	if info.Engine == model.SortInFile {
-		err = os.MkdirAll(info.SortDir, 0755)
+		err = os.MkdirAll(info.SortDir, 0o755)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
 		}
@@ -547,7 +547,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 		if newCf.info.SyncPointEnabled {
 			log.Info("syncpoint is on, creating the sync table")
-			//create the sync table
+			// create the sync table
 			err := newCf.syncpointStore.CreateSynctable(ctx)
 			if err != nil {
 				return err
