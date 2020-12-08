@@ -16,6 +16,7 @@ package model
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type kvSuite struct{}
@@ -23,6 +24,7 @@ type kvSuite struct{}
 var _ = check.Suite(&kvSuite{})
 
 func (s *kvSuite) TestRegionFeedEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
 	raw := &RawKVEntry{
 		CRTs:   1,
 		OpType: OpTypePut,
@@ -43,6 +45,7 @@ func (s *kvSuite) TestRegionFeedEvent(c *check.C) {
 }
 
 func (s *kvSuite) TestRawKVEntry(c *check.C) {
+	defer testleak.AfterTest(c)()
 	raw := &RawKVEntry{
 		StartTs: 100,
 		CRTs:    101,
