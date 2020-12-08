@@ -51,6 +51,7 @@ func (s *contextSuite) TestStdCancel(c *check.C) {
 }
 
 func (s *contextSuite) TestCancel(c *check.C) {
+	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
 	ctx, cancel := NewContext(stdCtx, &Vars{})
 	cancel()
@@ -68,5 +69,29 @@ func (s *contextSuite) TestThrow(c *check.C) {
 	})
 	ctx.Throw(nil)
 	ctx.Throw(errors.New("mock error"))
+	<-ctx.Done()
+}
+
+func (s *contextSuite) TestThrowCascade(c *check.C) {
+	defer testleak.AfterTest(c)()
+	stdCtx := context.Background()
+	ctx, cancel := NewContext(stdCtx, &Vars{})
+	var errNum1, errNum2 int
+	ctx = WithErrorHandler(ctx, func(err error) {
+		if err.Error() == "mock error" {
+			errNum1++
+		}else if err.Error() == "mock error2" {
+			errNum2++
+		}else{
+			c.Fail()
+		}
+	})
+	ctx2 := WithErrorHandler(ctx, func(err error) {
+		errNum2++
+		c.Assert(err.Error(), check.Equals, "mock error2")
+	})
+	ctx2.Throw(errors.New("mock error2"))
+	ctx.Throw(errors.New("mock error"))
+	cancel()
 	<-ctx.Done()
 }
