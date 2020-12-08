@@ -15,6 +15,7 @@ package model
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type captureSuite struct{}
@@ -22,6 +23,7 @@ type captureSuite struct{}
 var _ = check.Suite(&captureSuite{})
 
 func (s *captureSuite) TestMarshalUnmarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := &CaptureInfo{
 		ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7890",
 		AdvertiseAddr: "127.0.0.1:8300",
