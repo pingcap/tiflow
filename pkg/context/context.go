@@ -32,6 +32,7 @@ type Vars struct {
 // Context contains Vars(), Done(), Throw(error) and StdContext() context.Context
 // Context is used to instead of standard context
 type Context interface {
+
 	// Vars return the `Vars` store by the root context created by `NewContext`
 	// Note that the `Vars` should be READ-ONLY
 	// The root node and all its children node share one pointer of `Vars`
@@ -42,10 +43,11 @@ type Context interface {
 	// - the `cancel()` returned from `NewContext` is called.
 	// - the `stdCtx` specified in `NewContext` is done.
 	Done() <-chan struct{}
-	
+
 	// Throw an error to parents nodes
 	// we can using `WatchThrow` to listen the errors thrown by children nodes
 	Throw(error)
+
 	// StdContext return a simple struct implement the stdcontext.Context interface
 	// The Context in this package and the StdContext returned by this function have the same life cycle
 	// It means the `StdContext.Done()` will done when the `Context` is done.
