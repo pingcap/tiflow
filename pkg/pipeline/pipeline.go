@@ -44,7 +44,7 @@ func NewPipeline(ctx context.Context) (context.Context, *Pipeline) {
 		header:  header,
 		runners: runners,
 	}
-	ctx = context.WatchThrow(ctx, func(err error) {
+	ctx = context.WithErrorHandler(ctx, func(err error) {
 		p.addError(err)
 		p.close()
 	})

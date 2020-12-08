@@ -88,8 +88,8 @@ type throwContext struct {
 	f func(error)
 }
 
-// WatchThrow creates a new context that can watch the Throw function
-func WatchThrow(ctx Context, f func(error)) Context {
+// WithErrorHandler creates a new context that can watch the Throw function
+func WithErrorHandler(ctx Context, f func(error)) Context {
 	return &throwContext{
 		Context: ctx,
 		f:       f,

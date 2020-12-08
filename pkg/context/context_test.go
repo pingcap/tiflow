@@ -62,7 +62,7 @@ func (s *contextSuite) TestThrow(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
 	ctx, cancel := NewContext(stdCtx, &Vars{})
-	ctx = WatchThrow(ctx, func(err error) {
+	ctx = WithErrorHandler(ctx, func(err error) {
 		c.Assert(err.Error(), check.Equals, "mock error")
 		cancel()
 	})
