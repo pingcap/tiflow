@@ -20,17 +20,27 @@ import (
 	"github.com/pingcap/ticdc/pkg/pipeline"
 )
 
+// TableStatus is status of the table pipeline
+type TableStatus = int32
+
+// TableStatus for table pipeline
+const (
+	TableStatusInitializing TableStatus = iota
+	TableStatusRunning
+	TableStatusStoped
+)
+
 type outputNode struct {
 	outputCh   chan *model.PolymorphicEvent
 	resolvedTs *model.Ts
-	stopped    *int32
+	status     *TableStatus
 }
 
-func newOutputNode(outputCh chan *model.PolymorphicEvent, resolvedTs *model.Ts, stopped *int32) pipeline.Node {
+func newOutputNode(outputCh chan *model.PolymorphicEvent, resolvedTs *model.Ts, status *TableStatus) pipeline.Node {
 	return &outputNode{
 		outputCh:   outputCh,
 		resolvedTs: resolvedTs,
-		stopped:    stopped,
+		status:     status,
 	}
 }
 
@@ -55,13 +65,13 @@ func (n *outputNode) Receive(ctx pipeline.NodeContext) error {
 		}
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeStopped {
-			atomic.StoreInt32(n.stopped, 1)
+			atomic.StoreInt32(n.status, TableStatusStoped)
 		}
 	}
 	return nil
 }
 
 func (n *outputNode) Destroy(ctx pipeline.NodeContext) error {
-	atomic.StoreInt32(n.stopped, 1)
+	atomic.StoreInt32(n.status, TableStatusStoped)
 	return nil
 }

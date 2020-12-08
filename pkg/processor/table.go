@@ -36,7 +36,7 @@ import (
 type TablePipeline struct {
 	p          *pipeline.Pipeline
 	resolvedTs uint64
-	stopped    int32
+	status     TableStatus
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
@@ -45,14 +45,25 @@ func (t *TablePipeline) ResolvedTs() model.Ts {
 }
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-func (t *TablePipeline) AsyncStop() bool {
+func (t *TablePipeline) AsyncStop() {
 	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
 		Tp: pipeline.CommandTypeShouldStop,
 	}))
 	if !cerror.ErrSendToClosedPipeline.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
-	return atomic.LoadInt32(&t.stopped) != 0
+}
+
+// Workload returns the workload of this table
+func (t *TablePipeline) Workload() *model.WorkloadInfo {
+	// TODO(leoppro) calculate the workload of this table
+	// We temporarily set the value to constant 1
+	return &model.WorkloadInfo{Workload: 1}
+}
+
+// Status returns the status of this table pipeline
+func (t *TablePipeline) Status() TableStatus {
+	return atomic.LoadInt32(&t.status)
 }
 
 // NewTablePipeline creates a table pipeline
@@ -81,11 +92,12 @@ func NewTablePipeline(ctx context.Context,
 		tableName = strconv.Itoa(int(tableID))
 	}
 	tablePipeline := new(TablePipeline)
+	tablePipeline.resolvedTs = targetTs
 	ctx, p := pipeline.NewPipeline(ctx)
 	p.AppendNode(ctx, "puller", newPullerNode(credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
 	p.AppendNode(ctx, "safe_stopper", newSafeStopperNode(targetTs))
-	p.AppendNode(ctx, "output", newOutputNode(outputCh, &tablePipeline.resolvedTs, &tablePipeline.stopped))
+	p.AppendNode(ctx, "output", newOutputNode(outputCh, &tablePipeline.resolvedTs, &tablePipeline.status))
 	return ctx, tablePipeline
 }
