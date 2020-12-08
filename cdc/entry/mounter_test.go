@@ -23,15 +23,27 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
+=======
+	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+	ticonfig "github.com/pingcap/tidb/config"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/util/testkit"
+	"go.uber.org/zap"
+>>>>>>> 1d32d72... tests: add leak test check in Makefile, complete leak tests (#1166)
 )
 
 type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
+<<<<<<< HEAD
 func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *Storage) {
 	pm := puller.NewMockPullerManager(c, newRowFormat)
 	for _, sql := range sqls {
@@ -44,6 +56,40 @@ func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sq
 			c.Fail()
 		}
 	}()
+=======
+func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		tableName      string
+		createTableDDL string
+		values         [][]interface{}
+	}{{
+		tableName:      "simple",
+		createTableDDL: "create table simple(id int primary key)",
+		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+	}, {
+		tableName:      "no_pk",
+		createTableDDL: "create table no_pk(id int not null unique key)",
+		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+	}, {
+		tableName:      "many_index",
+		createTableDDL: "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
+		values:         [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
+	}, {
+		tableName:      "default_value",
+		createTableDDL: "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
+		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+	}, {
+		tableName: "partition_table",
+		createTableDDL: `CREATE TABLE partition_table  (
+			id INT NOT NULL AUTO_INCREMENT UNIQUE KEY,
+			fname VARCHAR(25) NOT NULL,
+			lname VARCHAR(25) NOT NULL,
+			store_id INT NOT NULL,
+			department_id INT NOT NULL,
+			INDEX (department_id)
+		)
+>>>>>>> 1d32d72... tests: add leak test check in Makefile, complete leak tests (#1166)
 
 	jobs := pm.GetDDLJobs()
 	schemaBuilder,err := NewStorageBuilder(jobs, ddlPlr.SortedOutput(ctx))
