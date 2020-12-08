@@ -80,9 +80,9 @@ func (s *contextSuite) TestThrowCascade(c *check.C) {
 	ctx = WithErrorHandler(ctx, func(err error) {
 		if err.Error() == "mock error" {
 			errNum1++
-		}else if err.Error() == "mock error2" {
+		} else if err.Error() == "mock error2" {
 			errNum2++
-		}else{
+		} else {
 			c.Fail()
 		}
 	})
