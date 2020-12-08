@@ -858,6 +858,8 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 }
 
 func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	addr := "127.0.0.1:12034"
@@ -923,7 +925,6 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	c.Assert(len(workloads), check.Equals, 1)
 	c.Assert(workloads, check.HasKey, capture.info.ID)
 
-	err = capture.session.Close()
+	err = capture.etcdClient.Close()
 	c.Assert(err, check.IsNil)
-	s.TearDownTest(c)
 }
