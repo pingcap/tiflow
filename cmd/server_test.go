@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/config"
 )
 
@@ -23,6 +24,7 @@ type serverSuite struct{}
 var _ = check.Suite(&serverSuite{})
 
 func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
+	defer testleak.AfterTest(c)()
 	patchTiDBConf()
 	cfg := config.GetGlobalConfig()
 	c.Assert(cfg.TiKVClient.MaxBatchSize, check.Equals, uint(0))

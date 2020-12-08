@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -36,6 +37,7 @@ type mountTxnsSuite struct{}
 var _ = check.Suite(&mountTxnsSuite{})
 
 func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
