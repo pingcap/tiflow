@@ -29,7 +29,7 @@ type sorterNode struct {
 	sortEngine model.SortEngine
 	sortDir    string
 	sorter     puller.EventSorter
-	tableName  string
+	tableName  string // quoted schema and table, used in metircs only
 }
 
 func newSorterNode(sortEngine model.SortEngine, sortDir string, tableName string) pipeline.Node {

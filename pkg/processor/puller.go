@@ -30,7 +30,7 @@ type pullerNode struct {
 	credential *security.Credential
 	kvStorage  tidbkv.Storage
 	limitter   *puller.BlurResourceLimitter
-	tableName  string
+	tableName  string // quoted schema and table, used in metircs only
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
