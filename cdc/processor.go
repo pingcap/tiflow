@@ -535,16 +535,13 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			// no operation is updated, it means no tables are handled and we
-			// don't need to flush task status neigher.
-			if !taskStatus.Dirty {
-				return false, nil
-			}
 			err = p.flushTaskPosition(ctx)
 			if err != nil {
 				return true, errors.Trace(err)
 			}
-			return true, nil
+			// no operation is updated, it means no tables are handled and we
+			// don't need to flush task status neigher.
+			return taskStatus.Dirty, nil
 		})
 	if err != nil {
 		// not need to check error
