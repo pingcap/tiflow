@@ -21,10 +21,10 @@ type MessageType int
 const (
 	// MessageTypeUnknown is unknown message type
 	MessageTypeUnknown MessageType = iota
-	// MessageTypeLifecycle is lifecycle message type
-	MessageTypeLifecycle
-	// MessageTypeRowChangedEvent is the row changed event message type
-	MessageTypeRowChangedEvent
+	// MessageTypeCommand is command message type
+	MessageTypeCommand
+	// MessageTypePolymorphicEvent is the row changed event message type
+	MessageTypePolymorphicEvent
 )
 
 // Message is a vehicle for transferring information between nodes
@@ -32,51 +32,41 @@ type Message struct {
 	// TODO add more kind of messages
 	// Tp is the type of Message
 	Tp MessageType
-	// Lifecycle represents the message about the lifecycle
-	Lifecycle *LifecycleMessage
-	// RowChangedEvent represents the row change event
-	RowChangedEvent *model.RowChangedEvent
+	// Command is the command in this message
+	Command *Command
+	// PolymorphicEvent represents the row change event
+	PolymorphicEvent *model.PolymorphicEvent
 }
 
-// SetLifecycleMessage sets the message to LifecycleMessage
-func (m *Message) SetLifecycleMessage(msg *LifecycleMessage) *Message {
-	m.Tp = MessageTypeLifecycle
-	m.Lifecycle = msg
-	return m
+// PolymorphicEventMessage creates the message of PolymorphicEvent
+func PolymorphicEventMessage(event *model.PolymorphicEvent) *Message {
+	return &Message{
+		Tp:               MessageTypePolymorphicEvent,
+		PolymorphicEvent: event,
+	}
 }
 
-// SetRowChangedEvent sets the message to RowChangedEvent
-func (m *Message) SetRowChangedEvent(row *model.RowChangedEvent) *Message {
-	m.Tp = MessageTypeRowChangedEvent
-	m.RowChangedEvent = row
-	return m
+// CommandMessage creates the message of Command
+func CommandMessage(command *Command) *Message {
+	return &Message{
+		Tp:      MessageTypeCommand,
+		Command: command,
+	}
 }
 
-// LifecycleMessageType is the type of message about the lifecycle
-type LifecycleMessageType int
+// CommandType is the type of Command
+type CommandType int
 
 const (
-	// LifecycleMessageUnknown is unknown lifecycle message
-	LifecycleMessageUnknown LifecycleMessageType = iota
-	// LifecycleMessageStarted is started lifecycle message
-	LifecycleMessageStarted
-	// LifecycleMessageStopped is stopped lifecycle message
-	LifecycleMessageStopped
+	// CommandTypeUnknown is unknown message type
+	CommandTypeUnknown CommandType = iota
+	// CommandTypeShouldStop means the table pipeline should stop soon
+	CommandTypeShouldStop
+	// CommandTypeStopped means the table pipeline is stopped
+	CommandTypeStopped
 )
 
-// LifecycleMessage represents the message about the lifecycle
-type LifecycleMessage struct {
-	Tp LifecycleMessageType
-}
-
-// SetStarted sets the message to Started
-func (m *LifecycleMessage) SetStarted() *LifecycleMessage {
-	m.Tp = LifecycleMessageStarted
-	return m
-}
-
-// SetStopped sets the message to Stopped
-func (m *LifecycleMessage) SetStopped() *LifecycleMessage {
-	m.Tp = LifecycleMessageStopped
-	return m
+// Command is the command about table pipeline
+type Command struct {
+	Tp CommandType
 }

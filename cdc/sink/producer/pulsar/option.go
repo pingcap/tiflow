@@ -174,7 +174,7 @@ func (vs values) Str(name string) string {
 
 func (vs values) SubPathKV(prefix string) map[string]string {
 	prefix = prefix + "."
-	var m = map[string]string{}
+	m := map[string]string{}
 	for name, value := range vs {
 		if !strings.HasPrefix(name, prefix) {
 			continue
