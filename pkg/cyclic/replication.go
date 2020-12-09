@@ -69,6 +69,11 @@ func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, buc
 		quotes.QuoteSchema(schema, table), bucket, replicaID, startTs)
 }
 
+// Enabled returns whether cyclic replication is enabled
+func (c *Cyclic) Enabled() bool {
+	return c.config.Enable
+}
+
 // FilterReplicaID return a slice of replica IDs needs to be filtered.
 func (c *Cyclic) FilterReplicaID() []uint64 {
 	return c.config.FilterReplicaID
