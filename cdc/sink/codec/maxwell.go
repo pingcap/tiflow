@@ -83,7 +83,7 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Type:      model.MqMessageTypeRow,
 	}
 	value := &maxwellMessage{
-		Ts:       0o00000000,
+		Ts:       0,
 		Database: e.Table.Schema,
 		Table:    e.Table.Table,
 		Data:     make(map[string]interface{}),
