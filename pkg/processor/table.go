@@ -34,9 +34,12 @@ import (
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
 type TablePipeline struct {
-	p          *pipeline.Pipeline
-	resolvedTs uint64
-	status     TableStatus
+	p           *pipeline.Pipeline
+	resolvedTs  uint64
+	status      TableStatus
+	tableID     int64
+	markTableID int64
+	tableName   string // quoted schema and table, used in metircs only
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
@@ -54,16 +57,32 @@ func (t *TablePipeline) AsyncStop() {
 	}
 }
 
+var workload = model.WorkloadInfo{Workload: 1}
+
 // Workload returns the workload of this table
-func (t *TablePipeline) Workload() *model.WorkloadInfo {
+func (t *TablePipeline) Workload() model.WorkloadInfo {
 	// TODO(leoppro) calculate the workload of this table
 	// We temporarily set the value to constant 1
-	return &model.WorkloadInfo{Workload: 1}
+	return workload
 }
 
 // Status returns the status of this table pipeline
 func (t *TablePipeline) Status() TableStatus {
 	return atomic.LoadInt32(&t.status)
+}
+
+// ID returns the ID of source table and mark table
+func (t *TablePipeline) ID() (tableID, markTableID int64) {
+	return t.tableID, t.markTableID
+}
+
+// Name returns the quoted schema and table name
+func (t *TablePipeline) Name() string {
+	return t.tableName
+}
+
+func (t *TablePipeline) Cancel() {
+
 }
 
 // NewTablePipeline creates a table pipeline
@@ -91,8 +110,13 @@ func NewTablePipeline(ctx context.Context,
 		log.Warn("get table name for metric", zap.Error(err))
 		tableName = strconv.Itoa(int(tableID))
 	}
-	tablePipeline := new(TablePipeline)
-	tablePipeline.resolvedTs = targetTs
+	tablePipeline := &TablePipeline{
+		resolvedTs:  targetTs,
+		tableID:     tableID,
+		markTableID: replicaInfo.MarkTableID,
+		tableName:   tableName,
+	}
+
 	ctx, p := pipeline.NewPipeline(ctx)
 	p.AppendNode(ctx, "puller", newPullerNode(credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))

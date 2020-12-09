@@ -37,6 +37,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	cdcprocessor "github.com/pingcap/ticdc/pkg/processor"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -102,7 +103,7 @@ type processor struct {
 	stateMu           sync.Mutex
 	status            *model.TaskStatus
 	position          *model.TaskPosition
-	tables            map[int64]*tableInfo
+	tables            map[int64]*cdcprocessor.TablePipeline
 	markTableIDs      map[int64]struct{}
 	statusModRevision int64
 
@@ -116,43 +117,6 @@ type processor struct {
 	wg       *errgroup.Group
 	errCh    chan<- error
 	opDoneCh chan int64
-}
-
-type tableInfo struct {
-	id          int64
-	name        string // quoted schema and table, used in metircs only
-	resolvedTs  uint64
-	markTableID int64
-	mResolvedTs uint64
-	sorter      *puller.Rectifier
-	workload    model.WorkloadInfo
-	cancel      context.CancelFunc
-	// isDying shows that the table is being removed.
-	// In the case the same table is added back before safe removal is finished,
-	// this flag is used to tell whether it's safe to kill the table.
-	isDying uint32
-}
-
-func (t *tableInfo) loadResolvedTs() uint64 {
-	tableRts := atomic.LoadUint64(&t.resolvedTs)
-	if t.markTableID != 0 {
-		mTableRts := atomic.LoadUint64(&t.mResolvedTs)
-		if mTableRts < tableRts {
-			return mTableRts
-		}
-	}
-	return tableRts
-}
-
-// safeStop will stop the table change feed safety
-func (t *tableInfo) safeStop() (stopped bool, checkpointTs model.Ts) {
-	atomic.StoreUint32(&t.isDying, 1)
-	t.sorter.SafeStop()
-	status := t.sorter.GetStatus()
-	if status != model.SorterStatusStopped && status != model.SorterStatusFinished {
-		return false, 0
-	}
-	return true, t.sorter.GetMaxResolvedTs()
 }
 
 // newProcessor creates and returns a processor for the specified change feed
@@ -227,7 +191,7 @@ func newProcessor(
 		localCheckpointTsNotifier: localCheckpointTsNotifier,
 		localCheckpointTsReceiver: localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond),
 
-		tables:       make(map[int64]*tableInfo),
+		tables:       make(map[int64]*cdcprocessor.TablePipeline),
 		markTableIDs: make(map[int64]struct{}),
 
 		opDoneCh: make(chan int64, 256),
@@ -315,8 +279,8 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "changefeedID: %s, info: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
 
 	p.stateMu.Lock()
-	for _, table := range p.tables {
-		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTs())
+	for tableID, table := range p.tables {
+		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", tableID, table.ResolvedTs())
 	}
 	p.stateMu.Unlock()
 
@@ -385,7 +349,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			minResolvedTs := p.ddlPuller.GetResolvedTs()
 			p.stateMu.Lock()
 			for _, table := range p.tables {
-				ts := table.loadResolvedTs()
+				ts := table.ResolvedTs()
 
 				if ts < minResolvedTs {
 					minResolvedTs = ts
@@ -478,8 +442,8 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 		}
 		p.stateMu.Lock()
 		workload := make(model.TaskWorkload, len(p.tables))
-		for _, table := range p.tables {
-			workload[table.id] = table.workload
+		for tableID, table := range p.tables {
+			workload[tableID] = table.Workload()
 		}
 		p.stateMu.Unlock()
 		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID, &workload)
@@ -574,7 +538,7 @@ func (p *processor) removeTable(tableID int64) {
 		return
 	}
 
-	if atomic.SwapUint32(&table.isDying, 0) == 0 {
+	if table.Status() != cdcprocessor.TableStatusStoped {
 		return
 	}
 	table.cancel()
