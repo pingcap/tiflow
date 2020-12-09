@@ -576,6 +576,11 @@ error = '''
 can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)
 '''
 
+["CDC:ErrSendToClosedPipeline"]
+error = '''
+pipeline is closed, cannot send message
+'''
+
 ["CDC:ErrServeHTTP"]
 error = '''
 serve http error
