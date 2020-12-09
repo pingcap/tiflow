@@ -212,6 +212,8 @@ func newProcessor(
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
 
+		flushCheckpointInterval: flushCheckpointInterval,
+
 		position: &model.TaskPosition{CheckPointTs: checkpointTs},
 		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
@@ -533,6 +535,11 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
+			// no operation is updated, it means no tables are handled and we
+			// don't need to flush task status neigher.
+			if !taskStatus.Dirty {
+				return false, nil
+			}
 			err = p.flushTaskPosition(ctx)
 			if err != nil {
 				return true, errors.Trace(err)
@@ -598,6 +605,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 					opt.Done = true
 					opt.Status = model.OperFinished
+					status.Dirty = true
 					continue
 				}
 				stopped, checkpointTs := table.safeStop()
@@ -610,6 +618,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						tablesToRemove = append(tablesToRemove, tableID)
 						opt.Done = true
 						opt.Status = model.OperFinished
+						status.Dirty = true
 					}
 				}
 			}
@@ -623,6 +632,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			}
 			p.addTable(ctx, tableID, replicaInfo)
 			opt.Status = model.OperProcessed
+			status.Dirty = true
 		}
 	}
 
@@ -642,6 +652,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			}
 			status.Operation[tableID].Done = true
 			status.Operation[tableID].Status = model.OperFinished
+			status.Dirty = true
 		default:
 			goto done
 		}
