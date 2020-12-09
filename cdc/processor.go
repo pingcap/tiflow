@@ -535,8 +535,10 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			// no operation is updated, it means no tables are handled and we
-			// don't need to flush task status neigher.
+			// processor reads latest task status from etcd, analyzes operations
+			// field and processes table add or delete. If operation is unapplied
+			// but stays unchanged after processor handling tables, it means no
+			// status is changed and we don't need to flush task status neigher.
 			if !taskStatus.Dirty {
 				return false, nil
 			}
