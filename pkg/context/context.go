@@ -41,7 +41,7 @@ type Context interface {
 	Vars() *Vars
 
 	// Done return a channel which will be closed in the following cases:
-	// - the `cancel()` returned from `NewContext` is called.
+	// - the `cancel()` returned from `WithCancel` is called.
 	// - the `stdCtx` specified in `NewContext` is done.
 	Done() <-chan struct{}
 
@@ -56,32 +56,49 @@ type Context interface {
 }
 
 type rootContext struct {
-	stdCtx context.Context
-	vars   *Vars
+	Context
+	vars *Vars
 }
 
 // NewContext returns a new pipeline context
-func NewContext(stdCtx context.Context, vars *Vars) (Context, context.CancelFunc) {
-	stdCtx, cancel := context.WithCancel(stdCtx)
+func NewContext(stdCtx context.Context, vars *Vars) Context {
 	ctx := &rootContext{
-		stdCtx: stdCtx,
-		vars:   vars,
+		vars: vars,
 	}
-	return ctx, cancel
+	return withStdCancel(ctx, stdCtx)
 }
 
 func (ctx *rootContext) Vars() *Vars {
 	return ctx.vars
 }
 
-func (ctx *rootContext) Done() <-chan struct{} {
+func (ctx *rootContext) Throw(error) { /* do nothing */ }
+
+type stdContext struct {
+	stdCtx context.Context
+	Context
+}
+
+func (ctx *stdContext) Done() <-chan struct{} {
 	return ctx.stdCtx.Done()
 }
 
-func (ctx *rootContext) Throw(error) { /* do nothing */ }
-
-func (ctx *rootContext) StdContext() context.Context {
+func (ctx *stdContext) StdContext() context.Context {
 	return ctx.stdCtx
+}
+
+//revive:disable:context-as-argument
+func withStdCancel(ctx Context, stdCtx context.Context) Context {
+	return &stdContext{
+		stdCtx:  stdCtx,
+		Context: ctx,
+	}
+}
+
+// WithCancel return a Context with the cancel function
+func WithCancel(ctx Context) (Context, context.CancelFunc) {
+	stdCtx, cancel := context.WithCancel(ctx.StdContext())
+	return withStdCancel(ctx, stdCtx), cancel
 }
 
 type throwContext struct {
