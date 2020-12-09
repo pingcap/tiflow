@@ -140,12 +140,6 @@ type TableOperation struct {
 	Status     uint64 `json:"status,omitempty"`
 }
 
-// TableProcessed returns whether the table has been processed by processor
-func (o *TableOperation) TableProcessed() bool {
-	// TODO: remove o.Done
-	return o.Status == OperProcessed || o.Status == OperFinished || o.Done
-}
-
 // TableApplied returns whether the table has finished the startup procedure.
 // Returns true if table has been processed by processor and resolved ts reaches global resolved ts.
 func (o *TableOperation) TableApplied() bool {

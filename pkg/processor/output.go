@@ -27,20 +27,21 @@ type TableStatus = int32
 const (
 	TableStatusInitializing TableStatus = iota
 	TableStatusRunning
+	TableStatusStopping
 	TableStatusStoped
 )
 
 type outputNode struct {
-	outputCh   chan *model.PolymorphicEvent
-	resolvedTs *model.Ts
-	status     *TableStatus
+	outputCh           chan *model.PolymorphicEvent
+	status             *TableStatus
+	resolvedTsListener func(model.Ts)
 }
 
-func newOutputNode(outputCh chan *model.PolymorphicEvent, resolvedTs *model.Ts, status *TableStatus) pipeline.Node {
+func newOutputNode(outputCh chan *model.PolymorphicEvent, status *TableStatus, resolvedTsListener func(model.Ts)) pipeline.Node {
 	return &outputNode{
-		outputCh:   outputCh,
-		resolvedTs: resolvedTs,
-		status:     status,
+		outputCh:           outputCh,
+		status:             status,
+		resolvedTsListener: resolvedTsListener,
 	}
 }
 
@@ -55,7 +56,8 @@ func (n *outputNode) Receive(ctx pipeline.NodeContext) error {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		if msg.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
-			atomic.StoreUint64(n.resolvedTs, msg.PolymorphicEvent.CRTs)
+			atomic.CompareAndSwapInt32(n.status, TableStatusInitializing, TableStatusRunning)
+			n.resolvedTsListener(msg.PolymorphicEvent.CRTs)
 			return nil
 		}
 		select {

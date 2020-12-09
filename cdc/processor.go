@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -32,8 +31,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
+	cdccontext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -114,9 +113,8 @@ type processor struct {
 	localCheckpointTsNotifier   *notify.Notifier
 	localCheckpointTsReceiver   *notify.Receiver
 
-	wg       *errgroup.Group
-	errCh    chan<- error
-	opDoneCh chan int64
+	wg    *errgroup.Group
+	errCh chan<- error
 }
 
 // newProcessor creates and returns a processor for the specified change feed
@@ -193,8 +191,6 @@ func newProcessor(
 
 		tables:       make(map[int64]*cdcprocessor.TablePipeline),
 		markTableIDs: make(map[int64]struct{}),
-
-		opDoneCh: make(chan int64, 256),
 	}
 	modRevision, status, err := p.etcdCli.GetTaskStatus(ctx, p.changefeedID, p.captureInfo.ID)
 	if err != nil {
@@ -541,24 +537,27 @@ func (p *processor) removeTable(tableID int64) {
 	if table.Status() != cdcprocessor.TableStatusStoped {
 		return
 	}
-	table.cancel()
+	table.Cancel()
 	delete(p.tables, tableID)
-	if table.markTableID != 0 {
-		delete(p.markTableIDs, table.markTableID)
+	_, markTableID := table.ID()
+	if markTableID != 0 {
+		delete(p.markTableIDs, markTableID)
 	}
-	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.Name())
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
 func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
 	for tableID, opt := range status.Operation {
-		if opt.TableProcessed() {
+		if opt.TableApplied() {
 			continue
 		}
 		if opt.Delete {
 			if opt.BoundaryTs <= p.position.CheckPointTs {
+				p.stateMu.Lock()
 				table, exist := p.tables[tableID]
+				p.stateMu.Unlock()
 				if !exist {
 					log.Warn("table which will be deleted is not found",
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
@@ -566,53 +565,61 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					opt.Status = model.OperFinished
 					continue
 				}
-				stopped, checkpointTs := table.safeStop()
-				log.Debug("safeStop table", zap.Int64("tableID", tableID),
-					util.ZapFieldChangefeed(ctx), zap.Bool("stopped", stopped),
-					zap.Uint64("checkpointTs", checkpointTs))
-				if stopped {
-					opt.BoundaryTs = checkpointTs
-					if checkpointTs <= p.position.CheckPointTs {
+				switch opt.Status {
+				case model.OperDispatched:
+					table.AsyncStop()
+					opt.Status = model.OperDispatched
+				case model.OperProcessed:
+					if table.Status() == cdcprocessor.TableStatusStoped && table.ResolvedTs() <= p.position.CheckPointTs {
 						tablesToRemove = append(tablesToRemove, tableID)
 						opt.Done = true
+						opt.BoundaryTs = table.ResolvedTs()
 						opt.Status = model.OperFinished
+						log.Debug("safeStop table", zap.Int64("tableID", tableID),
+							util.ZapFieldChangefeed(ctx),
+							zap.Uint64("checkpointTs", table.ResolvedTs()))
 					}
+				default:
+					log.Panic("unreachable")
 				}
+
 			}
 		} else {
-			replicaInfo, exist := status.Tables[tableID]
-			if !exist {
-				return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
+			switch opt.Status {
+			case model.OperDispatched:
+				replicaInfo, exist := status.Tables[tableID]
+				if !exist {
+					return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
+				}
+				if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
+					return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
+				}
+				p.addTable(ctx, tableID, replicaInfo)
+				opt.Status = model.OperProcessed
+			case model.OperProcessed:
+				p.stateMu.Lock()
+				table, exist := p.tables[tableID]
+				p.stateMu.Unlock()
+				if !exist {
+					log.Panic("table which was added is not found",
+						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+				}
+				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
+					opt.Done = true
+					opt.Status = model.OperFinished
+					log.Debug("Operation done signal received",
+						util.ZapFieldChangefeed(ctx),
+						zap.Int64("tableID", tableID),
+						zap.Reflect("operation", opt))
+				}
+			default:
+				log.Panic("unreachable")
 			}
-			if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
-				return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
-			}
-			p.addTable(ctx, tableID, replicaInfo)
-			opt.Status = model.OperProcessed
 		}
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case tableID := <-p.opDoneCh:
-			log.Debug("Operation done signal received",
-				util.ZapFieldChangefeed(ctx),
-				zap.Int64("tableID", tableID),
-				zap.Reflect("operation", status.Operation[tableID]))
-			if status.Operation[tableID] == nil {
-				log.Debug("TableID does not exist, probably a mark table, ignore",
-					util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-				continue
-			}
-			status.Operation[tableID].Done = true
-			status.Operation[tableID].Status = model.OperFinished
-		default:
-			goto done
-		}
-	}
-done:
 	if !status.SomeOperationsUnapplied() {
 		status.Operation = nil
 	}
@@ -895,23 +902,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
-	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
-		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = name.QuoteString()
-			return nil
-		}
-		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
-	if err != nil {
-		log.Warn("get table name for metric", util.ZapFieldChangefeed(ctx), zap.String("error", err.Error()))
-		tableName = strconv.Itoa(int(tableID))
-	}
-
 	if table, ok := p.tables[tableID]; ok {
-		if atomic.SwapUint32(&table.isDying, 0) == 1 {
-			log.Warn("The same table exists but is dying. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			table.cancel()
+		if table.Status() == cdcprocessor.TableStatusStopping {
+			log.Warn("The same table exists but is stopping. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
+			table.Cancel()
 		} else {
 			log.Warn("Ignore existing table", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			return
@@ -929,102 +923,62 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	}
 
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+	cdcCtx, _ := cdccontext.NewContext(ctx, &cdccontext.Vars{
+		CaptureAddr:   p.captureInfo.AdvertiseAddr,
+		PDClient:      p.pdCli,
+		SchemaStorage: p.schemaStorage,
+		Config:        p.changefeed.Config,
+	})
+	kvStorage, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		p.errCh <- err
+	}
+	var tableName string
+	err = retry.Run(time.Millisecond*5, 3, func() error {
+		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
+			tableName = name.QuoteString()
+			return nil
+		}
+		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
+	})
+	if err != nil {
+		log.Warn("get table name for metric", zap.Error(err))
+		tableName = strconv.Itoa(int(tableID))
+	}
+	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+
+	resolvedTsListener := func(table *cdcprocessor.TablePipeline, resolvedTs model.Ts) {
+		p.localResolvedNotifier.Notify()
+		resolvedTsGauge.Set(float64(oracle.ExtractPhysical(resolvedTs)))
+	}
+
+	_, table := cdcprocessor.NewTablePipeline(
+		cdcCtx,
+		p.credential,
+		kvStorage,
+		p.limitter,
+		p.mounter,
+		p.changefeed.Engine,
+		p.changefeed.SortDir,
+		tableID,
+		tableName,
+		replicaInfo,
+		p.changefeed.GetTargetTs(),
+		p.output,
+		resolvedTsListener,
+	)
+
+	go func() {
+		for _, err := range table.Wait() {
+			p.errCh <- err
+		}
+	}()
+
 	log.Debug("Add table", zap.Int64("tableID", tableID),
 		util.ZapFieldChangefeed(ctx),
-		zap.String("name", tableName),
+		zap.String("name", table.Name()),
 		zap.Any("replicaInfo", replicaInfo),
 		zap.Uint64("globalResolvedTs", globalResolvedTs))
-
-	ctx = util.PutTableInfoInCtx(ctx, tableID, tableName)
-	ctx, cancel := context.WithCancel(ctx)
-	table := &tableInfo{
-		id:         tableID,
-		name:       tableName,
-		resolvedTs: replicaInfo.StartTs,
-		cancel:     cancel,
-	}
-	// TODO(leoppro) calculate the workload of this table
-	// We temporarily set the value to constant 1
-	table.workload = model.WorkloadInfo{Workload: 1}
-
-	startPuller := func(tableID model.TableID, pResolvedTs *uint64) *puller.Rectifier {
-
-		// start table puller
-		enableOldValue := p.changefeed.Config.EnableOldValue
-		span := regionspan.GetTableSpan(tableID, enableOldValue)
-		kvStorage, err := util.KVStorageFromCtx(ctx)
-		if err != nil {
-			p.errCh <- err
-			return nil
-		}
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
-		go func() {
-			err := plr.Run(ctx)
-			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
-			}
-		}()
-
-		var sorterImpl puller.EventSorter
-		switch p.changefeed.Engine {
-		case model.SortInMemory:
-			sorterImpl = puller.NewEntrySorter()
-		case model.SortInFile, model.SortUnified:
-			err := util.IsDirAndWritable(p.changefeed.SortDir)
-			if err != nil {
-				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0755)
-					if err != nil {
-						p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
-						return nil
-					}
-				} else {
-					p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
-					return nil
-				}
-			}
-
-			if p.changefeed.Engine == model.SortInFile {
-				sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
-			} else {
-				// Unified Sorter
-				sorterImpl = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
-			}
-		default:
-			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
-			return nil
-		}
-		sorter := puller.NewRectifier(sorterImpl, p.changefeed.GetTargetTs())
-
-		go func() {
-			err := sorter.Run(ctx)
-			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
-			}
-		}()
-
-		go func() {
-			p.pullerConsume(ctx, plr, sorter)
-		}()
-
-		go func() {
-			p.sorterConsume(ctx, tableID, tableName, sorter, pResolvedTs, replicaInfo)
-		}()
-
-		return sorter
-	}
-
-	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
-		mTableID := replicaInfo.MarkTableID
-		// we should to make sure a mark table is only listened once.
-		if _, exist := p.markTableIDs[mTableID]; !exist {
-			p.markTableIDs[mTableID] = struct{}{}
-			table.markTableID = mTableID
-			table.mResolvedTs = replicaInfo.StartTs
-
-			startPuller(mTableID, &table.mResolvedTs)
-		}
-	}
 
 	p.tables[tableID] = table
 	if p.position.CheckPointTs > replicaInfo.StartTs {
@@ -1035,142 +989,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	}
 
 	atomic.StoreUint64(&p.localResolvedTs, p.position.ResolvedTs)
-	table.sorter = startPuller(tableID, &table.resolvedTs)
-
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
-}
-
-// sorterConsume receives sorted PolymorphicEvent from sorter of each table and
-// sends to processor's output chan
-func (p *processor) sorterConsume(
-	ctx context.Context,
-	tableID int64,
-	tableName string,
-	sorter *puller.Rectifier,
-	pResolvedTs *uint64,
-	replicaInfo *model.TableReplicaInfo,
-) {
-	var lastResolvedTs uint64
-	opDone := false
-	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
-	checkDoneTicker := time.NewTicker(1 * time.Second)
-	checkDone := func() {
-		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs {
-			log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
-				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
-				zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
-
-			opDone = true
-			checkDoneTicker.Stop()
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
-				}
-				return
-			case p.opDoneCh <- tableID:
-			}
-		}
-		if !opDone {
-			log.Debug("addTable not done",
-				util.ZapFieldChangefeed(ctx),
-				zap.Uint64("tableResolvedTs", lastResolvedTs),
-				zap.Uint64("localResolvedTs", localResolvedTs),
-				zap.Uint64("globalResolvedTs", globalResolvedTs),
-				zap.Int64("tableID", tableID))
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
-			}
-			return
-		case pEvent := <-sorter.Output():
-			if pEvent == nil {
-				continue
-			}
-
-			pEvent.SetUpFinishedChan()
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
-				}
-				return
-			case p.mounter.Input() <- pEvent:
-			}
-
-			if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
-				lastResolvedTs = pEvent.CRTs
-				p.localResolvedNotifier.Notify()
-				resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
-				if !opDone {
-					checkDone()
-				}
-				continue
-			}
-			sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-			if pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
-				log.Panic("The CRTs of event is not expected, please report a bug",
-					util.ZapFieldChangefeed(ctx),
-					zap.String("model", "sorter"),
-					zap.Uint64("globalResolvedTs", sinkResolvedTs),
-					zap.Uint64("resolvedTs", lastResolvedTs),
-					zap.Int64("tableID", tableID),
-					zap.Any("replicaInfo", replicaInfo),
-					zap.Any("row", pEvent))
-			}
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
-				}
-				return
-			case p.output <- pEvent:
-			}
-		case <-checkDoneTicker.C:
-			if !opDone {
-				checkDone()
-			}
-		}
-	}
-}
-
-// pullerConsume receives RawKVEntry from a given puller and sends to sorter
-// for data sorting and mounter for data encode
-func (p *processor) pullerConsume(
-	ctx context.Context,
-	plr puller.Puller,
-	sorter *puller.Rectifier,
-) {
-	for {
-		select {
-		case <-ctx.Done():
-			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
-			}
-			return
-		case rawKV := <-plr.Output():
-			if rawKV == nil {
-				continue
-			}
-			pEvent := model.NewPolymorphicEvent(rawKV)
-			sorter.AddEntry(ctx, pEvent)
-		}
-	}
 }
 
 func (p *processor) stop(ctx context.Context) error {
 	log.Info("stop processor", zap.String("id", p.id), zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeedID))
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
-		tbl.cancel()
+		tbl.Cancel()
 	}
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel

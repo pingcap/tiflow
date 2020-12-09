@@ -38,6 +38,7 @@ func (n *mounterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
+		msg.PolymorphicEvent.SetUpFinishedChan()
 		select {
 		case <-ctx.Done():
 			return nil

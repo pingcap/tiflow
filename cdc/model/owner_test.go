@@ -101,11 +101,6 @@ func (s *ownerCommonSuite) TestChangeFeedStatusMarshal(c *check.C) {
 }
 
 func (s *ownerCommonSuite) TestTableOperationState(c *check.C) {
-	processedMap := map[uint64]bool{
-		OperDispatched: false,
-		OperProcessed:  true,
-		OperFinished:   true,
-	}
 	appliedMap := map[uint64]bool{
 		OperDispatched: false,
 		OperProcessed:  false,
@@ -113,10 +108,6 @@ func (s *ownerCommonSuite) TestTableOperationState(c *check.C) {
 	}
 	o := &TableOperation{}
 
-	for status, processed := range processedMap {
-		o.Status = status
-		c.Assert(o.TableProcessed(), check.Equals, processed)
-	}
 	for status, applied := range appliedMap {
 		o.Status = status
 		c.Assert(o.TableApplied(), check.Equals, applied)

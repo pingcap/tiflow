@@ -14,11 +14,8 @@
 package processor
 
 import (
-	"strconv"
 	"sync/atomic"
-	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -26,7 +23,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"
@@ -49,11 +45,14 @@ func (t *TablePipeline) ResolvedTs() model.Ts {
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 func (t *TablePipeline) AsyncStop() {
-	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
-		Tp: pipeline.CommandTypeShouldStop,
-	}))
-	if !cerror.ErrSendToClosedPipeline.Equal(err) {
-		log.Panic("unexpect error from send to first node", zap.Error(err))
+	if atomic.CompareAndSwapInt32(&t.status, TableStatusRunning, TableStatusStopping) ||
+		atomic.CompareAndSwapInt32(&t.status, TableStatusInitializing, TableStatusStopping) {
+		err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
+			Tp: pipeline.CommandTypeShouldStop,
+		}))
+		if !cerror.ErrSendToClosedPipeline.Equal(err) {
+			log.Panic("unexpect error from send to first node", zap.Error(err))
+		}
 	}
 }
 
@@ -81,8 +80,14 @@ func (t *TablePipeline) Name() string {
 	return t.tableName
 }
 
+// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
 func (t *TablePipeline) Cancel() {
+	// TODO support cancel
+}
 
+// Wait waits for all node destroyed and returns errors
+func (t *TablePipeline) Wait() []error {
+	return t.p.Wait()
 }
 
 // NewTablePipeline creates a table pipeline
@@ -95,26 +100,20 @@ func NewTablePipeline(ctx context.Context,
 	sortEngine model.SortEngine,
 	sortDir string,
 	tableID model.TableID,
+	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	targetTs model.Ts,
-	outputCh chan *model.PolymorphicEvent) (context.Context, *TablePipeline) {
-	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
-		if name, ok := ctx.Vars().SchemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = name.QuoteString()
-			return nil
-		}
-		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
-	if err != nil {
-		log.Warn("get table name for metric", zap.Error(err))
-		tableName = strconv.Itoa(int(tableID))
-	}
+	outputCh chan *model.PolymorphicEvent,
+	resolvedTsListener func(*TablePipeline, model.Ts)) (context.Context, *TablePipeline) {
 	tablePipeline := &TablePipeline{
 		resolvedTs:  targetTs,
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
+	}
+	listener := func(resolvedTs model.Ts) {
+		atomic.StoreUint64(&tablePipeline.resolvedTs, resolvedTs)
+		resolvedTsListener(tablePipeline, resolvedTs)
 	}
 
 	ctx, p := pipeline.NewPipeline(ctx)
@@ -122,6 +121,6 @@ func NewTablePipeline(ctx context.Context,
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
 	p.AppendNode(ctx, "safe_stopper", newSafeStopperNode(targetTs))
-	p.AppendNode(ctx, "output", newOutputNode(outputCh, &tablePipeline.resolvedTs, &tablePipeline.status))
+	p.AppendNode(ctx, "output", newOutputNode(outputCh, &tablePipeline.status, listener))
 	return ctx, tablePipeline
 }
