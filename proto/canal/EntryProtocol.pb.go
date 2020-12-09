@@ -13,11 +13,9 @@ import (
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
-var (
-	_ = proto.Marshal
-	_ = fmt.Errorf
-	_ = math.Inf
-)
+var _ = proto.Marshal
+var _ = fmt.Errorf
+var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -192,11 +190,9 @@ func (*Entry) ProtoMessage()    {}
 func (*Entry) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{0}
 }
-
 func (m *Entry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *Entry) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Entry.Marshal(b, m, deterministic)
@@ -209,15 +205,12 @@ func (m *Entry) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-
 func (m *Entry) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Entry.Merge(m, src)
 }
-
 func (m *Entry) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *Entry) XXX_DiscardUnknown() {
 	xxx_messageInfo_Entry.DiscardUnknown(m)
 }
@@ -319,11 +312,9 @@ func (*Header) ProtoMessage()    {}
 func (*Header) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{1}
 }
-
 func (m *Header) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *Header) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Header.Marshal(b, m, deterministic)
@@ -336,15 +327,12 @@ func (m *Header) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-
 func (m *Header) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Header.Merge(m, src)
 }
-
 func (m *Header) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *Header) XXX_DiscardUnknown() {
 	xxx_messageInfo_Header.DiscardUnknown(m)
 }
@@ -356,13 +344,11 @@ type isHeader_VersionPresent interface {
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
-
 type isHeader_SourceTypePresent interface {
 	isHeader_SourceTypePresent()
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
-
 type isHeader_EventTypePresent interface {
 	isHeader_EventTypePresent()
 	MarshalTo([]byte) (int, error)
@@ -372,11 +358,9 @@ type isHeader_EventTypePresent interface {
 type Header_Version struct {
 	Version int32 `protobuf:"varint,1,opt,name=version,proto3,oneof" json:"version,omitempty"`
 }
-
 type Header_SourceType struct {
 	SourceType Type `protobuf:"varint,7,opt,name=sourceType,proto3,enum=com.alibaba.otter.canal.protocol.Type,oneof" json:"sourceType,omitempty"`
 }
-
 type Header_EventType struct {
 	EventType EventType `protobuf:"varint,11,opt,name=eventType,proto3,enum=com.alibaba.otter.canal.protocol.EventType,oneof" json:"eventType,omitempty"`
 }
@@ -391,14 +375,12 @@ func (m *Header) GetVersionPresent() isHeader_VersionPresent {
 	}
 	return nil
 }
-
 func (m *Header) GetSourceTypePresent() isHeader_SourceTypePresent {
 	if m != nil {
 		return m.SourceTypePresent
 	}
 	return nil
 }
-
 func (m *Header) GetEventTypePresent() isHeader_EventTypePresent {
 	if m != nil {
 		return m.EventTypePresent
@@ -542,11 +524,9 @@ func (*Column) ProtoMessage()    {}
 func (*Column) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{2}
 }
-
 func (m *Column) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *Column) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Column.Marshal(b, m, deterministic)
@@ -559,15 +539,12 @@ func (m *Column) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-
 func (m *Column) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Column.Merge(m, src)
 }
-
 func (m *Column) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *Column) XXX_DiscardUnknown() {
 	xxx_messageInfo_Column.DiscardUnknown(m)
 }
@@ -688,11 +665,9 @@ func (*RowData) ProtoMessage()    {}
 func (*RowData) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{3}
 }
-
 func (m *RowData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *RowData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RowData.Marshal(b, m, deterministic)
@@ -705,15 +680,12 @@ func (m *RowData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-
 func (m *RowData) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RowData.Merge(m, src)
 }
-
 func (m *RowData) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *RowData) XXX_DiscardUnknown() {
 	xxx_messageInfo_RowData.DiscardUnknown(m)
 }
@@ -774,11 +746,9 @@ func (*RowChange) ProtoMessage()    {}
 func (*RowChange) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{4}
 }
-
 func (m *RowChange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *RowChange) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RowChange.Marshal(b, m, deterministic)
@@ -791,15 +761,12 @@ func (m *RowChange) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-
 func (m *RowChange) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RowChange.Merge(m, src)
 }
-
 func (m *RowChange) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *RowChange) XXX_DiscardUnknown() {
 	xxx_messageInfo_RowChange.DiscardUnknown(m)
 }
@@ -811,7 +778,6 @@ type isRowChange_EventTypePresent interface {
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
-
 type isRowChange_IsDdlPresent interface {
 	isRowChange_IsDdlPresent()
 	MarshalTo([]byte) (int, error)
@@ -821,7 +787,6 @@ type isRowChange_IsDdlPresent interface {
 type RowChange_EventType struct {
 	EventType EventType `protobuf:"varint,2,opt,name=eventType,proto3,enum=com.alibaba.otter.canal.protocol.EventType,oneof" json:"eventType,omitempty"`
 }
-
 type RowChange_IsDdl struct {
 	IsDdl bool `protobuf:"varint,10,opt,name=isDdl,proto3,oneof" json:"isDdl,omitempty"`
 }
@@ -835,7 +800,6 @@ func (m *RowChange) GetEventTypePresent() isRowChange_EventTypePresent {
 	}
 	return nil
 }
-
 func (m *RowChange) GetIsDdlPresent() isRowChange_IsDdlPresent {
 	if m != nil {
 		return m.IsDdlPresent
@@ -921,11 +885,9 @@ func (*TransactionBegin) ProtoMessage()    {}
 func (*TransactionBegin) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{5}
 }
-
 func (m *TransactionBegin) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *TransactionBegin) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_TransactionBegin.Marshal(b, m, deterministic)
@@ -938,15 +900,12 @@ func (m *TransactionBegin) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
-
 func (m *TransactionBegin) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_TransactionBegin.Merge(m, src)
 }
-
 func (m *TransactionBegin) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *TransactionBegin) XXX_DiscardUnknown() {
 	xxx_messageInfo_TransactionBegin.DiscardUnknown(m)
 }
@@ -1000,11 +959,9 @@ func (*TransactionEnd) ProtoMessage()    {}
 func (*TransactionEnd) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{6}
 }
-
 func (m *TransactionEnd) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *TransactionEnd) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_TransactionEnd.Marshal(b, m, deterministic)
@@ -1017,15 +974,12 @@ func (m *TransactionEnd) XXX_Marshal(b []byte, deterministic bool) ([]byte, erro
 		return b[:n], nil
 	}
 }
-
 func (m *TransactionEnd) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_TransactionEnd.Merge(m, src)
 }
-
 func (m *TransactionEnd) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *TransactionEnd) XXX_DiscardUnknown() {
 	xxx_messageInfo_TransactionEnd.DiscardUnknown(m)
 }
@@ -1068,11 +1022,9 @@ func (*Pair) ProtoMessage()    {}
 func (*Pair) Descriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{7}
 }
-
 func (m *Pair) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *Pair) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Pair.Marshal(b, m, deterministic)
@@ -1085,15 +1037,12 @@ func (m *Pair) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-
 func (m *Pair) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Pair.Merge(m, src)
 }
-
 func (m *Pair) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *Pair) XXX_DiscardUnknown() {
 	xxx_messageInfo_Pair.DiscardUnknown(m)
 }
@@ -1268,7 +1217,6 @@ func (m *Entry_EntryType) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x10
 	return len(dAtA) - i, nil
 }
-
 func (m *Header) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1404,7 +1352,6 @@ func (m *Header_Version) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x8
 	return len(dAtA) - i, nil
 }
-
 func (m *Header_SourceType) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1417,7 +1364,6 @@ func (m *Header_SourceType) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x38
 	return len(dAtA) - i, nil
 }
-
 func (m *Header_EventType) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1430,7 +1376,6 @@ func (m *Header_EventType) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x58
 	return len(dAtA) - i, nil
 }
-
 func (m *Column) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1554,7 +1499,6 @@ func (m *Column_IsNull) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x30
 	return len(dAtA) - i, nil
 }
-
 func (m *RowData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1728,7 +1672,6 @@ func (m *RowChange_EventType) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x10
 	return len(dAtA) - i, nil
 }
-
 func (m *RowChange_IsDdl) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -1746,7 +1689,6 @@ func (m *RowChange_IsDdl) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	dAtA[i] = 0x50
 	return len(dAtA) - i, nil
 }
-
 func (m *TransactionBegin) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1910,7 +1852,6 @@ func encodeVarintEntryProtocol(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-
 func (m *Entry) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1943,7 +1884,6 @@ func (m *Entry_EntryType) Size() (n int) {
 	n += 1 + sovEntryProtocol(uint64(m.EntryType))
 	return n
 }
-
 func (m *Header) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2012,7 +1952,6 @@ func (m *Header_Version) Size() (n int) {
 	n += 1 + sovEntryProtocol(uint64(m.Version))
 	return n
 }
-
 func (m *Header_SourceType) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2022,7 +1961,6 @@ func (m *Header_SourceType) Size() (n int) {
 	n += 1 + sovEntryProtocol(uint64(m.SourceType))
 	return n
 }
-
 func (m *Header_EventType) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2032,7 +1970,6 @@ func (m *Header_EventType) Size() (n int) {
 	n += 1 + sovEntryProtocol(uint64(m.EventType))
 	return n
 }
-
 func (m *Column) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2090,7 +2027,6 @@ func (m *Column_IsNull) Size() (n int) {
 	n += 2
 	return n
 }
-
 func (m *RowData) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2171,7 +2107,6 @@ func (m *RowChange_EventType) Size() (n int) {
 	n += 1 + sovEntryProtocol(uint64(m.EventType))
 	return n
 }
-
 func (m *RowChange_IsDdl) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2181,7 +2116,6 @@ func (m *RowChange_IsDdl) Size() (n int) {
 	n += 2
 	return n
 }
-
 func (m *TransactionBegin) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2258,11 +2192,9 @@ func (m *Pair) Size() (n int) {
 func sovEntryProtocol(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
-
 func sozEntryProtocol(x uint64) (n int) {
 	return sovEntryProtocol(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-
 func (m *Entry) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2407,7 +2339,6 @@ func (m *Entry) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Header) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2792,7 +2723,6 @@ func (m *Header) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Column) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3095,7 +3025,6 @@ func (m *Column) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RowData) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3252,7 +3181,6 @@ func (m *RowData) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RowChange) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3499,7 +3427,6 @@ func (m *RowChange) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionBegin) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3658,7 +3585,6 @@ func (m *TransactionBegin) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TransactionEnd) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3798,7 +3724,6 @@ func (m *TransactionEnd) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *Pair) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3917,7 +3842,6 @@ func (m *Pair) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func skipEntryProtocol(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
