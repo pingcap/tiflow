@@ -49,7 +49,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		err := util.IsDirAndWritable(n.sortDir)
 		if err != nil {
 			if os.IsNotExist(errors.Cause(err)) {
-				err = os.MkdirAll(n.sortDir, 0755)
+				err = os.MkdirAll(n.sortDir, 0o755)
 				if err != nil {
 					return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 				}
