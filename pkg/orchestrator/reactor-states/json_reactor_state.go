@@ -11,13 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrator
+package reactor_states
 
 import (
 	"encoding/json"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"reflect"
 
-	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -31,7 +32,13 @@ type JSONReactorState struct {
 	modifiedJSONData   interface{}
 	key                string
 	isUpdatedByReactor bool
+	patches            []JSONPatchFunc
 }
+
+// JSONPatchFunc is a function that updates an object that is serializable to JSON.
+// It is okay to modify the input and return the input itself.
+// Use ErrEtcdTryAgain and ErrEtcdIgnore to trigger Etcd transaction retries and to give up this update.
+type JSONPatchFunc = func (data interface{}) (newData interface{}, err error)
 
 // NewJSONReactorState returns a new JSONReactorState.
 // `data` needs to be a pointer to an object serializable in JSON.
@@ -53,19 +60,19 @@ func NewJSONReactorState(key string, data interface{}) (*JSONReactorState, error
 }
 
 // Update implements the ReactorState interface.
-func (s *JSONReactorState) Update(key []byte, value []byte) {
-	if string(key) != s.key {
+func (s *JSONReactorState) Update(key util.EtcdRelKey, value []byte) {
+	if key.String() != s.key {
 		return
 	}
 
 	err := json.Unmarshal(value, s.jsonData)
 	if err != nil {
 		log.Panic("Cannot parse JSON state",
-			zap.ByteString("key", key),
+			zap.ByteString("key", key.Bytes()),
 			zap.ByteString("value", value))
 	}
 
-	log.Debug("Update", zap.ByteString("key", key), zap.ByteString("value", value))
+	log.Debug("Update", zap.ByteString("key", key.Bytes()), zap.ByteString("value", value))
 
 	deepCopy(s.jsonData, s.modifiedJSONData)
 	s.isUpdatedByReactor = true
@@ -73,42 +80,52 @@ func (s *JSONReactorState) Update(key []byte, value []byte) {
 
 // GetPatches implements the ReactorState interface.
 // The patches are generated and applied according to the standard RFC6902 JSON patches.
-func (s *JSONReactorState) GetPatches() []*DataPatch {
-	oldBytes, err := json.Marshal(s.jsonData)
-	if err != nil {
-		log.Panic("Cannot marshal JSON state", zap.String("key", s.key), zap.Reflect("json", s.jsonData))
-	}
-
-	newBytes, err := json.Marshal(s.modifiedJSONData)
-	if err != nil {
-		log.Panic("Cannot marshal JSON state", zap.String("key", s.key), zap.Reflect("json", s.modifiedJSONData))
-	}
-
-	patchBytes, err := jsonpatch.CreateMergePatch(oldBytes, newBytes)
-	if err != nil {
-		log.Panic("Cannot generate JSON patch", zap.ByteString("old", oldBytes), zap.ByteString("new", newBytes))
-	}
-
-	dataPatch := &DataPatch{
-		Key: []byte(s.key),
+func (s *JSONReactorState) GetPatches() []*orchestrator.DataPatch {
+	dataPatch := &orchestrator.DataPatch{
+		Key: util.NewEtcdRelKey(s.key),
 		Fun: func(old []byte) ([]byte, error) {
-			ret, err := jsonpatch.MergePatch(old, patchBytes)
+			tp := reflect.TypeOf(s.jsonData)
+			oldStruct := reflect.New(tp.Elem()).Interface()
+			err := json.Unmarshal(old, oldStruct)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			log.Debug("json patch applied", zap.ByteString("patch", patchBytes), zap.ByteString("old", old), zap.ByteString("new", ret))
-			return ret, nil
+
+			for _, f := range s.patches {
+				newStruct, err := f(oldStruct)
+				if err != nil {
+					if errors.Cause(err) == orchestrator.ErrEtcdIgnore {
+						continue
+					}
+					return nil, errors.Trace(err)
+				}
+				oldStruct = newStruct
+			}
+
+			newBytes, err := json.Marshal(oldStruct)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			s.patches = s.patches[:0]
+			return newBytes, nil
 		},
 	}
 
-	return []*DataPatch{dataPatch}
+	return []*orchestrator.DataPatch{dataPatch}
 }
 
-// Inner returns a copy of the snapshot of the state, which can safely be updated by the reactor within a tick.
+// Inner returns a copy of the snapshot of the state.
+// DO NOT modify the returned object. The modified object will not be persisted.
 func (s *JSONReactorState) Inner() interface{} {
 	return s.modifiedJSONData
 }
 
+func (s *JSONReactorState) AddUpdateFunc(f JSONPatchFunc) {
+	s.patches = append(s.patches, f)
+}
+
+// TODO optimize for performance
 func deepCopy(a, b interface{}) {
 	byt, _ := json.Marshal(a)
 	_ = json.Unmarshal(byt, b)

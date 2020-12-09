@@ -14,17 +14,14 @@
 package orchestrator
 
 import (
-	"bytes"
 	"context"
-	"log"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
-	"go.uber.org/zap"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -33,16 +30,16 @@ type EtcdWorker struct {
 	reactor Reactor
 	state   ReactorState
 	// rawState is the local cache of the latest Etcd state.
-	rawState       map[string][]byte
+	rawState       map[util.EtcdKey][]byte
 	pendingUpdates []*etcdUpdate
 	// revision is the Etcd revision of the latest event received from Etcd
 	// (which has not necessarily been applied to the ReactorState)
 	revision int64
-	prefix   string
+	prefix   util.EtcdPrefix
 }
 
 type etcdUpdate struct {
-	key   []byte
+	key   util.EtcdKey
 	value []byte
 }
 
@@ -52,8 +49,8 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 		client:   client,
 		reactor:  reactor,
 		state:    initState,
-		rawState: make(map[string][]byte),
-		prefix:   normalizePrefix(prefix),
+		rawState: make(map[util.EtcdKey][]byte),
+		prefix:   util.NormalizePrefix(prefix),
 	}, nil
 }
 
@@ -73,7 +70,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchCh := worker.client.Watch(ctx1, worker.prefix, clientv3.WithPrefix())
+	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
 	var pendingPatches []*DataPatch
 
 	for {
@@ -125,7 +122,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 		} else {
 			// We are safe to update the ReactorState only if there is no pending patch.
 			for _, update := range worker.pendingUpdates {
-				worker.state.Update(worker.removePrefixBytes(update.key), update.value)
+				rkey := update.key.RemovePrefix(&worker.prefix)
+				worker.state.Update(rkey, update.value)
 			}
 
 			worker.pendingUpdates = worker.pendingUpdates[:0]
@@ -147,29 +145,29 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 	switch event.Type {
 	case mvccpb.PUT:
 		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-			key:   event.Kv.Key,
+			key:   util.NewEtcdKeyFromBytes(event.Kv.Key),
 			value: event.Kv.Value,
 		})
-		worker.rawState[string(event.Kv.Key)] = event.Kv.Value
+		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = event.Kv.Value
 	case mvccpb.DELETE:
 		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-			key:   event.Kv.Key,
+			key:   util.NewEtcdKeyFromBytes(event.Kv.Key),
 			value: event.Kv.Value,
 		})
-		delete(worker.rawState, string(event.Kv.Key))
+		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
 	return nil
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
-	resp, err := worker.client.Get(ctx, worker.prefix, clientv3.WithPrefix())
+	resp, err := worker.client.Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	worker.rawState = make(map[string][]byte)
+	worker.rawState = make(map[util.EtcdKey][]byte)
 	for _, kv := range resp.Kvs {
-		worker.rawState[string(kv.Key)] = kv.Value
+		worker.rawState[util.NewEtcdKeyFromBytes(kv.Key)] = kv.Value
 	}
 
 	worker.revision = resp.Header.Revision
@@ -182,11 +180,12 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		ops := make([]clientv3.Op, 0)
 
 		for _, patch := range patches {
-			old, ok := worker.rawState[worker.prefix+string(patch.Key)]
+			fullKey := worker.prefix.FullKey(&patch.Key)
+			old, ok := worker.rawState[fullKey]
 
 			// make sure someone else has not updated the key after the last snapshot
 			if ok {
-				cmp := clientv3.Compare(clientv3.ModRevision(worker.prefix+string(patch.Key)), "<", worker.revision+1)
+				cmp := clientv3.Compare(clientv3.ModRevision(fullKey.String()), "<", worker.revision+1)
 				cmps = append(cmps, cmp)
 			}
 
@@ -201,9 +200,9 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 
 			var op clientv3.Op
 			if value != nil {
-				op = clientv3.OpPut(worker.prefix+string(patch.Key), string(value))
+				op = clientv3.OpPut(fullKey.String(), string(value))
 			} else {
-				op = clientv3.OpDelete(worker.prefix + string(patch.Key))
+				op = clientv3.OpDelete(fullKey.String())
 			}
 			ops = append(ops, op)
 		}
@@ -217,15 +216,15 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			worker.revision = resp.Header.GetRevision()
 			for _, op := range ops {
 				if op.IsPut() {
-					worker.rawState[string(op.KeyBytes())] = op.ValueBytes()
+					worker.rawState[util.NewEtcdKeyFromBytes(op.KeyBytes())] = op.ValueBytes()
 					worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-						key:   op.KeyBytes(),
+						key:   util.NewEtcdKeyFromBytes(op.KeyBytes()),
 						value: op.ValueBytes(),
 					})
 				} else if op.IsDelete() {
-					delete(worker.rawState, string(op.KeyBytes()))
+					delete(worker.rawState,util.NewEtcdKeyFromBytes(op.KeyBytes()))
 					worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-						key:   op.KeyBytes(),
+						key:   util.NewEtcdKeyFromBytes(op.KeyBytes()),
 						value: nil,
 					})
 				}
@@ -241,21 +240,4 @@ func (worker *EtcdWorker) cleanUp() {
 	worker.rawState = nil
 	worker.revision = 0
 	worker.pendingUpdates = worker.pendingUpdates[:0]
-}
-
-func (worker *EtcdWorker) removePrefixBytes(key []byte) []byte {
-	if bytes.Index(key, []byte(worker.prefix)) != 0 {
-		log.Panic("prefix not found", zap.ByteString("key", key), zap.String("prefix", worker.prefix))
-	}
-	return bytes.TrimPrefix(key, []byte(worker.prefix))
-}
-
-// normalizePrefix adds a slash to the beginning of `prefix` if none is present,
-// and removes a trailing slash, if one is present.
-func normalizePrefix(prefix string) string {
-	ret := prefix
-	if !strings.HasPrefix(prefix, "/") {
-		ret = "/" + prefix
-	}
-	return strings.TrimSuffix(ret, "/")
 }

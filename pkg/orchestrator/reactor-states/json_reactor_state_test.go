@@ -11,20 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrator
+package reactor_states
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+const (
+	testEtcdKeyPrefix    = "/cdc_etcd_worker_test"
+)
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&jsonReactorStateSuite{})
 
@@ -43,9 +51,9 @@ type simpleJSONReactor struct {
 	id     int
 }
 
-func (r *simpleJSONReactor) Tick(_ context.Context, state ReactorState) (nextState ReactorState, err error) {
+func (r *simpleJSONReactor) Tick(_ context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	if r.oldVal >= 100 {
-		return nil, ErrReactorFinished
+		return nil, orchestrator.ErrReactorFinished
 	}
 	newState := state.(*JSONReactorState)
 	r.state = newState
@@ -55,13 +63,22 @@ func (r *simpleJSONReactor) Tick(_ context.Context, state ReactorState) (nextSta
 	switch r.id {
 	case 0:
 		oldVal = snapshot.A
-		snapshot.A = r.oldVal + 1
+		r.state.AddUpdateFunc(func(data interface{}) (newData interface{}, err error) {
+			data.(*simpleJSONRecord).A++
+			return data, nil
+		})
 	case 1:
 		oldVal = snapshot.B
-		snapshot.B = r.oldVal + 1
+		r.state.AddUpdateFunc(func(data interface{}) (newData interface{}, err error) {
+			data.(*simpleJSONRecord).B++
+			return data, nil
+		})
 	case 2:
 		oldVal = snapshot.C
-		snapshot.C = r.oldVal + 1
+		r.state.AddUpdateFunc(func(data interface{}) (newData interface{}, err error) {
+			data.(*simpleJSONRecord).C++
+			return data, nil
+		})
 	}
 	if r.oldVal != oldVal {
 		log.Panic("validation failed", zap.Int("id", r.id), zap.Int("expected", r.oldVal), zap.Int("actual", oldVal))
@@ -100,7 +117,7 @@ func (s *jsonReactorStateSuite) TestSimpleJSONRecord(c *check.C) {
 		initState, err := NewJSONReactorState("/json", &simpleJSONRecord{})
 		c.Assert(err, check.IsNil)
 
-		etcdWorker, err := NewEtcdWorker(newClient(), testEtcdKeyPrefix, reactor, initState)
+		etcdWorker, err := orchestrator.NewEtcdWorker(newClient(), testEtcdKeyPrefix, reactor, initState)
 		c.Assert(err, check.IsNil)
 
 		errg.Go(func() error {

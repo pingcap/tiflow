@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
@@ -119,7 +120,7 @@ func (s *simpleReactorState) Get(i1, i2 int) int {
 
 func (s *simpleReactorState) Inc(i1, i2 int) {
 	patch := &DataPatch{
-		Key: []byte("/" + strconv.Itoa(i1)),
+		Key: util.NewEtcdRelKey("/" + strconv.Itoa(i1)),
 		Fun: func(old []byte) ([]byte, error) {
 			var oldJSON []int
 			err := json.Unmarshal(old, &oldJSON)
@@ -137,7 +138,7 @@ func (s *simpleReactorState) Inc(i1, i2 int) {
 
 func (s *simpleReactorState) SetSum(sum int) {
 	patch := &DataPatch{
-		Key: []byte("/sum"),
+		Key: util.NewEtcdRelKey("/sum"),
 		Fun: func(_ []byte) ([]byte, error) {
 			return []byte(strconv.Itoa(sum)), nil
 		},
@@ -146,10 +147,10 @@ func (s *simpleReactorState) SetSum(sum int) {
 	s.patches = append(s.patches, patch)
 }
 
-func (s *simpleReactorState) Update(key []byte, value []byte) {
-	subMatches := keyParseRegexp.FindSubmatch(key)
+func (s *simpleReactorState) Update(key util.EtcdRelKey, value []byte) {
+	subMatches := keyParseRegexp.FindSubmatch(key.Bytes())
 	if len(subMatches) != 2 {
-		log.Panic("illegal Etcd key", zap.ByteString("key", key))
+		log.Panic("illegal Etcd key", zap.ByteString("key", key.Bytes()))
 	}
 
 	if string(subMatches[1]) == "sum" {
@@ -279,7 +280,7 @@ type intReactorState struct {
 	isUpdated bool
 }
 
-func (s *intReactorState) Update(_ []byte, value []byte) {
+func (s *intReactorState) Update(_ util.EtcdRelKey, value []byte) {
 	var err error
 	s.val, err = strconv.Atoi(string(value))
 	if err != nil {
