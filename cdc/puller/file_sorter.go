@@ -205,7 +205,7 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 	if buf.Len() == 0 {
 		return 0, nil
 	}
-	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrFileSorterOpenFile, err)
 	}
@@ -256,6 +256,7 @@ func (h sortHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 func (h *sortHeap) Push(x interface{}) {
 	*h = append(*h, x.(*sortItem))
 }
+
 func (h *sortHeap) Pop() interface{} {
 	old := *h
 	n := len(old)

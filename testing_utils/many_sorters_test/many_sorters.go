@@ -34,10 +34,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var sorterDir = flag.String("dir", "./sorter", "temporary directory used for sorting")
-var numSorters = flag.Int("num-sorters", 256, "number of instances of sorters")
-var numEvents = flag.Int("num-events-per-sorter", 10000, "number of events sent to a sorter")
-var percentageResolves = flag.Int("percentage-resolve-events", 70, "percentage of resolved events")
+var (
+	sorterDir          = flag.String("dir", "./sorter", "temporary directory used for sorting")
+	numSorters         = flag.Int("num-sorters", 256, "number of instances of sorters")
+	numEvents          = flag.Int("num-events-per-sorter", 10000, "number of events sent to a sorter")
+	percentageResolves = flag.Int("percentage-resolve-events", 70, "percentage of resolved events")
+)
 
 func main() {
 	flag.Parse()
@@ -58,7 +60,7 @@ func main() {
 		_ = http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	err = os.MkdirAll(*sorterDir, 0755)
+	err = os.MkdirAll(*sorterDir, 0o755)
 	if err != nil {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}

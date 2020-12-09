@@ -38,12 +38,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	forceEnableOldValueProtocols = []string{
-		"canal",
-		"maxwell",
-	}
-)
+var forceEnableOldValueProtocols = []string{
+	"canal",
+	"maxwell",
+}
 
 func newChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
