@@ -28,6 +28,7 @@ type ownerCommonSuite struct{}
 var _ = check.Suite(&ownerCommonSuite{})
 
 func (s *ownerCommonSuite) TestAdminJobType(c *check.C) {
+	defer testleak.AfterTest(c)()
 	names := map[AdminJobType]string{
 		AdminNone:         "noop",
 		AdminStop:         "stop changefeed",
@@ -53,6 +54,7 @@ func (s *ownerCommonSuite) TestAdminJobType(c *check.C) {
 }
 
 func (s *ownerCommonSuite) TestDDLStateString(c *check.C) {
+	defer testleak.AfterTest(c)()
 	names := map[ChangeFeedDDLState]string{
 		ChangeFeedSyncDML:          "SyncDML",
 		ChangeFeedWaitToExecDDL:    "WaitToExecDDL",
@@ -66,6 +68,7 @@ func (s *ownerCommonSuite) TestDDLStateString(c *check.C) {
 }
 
 func (s *ownerCommonSuite) TestTaskPositionMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
 	pos := &TaskPosition{
 		ResolvedTs:   420875942036766723,
 		CheckPointTs: 420875940070686721,
@@ -84,6 +87,7 @@ func (s *ownerCommonSuite) TestTaskPositionMarshal(c *check.C) {
 }
 
 func (s *ownerCommonSuite) TestChangeFeedStatusMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
 	status := &ChangeFeedStatus{
 		ResolvedTs:   420875942036766723,
 		CheckpointTs: 420875940070686721,
@@ -119,6 +123,7 @@ func (s *ownerCommonSuite) TestTableOperationState(c *check.C) {
 }
 
 func (s *ownerCommonSuite) TestTaskWorkloadMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
 	workload := &TaskWorkload{
 		12: WorkloadInfo{Workload: uint64(1)},
 		15: WorkloadInfo{Workload: uint64(3)},
@@ -212,6 +217,7 @@ func (s *taskStatusSuite) TestProcSnapshot(c *check.C) {
 }
 
 func (s *taskStatusSuite) TestTaskStatusMarshal(c *check.C) {
+	defer testleak.AfterTest(c)()
 	status := &TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
 			1: {StartTs: 420875942036766723},
@@ -231,6 +237,7 @@ func (s *taskStatusSuite) TestTaskStatusMarshal(c *check.C) {
 }
 
 func (s *taskStatusSuite) TestAddTable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ts := uint64(420875942036766723)
 	expected := &TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
@@ -253,6 +260,7 @@ func (s *taskStatusSuite) TestAddTable(c *check.C) {
 }
 
 func (s *taskStatusSuite) TestTaskStatusApplyState(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ts1 := uint64(420875042036766723)
 	ts2 := uint64(420876783269969921)
 	status := &TaskStatus{}

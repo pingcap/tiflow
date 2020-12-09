@@ -68,18 +68,17 @@ const (
 // SyncpointTableName is the name of table where all syncpoint maps sit
 const syncpointTableName string = "syncpoint_v1"
 
-var (
-	validSchemes = map[string]bool{
-		"mysql":     true,
-		"mysql+ssl": true,
-		"tidb":      true,
-		"tidb+ssl":  true,
-	}
-)
+var validSchemes = map[string]bool{
+	"mysql":     true,
+	"mysql+ssl": true,
+	"tidb":      true,
+	"tidb+ssl":  true,
+}
 
 type mysqlSyncpointStore struct {
 	db *sql.DB
 }
+
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
@@ -252,7 +251,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	// Must relax sql mode to support cyclic replication, as downstream may have
 	// extra columns (not null and no default value).
-	if s.cyclic != nil {
+	if s.cyclic == nil || !s.cyclic.Enabled() {
 		return nil
 	}
 	var oldMode, newMode string
@@ -263,12 +262,11 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	}
 
 	newMode = cyclic.RelaxSQLMode(oldMode)
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	err = rows.Close()
-	return cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	return nil
 }
 
 var _ Sink = &mysqlSink{}
@@ -467,6 +465,22 @@ func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string)
 	return params, nil
 }
 
+var getDBConnImpl = getDBConn
+
+func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
+	}
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+	}
+	return db, nil
+}
+
 // newMySQLSink creates a new MySQL sink using schema storage
 func newMySQLSink(
 	ctx context.Context,
@@ -476,8 +490,6 @@ func newMySQLSink(
 	replicaConfig *config.ReplicaConfig,
 	opts map[string]string,
 ) (Sink, error) {
-	var db *sql.DB
-
 	opts[OptChangefeedID] = changefeedID
 	params, err := parseSinkURI(ctx, sinkURI, opts)
 	if err != nil {
@@ -511,10 +523,9 @@ func newMySQLSink(
 	if params.timezone != "" {
 		dsn.Params["time_zone"] = params.timezone
 	}
-	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+	testDB, err := getDBConnImpl(ctx, dsn.FormatDSN())
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+		return nil, err
 	}
 	defer testDB.Close()
 
@@ -522,15 +533,9 @@ func newMySQLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	db, err = sql.Open("mysql", dsnStr)
+	db, err := getDBConnImpl(ctx, dsnStr)
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
-	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+		return nil, err
 	}
 
 	log.Info("Start mysql sink")
@@ -1156,7 +1161,7 @@ func buildColumnList(names []string) string {
 func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
 	var syncDB *sql.DB
 
-	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
+	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
 		return nil, errors.New("can create mysql sink with unsupported scheme")

@@ -17,14 +17,15 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"math/rand"
+	"os"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/tests/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"math/rand"
-	"os"
 )
 
 const (

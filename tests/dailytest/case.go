@@ -25,7 +25,8 @@ import (
 	"github.com/pingcap/log"
 )
 
-var casePKAddDuplicateUK = []string{`
+var casePKAddDuplicateUK = []string{
+	`
 CREATE TABLE binlog_pk_add_duplicate_uk(id INT PRIMARY KEY, a1 INT);
 `,
 	`
@@ -158,7 +159,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 		// insert 5 * 1M
 		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
-		var data = make([]byte, 1<<20)
+		data := make([]byte, 1<<20)
 		for i := 0; i < 5; i++ {
 			_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
 			if err != nil {

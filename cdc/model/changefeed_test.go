@@ -232,6 +232,7 @@ func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
 }
 
 func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
+	defer testleak.AfterTest(c)()
 	validIDs := []string{
 		"test",
 		"1",
@@ -254,6 +255,7 @@ func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
 }
 
 func (s *changefeedSuite) TestGetTs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		startTs      uint64 = 418881574869139457
 		targetTs     uint64 = 420891571239139085

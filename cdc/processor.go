@@ -66,9 +66,7 @@ const (
 	schemaStorageGCLag = time.Minute * 20
 )
 
-var (
-	fNewPDCli = pd.NewClientWithContext
-)
+var fNewPDCli = pd.NewClientWithContext
 
 type processor struct {
 	id           string
@@ -456,7 +454,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	//p.position.Count = p.sink.Count()
+	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
