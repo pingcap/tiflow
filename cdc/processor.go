@@ -535,7 +535,7 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			// processor reads latest task status from etcd, analyzes operations
+			// processor reads latest task status from etcd, analyzes operation
 			// field and processes table add or delete. If operation is unapplied
 			// but stays unchanged after processor handling tables, it means no
 			// status is changed and we don't need to flush task status neigher.
@@ -659,6 +659,9 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 done:
 	if !status.SomeOperationsUnapplied() {
 		status.Operation = nil
+		// status.Dirty must be true when status changes from `unapplied` to `applied`,
+		// setting status.Dirty = true is not **must** here.
+		status.Dirty = true
 	}
 	return tablesToRemove, nil
 }
