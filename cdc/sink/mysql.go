@@ -68,18 +68,17 @@ const (
 // SyncpointTableName is the name of table where all syncpoint maps sit
 const syncpointTableName string = "syncpoint_v1"
 
-var (
-	validSchemes = map[string]bool{
-		"mysql":     true,
-		"mysql+ssl": true,
-		"tidb":      true,
-		"tidb+ssl":  true,
-	}
-)
+var validSchemes = map[string]bool{
+	"mysql":     true,
+	"mysql+ssl": true,
+	"tidb":      true,
+	"tidb+ssl":  true,
+}
 
 type mysqlSyncpointStore struct {
 	db *sql.DB
 }
+
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
@@ -1162,7 +1161,7 @@ func buildColumnList(names []string) string {
 func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
 	var syncDB *sql.DB
 
-	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
+	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
 		return nil, errors.New("can create mysql sink with unsupported scheme")

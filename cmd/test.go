@@ -23,9 +23,7 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-var (
-	testPdAddr string
-)
+var testPdAddr string
 
 func init() {
 	rootCmd.AddCommand(testKVCmd)

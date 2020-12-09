@@ -82,7 +82,7 @@ func init() {
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 
-	//register pulsar sink
+	// register pulsar sink
 	sinkIniterMap["pulsar"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)

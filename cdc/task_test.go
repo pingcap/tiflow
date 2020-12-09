@@ -65,6 +65,7 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 	s.w = watcher
 	s.endpoints = endpoints
 }
+
 func (s *taskSuite) TearDownTest(c *check.C) {
 	s.s.Close()
 	s.c.Close()
@@ -106,6 +107,7 @@ func (s *taskSuite) setupFeedInfo(c *check.C, changeFeedID string) {
 			CheckpointTs: 1,
 		}), check.IsNil)
 }
+
 func (s *taskSuite) teardownFeedInfo(c *check.C, changeFeedID string) {
 	etcd := s.c
 	// Delete change feed info
@@ -135,9 +137,11 @@ func (s *taskSuite) TestParseTask(c *check.C) {
 	}{
 		{"nil task key", nil, nil},
 		{"short task key", []byte("test"), nil},
-		{"normal task key",
+		{
+			"normal task key",
 			[]byte(kv.GetEtcdKeyTaskStatus(changeFeedID, s.w.capture.info.ID)),
-			&Task{changeFeedID, 1}},
+			&Task{changeFeedID, 1},
+		},
 	}
 	for _, t := range tests {
 		c.Log("testing ", t.Desc)

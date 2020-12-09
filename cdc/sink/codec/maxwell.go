@@ -83,7 +83,7 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Type:      model.MqMessageTypeRow,
 	}
 	value := &maxwellMessage{
-		Ts:       000000000,
+		Ts:       0,
 		Database: e.Table.Schema,
 		Table:    e.Table.Table,
 		Data:     make(map[string]interface{}),
@@ -138,12 +138,10 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 						if value.Data[v.Name] != v.Value {
 							value.Old[v.Name] = v.Value
 						}
-
 					} else {
 						if value.Data[v.Name] != string(v.Value.([]byte)) {
 							value.Old[v.Name] = string(v.Value.([]byte))
 						}
-
 					}
 				default:
 					if value.Data[v.Name] != v.Value {
@@ -178,7 +176,7 @@ func (d *MaxwellEventBatchEncoder) SetParams(params map[string]string) error {
 type Column struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
-	//Do not mark the unique key temporarily
+	// Do not mark the unique key temporarily
 	Signed       bool   `json:"signed,omitempty"`
 	ColumnLength int    `json:"column-length,omitempty"`
 	Charset      string `json:"charset,omitempty"`
@@ -190,7 +188,7 @@ type TableStruct struct {
 	Charset  string    `json:"charset,omitempty"`
 	Table    string    `json:"table"`
 	Columns  []*Column `json:"columns"`
-	//Do not output whether it is a primary key temporarily
+	// Do not output whether it is a primary key temporarily
 	PrimaryKey []string `json:"primary-key"`
 }
 
@@ -248,7 +246,6 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 				Name: v.Name,
 				Type: err.Error(),
 			})
-
 		}
 		value.Def.Columns = append(value.Def.Columns, &Column{
 			Name: v.Name,
@@ -315,7 +312,7 @@ func NewMaxwellEventBatchEncoder() EventBatchEncoder {
 	return batch
 }
 
-//ddl typecode from parser/model/ddl.go
+// ddl typecode from parser/model/ddl.go
 func ddlToMaxwellType(ddlType model2.ActionType) string {
 	if ddlType >= model2.ActionAddColumn && ddlType <= model2.ActionDropTablePartition {
 		return "table-alter"
@@ -338,7 +335,7 @@ func ddlToMaxwellType(ddlType model2.ActionType) string {
 	}
 }
 
-//Convert column type code to maxwell column type
+// Convert column type code to maxwell column type
 func columnToMaxwellType(columnType byte) (string, error) {
 	switch columnType {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24:
