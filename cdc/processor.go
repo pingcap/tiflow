@@ -535,13 +535,13 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			err = p.flushTaskPosition(ctx)
-			if err != nil {
-				return true, errors.Trace(err)
-			}
 			// no operation is updated, it means no tables are handled and we
 			// don't need to flush task status neigher.
-			return taskStatus.Dirty, nil
+			if !taskStatus.Dirty {
+				return false, nil
+			}
+			err = p.flushTaskPosition(ctx)
+			return true, err
 		})
 	if err != nil {
 		// not need to check error
@@ -615,8 +615,8 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						tablesToRemove = append(tablesToRemove, tableID)
 						opt.Done = true
 						opt.Status = model.OperFinished
-						status.Dirty = true
 					}
+					status.Dirty = true
 				}
 			}
 		} else {
