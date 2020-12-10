@@ -538,7 +538,7 @@ func (p *processor) removeTable(tableID int64) {
 		return
 	}
 
-	if table.Status() != cdcprocessor.TableStatusStoped {
+	if table.Status() != cdcprocessor.TableStatusStopped {
 		return
 	}
 	table.Cancel()
@@ -576,7 +576,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					opt.Status = model.OperDispatched
 					status.Dirty = true
 				case model.OperProcessed:
-					if table.Status() == cdcprocessor.TableStatusStoped && table.ResolvedTs() <= p.position.CheckPointTs {
+					if table.Status() == cdcprocessor.TableStatusStopped && table.ResolvedTs() <= p.position.CheckPointTs {
 						tablesToRemove = append(tablesToRemove, tableID)
 						opt.Done = true
 						opt.BoundaryTs = table.ResolvedTs()
