@@ -814,6 +814,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		}
 		start := time.Now()
 
+		log.Debug("LEOPPRO: show resolvedTs before sink", zap.Reflect("ts", resolvedTs))
 		checkpointTs, err := p.sink.FlushRowChangedEvents(ctx, resolvedTs)
 		if err != nil {
 			return errors.Trace(err)
@@ -982,6 +983,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	go func() {
 		for _, err := range table.Wait() {
+			if cerror.ErrTableProcessorStoppedSafely.Equal(err) {
+				continue
+			}
 			p.errCh <- err
 		}
 	}()
