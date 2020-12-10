@@ -62,7 +62,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
 	})
 
-	err := os.MkdirAll("./sorter", 0755)
+	err := os.MkdirAll("./sorter", 0o755)
 	c.Assert(err, check.IsNil)
 	sorter := sorter2.NewUnifiedSorter("./sorter", "test", "0.0.0.0:0")
 
@@ -80,7 +80,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 		MaxMemoryConsumption: 0,
 	})
 
-	err := os.MkdirAll("./sorter", 0755)
+	err := os.MkdirAll("./sorter", 0o755)
 	c.Assert(err, check.IsNil)
 	sorter := sorter2.NewUnifiedSorter("./sorter", "test", "0.0.0.0:0")
 

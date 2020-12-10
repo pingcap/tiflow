@@ -147,8 +147,10 @@ func (b *memBuffer) Size() int64 {
 	return atomic.LoadInt64(&b.limitter.used)
 }
 
-var sizeOfVal = unsafe.Sizeof(model.RawKVEntry{})
-var sizeOfResolve = unsafe.Sizeof(model.ResolvedSpan{})
+var (
+	sizeOfVal     = unsafe.Sizeof(model.RawKVEntry{})
+	sizeOfResolve = unsafe.Sizeof(model.ResolvedSpan{})
+)
 
 func entrySize(e model.RegionFeedEvent) int {
 	if e.Val != nil {

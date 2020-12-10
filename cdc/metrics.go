@@ -14,8 +14,9 @@
 package cdc
 
 import (
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"time"
+
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
 
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
