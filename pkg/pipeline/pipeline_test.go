@@ -99,7 +99,8 @@ func (n *checkNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx, cancel := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.WithCancel(ctx)
 	ctx, p := NewPipeline(ctx)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
@@ -205,7 +206,8 @@ func (n *errorNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx, cancel := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx, p := NewPipeline(ctx)
 	p.AppendNode(ctx, "echo node", echoNode{})
@@ -284,7 +286,8 @@ func (n *throwNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx, cancel := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx, p := NewPipeline(ctx)
 	p.AppendNode(ctx, "echo node", echoNode{})

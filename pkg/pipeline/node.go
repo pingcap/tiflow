@@ -13,7 +13,9 @@
 
 package pipeline
 
-// Node represents a handle unit for the message stream in pipeline
+// Node represents a handle unit for the message stream in the pipeline
+// The following functions in this interface will be called in one goroutine.
+// It's NO NEED to consider concurrency issues
 type Node interface {
 	// Init initializes the node
 	// when the pipeline is started, this function will be called in order

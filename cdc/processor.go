@@ -174,6 +174,8 @@ func newProcessor(
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
 
+		flushCheckpointInterval: flushCheckpointInterval,
+
 		position: &model.TaskPosition{CheckPointTs: checkpointTs},
 		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
@@ -493,11 +495,15 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			err = p.flushTaskPosition(ctx)
-			if err != nil {
-				return true, errors.Trace(err)
+			// processor reads latest task status from etcd, analyzes operation
+			// field and processes table add or delete. If operation is unapplied
+			// but stays unchanged after processor handling tables, it means no
+			// status is changed and we don't need to flush task status neigher.
+			if !taskStatus.Dirty {
+				return false, nil
 			}
-			return true, nil
+			err = p.flushTaskPosition(ctx)
+			return true, err
 		})
 	if err != nil {
 		// not need to check error
@@ -561,18 +567,21 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 					opt.Done = true
 					opt.Status = model.OperFinished
+					status.Dirty = true
 					continue
 				}
 				switch opt.Status {
 				case model.OperDispatched:
 					table.AsyncStop()
 					opt.Status = model.OperDispatched
+					status.Dirty = true
 				case model.OperProcessed:
 					if table.Status() == cdcprocessor.TableStatusStoped && table.ResolvedTs() <= p.position.CheckPointTs {
 						tablesToRemove = append(tablesToRemove, tableID)
 						opt.Done = true
 						opt.BoundaryTs = table.ResolvedTs()
 						opt.Status = model.OperFinished
+						status.Dirty = true
 						log.Debug("safeStop table", zap.Int64("tableID", tableID),
 							util.ZapFieldChangefeed(ctx),
 							zap.Uint64("checkpointTs", table.ResolvedTs()))
@@ -594,6 +603,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				}
 				p.addTable(ctx, tableID, replicaInfo)
 				opt.Status = model.OperProcessed
+				status.Dirty = true
 			case model.OperProcessed:
 				p.stateMu.Lock()
 				table, exist := p.tables[tableID]
@@ -607,6 +617,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 					opt.Done = true
 					opt.Status = model.OperFinished
+					status.Dirty = true
 					log.Debug("Operation done signal received",
 						util.ZapFieldChangefeed(ctx),
 						zap.Int64("tableID", tableID),
@@ -620,6 +631,9 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 
 	if !status.SomeOperationsUnapplied() {
 		status.Operation = nil
+		// status.Dirty must be true when status changes from `unapplied` to `applied`,
+		// setting status.Dirty = true is not **must** here.
+		status.Dirty = true
 	}
 	return tablesToRemove, nil
 }
