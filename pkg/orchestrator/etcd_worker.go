@@ -202,15 +202,15 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			return errors.Trace(err)
 		}
 
-		if bytes.Equal(old, value) {
-			// Ignore patches that produce a new value that is the same as the old value.
-			continue
-		}
-
 		// make sure someone else has not updated the key after the last snapshot
 		if ok {
 			cmp := clientv3.Compare(clientv3.ModRevision(fullKey.String()), "<", worker.revision+1)
 			cmps = append(cmps, cmp)
+		}
+
+		if bytes.Equal(old, value) {
+			// Ignore patches that produce a new value that is the same as the old value.
+			continue
 		}
 
 		var op clientv3.Op
