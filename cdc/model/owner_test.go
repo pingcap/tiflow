@@ -105,6 +105,7 @@ func (s *ownerCommonSuite) TestChangeFeedStatusMarshal(c *check.C) {
 }
 
 func (s *ownerCommonSuite) TestTableOperationState(c *check.C) {
+	defer testleak.AfterTest(c)()
 	appliedMap := map[uint64]bool{
 		OperDispatched: false,
 		OperProcessed:  false,
