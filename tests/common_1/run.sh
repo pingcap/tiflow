@@ -31,11 +31,17 @@ function run() {
     fi
 
     run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    # TODO: refine the release detection after 5.0 tag of TiDB is ready
     tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
         "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
     if [[ ! $tidb_build_branch =~ ^(master)$ ]]; then
         echo "skip some SQLs in tidb v4.0.x"
     else
+        # https://github.com/pingcap/tidb/pull/21533 disables multi_schema change
+        # feature by default, turn it on first
+        run_sql "set @@global.tidb_enable_change_multi_schema = 'on'" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+        # TiDB global variables cache 2 seconds at most
+        sleep 2
         run_sql_file $CUR/data/test_v5.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     fi
     run_sql_file $CUR/data/test_finish.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
