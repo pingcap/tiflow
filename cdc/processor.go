@@ -678,6 +678,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				case <-ctx.Done():
 					return
 				case p.output2Sink <- event:
+					log.Debug("LEOPPRO: show Event", zap.Reflect("event", event))
 				}
 			case <-globalResolvedTsReceiver.C:
 				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
@@ -773,6 +774,10 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			time.Sleep(10 * time.Second)
 			panic("ProcessorSyncResolvedPreEmit")
 		})
+		if len(rows) == 0 {
+			return nil
+		}
+		log.Debug("LEOPPRO: show Event before sink", zap.Reflect("event", rows))
 		err := p.sink.EmitRowChangedEvents(ctx, rows...)
 		if err != nil {
 			return errors.Trace(err)
