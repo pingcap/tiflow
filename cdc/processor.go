@@ -798,16 +798,15 @@ func (p *processor) syncResolved(ctx context.Context) error {
 
 	flushSink := func(resolvedTs model.Ts) error {
 		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-		var minTs uint64
 		if resolvedTs > globalResolvedTs {
 			resolvedTs = globalResolvedTs
 		}
-		if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
+		if resolvedTs == 0 || atomic.LoadUint64(&p.checkpointTs) == resolvedTs {
 			return nil
 		}
 		start := time.Now()
 
-		checkpointTs, err := p.sink.FlushRowChangedEvents(ctx, minTs)
+		checkpointTs, err := p.sink.FlushRowChangedEvents(ctx, resolvedTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
