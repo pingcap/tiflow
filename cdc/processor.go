@@ -338,12 +338,14 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			p.stateMu.Lock()
 			for _, table := range p.tables {
 				ts := table.ResolvedTs()
+				log.Debug("LEOPPRO: resolved in local resolved worker", zap.String("table", table.Name()), zap.Uint64("resolvedTs", ts))
 
 				if ts < minResolvedTs {
 					minResolvedTs = ts
 				}
 			}
 			p.stateMu.Unlock()
+			log.Debug("LEOPPRO: min resolved in local resolved worker", zap.Uint64("resolvedTs", minResolvedTs))
 			atomic.StoreUint64(&p.localResolvedTs, minResolvedTs)
 
 			phyTs := oracle.ExtractPhysical(minResolvedTs)
@@ -957,6 +959,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	resolvedTsListener := func(table *cdcprocessor.TablePipeline, resolvedTs model.Ts) {
 		p.localResolvedNotifier.Notify()
+		log.Debug("LEOPPRO: show resolved event in pipeline", zap.String("table", table.Name()), zap.Uint64("resolved", resolvedTs))
 		resolvedTsGauge.Set(float64(oracle.ExtractPhysical(resolvedTs)))
 	}
 
