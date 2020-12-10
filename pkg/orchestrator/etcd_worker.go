@@ -184,19 +184,23 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			fullKey := worker.prefix.FullKey(&patch.Key)
 			old, ok := worker.rawState[fullKey]
 
-			// make sure someone else has not updated the key after the last snapshot
-			if ok {
-				cmp := clientv3.Compare(clientv3.ModRevision(fullKey.String()), "<", worker.revision+1)
-				cmps = append(cmps, cmp)
-			}
-
 			value, err := patch.Fun(old)
-
 			if err != nil {
 				if errors.Cause(err) == cerrors.ErrEtcdIgnore {
 					continue
 				}
 				return errors.Trace(err)
+			}
+
+			if string(value) == string(old) {
+				// Ignore patches that produce a new value that is the same as the old value.
+				continue
+			}
+
+			// make sure someone else has not updated the key after the last snapshot
+			if ok {
+				cmp := clientv3.Compare(clientv3.ModRevision(fullKey.String()), "<", worker.revision+1)
+				cmps = append(cmps, cmp)
 			}
 
 			var op clientv3.Op
