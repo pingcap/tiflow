@@ -14,6 +14,7 @@
 package processor
 
 import (
+	stdContext "context"
 	"sync/atomic"
 
 	"github.com/pingcap/log"
@@ -36,6 +37,7 @@ type TablePipeline struct {
 	tableID     int64
 	markTableID int64
 	tableName   string // quoted schema and table, used in metircs only
+	cancel      stdContext.CancelFunc
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
@@ -82,7 +84,7 @@ func (t *TablePipeline) Name() string {
 
 // Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
 func (t *TablePipeline) Cancel() {
-	// TODO support cancel
+	t.cancel()
 }
 
 // Wait waits for all node destroyed and returns errors
@@ -105,11 +107,13 @@ func NewTablePipeline(ctx context.Context,
 	targetTs model.Ts,
 	outputCh chan *model.PolymorphicEvent,
 	resolvedTsListener func(*TablePipeline, model.Ts)) (context.Context, *TablePipeline) {
+	ctx, cancel := context.WithCancel(ctx)
 	tablePipeline := &TablePipeline{
 		resolvedTs:  targetTs,
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
+		cancel:      cancel,
 	}
 	listener := func(resolvedTs model.Ts) {
 		atomic.StoreUint64(&tablePipeline.resolvedTs, resolvedTs)

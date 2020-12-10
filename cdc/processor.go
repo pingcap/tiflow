@@ -918,6 +918,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		if table.Status() == cdcprocessor.TableStatusStopping {
 			log.Warn("The same table exists but is stopping. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.Cancel()
+		} else if table.Status() == cdcprocessor.TableStatusStopped {
+			log.Warn("The same table exists but is stopped. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
+			table.Cancel()
 		} else {
 			log.Warn("Ignore existing table", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			return
@@ -935,7 +938,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	}
 
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-	cdcCtx, _ := cdccontext.NewContext(ctx, &cdccontext.Vars{
+	cdcCtx := cdccontext.NewContext(ctx, &cdccontext.Vars{
 		CaptureAddr:   p.captureInfo.AdvertiseAddr,
 		PDClient:      p.pdCli,
 		SchemaStorage: p.schemaStorage,

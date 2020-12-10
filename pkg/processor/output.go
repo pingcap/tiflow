@@ -28,7 +28,7 @@ const (
 	TableStatusInitializing TableStatus = iota
 	TableStatusRunning
 	TableStatusStopping
-	TableStatusStoped
+	TableStatusStopped
 )
 
 type outputNode struct {
@@ -67,13 +67,13 @@ func (n *outputNode) Receive(ctx pipeline.NodeContext) error {
 		}
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeStopped {
-			atomic.StoreInt32(n.status, TableStatusStoped)
+			atomic.StoreInt32(n.status, TableStatusStopped)
 		}
 	}
 	return nil
 }
 
 func (n *outputNode) Destroy(ctx pipeline.NodeContext) error {
-	atomic.StoreInt32(n.status, TableStatusStoped)
+	atomic.StoreInt32(n.status, TableStatusStopped)
 	return nil
 }

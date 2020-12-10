@@ -21,7 +21,8 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-// Vars contains some vars which can be used to anywhere in a pipeline
+// Vars contains some vars which can be used anywhere in a pipeline
+// All field in Vars should be READ-ONLY and THREAD-SAFE
 type Vars struct {
 	// TODO add more vars
 	CaptureAddr   string
@@ -75,6 +76,18 @@ func (ctx *rootContext) Vars() *Vars {
 func (ctx *rootContext) Throw(error) { /* do nothing */ }
 
 type stdContext struct {
+	stdCtx context.Context
+	Context
+}
+
+func (ctx *stdContext) Done() <-chan struct{} {
+	return ctx.stdCtx.Done()
+}
+
+func (ctx *stdContext) StdContext() context.Context {
+	return ctx.stdCtx
+}
+
 //revive:disable:context-as-argument
 func withStdCancel(ctx Context, stdCtx context.Context) Context {
 	return &stdContext{
@@ -98,6 +111,7 @@ type throwContext struct {
 func WithErrorHandler(ctx Context, f func(error)) Context {
 	return &throwContext{
 		Context: ctx,
+		f:       f,
 	}
 }
 

@@ -14,11 +14,11 @@
 package processor
 
 import (
-	"context"
+	stdContext "context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -34,7 +34,7 @@ type pullerNode struct {
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
-	cancel      context.CancelFunc
+	cancel      stdContext.CancelFunc
 }
 
 func newPullerNode(
@@ -52,24 +52,26 @@ func newPullerNode(
 	}
 }
 
-func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
+func (n *pullerNode) tableSpan(ctx context.Context) []regionspan.Span {
 	// start table puller
 	enableOldValue := ctx.Vars().Config.EnableOldValue
-	spans := make([]regionspan.Span, 0, 2)
+	spans := make([]regionspan.Span, 0, 4)
 	spans = append(spans, regionspan.GetTableSpan(n.tableID, enableOldValue))
 
 	if ctx.Vars().Config.Cyclic.IsEnabled() && n.replicaInfo.MarkTableID != 0 {
 		spans = append(spans, regionspan.GetTableSpan(n.replicaInfo.MarkTableID, enableOldValue))
 	}
+	return spans
+}
 
-	ctxC, cancel := context.WithCancel(ctx.StdContext())
+func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
+	enableOldValue := ctx.Vars().Config.EnableOldValue
+	ctxC, cancel := stdContext.WithCancel(ctx.StdContext())
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
-	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage, n.replicaInfo.StartTs, spans, n.limitter, enableOldValue)
+	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
+		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
 	go func() {
-		err := plr.Run(ctxC)
-		if errors.Cause(err) != context.Canceled {
-			ctx.Throw(err)
-		}
+		ctx.Throw(plr.Run(ctxC))
 	}()
 	go func() {
 		for {
