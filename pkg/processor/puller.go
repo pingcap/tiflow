@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"golang.org/x/sync/errgroup"
 )
 
 type pullerNode struct {
@@ -35,6 +36,7 @@ type pullerNode struct {
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
 	cancel      stdContext.CancelFunc
+	wg          errgroup.Group
 }
 
 func newPullerNode(
@@ -70,14 +72,15 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
-	go func() {
+	n.wg.Go(func() error {
 		ctx.Throw(plr.Run(ctxC))
-	}()
-	go func() {
+		return nil
+	})
+	n.wg.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				return nil
 			case rawKV := <-plr.Output():
 				if rawKV == nil {
 					continue
@@ -86,7 +89,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
 			}
 		}
-	}()
+	})
 	n.cancel = cancel
 	return nil
 }
@@ -100,5 +103,5 @@ func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 
 func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
 	n.cancel()
-	return nil
+	return n.wg.Wait()
 }

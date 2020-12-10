@@ -126,5 +126,6 @@ func NewTablePipeline(ctx context.Context,
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
 	p.AppendNode(ctx, "safe_stopper", newSafeStopperNode(targetTs))
 	p.AppendNode(ctx, "output", newOutputNode(outputCh, &tablePipeline.status, listener))
+	tablePipeline.p = p
 	return ctx, tablePipeline
 }

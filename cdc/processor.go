@@ -94,8 +94,9 @@ type processor struct {
 	ddlPullerCancel context.CancelFunc
 	schemaStorage   *entry.SchemaStorage
 
-	output  chan *model.PolymorphicEvent
-	mounter entry.Mounter
+	outputFromTable chan *model.PolymorphicEvent
+	output2Sink     chan *model.PolymorphicEvent
+	mounter         entry.Mounter
 
 	stateMu           sync.Mutex
 	status            *model.TaskStatus
@@ -104,12 +105,10 @@ type processor struct {
 	markTableIDs      map[int64]struct{}
 	statusModRevision int64
 
-	sinkEmittedResolvedNotifier *notify.Notifier
-	sinkEmittedResolvedReceiver *notify.Receiver
-	localResolvedNotifier       *notify.Notifier
-	localResolvedReceiver       *notify.Receiver
-	localCheckpointTsNotifier   *notify.Notifier
-	localCheckpointTsReceiver   *notify.Receiver
+	localResolvedNotifier     *notify.Notifier
+	localResolvedReceiver     *notify.Receiver
+	localCheckpointTsNotifier *notify.Notifier
+	localCheckpointTsReceiver *notify.Receiver
 
 	wg    *errgroup.Group
 	errCh chan<- error
@@ -155,7 +154,6 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 
-	sinkEmittedResolvedNotifier := new(notify.Notifier)
 	localResolvedNotifier := new(notify.Notifier)
 	localCheckpointTsNotifier := new(notify.Notifier)
 	p := &processor{
@@ -176,11 +174,9 @@ func newProcessor(
 
 		flushCheckpointInterval: flushCheckpointInterval,
 
-		position: &model.TaskPosition{CheckPointTs: checkpointTs},
-		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
-
-		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
-		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		position:        &model.TaskPosition{CheckPointTs: checkpointTs},
+		outputFromTable: make(chan *model.PolymorphicEvent),
+		output2Sink:     make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		localResolvedNotifier: localResolvedNotifier,
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
@@ -218,10 +214,6 @@ func (p *processor) Run(ctx context.Context) {
 
 	wg.Go(func() error {
 		return p.globalStatusWorker(cctx)
-	})
-
-	wg.Go(func() error {
-		return p.sinkDriver(cctx)
 	})
 
 	wg.Go(func() error {
@@ -681,6 +673,12 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
+			case event := <-p.outputFromTable:
+				select {
+				case <-ctx.Done():
+					return
+				case p.output2Sink <- event:
+				}
 			case <-globalResolvedTsReceiver.C:
 				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
 				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
@@ -693,7 +691,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return
-				case p.output <- model.NewResolvedPolymorphicEvent(0, globalResolvedTs):
+				case p.output2Sink <- model.NewResolvedPolymorphicEvent(0, globalResolvedTs):
 					// regionID = 0 means the event is produced by TiCDC
 				}
 			}
@@ -750,56 +748,16 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) sinkDriver(ctx context.Context) error {
-	metricFlushDuration := sinkFlushRowChangedDuration.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-p.sinkEmittedResolvedReceiver.C:
-			sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-			var minTs uint64
-			if sinkEmittedResolvedTs < globalResolvedTs {
-				minTs = sinkEmittedResolvedTs
-			} else {
-				minTs = globalResolvedTs
-			}
-			if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
-				continue
-			}
-			start := time.Now()
-
-			checkpointTs, err := p.sink.FlushRowChangedEvents(ctx, minTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if checkpointTs != 0 {
-				atomic.StoreUint64(&p.checkpointTs, checkpointTs)
-				p.localCheckpointTsNotifier.Notify()
-			}
-
-			dur := time.Since(start)
-			metricFlushDuration.Observe(dur.Seconds())
-			if dur > 3*time.Second {
-				log.Warn("flush row changed events too slow",
-					zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
-			}
-		}
-	}
-}
-
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer func() {
-		p.sinkEmittedResolvedReceiver.Stop()
 		log.Info("syncResolved stopped", util.ZapFieldChangefeed(ctx))
 	}()
 
 	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
 	rows := make([]*model.RowChangedEvent, 0, defaultSyncResolvedBatch)
 
-	flushRowChangedEvents := func() error {
+	flush2Sink := func() error {
 		for _, ev := range events {
 			err := ev.WaitPrepare(ctx)
 			if err != nil {
@@ -828,10 +786,41 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		events = append(events, row)
 
 		if len(events) >= defaultSyncResolvedBatch {
-			err := flushRowChangedEvents()
+			err := flush2Sink()
 			if err != nil {
 				return errors.Trace(err)
 			}
+		}
+		return nil
+	}
+
+	metricFlushDuration := sinkFlushRowChangedDuration.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+
+	flushSink := func(resolvedTs model.Ts) error {
+		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+		var minTs uint64
+		if resolvedTs > globalResolvedTs {
+			resolvedTs = globalResolvedTs
+		}
+		if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
+			return nil
+		}
+		start := time.Now()
+
+		checkpointTs, err := p.sink.FlushRowChangedEvents(ctx, minTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if checkpointTs != 0 {
+			atomic.StoreUint64(&p.checkpointTs, checkpointTs)
+			p.localCheckpointTsNotifier.Notify()
+		}
+
+		dur := time.Since(start)
+		metricFlushDuration.Observe(dur.Seconds())
+		if dur > 3*time.Second {
+			log.Warn("flush row changed events too slow",
+				zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
 		}
 		return nil
 	}
@@ -841,7 +830,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case row := <-p.output:
+		case row := <-p.output2Sink:
 			if row == nil {
 				continue
 			}
@@ -849,13 +838,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
-				err := flushRowChangedEvents()
-				if err != nil {
+				resolvedTs = row.CRTs
+				if err := flush2Sink(); err != nil {
 					return errors.Trace(err)
 				}
-				resolvedTs = row.CRTs
-				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
-				p.sinkEmittedResolvedNotifier.Notify()
+				if err := flushSink(resolvedTs); err != nil {
+					return errors.Trace(err)
+				}
 				continue
 			}
 			// Global resolved ts should fallback in some table rebalance cases,
@@ -892,7 +881,7 @@ func (p *processor) collectMetrics(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(defaultMetricInterval):
-			tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(float64(len(p.output)))
+			tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(float64(len(p.output2Sink)))
 		}
 	}
 }
@@ -979,7 +968,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		tableName,
 		replicaInfo,
 		p.changefeed.GetTargetTs(),
-		p.output,
+		p.outputFromTable,
 		resolvedTsListener,
 	)
 

@@ -23,6 +23,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 type sorterNode struct {
@@ -30,6 +31,7 @@ type sorterNode struct {
 	sortDir    string
 	sorter     puller.EventSorter
 	tableName  string // quoted schema and table, used in metircs only
+	wg         errgroup.Group
 }
 
 func newSorterNode(sortEngine model.SortEngine, sortDir string, tableName string) pipeline.Node {
@@ -67,16 +69,20 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
 	}
-	go ctx.Throw(sorter.Run(ctx.StdContext()))
-	go func() {
+	n.wg.Go(func() error {
+		ctx.Throw(sorter.Run(ctx.StdContext()))
+		return nil
+	})
+	n.wg.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
+				return nil
 			case msg := <-sorter.Output():
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 			}
 		}
-	}()
+	})
 	n.sorter = sorter
 	return nil
 }
@@ -94,6 +100,5 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	// TODO: check is the sorter should be destroyed
-	return nil
+	return n.wg.Wait()
 }

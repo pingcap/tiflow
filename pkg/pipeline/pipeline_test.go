@@ -16,6 +16,7 @@ package pipeline
 import (
 	stdCtx "context"
 	"testing"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -317,4 +318,88 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
 	c.Assert(errs[2].Error(), check.Equals, "error node throw an error, index: 5")
 	c.Assert(errs[3].Error(), check.Equals, "error node throw an error, index: 6")
+}
+
+func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.WithCancel(ctx)
+	ctx, p := NewPipeline(ctx)
+	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+		Row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "I am built by test function",
+				Table:  "CC1",
+			},
+		},
+	}))
+	c.Assert(err, check.IsNil)
+	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+		Row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "I am built by test function",
+				Table:  "DD2",
+			},
+		},
+	}))
+	c.Assert(err, check.IsNil)
+	p.AppendNode(ctx, "echo node", echoNode{})
+	// wait the echo node sent all messages to next node
+	time.Sleep(1 * time.Second)
+
+	p.AppendNode(ctx, "check node", &checkNode{
+		c: c,
+		expected: []*Message{
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "init function is called in echo node",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "I am built by test function",
+						Table:  "CC1",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "ECHO: I am built by test function",
+						Table:  "ECHO: CC1",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "I am built by test function",
+						Table:  "DD2",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "ECHO: I am built by test function",
+						Table:  "ECHO: DD2",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "destory function is called in echo node",
+					},
+				},
+			}),
+		},
+	})
+
+	cancel()
+	errs := p.Wait()
+	c.Assert(len(errs), check.Equals, 0)
 }
