@@ -109,7 +109,7 @@ func NewTablePipeline(ctx context.Context,
 	resolvedTsListener func(*TablePipeline, model.Ts)) (context.Context, *TablePipeline) {
 	ctx, cancel := context.WithCancel(ctx)
 	tablePipeline := &TablePipeline{
-		resolvedTs:  targetTs,
+		resolvedTs:  replicaInfo.StartTs,
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
