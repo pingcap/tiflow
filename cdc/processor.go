@@ -680,7 +680,6 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				case <-ctx.Done():
 					return
 				case p.output2Sink <- event:
-					log.Debug("LEOPPRO: show Event", zap.Reflect("event", event))
 				}
 			case <-globalResolvedTsReceiver.C:
 				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
