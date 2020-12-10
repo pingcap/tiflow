@@ -52,7 +52,7 @@ func (t *TablePipeline) AsyncStop() {
 		err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
 			Tp: pipeline.CommandTypeShouldStop,
 		}))
-		if !cerror.ErrSendToClosedPipeline.Equal(err) {
+		if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
 			log.Panic("unexpect error from send to first node", zap.Error(err))
 		}
 	}
