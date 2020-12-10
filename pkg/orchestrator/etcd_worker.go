@@ -14,6 +14,7 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"time"
 
@@ -155,20 +156,16 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
+	worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
+		key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
+		value:    event.Kv.Value,
+		revision: event.Kv.ModRevision,
+	})
+
 	switch event.Type {
 	case mvccpb.PUT:
-		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-			key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
-			value:    event.Kv.Value,
-			revision: event.Kv.ModRevision,
-		})
 		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = event.Kv.Value
 	case mvccpb.DELETE:
-		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-			key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
-			value:    event.Kv.Value,
-			revision: event.Kv.ModRevision,
-		})
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
 	return nil
@@ -205,7 +202,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			return errors.Trace(err)
 		}
 
-		if string(value) == string(old) {
+		if bytes.Equal(old, value) {
 			// Ignore patches that produce a new value that is the same as the old value.
 			continue
 		}
