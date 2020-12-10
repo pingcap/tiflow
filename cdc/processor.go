@@ -778,7 +778,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		if len(rows) == 0 {
 			return nil
 		}
-		log.Debug("LEOPPRO: show Event before sink", zap.Reflect("event", rows))
+		for _, row := range rows {
+			log.Debug("LEOPPRO: show Event before sink", zap.Reflect("event", row))
+		}
 		err := p.sink.EmitRowChangedEvents(ctx, rows...)
 		if err != nil {
 			return errors.Trace(err)
