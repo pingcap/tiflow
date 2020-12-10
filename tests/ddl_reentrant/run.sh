@@ -120,21 +120,22 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR --tidb-config $CUR/conf/tidb_config.toml
 
     complete_ddls
+    # TODO: refine the release detection after 5.0 tag of TiDB is ready
+    if [[ $tidb_build_branch =~ master ]]; then
+        # https://github.com/pingcap/tidb/pull/21533 disables multi_schema change
+        # feature by default, turn it on first
+        run_sql "set global tidb_enable_change_multi_schema = on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+        # This must be set before cdc server starts
+        run_sql "set global tidb_enable_change_multi_schema = on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+        # TiDB global variables cache 2 seconds at most
+        sleep 2
+    fi
 
     cd $WORK_DIR
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     changefeedid=$(cdc cli changefeed create --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
 
-    # TODO: refine the release detection after 5.0 tag of TiDB is ready
-    if [[ $tidb_build_branch =~ master ]]; then
-        # https://github.com/pingcap/tidb/pull/21533 disables multi_schema change
-        # feature by default, turn it on first
-        run_sql "set global tidb_enable_change_multi_schema = on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-        run_sql "set global tidb_enable_change_multi_schema = on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-        # TiDB global variables cache 2 seconds at most
-        sleep 2
-    fi
     OLDIFS=$IFS
     IFS=""
     idx=0
