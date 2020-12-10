@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.etcd.io/etcd/clientv3"
@@ -111,7 +112,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			// Here we have some patches yet to be uploaded to Etcd.
 			err := worker.applyPatches(ctx, pendingPatches)
 			if err != nil {
-				if errors.Cause(err) == ErrEtcdTryAgain {
+				if errors.Cause(err) == cerrors.ErrEtcdTryAgain {
 					continue
 				}
 				return errors.Trace(err)
@@ -129,14 +130,14 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			worker.pendingUpdates = worker.pendingUpdates[:0]
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
-				if errors.Cause(err) == ErrReactorFinished {
+				if errors.Cause(err) == cerrors.ErrReactorFinished {
 					// normal exit
 					return nil
 				}
 				return errors.Trace(err)
 			}
 			worker.state = nextState
-			pendingPatches = nextState.GetPatches()
+			pendingPatches = append(pendingPatches, nextState.GetPatches()...)
 		}
 	}
 }
@@ -192,7 +193,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			value, err := patch.Fun(old)
 
 			if err != nil {
-				if errors.Cause(err) == ErrEtcdIgnore {
+				if errors.Cause(err) == cerrors.ErrEtcdIgnore {
 					continue
 				}
 				return errors.Trace(err)
@@ -222,7 +223,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 						value: op.ValueBytes(),
 					})
 				} else if op.IsDelete() {
-					delete(worker.rawState,util.NewEtcdKeyFromBytes(op.KeyBytes()))
+					delete(worker.rawState, util.NewEtcdKeyFromBytes(op.KeyBytes()))
 					worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
 						key:   util.NewEtcdKeyFromBytes(op.KeyBytes()),
 						value: nil,
@@ -232,7 +233,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			return nil
 		}
 
-		return ErrEtcdTryAgain
+		return cerrors.ErrEtcdTryAgain
 	}
 }
 

@@ -15,7 +15,7 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
+
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 )
 
@@ -24,15 +24,6 @@ import (
 type Reactor interface {
 	Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error)
 }
-
-var (
-	// ErrEtcdTryAgain is used by a PatchFunc to force a transaction abort.
-	ErrEtcdTryAgain = errors.New("ErrEtcdTryAgain")
-	// ErrEtcdIgnore is used by a PatchFunc to signal that the reactor no longer wishes to update Etcd.
-	ErrEtcdIgnore = errors.New("ErrEtcdIgnore")
-	// ErrReactorFinished is used by reactor to signal a **normal** exit.
-	ErrReactorFinished = errors.New("ErrReactorFinished")
-)
 
 // PatchFunc should be a pure function that returns a new value given the old value.
 // The function is called each time the EtcdWorker initiates an Etcd transaction.

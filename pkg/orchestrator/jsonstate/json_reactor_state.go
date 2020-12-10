@@ -11,16 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reactor_states
+package jsonstate
 
 import (
 	"encoding/json"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"reflect"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +39,7 @@ type JSONReactorState struct {
 // JSONPatchFunc is a function that updates an object that is serializable to JSON.
 // It is okay to modify the input and return the input itself.
 // Use ErrEtcdTryAgain and ErrEtcdIgnore to trigger Etcd transaction retries and to give up this update.
-type JSONPatchFunc = func (data interface{}) (newData interface{}, err error)
+type JSONPatchFunc = func(data interface{}) (newData interface{}, err error)
 
 // NewJSONReactorState returns a new JSONReactorState.
 // `data` needs to be a pointer to an object serializable in JSON.
@@ -81,6 +82,13 @@ func (s *JSONReactorState) Update(key util.EtcdRelKey, value []byte) {
 // GetPatches implements the ReactorState interface.
 // The patches are generated and applied according to the standard RFC6902 JSON patches.
 func (s *JSONReactorState) GetPatches() []*orchestrator.DataPatch {
+	// We need to let the PatchFunc capture the array of JSONPatchFunc's,
+	// and let the DataPatch be the sole object referring to those JSONPatchFunc's,
+	// so that JSONReactorState does not have to worry about when to clean them up.
+	subPatches := make([]JSONPatchFunc, len(s.patches))
+	copy(subPatches, s.patches)
+	s.patches = s.patches[:0]
+
 	dataPatch := &orchestrator.DataPatch{
 		Key: util.NewEtcdRelKey(s.key),
 		Fun: func(old []byte) ([]byte, error) {
@@ -91,10 +99,10 @@ func (s *JSONReactorState) GetPatches() []*orchestrator.DataPatch {
 				return nil, errors.Trace(err)
 			}
 
-			for _, f := range s.patches {
+			for _, f := range subPatches {
 				newStruct, err := f(oldStruct)
 				if err != nil {
-					if errors.Cause(err) == orchestrator.ErrEtcdIgnore {
+					if errors.Cause(err) == cerrors.ErrEtcdIgnore {
 						continue
 					}
 					return nil, errors.Trace(err)
@@ -107,7 +115,6 @@ func (s *JSONReactorState) GetPatches() []*orchestrator.DataPatch {
 				return nil, errors.Trace(err)
 			}
 
-			s.patches = s.patches[:0]
 			return newBytes, nil
 		},
 	}
@@ -121,6 +128,8 @@ func (s *JSONReactorState) Inner() interface{} {
 	return s.modifiedJSONData
 }
 
+// AddUpdateFunc accepts a JSONPatchFunc that updates the managed JSON-serializable object.
+// If multiple JSONPatchFunc's are added within a Tick, they are applied in the order in which AddUpdateFunc has been called.
 func (s *JSONReactorState) AddUpdateFunc(f JSONPatchFunc) {
 	s.patches = append(s.patches, f)
 }

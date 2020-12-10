@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package reactor_states
+package jsonstate
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,7 +30,7 @@ import (
 )
 
 const (
-	testEtcdKeyPrefix    = "/cdc_etcd_worker_test"
+	testEtcdKeyPrefix = "/cdc_etcd_worker_test"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -53,7 +54,7 @@ type simpleJSONReactor struct {
 
 func (r *simpleJSONReactor) Tick(_ context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	if r.oldVal >= 100 {
-		return nil, orchestrator.ErrReactorFinished
+		return nil, cerrors.ErrReactorFinished
 	}
 	newState := state.(*JSONReactorState)
 	r.state = newState

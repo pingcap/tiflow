@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -55,7 +56,7 @@ type simpleReactor struct {
 
 func (s *simpleReactor) Tick(_ context.Context, state ReactorState) (nextState ReactorState, err error) {
 	if s.tickCount >= totalTicksPerReactor {
-		return nil, ErrReactorFinished
+		return nil, cerrors.ErrReactorFinished
 	}
 	s.tickCount++
 
@@ -307,7 +308,7 @@ func (r *linearizabilityReactor) Tick(ctx context.Context, state ReactorState) (
 		r.expected++
 	}
 	if r.state.val == 1999 {
-		return nil, ErrReactorFinished
+		return nil, cerrors.ErrReactorFinished
 	}
 	r.state.isUpdated = false
 	return r.state, nil
