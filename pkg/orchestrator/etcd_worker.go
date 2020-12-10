@@ -31,27 +31,33 @@ type EtcdWorker struct {
 	reactor Reactor
 	state   ReactorState
 	// rawState is the local cache of the latest Etcd state.
-	rawState       map[util.EtcdKey][]byte
+	rawState map[util.EtcdKey][]byte
+	// pendingUpdates stores updates initiated by the Reactor that have not yet been uploaded to Etcd.
 	pendingUpdates []*etcdUpdate
 	// revision is the Etcd revision of the latest event received from Etcd
 	// (which has not necessarily been applied to the ReactorState)
 	revision int64
-	prefix   util.EtcdPrefix
+	// reactor.Tick() should not be called until revision >= barrierRev.
+	barrierRev int64
+	// prefix is the scope of Etcd watch
+	prefix util.EtcdPrefix
 }
 
 type etcdUpdate struct {
-	key   util.EtcdKey
-	value []byte
+	key      util.EtcdKey
+	value    []byte
+	revision int64
 }
 
 // NewEtcdWorker returns a new EtcdWorker
 func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
 	return &EtcdWorker{
-		client:   client,
-		reactor:  reactor,
-		state:    initState,
-		rawState: make(map[util.EtcdKey][]byte),
-		prefix:   util.NormalizePrefix(prefix),
+		client:     client,
+		reactor:    reactor,
+		state:      initState,
+		rawState:   make(map[util.EtcdKey][]byte),
+		prefix:     util.NormalizePrefix(prefix),
+		barrierRev: -1, // -1 indicates no barrier
 	}, nil
 }
 
@@ -121,6 +127,12 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			// `applyPatches` is all-or-none, so in case of success, we should clear all the pendingPatches.
 			pendingPatches = pendingPatches[:0]
 		} else {
+			if worker.revision < worker.barrierRev {
+				// We hold off notifying the Reactor because barrierRev has not been reached.
+				// This usually happens when a committed write Txn has not been received by Watch.
+				continue
+			}
+
 			// We are safe to update the ReactorState only if there is no pending patch.
 			for _, update := range worker.pendingUpdates {
 				rkey := update.key.RemovePrefix(&worker.prefix)
@@ -146,14 +158,16 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 	switch event.Type {
 	case mvccpb.PUT:
 		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-			key:   util.NewEtcdKeyFromBytes(event.Kv.Key),
-			value: event.Kv.Value,
+			key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
+			value:    event.Kv.Value,
+			revision: event.Kv.ModRevision,
 		})
 		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = event.Kv.Value
 	case mvccpb.DELETE:
 		worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-			key:   util.NewEtcdKeyFromBytes(event.Kv.Key),
-			value: event.Kv.Value,
+			key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
+			value:    event.Kv.Value,
+			revision: event.Kv.ModRevision,
 		})
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
@@ -176,69 +190,52 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
-	for {
-		cmps := make([]clientv3.Cmp, 0)
-		ops := make([]clientv3.Op, 0)
+	cmps := make([]clientv3.Cmp, 0)
+	ops := make([]clientv3.Op, 0)
 
-		for _, patch := range patches {
-			fullKey := worker.prefix.FullKey(&patch.Key)
-			old, ok := worker.rawState[fullKey]
+	for _, patch := range patches {
+		fullKey := worker.prefix.FullKey(&patch.Key)
+		old, ok := worker.rawState[fullKey]
 
-			value, err := patch.Fun(old)
-			if err != nil {
-				if errors.Cause(err) == cerrors.ErrEtcdIgnore {
-					continue
-				}
-				return errors.Trace(err)
-			}
-
-			if string(value) == string(old) {
-				// Ignore patches that produce a new value that is the same as the old value.
+		value, err := patch.Fun(old)
+		if err != nil {
+			if errors.Cause(err) == cerrors.ErrEtcdIgnore {
 				continue
 			}
-
-			// make sure someone else has not updated the key after the last snapshot
-			if ok {
-				cmp := clientv3.Compare(clientv3.ModRevision(fullKey.String()), "<", worker.revision+1)
-				cmps = append(cmps, cmp)
-			}
-
-			var op clientv3.Op
-			if value != nil {
-				op = clientv3.OpPut(fullKey.String(), string(value))
-			} else {
-				op = clientv3.OpDelete(fullKey.String())
-			}
-			ops = append(ops, op)
-		}
-
-		resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
-		if err != nil {
 			return errors.Trace(err)
 		}
 
-		if resp.Succeeded {
-			worker.revision = resp.Header.GetRevision()
-			for _, op := range ops {
-				if op.IsPut() {
-					worker.rawState[util.NewEtcdKeyFromBytes(op.KeyBytes())] = op.ValueBytes()
-					worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-						key:   util.NewEtcdKeyFromBytes(op.KeyBytes()),
-						value: op.ValueBytes(),
-					})
-				} else if op.IsDelete() {
-					delete(worker.rawState, util.NewEtcdKeyFromBytes(op.KeyBytes()))
-					worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
-						key:   util.NewEtcdKeyFromBytes(op.KeyBytes()),
-						value: nil,
-					})
-				}
-			}
-			return nil
+		if string(value) == string(old) {
+			// Ignore patches that produce a new value that is the same as the old value.
+			continue
 		}
 
-		return cerrors.ErrEtcdTryAgain
+		// make sure someone else has not updated the key after the last snapshot
+		if ok {
+			cmp := clientv3.Compare(clientv3.ModRevision(fullKey.String()), "<", worker.revision+1)
+			cmps = append(cmps, cmp)
+		}
+
+		var op clientv3.Op
+		if value != nil {
+			op = clientv3.OpPut(fullKey.String(), string(value))
+		} else {
+			op = clientv3.OpDelete(fullKey.String())
+		}
+		ops = append(ops, op)
 	}
+
+	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if resp.Succeeded {
+		worker.barrierRev = resp.Header.GetRevision()
+		return nil
+	}
+
+	return cerrors.ErrEtcdTryAgain
 }
 
 func (worker *EtcdWorker) cleanUp() {

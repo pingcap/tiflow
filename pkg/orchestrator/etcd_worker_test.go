@@ -38,7 +38,7 @@ const (
 	testEtcdKeyPrefix    = "/cdc_etcd_worker_test"
 	numGroups            = 10
 	numValuesPerGroup    = 5
-	totalTicksPerReactor = 100
+	totalTicksPerReactor = 1000
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
