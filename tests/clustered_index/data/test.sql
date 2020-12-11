@@ -117,12 +117,27 @@ DELETE FROM t_year WHERE b = 2;
 
 
 create table t_char(a char(20) primary key, b int);
+INSERT INTO t_char VALUES ('abcc', 1);
+INSERT INTO t_char VALUES ('sdff', 2);
+UPDATE t_char SET a = 'ppooii' WHERE b = 2;
+DELETE FROM t_char WHERE b = 1;
+
 create table t_varcher(a varchar(255) primary key, b int);
-create table t_text(a text primary key, b int);
+INSERT INTO t_varcher VALUES ('abcc', 1);
+INSERT INTO t_varcher VALUES ('sdff', 2);
+UPDATE t_varcher SET a = 'ppooii' WHERE b = 2;
+DELETE FROM t_varcher WHERE b = 1;
+
+create table t_text (a text primary key, b int);
+INSERT INTO t_text VALUES ('abcc', 1);
+INSERT INTO t_text VALUES ('sdff', 2);
+UPDATE t_text SET a = 'ppooii' WHERE b = 2;
+DELETE FROM t_text WHERE b = 1;
+
 create table t_binary(a binary primary key, b int);
 create table t_blob(a blob primary key, b int);
-create table t_enum(e enum primary key, b int);
-create table t_set(s set primary key, b int);
+create table t_enum(e enum('a', 'b', 'c') primary key, b int);
+create table t_set(s set('a', 'b', 'c') primary key, b int);
 
 
 create table t8(a int, b varchar(255) as (concat(a, "test")) stored, primary key(b));
@@ -134,8 +149,22 @@ DELETE FROM t8 WHERE a = 2021;
 
 
 create table t9(a int, b varchar(255), c int, primary key(a ,b));
+insert into t9 values(1, "aaa", 1),(2, "bbb", 2),(3, "ccc", 3);
+update t9 set b='ddd' where c = 3;
+delete from t9 where c = 2;
+
 create table t10(a int, b int, c int, primary key(a, b));
+insert into t10 values(1, 1, 1),(2, 2, 2),(3, 3, 3);
+update t10 set b = 4 where a = 3;
+delete from t10 where a = 2;
+
 create table t11(a int, b float, c int, primary key(a,b));
+insert into t11 values(1, 1.1, 1),(2, 2.2, 2),(3, 3.3, 3);
+update t11 set b = 4.4 where c = 3;
+delete from t11 where b = 2;
+
   
 create table t12(name char(255) primary key, b int, c int, index idx(name), unique index uidx(name));
 insert into t12 values("aaaa", 1, 1), ("bbb", 2, 2), ("ccc", 3, 3);
+update t12 set a = 'ddd' where c = 3;
+delete from t12 where c = 2;
