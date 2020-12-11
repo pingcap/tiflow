@@ -161,14 +161,13 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	c.Assert(f.Frontier(), check.Equals, uint64(9))
 	c.Assert(f.String(), check.Equals, `[1 @ 9] [g @ 10] [i @ Max] `)
 	checkFrontier(c, f)
-
 }
 
 func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 	defer testleak.AfterTest(c)()
 	var keyMin []byte
 	var keyMax []byte
-	var keyMid = []byte("m")
+	keyMid := []byte("m")
 
 	spMinMid := regionspan.ComparableSpan{Start: keyMin, End: keyMid}
 	spMidMax := regionspan.ComparableSpan{Start: keyMid, End: keyMax}

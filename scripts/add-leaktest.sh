@@ -26,9 +26,9 @@ sed -i'~' -e '
 
 for i in $@; do
   if ! cmp -s $i $i~ ; then
-    goimports -w $i
-    gofmt -w $i
+    tools/bin/gofumports -s -w $i
   fi
-echo $i
   rm -f $i~
 done
+
+git --no-pager diff --exit-code

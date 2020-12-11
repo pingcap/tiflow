@@ -15,9 +15,10 @@ package util
 
 import (
 	"context"
+	"time"
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
-	"time"
 )
 
 // MonitorCancelLatency monitors the latency from ctx being cancelled and the returned function being called

@@ -38,11 +38,15 @@ func (s *clientChangefeedSuite) TestVerifyChangefeedParams(c *check.C) {
 	content := `
 enable-old-value = false
 `
-	err := ioutil.WriteFile(path, []byte(content), 0644)
+	err := ioutil.WriteFile(path, []byte(content), 0o644)
 	c.Assert(err, check.IsNil)
 
 	sinkURI = "blackhole:///?protocol=maxwell"
 	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
+
+	sinkURI = ""
+	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil)
+	c.Assert(err, check.NotNil)
 }

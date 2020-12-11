@@ -31,15 +31,18 @@ func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
 	scheduler := newTableNumberScheduler()
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
-		2: model.WorkloadInfo{Workload: 1}})
+		2: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture2", model.TaskWorkload{
 		3: model.WorkloadInfo{Workload: 1},
-		4: model.WorkloadInfo{Workload: 1}})
+		4: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture3", model.TaskWorkload{
 		5: model.WorkloadInfo{Workload: 1},
 		6: model.WorkloadInfo{Workload: 1},
 		7: model.WorkloadInfo{Workload: 1},
-		8: model.WorkloadInfo{Workload: 1}})
+		8: model.WorkloadInfo{Workload: 1},
+	})
 	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "35.36%")
 	tableToAdd := map[model.TableID]model.Ts{10: 1, 11: 2, 12: 3, 13: 4, 14: 5, 15: 6, 16: 7, 17: 8}
 	result := scheduler.DistributeTables(tableToAdd)
@@ -64,17 +67,20 @@ func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
 	scheduler := newTableNumberScheduler()
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
-		2: model.WorkloadInfo{Workload: 1}})
+		2: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture2", model.TaskWorkload{
 		3: model.WorkloadInfo{Workload: 1},
-		4: model.WorkloadInfo{Workload: 1}})
+		4: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture3", model.TaskWorkload{
 		5:  model.WorkloadInfo{Workload: 1},
 		6:  model.WorkloadInfo{Workload: 1},
 		7:  model.WorkloadInfo{Workload: 1},
 		8:  model.WorkloadInfo{Workload: 1},
 		9:  model.WorkloadInfo{Workload: 1},
-		10: model.WorkloadInfo{Workload: 1}})
+		10: model.WorkloadInfo{Workload: 1},
+	})
 	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "56.57%")
 	skewness, moveJobs := scheduler.CalRebalanceOperates(0)
 
@@ -91,7 +97,8 @@ func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
 		2: model.WorkloadInfo{Workload: 1},
-		3: model.WorkloadInfo{Workload: 1}})
+		3: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture2", model.TaskWorkload{})
 	scheduler.ResetWorkloads("capture3", model.TaskWorkload{})
 	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "141.42%")

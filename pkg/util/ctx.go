@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"
 )
@@ -86,12 +88,12 @@ func TimezoneFromCtx(ctx context.Context) *time.Location {
 }
 
 // KVStorageFromCtx returns a tikv store
-func KVStorageFromCtx(ctx context.Context) kv.Storage {
+func KVStorageFromCtx(ctx context.Context) (kv.Storage, error) {
 	store, ok := ctx.Value(ctxKeyKVStorage).(kv.Storage)
 	if !ok {
-		return nil
+		return nil, errors.Errorf("context can not find the value associated with key: %s", ctxKeyKVStorage)
 	}
-	return store
+	return store, nil
 }
 
 // SetOwnerInCtx returns a new child context with the owner flag set.

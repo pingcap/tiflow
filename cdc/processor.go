@@ -66,9 +66,7 @@ const (
 	schemaStorageGCLag = time.Minute * 20
 )
 
-var (
-	fNewPDCli = pd.NewClientWithContext
-)
+var fNewPDCli = pd.NewClientWithContext
 
 type processor struct {
 	id           string
@@ -180,9 +178,12 @@ func newProcessor(
 
 	log.Info("start processor with startts",
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
+	kvStorage, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	kvStorage := util.KVStorageFromCtx(ctx)
-	ddlPuller := puller.NewPuller(pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -210,6 +211,8 @@ func newProcessor(
 		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum, changefeed.Config.EnableOldValue),
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
+
+		flushCheckpointInterval: flushCheckpointInterval,
 
 		position: &model.TaskPosition{CheckPointTs: checkpointTs},
 		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
@@ -440,6 +443,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 		if ddlRawKV == nil {
 			continue
 		}
+		failpoint.Inject("processorDDLResolved", func() {})
 		if ddlRawKV.OpType == model.OpTypeResolved {
 			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			p.localResolvedNotifier.Notify()
@@ -492,7 +496,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	//p.position.Count = p.sink.Count()
+	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
@@ -531,11 +535,15 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			err = p.flushTaskPosition(ctx)
-			if err != nil {
-				return true, errors.Trace(err)
+			// processor reads latest task status from etcd, analyzes operation
+			// field and processes table add or delete. If operation is unapplied
+			// but stays unchanged after processor handling tables, it means no
+			// status is changed and we don't need to flush task status neigher.
+			if !taskStatus.Dirty {
+				return false, nil
 			}
-			return true, nil
+			err = p.flushTaskPosition(ctx)
+			return true, err
 		})
 	if err != nil {
 		// not need to check error
@@ -596,6 +604,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 					opt.Done = true
 					opt.Status = model.OperFinished
+					status.Dirty = true
 					continue
 				}
 				stopped, checkpointTs := table.safeStop()
@@ -609,6 +618,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						opt.Done = true
 						opt.Status = model.OperFinished
 					}
+					status.Dirty = true
 				}
 			}
 		} else {
@@ -621,6 +631,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			}
 			p.addTable(ctx, tableID, replicaInfo)
 			opt.Status = model.OperProcessed
+			status.Dirty = true
 		}
 	}
 
@@ -640,6 +651,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			}
 			status.Operation[tableID].Done = true
 			status.Operation[tableID].Status = model.OperFinished
+			status.Dirty = true
 		default:
 			goto done
 		}
@@ -647,6 +659,9 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 done:
 	if !status.SomeOperationsUnapplied() {
 		status.Operation = nil
+		// status.Dirty must be true when status changes from `unapplied` to `applied`,
+		// setting status.Dirty = true is not **must** here.
+		status.Dirty = true
 	}
 	return tablesToRemove, nil
 }
@@ -980,12 +995,15 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	table.workload = model.WorkloadInfo{Workload: 1}
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64) *puller.Rectifier {
-
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
-		kvStorage := util.KVStorageFromCtx(ctx)
-		plr := puller.NewPuller(p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
+		kvStorage, err := util.KVStorageFromCtx(ctx)
+		if err != nil {
+			p.errCh <- err
+			return nil
+		}
+		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -1001,7 +1019,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0755)
+					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
 					if err != nil {
 						p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 						return nil

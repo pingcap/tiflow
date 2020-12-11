@@ -75,8 +75,10 @@ func runDDLTest(srcs []*sql.DB) {
 		log.S().Infof("runDDLTest take %v", time.Since(start))
 	}()
 
-	for i, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL,
-		modifyColumnDDL, addDropIndexDDL} {
+	for i, ddlFunc := range []func(context.Context, *sql.DB){
+		createDropSchemaDDL, truncateDDL, addDropColumnDDL,
+		modifyColumnDDL, addDropIndexDDL,
+	} {
 		testName := getFunctionName(ddlFunc)
 		log.S().Info("running ddl test: ", i, " ", testName)
 
@@ -309,8 +311,9 @@ func addDropIndexDDL(ctx context.Context, db *sql.DB) {
 	}
 }
 
-const createDatabaseSQL = "create database if not exists test"
-const createTableSQL = `
+const (
+	createDatabaseSQL = "create database if not exists test"
+	createTableSQL    = `
 create table if not exists test.%s
 (
     id1 int unique key not null,
@@ -318,6 +321,7 @@ create table if not exists test.%s
     v1  int default null
 )
 `
+)
 
 func mustCreateTable(db *sql.DB, tableName string) {
 	util.MustExec(db, createDatabaseSQL)
