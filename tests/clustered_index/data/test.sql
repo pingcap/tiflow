@@ -135,9 +135,24 @@ UPDATE t_text SET a = 'ppooii' WHERE b = 2;
 DELETE FROM t_text WHERE b = 1;
 
 create table t_binary(a binary primary key, b int);
+INSERT INTO t_binary VALUES (x'89504E470D0A1A0A',1),(x'89504E470D0A1A0B',2),(x'89504E470D0A1A0C',3);
+update t_binary set a = x'89504E470D0A1A0D' where b = 3;
+delete from t_binary where b = 2;
+
 create table t_blob(a blob primary key, b int);
+INSERT INTO t_blob VALUES (x'89504E470D0A1A0A',1),(x'89504E470D0A1A0B',2),(x'89504E470D0A1A0C',3);
+update t_blob set a = x'89504E470D0A1A0D' where b = 3;
+delete from t_binary where b = 2;
+
 create table t_enum(e enum('a', 'b', 'c') primary key, b int);
+INSERT INTO t_enum VALUES ('a',1),('b',2),('c',3);
+delete from t_enum where b = 2;
+update t_enum set e = 'b' where b = 3;
+
 create table t_set(s set('a', 'b', 'c') primary key, b int);
+INSERT INTO t_set VALUES ('a',1),('b,c',2),('a,c',3);
+delete from t_set where b = 2;
+update t_set set e = 'b' where b = 3;
 
 
 create table t8(a int, b varchar(255) as (concat(a, "test")) stored, primary key(b));
