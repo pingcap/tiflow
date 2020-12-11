@@ -70,7 +70,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
 	}
 	n.wg.Go(func() error {
-		ctx.Throw(sorter.Run(ctx.StdContext()))
+		ctx.Throw(errors.Trace(sorter.Run(ctx.StdContext())))
 		return nil
 	})
 	n.wg.Go(func() error {

@@ -16,6 +16,7 @@ package processor
 import (
 	stdContext "context"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/context"
@@ -73,7 +74,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
 	n.wg.Go(func() error {
-		ctx.Throw(plr.Run(ctxC))
+		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil
 	})
 	n.wg.Go(func() error {

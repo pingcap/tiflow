@@ -570,15 +570,24 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					opt.Status = model.OperProcessed
 					status.Dirty = true
 				case model.OperProcessed:
-					if table.Status() == cdcprocessor.TableStatusStopped && table.ResolvedTs() <= p.position.CheckPointTs {
-						tablesToRemove = append(tablesToRemove, tableID)
-						opt.Done = true
-						opt.BoundaryTs = table.ResolvedTs()
-						opt.Status = model.OperFinished
-						status.Dirty = true
-						log.Debug("safeStop table", zap.Int64("tableID", tableID),
-							util.ZapFieldChangefeed(ctx),
-							zap.Uint64("checkpointTs", table.ResolvedTs()))
+					if table.Status() == cdcprocessor.TableStatusStopped {
+						if opt.BoundaryTs != table.ResolvedTs() {
+							opt.BoundaryTs = table.ResolvedTs()
+							status.Dirty = true
+							log.Debug("table stopped safety", zap.Int64("tableID", tableID),
+								util.ZapFieldChangefeed(ctx),
+								zap.Uint64("checkpointTs", table.ResolvedTs()))
+						}
+						if table.ResolvedTs() <= p.position.CheckPointTs {
+							tablesToRemove = append(tablesToRemove, tableID)
+							opt.Done = true
+							opt.Status = model.OperFinished
+							status.Dirty = true
+							log.Debug("Operation done signal received",
+								util.ZapFieldChangefeed(ctx),
+								zap.Int64("tableID", tableID),
+								zap.Reflect("operation", opt))
+						}
 					}
 				default:
 					log.Panic("unreachable")
@@ -983,7 +992,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	go func() {
 		for _, err := range table.Wait() {
-			if cerror.ErrTableProcessorStoppedSafely.Equal(err) {
+			if cerror.ErrTableProcessorStoppedSafely.Equal(err) || errors.Cause(err) == context.Canceled {
 				continue
 			}
 			p.errCh <- err
@@ -1104,7 +1113,8 @@ func runProcessor(
 			log.Info("processor exited",
 				util.ZapFieldCapture(ctx),
 				zap.String("changefeed", changefeedID),
-				zap.String("processor", processor.id))
+				zap.String("processor", processor.id),
+				zap.Error(err))
 		}
 		cancel()
 	}()
