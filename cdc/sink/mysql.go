@@ -133,7 +133,11 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 }
 
 func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
-	receiver := s.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	receiver, err := s.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		log.Error("flush row changed events routine starts failed", zap.Error(err))
+		return
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -574,17 +578,23 @@ func newMySQLSink(
 
 	sink.execWaitNotifier = new(notify.Notifier)
 	sink.resolvedNotifier = new(notify.Notifier)
-	sink.createSinkWorkers(ctx)
+	err = sink.createSinkWorkers(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	go sink.flushRowChangedEvents(ctx)
 
 	return sink, nil
 }
 
-func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
+func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 	s.workers = make([]*mysqlSinkWorker, s.params.workerCount)
 	for i := range s.workers {
-		receiver := s.execWaitNotifier.NewReceiver(defaultFlushInterval)
+		receiver, err := s.execWaitNotifier.NewReceiver(defaultFlushInterval)
+		if err != nil {
+			return err
+		}
 		worker := newMySQLSinkWorker(
 			s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
 		s.workers[i] = worker
@@ -598,6 +608,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 			}
 		}()
 	}
+	return nil
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {

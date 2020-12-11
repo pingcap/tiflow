@@ -342,6 +342,10 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	}
 
 	notifier := new(notify.Notifier)
+	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
 	k := &kafkaSaramaProducer{
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
@@ -352,7 +356,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			sent    uint64
 		}, partitionNum),
 		flushedNotifier: notifier,
-		flushedReceiver: notifier.NewReceiver(50 * time.Millisecond),
+		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 	}
