@@ -567,7 +567,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				switch opt.Status {
 				case model.OperDispatched:
 					table.AsyncStop()
-					opt.Status = model.OperDispatched
+					opt.Status = model.OperProcessed
 					status.Dirty = true
 				case model.OperProcessed:
 					if table.Status() == cdcprocessor.TableStatusStopped && table.ResolvedTs() <= p.position.CheckPointTs {
