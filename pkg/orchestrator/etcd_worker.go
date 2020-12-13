@@ -119,7 +119,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			// Here we have some patches yet to be uploaded to Etcd.
 			err := worker.applyPatches(ctx, pendingPatches)
 			if err != nil {
-				if errors.Cause(err) == cerrors.ErrEtcdTryAgain {
+				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
 					continue
 				}
 				return errors.Trace(err)
@@ -191,12 +191,12 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 	ops := make([]clientv3.Op, 0)
 
 	for _, patch := range patches {
-		fullKey := worker.prefix.FullKey(&patch.Key)
+		fullKey := worker.prefix.FullKey(patch.Key)
 		old, ok := worker.rawState[fullKey]
 
 		value, err := patch.Fun(old)
 		if err != nil {
-			if errors.Cause(err) == cerrors.ErrEtcdIgnore {
+			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
 				continue
 			}
 			return errors.Trace(err)
@@ -232,7 +232,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		return nil
 	}
 
-	return cerrors.ErrEtcdTryAgain
+	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
 func (worker *EtcdWorker) cleanUp() {

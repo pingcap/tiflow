@@ -102,7 +102,7 @@ func (s *JSONReactorState) GetPatches() []*orchestrator.DataPatch {
 			for _, f := range subPatches {
 				newStruct, err := f(oldStruct)
 				if err != nil {
-					if errors.Cause(err) == cerrors.ErrEtcdIgnore {
+					if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
 						continue
 					}
 					return nil, errors.Trace(err)
