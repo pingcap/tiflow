@@ -14,6 +14,7 @@
 package util
 
 import (
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -27,6 +28,7 @@ type keyUtilsSuite struct {
 }
 
 func (s *keyUtilsSuite) TestEtcdKey(c *check.C) {
+	defer testleak.AfterTest(c)()
 	key := NewEtcdKey("/a/b/c")
 	c.Assert(key, check.Equals, NewEtcdKeyFromBytes([]byte("/a/b/c")))
 	c.Assert(key.String(), check.Equals, "/a/b/c")
@@ -37,6 +39,7 @@ func (s *keyUtilsSuite) TestEtcdKey(c *check.C) {
 }
 
 func (s *keyUtilsSuite) TestEtcdRelKey(c *check.C) {
+	defer testleak.AfterTest(c)()
 	key := NewEtcdRelKey("/a/b/c")
 	c.Assert(key, check.Equals, NewEtcdRelKeyFromBytes([]byte("/a/b/c")))
 	c.Assert(key.String(), check.Equals, "/a/b/c")
@@ -47,6 +50,7 @@ func (s *keyUtilsSuite) TestEtcdRelKey(c *check.C) {
 }
 
 func (s *keyUtilsSuite) TestEtcdPrefix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	prefix := NewEtcdPrefix("/aa/bb/cc")
 	c.Assert(prefix, check.Equals, NewEtcdPrefixFromBytes([]byte("/aa/bb/cc")))
 	c.Assert(prefix.String(), check.Equals, "/aa/bb/cc")
@@ -57,6 +61,7 @@ func (s *keyUtilsSuite) TestEtcdPrefix(c *check.C) {
 }
 
 func (s *keyUtilsSuite) TestEtcdRelPrefix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	prefix := NewEtcdRelPrefix("/aa/bb/cc")
 	c.Assert(prefix, check.Equals, NewEtcdRelPrefixFromBytes([]byte("/aa/bb/cc")))
 	c.Assert(prefix.String(), check.Equals, "/aa/bb/cc")
@@ -66,6 +71,7 @@ func (s *keyUtilsSuite) TestEtcdRelPrefix(c *check.C) {
 }
 
 func (s *keyUtilsSuite) TestNormalizePrefix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	c.Assert(NormalizePrefix("aaa"), check.Equals, NewEtcdPrefix("/aaa"))
 	c.Assert(NormalizePrefix("aaa/"), check.Equals, NewEtcdPrefix("/aaa"))
 	c.Assert(NormalizePrefix("/aaa"), check.Equals, NewEtcdPrefix("/aaa"))
@@ -73,6 +79,7 @@ func (s *keyUtilsSuite) TestNormalizePrefix(c *check.C) {
 }
 
 func (s *keyUtilsSuite) TestCornerCases(c *check.C) {
+	defer testleak.AfterTest(c)()
 	c.Assert(func() { NewEtcdPrefix("").Head() }, check.Panics, "Empty EtcdPrefix")
 	c.Assert(func() { NewEtcdPrefix("").Tail() }, check.Panics, "Empty EtcdPrefix")
 	c.Assert(NewEtcdPrefix("aaa").Head(), check.Equals, NewEtcdPrefix(""))
