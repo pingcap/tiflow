@@ -111,9 +111,7 @@ type simpleReactorState struct {
 	patches []*DataPatch
 }
 
-var (
-	keyParseRegexp = regexp.MustCompile(`/(.+)`)
-)
+var keyParseRegexp = regexp.MustCompile(`/(.+)`)
 
 func (s *simpleReactorState) Get(i1, i2 int) int {
 	return s.values[i1][i2]
@@ -206,7 +204,6 @@ func setUpTest(c *check.C) (func() *etcd.Client, func()) {
 		}, func() {
 			server.Close()
 		}
-
 }
 
 func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
