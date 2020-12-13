@@ -13,155 +13,53 @@
 
 package pipeline
 
-import (
-	"context"
-	"time"
+import "github.com/pingcap/ticdc/pkg/context"
 
-	"github.com/pingcap/ticdc/pkg/config"
-)
+// NodeContext contains some read-only parameters and provide control for the pipeline life cycle
+type NodeContext interface {
+	context.Context
 
-// Context contains some read-only parameters and provide control for the pipeline life cycle
-type Context interface {
-	// ReplicaConfig returns the replica config
-	ReplicaConfig() *config.ReplicaConfig
 	// Message returns the message sent by the previous node
 	Message() *Message
 	// SendToNextNode sends the message to the next node
 	SendToNextNode(msg *Message)
-
-	// StdContext returns a std context
-	StdContext() context.Context
-	// Cancel cancels the context
-	Cancel()
-	// Done returns a channel like context.Context.Done
-	Done() <-chan struct{}
 }
 
-type baseContext struct {
-	parent Context
-}
-
-func (ctx *baseContext) ReplicaConfig() *config.ReplicaConfig {
-	return ctx.parent.ReplicaConfig()
-}
-
-func (ctx *baseContext) Message() *Message {
-	return ctx.parent.Message()
-}
-
-func (ctx *baseContext) SendToNextNode(msg *Message) {
-	ctx.parent.SendToNextNode(msg)
-}
-
-func (ctx *baseContext) Done() <-chan struct{} {
-	return ctx.parent.Done()
-}
-
-func (ctx *baseContext) StdContext() context.Context {
-	return ctx.parent.StdContext()
-}
-
-func (ctx *baseContext) Cancel() {
-	ctx.parent.Cancel()
-}
-
-type rootContext struct {
-	baseContext
-	config  *config.ReplicaConfig
-	closeCh chan struct{}
-}
-
-// NewRootContext returns a new root context
-func NewRootContext(config *config.ReplicaConfig) Context {
-	return &rootContext{
-		baseContext: baseContext{},
-		config:      config,
-		closeCh:     make(chan struct{}),
-	}
-}
-
-func (ctx *rootContext) Message() *Message {
-	panic("unreachable")
-}
-
-func (ctx *rootContext) SendToNextNode(msg *Message) {
-	panic("unreachable")
-}
-
-func (ctx *rootContext) ReplicaConfig() *config.ReplicaConfig {
-	return ctx.config
-}
-func (ctx *rootContext) Done() <-chan struct{} {
-	return ctx.closeCh
-}
-
-func (ctx *rootContext) StdContext() context.Context {
-	return cancelStdContext{
-		closeCh: ctx.closeCh,
-	}
-}
-
-func (ctx *rootContext) Cancel() {
-	defer func() {
-		// Avoid panic because repeated close channel
-		recover() //nolint:errcheck
-	}()
-	close(ctx.closeCh)
-}
-
-type messageContext struct {
-	baseContext
-	message *Message
-}
-
-func withMessage(ctx Context, msg *Message) Context {
-	return &messageContext{
-		baseContext: baseContext{
-			parent: ctx,
-		},
-		message: msg,
-	}
-}
-
-func (ctx *messageContext) Message() *Message {
-	return ctx.message
-}
-
-type outputChContext struct {
-	baseContext
+type nodeContext struct {
+	context.Context
+	msg      *Message
 	outputCh chan *Message
 }
 
-func (ctx *outputChContext) SendToNextNode(msg *Message) {
-	// The header channel should never be blocked
-	ctx.outputCh <- msg
-}
-
-func withOutputCh(ctx Context, outputCh chan *Message) Context {
-	return &outputChContext{
-		baseContext: baseContext{
-			parent: ctx,
-		},
+func newNodeContext(ctx context.Context, msg *Message, outputCh chan *Message) NodeContext {
+	return &nodeContext{
+		Context:  ctx,
+		msg:      msg,
 		outputCh: outputCh,
 	}
 }
 
-type cancelStdContext struct {
-	closeCh chan struct{}
+func (ctx *nodeContext) Message() *Message {
+	return ctx.msg
 }
 
-func (ctx cancelStdContext) Deadline() (deadline time.Time, ok bool) {
-	return time.Now(), false
+func (ctx *nodeContext) SendToNextNode(msg *Message) {
+	// The header channel should never be blocked
+	ctx.outputCh <- msg
 }
 
-func (ctx cancelStdContext) Done() <-chan struct{} {
-	return ctx.closeCh
+type messageContext struct {
+	NodeContext
+	message *Message
 }
 
-func (ctx cancelStdContext) Err() error {
-	return nil
+func withMessage(ctx NodeContext, msg *Message) NodeContext {
+	return messageContext{
+		NodeContext: ctx,
+		message:     msg,
+	}
 }
 
-func (ctx cancelStdContext) Value(key interface{}) interface{} {
-	return nil
+func (ctx messageContext) Message() *Message {
+	return ctx.message
 }

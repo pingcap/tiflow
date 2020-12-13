@@ -121,11 +121,15 @@ func newMqSink(
 		ret := newEncoder1()
 		err := ret.SetParams(opts)
 		if err != nil {
-			log.Fatal("MQ Encoder could not parse parameters", zap.Error(err))
+			log.Panic("MQ Encoder could not parse parameters", zap.Error(err))
 		}
 		return ret
 	}
 
+	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
@@ -137,7 +141,7 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
+		resolvedReceiver:    resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -212,7 +216,7 @@ flushLoop:
 		return 0, errors.Trace(err)
 	}
 	k.checkpointTs = resolvedTs
-	k.statistics.PrintStatus()
+	k.statistics.PrintStatus(ctx)
 	return k.checkpointTs, nil
 }
 
@@ -452,6 +456,15 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	s = sinkURI.Query().Get("key")
 	if s != "" {
 		config.Credential.KeyPath = s
+	}
+
+	s = sinkURI.Query().Get("auto-create-topic")
+	if s != "" {
+		autoCreate, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		config.TopicPreProcess = autoCreate
 	}
 
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {

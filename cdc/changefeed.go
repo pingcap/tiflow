@@ -361,7 +361,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
-		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", newStatus))
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", newStatus))
 	}
 
 	for tableID := range cleanedTables {
@@ -389,7 +389,7 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
-		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", status))
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", status))
 	}
 	return nil
 }
@@ -607,7 +607,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 	if len(c.ddlJobHistory) == 0 {
-		log.Fatal("ddl job history can not be empty in changefeed when should to execute DDL")
+		log.Panic("ddl job history can not be empty in changefeed when should to execute DDL")
 	}
 	todoDDLJob := c.ddlJobHistory[0]
 
@@ -699,7 +699,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 // handleSyncPoint record every syncpoint to downstream if the syncpoint feature is enable
 func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
-	//sync-point on
+	// sync-point on
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
 		defer c.syncpointMutex.Unlock()
@@ -802,7 +802,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 		if appliedTs != math.MaxUint64 {
 			log.Debug("some operation is still unapplied",
-				zap.String("captureID", captureID),
+				zap.String("capture-id", captureID),
 				zap.Uint64("appliedTs", appliedTs),
 				zap.Stringer("status", status))
 		}
@@ -863,7 +863,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	var tsUpdated bool
 
-	//syncpoint on
+	// syncpoint on
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
 		if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {

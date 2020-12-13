@@ -68,18 +68,17 @@ const (
 // SyncpointTableName is the name of table where all syncpoint maps sit
 const syncpointTableName string = "syncpoint_v1"
 
-var (
-	validSchemes = map[string]bool{
-		"mysql":     true,
-		"mysql+ssl": true,
-		"tidb":      true,
-		"tidb+ssl":  true,
-	}
-)
+var validSchemes = map[string]bool{
+	"mysql":     true,
+	"mysql+ssl": true,
+	"tidb":      true,
+	"tidb+ssl":  true,
+}
 
 type mysqlSyncpointStore struct {
 	db *sql.DB
 }
+
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
@@ -128,12 +127,16 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 			checkpointTs = workerCheckpointTs
 		}
 	}
-	s.statistics.PrintStatus()
+	s.statistics.PrintStatus(ctx)
 	return checkpointTs, nil
 }
 
 func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
-	receiver := s.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	receiver, err := s.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		log.Error("flush row changed events routine starts failed", zap.Error(err))
+		return
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -252,7 +255,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	// Must relax sql mode to support cyclic replication, as downstream may have
 	// extra columns (not null and no default value).
-	if s.cyclic != nil {
+	if s.cyclic == nil || !s.cyclic.Enabled() {
 		return nil
 	}
 	var oldMode, newMode string
@@ -263,12 +266,11 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	}
 
 	newMode = cyclic.RelaxSQLMode(oldMode)
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	err = rows.Close()
-	return cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	return nil
 }
 
 var _ Sink = &mysqlSink{}
@@ -467,6 +469,22 @@ func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string)
 	return params, nil
 }
 
+var getDBConnImpl = getDBConn
+
+func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
+	}
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+	}
+	return db, nil
+}
+
 // newMySQLSink creates a new MySQL sink using schema storage
 func newMySQLSink(
 	ctx context.Context,
@@ -476,8 +494,6 @@ func newMySQLSink(
 	replicaConfig *config.ReplicaConfig,
 	opts map[string]string,
 ) (Sink, error) {
-	var db *sql.DB
-
 	opts[OptChangefeedID] = changefeedID
 	params, err := parseSinkURI(ctx, sinkURI, opts)
 	if err != nil {
@@ -511,10 +527,9 @@ func newMySQLSink(
 	if params.timezone != "" {
 		dsn.Params["time_zone"] = params.timezone
 	}
-	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+	testDB, err := getDBConnImpl(ctx, dsn.FormatDSN())
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+		return nil, err
 	}
 	defer testDB.Close()
 
@@ -522,15 +537,9 @@ func newMySQLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	db, err = sql.Open("mysql", dsnStr)
+	db, err := getDBConnImpl(ctx, dsnStr)
 	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
-	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
+		return nil, err
 	}
 
 	log.Info("Start mysql sink")
@@ -574,17 +583,23 @@ func newMySQLSink(
 
 	sink.execWaitNotifier = new(notify.Notifier)
 	sink.resolvedNotifier = new(notify.Notifier)
-	sink.createSinkWorkers(ctx)
+	err = sink.createSinkWorkers(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	go sink.flushRowChangedEvents(ctx)
 
 	return sink, nil
 }
 
-func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
+func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 	s.workers = make([]*mysqlSinkWorker, s.params.workerCount)
 	for i := range s.workers {
-		receiver := s.execWaitNotifier.NewReceiver(defaultFlushInterval)
+		receiver, err := s.execWaitNotifier.NewReceiver(defaultFlushInterval)
+		if err != nil {
+			return err
+		}
 		worker := newMySQLSinkWorker(
 			s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
 		s.workers[i] = worker
@@ -598,6 +613,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 			}
 		}()
 	}
+	return nil
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
@@ -770,7 +786,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 	ctx context.Context, dmls *preparedDMLs, maxRetries uint64, bucket int,
 ) error {
 	if len(dmls.sqls) != len(dmls.values) {
-		log.Fatal("unexpected number of sqls and values",
+		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}
@@ -1156,7 +1172,7 @@ func buildColumnList(names []string) string {
 func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
 	var syncDB *sql.DB
 
-	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
+	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
 		return nil, errors.New("can create mysql sink with unsupported scheme")

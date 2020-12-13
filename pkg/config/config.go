@@ -26,7 +26,7 @@ import (
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
-	EnableOldValue:   false,
+	EnableOldValue:   true,
 	CheckGCSafePoint: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
@@ -97,13 +97,13 @@ func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	str, err := c.Marshal()
 	if err != nil {
-		log.Fatal("failed to marshal replica config",
+		log.Panic("failed to marshal replica config",
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	clone := new(ReplicaConfig)
 	err = clone.Unmarshal([]byte(str))
 	if err != nil {
-		log.Fatal("failed to unmarshal replica config",
+		log.Panic("failed to unmarshal replica config",
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	return clone

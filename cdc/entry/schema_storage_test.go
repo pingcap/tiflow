@@ -16,7 +16,9 @@ package entry
 import (
 	"context"
 	"fmt"
+	"sort"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
@@ -24,7 +26,12 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	ticonfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/domain"
+	tidbkv "github.com/pingcap/tidb/kv"
+	timeta "github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/testkit"
@@ -274,7 +281,6 @@ func (*schemaSuite) TestTable(c *check.C) {
 	// drop schema
 	err = snap.dropSchema(3)
 	c.Assert(err, check.IsNil)
-
 }
 
 func (t *schemaSuite) TestHandleDDL(c *check.C) {
@@ -392,7 +398,8 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
-			{Name: timodel.CIStr{O: "name"},
+			{
+				Name: timodel.CIStr{O: "name"},
 				FieldType: types.FieldType{
 					Flag: mysql.NotNullFlag,
 				},
@@ -405,8 +412,10 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "name",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "name"},
-						Offset: 0},
+					{
+						Name:   timodel.CIStr{O: "name"},
+						Offset: 0,
+					},
 				},
 				Unique: true,
 			},
@@ -415,8 +424,10 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "PRIMARY",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "id"},
-						Offset: 1},
+					{
+						Name:   timodel.CIStr{O: "id"},
+						Offset: 1,
+					},
 				},
 				Primary: true,
 			},
@@ -684,7 +695,7 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *check.C) {
 	dbInfo, ok := snap.SchemaByTableID(tableID)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(dbInfo.Name.O, check.Equals, "test2")
-	c.Assert(len(dbInfo.Tables), check.Equals, 3)
+	c.Assert(len(snap.tableInSchema), check.Equals, 3)
 }
 
 func (t *schemaSuite) TestSnapshotClone(c *check.C) {
@@ -769,4 +780,208 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 
 	c.Assert(len(snap3.tables)-len(snap1.tables), check.Equals, 5)
 	c.Assert(snap3.ineligibleTableID, check.HasLen, 0)
+}
+
+/*
+TODO: Untested Action:
+
+ActionAddForeignKey                 ActionType = 9
+ActionDropForeignKey                ActionType = 10
+ActionRebaseAutoID                  ActionType = 13
+ActionShardRowID                    ActionType = 16
+ActionLockTable                     ActionType = 27
+ActionUnlockTable                   ActionType = 28
+ActionRepairTable                   ActionType = 29
+ActionSetTiFlashReplica             ActionType = 30
+ActionUpdateTiFlashReplicaStatus    ActionType = 31
+ActionCreateSequence                ActionType = 34
+ActionAlterSequence                 ActionType = 35
+ActionDropSequence                  ActionType = 36
+ActionModifyTableAutoIdCache        ActionType = 39
+ActionRebaseAutoRandomBase          ActionType = 40
+ActionExchangeTablePartition        ActionType = 42
+ActionAddCheckConstraint            ActionType = 43
+ActionDropCheckConstraint           ActionType = 44
+ActionAlterCheckConstraint          ActionType = 45
+ActionAlterTableAlterPartition      ActionType = 46
+
+... Any Action which of value is greater than 46 ...
+*/
+func (t *schemaSuite) TestSchemaStorage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := context.Background()
+	testCases := [][]string{{
+		"create database test_ddl1",                                                               // ActionCreateSchema
+		"create table test_ddl1.simple_test1 (id bigint primary key)",                             // ActionCreateTable
+		"create table test_ddl1.simple_test2 (id bigint)",                                         // ActionCreateTable
+		"create table test_ddl1.simple_test3 (id bigint primary key)",                             // ActionCreateTable
+		"create table test_ddl1.simple_test4 (id bigint primary key)",                             // ActionCreateTable
+		"DROP TABLE test_ddl1.simple_test3",                                                       // ActionDropTable
+		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                           // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                         // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",             // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                              // ActionDropColumn
+		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                     // ActionDropColumns
+		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                       // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                        // ActionDropIndex
+		"TRUNCATE test_ddl1.simple_test1",                                                         // ActionTruncateTable
+		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                          // ActionModifySchemaCharsetAndCollate
+		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",             // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                       // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                             // ActionAlterIndexVisibility
+		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                            // ActionRenameIndex
+		"ALTER TABLE test_ddl1.simple_test2 MODIFY c2 BIGINT",                                     // ActionModifyColumn
+		"CREATE VIEW test_ddl1.view_test2 AS SELECT * FROM test_ddl1.simple_test2 WHERE id > 2",   // ActionCreateView
+		"DROP VIEW test_ddl1.view_test2",                                                          // ActionDropView
+		"RENAME TABLE test_ddl1.simple_test2 TO test_ddl1.simple_test5",                           // ActionRenameTable
+		"DROP DATABASE test_ddl1",                                                                 // ActionDropSchema
+		"create database test_ddl2",                                                               // ActionCreateSchema
+		"create table test_ddl2.simple_test1 (id bigint primary key, c1 int not null unique key)", // ActionCreateTable
+		`CREATE TABLE test_ddl2.employees  (
+			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+			fname VARCHAR(25) NOT NULL,
+			lname VARCHAR(25) NOT NULL,
+			store_id INT NOT NULL,
+			department_id INT NOT NULL
+		)
+
+		PARTITION BY RANGE(id)  (
+			PARTITION p0 VALUES LESS THAN (5),
+			PARTITION p1 VALUES LESS THAN (10),
+			PARTITION p2 VALUES LESS THAN (15),
+			PARTITION p3 VALUES LESS THAN (20)
+		)`, // ActionCreateTable
+		"ALTER TABLE test_ddl2.employees DROP PARTITION p2",                                  // ActionDropTablePartition
+		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", // ActionAddTablePartition
+		"ALTER TABLE test_ddl2.employees TRUNCATE PARTITION p3",                              // ActionTruncateTablePartition
+		"alter table test_ddl2.employees comment='modify comment'",                           // ActionModifyTableComment
+		"alter table test_ddl2.simple_test1 drop primary key",                                // ActionDropPrimaryKey
+		"alter table test_ddl2.simple_test1 add primary key pk(id)",                          // ActionAddPrimaryKey
+		"ALTER TABLE test_ddl2.simple_test1 ALTER id SET DEFAULT 18",                         // ActionSetDefaultValue
+		"ALTER TABLE test_ddl2.simple_test1 CHARACTER SET = utf8mb4",                         // ActionModifyTableCharsetAndCollate
+		// "recover table test_ddl2.employees",                                                  // ActionRecoverTable this ddl can't work on mock tikv
+
+		"DROP TABLE test_ddl2.employees",
+		`CREATE TABLE test_ddl2.employees2  (
+			id INT NOT NULL,
+			fname VARCHAR(25) NOT NULL,
+			lname VARCHAR(25) NOT NULL,
+			store_id INT NOT NULL,
+			department_id INT NOT NULL
+		)
+
+		PARTITION BY RANGE(id)  (
+			PARTITION p0 VALUES LESS THAN (5),
+			PARTITION p1 VALUES LESS THAN (10),
+			PARTITION p2 VALUES LESS THAN (15),
+			PARTITION p3 VALUES LESS THAN (20)
+		)`,
+		"ALTER TABLE test_ddl2.employees2 CHARACTER SET = utf8mb4",
+		"DROP DATABASE test_ddl2",
+	}}
+
+	testOneGroup := func(tc []string) {
+		store, err := mockstore.NewMockStore()
+		c.Assert(err, check.IsNil)
+		defer store.Close() //nolint:errcheck
+		ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
+			conf.AlterPrimaryKey = true
+		})
+		session.SetSchemaLease(0)
+		session.DisableStats4Test()
+		domain, err := session.BootstrapSession(store)
+		c.Assert(err, check.IsNil)
+		defer domain.Close()
+		domain.SetStatsUpdating(true)
+		tk := testkit.NewTestKit(c, store)
+
+		for _, ddlSQL := range tc {
+			tk.MustExec(ddlSQL)
+		}
+
+		jobs, err := getAllHistoryDDLJob(store)
+		c.Assert(err, check.IsNil)
+		scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+		c.Assert(err, check.IsNil)
+		for _, job := range jobs {
+			err := scheamStorage.HandleDDLJob(job)
+			c.Assert(err, check.IsNil)
+		}
+
+		for _, job := range jobs {
+			ts := job.BinlogInfo.FinishedTS
+			meta, err := kv.GetSnapshotMeta(store, ts)
+			c.Assert(err, check.IsNil)
+			snapFromMeta, err := newSchemaSnapshotFromMeta(meta, ts, false)
+			c.Assert(err, check.IsNil)
+			snapFromSchemaStore, err := scheamStorage.GetSnapshot(ctx, ts)
+			c.Assert(err, check.IsNil)
+
+			tidySchemaSnapshot(snapFromMeta)
+			tidySchemaSnapshot(snapFromSchemaStore)
+			c.Assert(snapFromMeta, check.DeepEquals, snapFromSchemaStore,
+				check.Commentf("%s", cmp.Diff(snapFromMeta, snapFromSchemaStore, cmp.AllowUnexported(schemaSnapshot{}, model.TableInfo{}))))
+		}
+	}
+
+	for _, tc := range testCases {
+		testOneGroup(tc)
+	}
+}
+
+func tidySchemaSnapshot(snap *schemaSnapshot) {
+	for _, dbInfo := range snap.schemas {
+		if len(dbInfo.Tables) == 0 {
+			dbInfo.Tables = nil
+		}
+	}
+	for _, tableInfo := range snap.tables {
+		tableInfo.TableInfoVersion = 0
+		if len(tableInfo.Columns) == 0 {
+			tableInfo.Columns = nil
+		}
+		if len(tableInfo.Indices) == 0 {
+			tableInfo.Indices = nil
+		}
+		if len(tableInfo.ForeignKeys) == 0 {
+			tableInfo.ForeignKeys = nil
+		}
+	}
+	// the snapshot from meta doesn't know which ineligible tables that have existed in history
+	// so we delete the ineligible tables which are already not exist
+	for tableID := range snap.ineligibleTableID {
+		if _, ok := snap.tables[tableID]; !ok {
+			delete(snap.ineligibleTableID, tableID)
+		}
+	}
+	// the snapshot from meta doesn't know which tables are truncated, so we just ignore it
+	snap.truncateTableID = nil
+	for _, v := range snap.tableInSchema {
+		sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
+	}
+}
+
+func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
+	s, err := session.CreateSession(storage)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if s != nil {
+		defer s.Close()
+	}
+
+	store := domain.GetDomain(s.(sessionctx.Context)).Store()
+	txn, err := store.Begin()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer txn.Rollback() //nolint:errcheck
+	txnMeta := timeta.NewMeta(txn)
+
+	jobs, err := txnMeta.GetAllHistoryDDLJobs()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return jobs, nil
 }

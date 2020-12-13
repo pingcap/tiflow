@@ -21,8 +21,8 @@ import (
 
 // Run runs the daily test
 func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, jobCount int, batch int) {
-
-	TableSQLs := []string{`
+	TableSQLs := []string{
+		`
 		create table ptest(
 			a int primary key,
 			b double NOT NULL DEFAULT 2.0,
@@ -44,7 +44,8 @@ func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, job
 			c varchar(10) NOT NULL,
 			d time unique not null
 		);
-		`}
+		`,
+	}
 
 	// run the simple test case
 	RunCase(sourceDB, targetDB, schema)
@@ -65,5 +66,4 @@ func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, job
 	})
 
 	log.S().Info("test pass!!!")
-
 }

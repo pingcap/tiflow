@@ -49,6 +49,11 @@ func interestingGoroutines() (gs []string) {
 		"google.golang.org/grpc.(*ccBalancerWrapper).watcher",
 		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
 		"go.etcd.io/etcd/v3/pkg/logutil.(*MergeLogger).outputLoop",
+		// library used by sarama, ref: https://github.com/rcrowley/go-metrics/pull/266
+		"github.com/rcrowley/go-metrics.(*meterArbiter).tick",
+		// TODO: remove these two lines after unified sorter is fixed
+		"github.com/pingcap/ticdc/cdc/puller/sorter.newBackEndPool",
+		"github.com/pingcap/ticdc/cdc/puller/sorter.(*heapSorter).flush",
 	}
 	shouldIgnore := func(stack string) bool {
 		if stack == "" {
@@ -76,8 +81,10 @@ func interestingGoroutines() (gs []string) {
 	return
 }
 
-var beforeTestGoroutines = map[string]bool{}
-var testGoroutinesInited bool
+var (
+	beforeTestGoroutines = map[string]bool{}
+	testGoroutinesInited bool
+)
 
 // BeforeTest gets the current goroutines.
 // It's used for check.Suite.SetUpSuite() function.

@@ -19,7 +19,7 @@ GOVENDORFLAG := -mod=vendor
 endif
 
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
-GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath 
+GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 ifeq ($(GOVERSION114), 1)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
@@ -32,7 +32,8 @@ MAC   := "Darwin"
 PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
-FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto')
+TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration')
 CDC_PKG := github.com/pingcap/ticdc
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
 FAILPOINT := bin/failpoint-ctl
@@ -105,6 +106,8 @@ integration_test_build: check_failpoint_ctl
 		-coverpkg=github.com/pingcap/ticdc/... \
 		-o bin/cdc.test github.com/pingcap/ticdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
 integration_test: integration_test_mysql
@@ -115,9 +118,9 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/run.sh kafka "$(CASE)"
 
-fmt:
+fmt: tools/bin/gofumports
 	@echo "gofmt (simplify)"
-	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
 lint: tools/bin/revive
 	@echo "linting"
@@ -131,6 +134,10 @@ check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
 
+check-leaktest-added: tools/bin/gofumports
+	@echo "check leak test added in all unit tests"
+	./scripts/add-leaktest.sh $(TEST_FILES)
+
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -139,12 +146,12 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: check-copyright fmt lint check-static tidy errdoc
+check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
-	grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
@@ -156,11 +163,15 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s
+	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
+
+tools/bin/gofumports: tools/check/go.mod
+	cd tools/check; test -e ../bin/gofumports || \
+	$(GO) build -o ../bin/gofumports mvdan.cc/gofumpt
 
 tools/bin/revive: tools/check/go.mod
 	cd tools/check; test -e ../bin/revive || \
@@ -168,7 +179,7 @@ tools/bin/revive: tools/check/go.mod
 
 tools/bin/errdoc-gen: tools/check/go.mod
 	cd tools/check; test -e ../bin/errdoc-gen || \
-	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/tiup/components/errdoc/errdoc-gen
+	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
 
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \

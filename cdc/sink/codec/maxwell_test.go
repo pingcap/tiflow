@@ -40,45 +40,13 @@ var _ = check.Suite(&maxwellbatchSuite{
 	}}},
 })
 
-func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
-	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
-		index := 0
-		for {
-			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
-			if !hasNext {
-				break
-			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
-			row, err := decoder.NextRowChangedEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(row, check.DeepEquals, cs[index], check.Commentf("index %d", index))
-			index++
-		}
-	}
-	checkDDLDecoder := func(decoder EventBatchDecoder, cs []*model.DDLEvent) {
-		index := 0
-		for {
-			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
-			if !hasNext {
-				break
-			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeDDL)
-			ddl, err := decoder.NextDDLEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(ddl, check.DeepEquals, cs[index])
-			index++
-		}
-	}
-
+func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder) {
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
-		// test normal decode
 		size := encoder.Size()
 		messages := encoder.Build()
 		if len(cs) == 0 {
@@ -87,9 +55,6 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 		}
 		c.Assert(messages, check.HasLen, 1)
 		c.Assert(len(messages[0].Key)+len(messages[0].Value), check.Equals, size)
-		decoder, err := newDecoder(messages[0].Key, messages[0].Value)
-		c.Assert(err, check.IsNil)
-		checkRowDecoder(decoder, cs)
 	}
 
 	for _, cs := range s.ddlCases {
@@ -98,10 +63,6 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 			c.Assert(msg, check.NotNil)
-
-			decoder, err := newDecoder(msg.Key, msg.Value)
-			c.Assert(err, check.IsNil)
-			checkDDLDecoder(decoder, cs)
 		}
 
 	}
@@ -109,7 +70,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 
 func (s *maxwellbatchSuite) TestmaxwellEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.testmaxwellBatchCodec(c, NewMaxwellEventBatchEncoder, NewMaxwellEventBatchDecoder)
+	s.testmaxwellBatchCodec(c, NewMaxwellEventBatchEncoder)
 }
 
 var _ = check.Suite(&maxwellcolumnSuite{})
@@ -133,8 +94,5 @@ func (s *maxwellcolumnSuite) TestMaxwellFormatCol(c *check.C) {
 	}
 	rowEncode, err := row.Encode()
 	c.Assert(err, check.IsNil)
-	row2 := new(maxwellMessage)
-	err = row2.Decode(rowEncode)
-	c.Assert(err, check.IsNil)
-	c.Assert(row2, check.DeepEquals, row)
+	c.Assert(rowEncode, check.NotNil)
 }
