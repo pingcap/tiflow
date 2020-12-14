@@ -62,7 +62,7 @@ create table t_bool(a bool primary key, b int);
 INSERT INTO t_bool VALUES(true,2);
 INSERT INTO t_bool VALUES(false,3);
 
-create table t_tinyint(a unsigned tinyint primary key, b int);
+create table t_tinyint(a tinyint primary key, b int);
 INSERT INTO t_tinyint VALUES(6,2);
 INSERT INTO t_tinyint VALUES(8,3);
 
