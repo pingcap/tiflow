@@ -1,4 +1,4 @@
-CONCURRENT_NUMBER = 6
+CONCURRENT_NUMBER = 1
 
 def prepare_binaries() {
     stage('Prepare Binaries') {
@@ -115,10 +115,11 @@ def tests(sink_type, node_label) {
 
 
         unstash 'cases_name'
-        def cases_name = sh (
-            script: 'cat go/src/github.com/pingcap/ticdc/tests/CASES',
-            returnStdout: true
-        ).trim().split()
+        // def cases_name = sh (
+        //     script: 'cat go/src/github.com/pingcap/ticdc/tests/CASES',
+        //     returnStdout: true
+        // ).trim().split()
+        def cases_name = ['cyclic_abc']
 
         def step_cases = []
         def step_length = (int)(cases_name.size() / CONCURRENT_NUMBER + 0.5)
