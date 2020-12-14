@@ -122,8 +122,8 @@ func NewTablePipeline(ctx context.Context,
 
 	ctx, p := pipeline.NewPipeline(ctx)
 	p.AppendNode(ctx, "puller", newPullerNode(credential, kvStorage, limitter, tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
+	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	p.AppendNode(ctx, "safe_stopper", newSafeStopperNode(targetTs))
 	p.AppendNode(ctx, "output", newOutputNode(outputCh, &tablePipeline.status, listener))
 	tablePipeline.p = p
