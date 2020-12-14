@@ -396,9 +396,11 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		cctx, cancel := context.WithCancel(ctx)
 		var outputRows [][]*model.RowChangedEvent
 		var outputReplicaIDs []uint64
+		receiver, err := notifier.NewReceiver(-1)
+		c.Assert(err, check.IsNil)
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
 			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
-			notifier.NewReceiver(-1),
+			receiver,
 			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 				outputRows = append(outputRows, events)
 				outputReplicaIDs = append(outputReplicaIDs, replicaID)
@@ -1044,9 +1046,6 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 	}
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
 	c.Assert(err, check.IsNil)
-
-	// TODO: remove this line after https://github.com/pingcap/ticdc/issues/1169 is fixed
-	time.Sleep(time.Millisecond * 500)
 
 	err = sink.Close()
 	c.Assert(err, check.IsNil)
