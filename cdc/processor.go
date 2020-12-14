@@ -156,6 +156,15 @@ func newProcessor(
 
 	localResolvedNotifier := new(notify.Notifier)
 	localCheckpointTsNotifier := new(notify.Notifier)
+	localResolvedReceiver, err := localResolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	localCheckpointTsReceiver, err := localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -179,11 +188,11 @@ func newProcessor(
 		output2Sink:     make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		localResolvedNotifier: localResolvedNotifier,
-		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		localResolvedReceiver: localResolvedReceiver,
 
 		checkpointTs:              checkpointTs,
 		localCheckpointTsNotifier: localCheckpointTsNotifier,
-		localCheckpointTsReceiver: localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond),
+		localCheckpointTsReceiver: localCheckpointTsReceiver,
 
 		tables:       make(map[int64]*cdcprocessor.TablePipeline),
 		markTableIDs: make(map[int64]struct{}),
@@ -650,9 +659,12 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		lastResolvedTs           uint64
 		watchKey                 = kv.GetEtcdKeyJob(p.changefeedID)
 		globalResolvedTsNotifier = new(notify.Notifier)
-		globalResolvedTsReceiver = globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	)
 	defer globalResolvedTsNotifier.Close()
+	globalResolvedTsReceiver, err := globalResolvedTsNotifier.NewReceiver(1 * time.Second)
+	if err != nil {
+		return err
+	}
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
 		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
