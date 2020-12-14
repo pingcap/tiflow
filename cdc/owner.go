@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -646,6 +647,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < minCheckpointTs {
 				minCheckpointTs = changefeed.status.CheckpointTs
 			}
+
+			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
+			changefeedCheckpointTsGauge.WithLabelValues(id).Set(float64(phyTs))
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			changefeedCheckpointTsLagGauge.WithLabelValues(id).Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 		}
 		if time.Since(o.lastFlushChangefeeds) > o.flushChangefeedInterval {
 			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
