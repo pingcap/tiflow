@@ -113,6 +113,9 @@ function run() {
         --cyclic-replica-id 3 \
         --cyclic-filter-replica-ids 1 \
         --cyclic-sync-ddl false
+        
+        
+    run_sql "ALTER TABLE test.simple TRUNCATE PARTITION p3;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     for i in $(seq 6 15); do {
         sqlup="START TRANSACTION;"
