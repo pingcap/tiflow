@@ -23,6 +23,7 @@ import (
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
@@ -89,6 +90,7 @@ func (r *simpleJSONReactor) Tick(_ context.Context, state orchestrator.ReactorSt
 }
 
 func (s *jsonReactorStateSuite) TestSimpleJSONRecord(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	url, etcdServer, err := etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
