@@ -196,7 +196,7 @@ func (s *sqlRequest) getAwaitableSQLRowContainer() *awaitableSQLRowContainer {
 	return &awaitableSQLRowContainer{
 		Awaitable: &basicAwaitable{
 			pollableAndCheckable: s,
-			timeout:              30 * time.Second,
+			timeout:              1200 * time.Second,
 		},
 		sqlRowContainer: s,
 	}

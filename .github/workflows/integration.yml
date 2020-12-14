@@ -31,7 +31,7 @@ jobs:
         run: go mod vendor
 
       - name: Pull images
-        run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
+        run: docker-compose -f docker-compose-mysql.yml pull --ignore-pull-failures
 
       - name: TiKV version
         run: docker run pingcap/tikv:release-4.0-nightly -V

@@ -62,7 +62,7 @@ func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 
 	return &basicAwaitable{
 		pollableAndCheckable: ret,
-		timeout:              120 * time.Second,
+		timeout:              1200 * time.Second,
 	}
 }
 
