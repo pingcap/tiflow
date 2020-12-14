@@ -114,28 +114,30 @@ def tests(sink_type, node_label) {
         }
 
 
-        unstash 'cases_name'
+        // unstash 'cases_name'
         // def cases_name = sh (
         //     script: 'cat go/src/github.com/pingcap/ticdc/tests/CASES',
         //     returnStdout: true
         // ).trim().split()
-        def cases_name = ['cyclic_abc']
+        // def cases_name = ['cyclic_abc']
 
-        def step_cases = []
-        def step_length = (int)(cases_name.size() / CONCURRENT_NUMBER + 0.5)
-        for(int i in 1..CONCURRENT_NUMBER) {
-            def end = i*step_length-1
-            if (i == CONCURRENT_NUMBER){
-                end = cases_name.size()-1
-            }
-            step_cases.add(cases_name[(i-1)*step_length..end])
-        }
-        step_cases.eachWithIndex{ case_names, index ->
-            def step_name = "step_${index}"
-            test_cases["integration test ${step_name}"] = {
-                run_integration_test(step_name, case_names.join(" "))
-            }
-        }
+        // def step_cases = []
+        // def step_length = (int)(cases_name.size() / CONCURRENT_NUMBER + 0.5)
+        // for(int i in 1..CONCURRENT_NUMBER) {
+        //     def end = i*step_length-1
+        //     if (i == CONCURRENT_NUMBER){
+        //         end = cases_name.size()-1
+        //     }
+        //     step_cases.add(cases_name[(i-1)*step_length..end])
+        // }
+        // step_cases.eachWithIndex{ case_names, index ->
+        //     def step_name = "step_${index}"
+        //     test_cases["integration test ${step_name}"] = {
+        //         run_integration_test(step_name, case_names.join(" "))
+        //     }
+        // }
+
+        run_integration_test("step_1", "cyclic_abc")
 
         parallel test_cases
     }
