@@ -3,10 +3,7 @@
 
     services:
       controller:
-        image: ticdc:latest
-        build:
-          context: .
-          dockerfile: ./Dockerfile.development
+        image: pingcap/ticdc:v4.0.6
         volumes:
           - /data
           - ./docker/logs:/logs
@@ -45,10 +42,7 @@
         restart: on-failure
 
       capturer1:
-        image: ticdc:latest
-        build:
-          context: .
-          dockerfile: ./Dockerfile.development
+        image: pingcap/ticdc:v4.0.6
         volumes:
           - /data
           - ./docker/logs:/logs
@@ -69,10 +63,7 @@
         restart: on-failure
 
       capturer2:
-        image: ticdc:latest
-        build:
-          context: .
-          dockerfile: ./Dockerfile.development
+        image: pingcap/ticdc:v4.0.6
         volumes:
           - /data
           - ./docker/logs:/logs
