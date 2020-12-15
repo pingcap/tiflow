@@ -26,7 +26,7 @@ cert-path = ""
 key-path = ""
 
 [log]
-level = "error"
+level = "debug"
 
 # log format, one of json, text, console
 #format = "text"

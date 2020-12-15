@@ -38,48 +38,6 @@
           - "downstream-tidb"
         restart: on-failure
 
-      capturer1:
-        image: pingcap/ticdc:v4.0.8
-        volumes:
-          - /data
-          - ./docker/logs:/logs
-        ports:
-          - "8301:8300"
-        environment:
-          GO_FAILPOINTS: ${GO_FAILPOINTS}
-        entrypoint: "/cdc server"
-        command:
-          - --addr=0.0.0.0:8300
-          - --pd=http://upstream-pd:2379
-          - --log-file=/logs/capturer1.log
-          - --log-level=debug
-          - --advertise-addr=capturer1:8300
-        depends_on:
-          - "upstream-tidb"
-          - "downstream-tidb"
-        restart: on-failure
-
-      capturer2:
-        image: pingcap/ticdc:v4.0.8
-        volumes:
-          - /data
-          - ./docker/logs:/logs
-        ports:
-          - "8302:8300"
-        environment:
-          GO_FAILPOINTS: ${GO_FAILPOINTS}
-        entrypoint: "/cdc server"
-        command:
-          - --addr=0.0.0.0:8300
-          - --pd=http://upstream-pd:2379
-          - --log-file=/logs/capturer2.log
-          - --log-level=debug
-          - --advertise-addr=capturer2:8300
-        depends_on:
-          - "upstream-tidb"
-          - "downstream-tidb"
-        restart: on-failure
-
       upstream-pd:
         image: pingcap/pd:nightly
         ports:
