@@ -66,8 +66,6 @@ const (
 	schemaStorageGCLag = time.Minute * 20
 )
 
-var fNewPDCli = pd.NewClientWithContext
-
 type processor struct {
 	id           string
 	captureInfo  model.CaptureInfo
@@ -156,6 +154,7 @@ func (t *tableInfo) safeStop() (stopped bool, checkpointTs model.Ts) {
 // newProcessor creates and returns a processor for the specified change feed
 func newProcessor(
 	ctx context.Context,
+	pdCli pd.Client,
 	credential *security.Credential,
 	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
@@ -167,12 +166,6 @@ func newProcessor(
 	flushCheckpointInterval time.Duration,
 ) (*processor, error) {
 	etcdCli := session.Client()
-	endpoints := session.Client().Endpoints()
-	pdCli, err := fNewPDCli(ctx, endpoints, credential.PDSecurityOption())
-	if err != nil {
-		return nil, errors.Annotatef(
-			cerror.WrapError(cerror.ErrNewProcessorFailed, err), "create pd client failed, addr: %v", endpoints)
-	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
@@ -1242,6 +1235,7 @@ func (p *processor) isStopped() bool {
 // runProcessor creates a new processor then starts it.
 func runProcessor(
 	ctx context.Context,
+	pdCli pd.Client,
 	credential *security.Credential,
 	session *concurrency.Session,
 	info model.ChangeFeedInfo,
@@ -1268,7 +1262,7 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	processor, err := newProcessor(ctx, credential, session, info, sink,
+	processor, err := newProcessor(ctx, pdCli, credential, session, info, sink,
 		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
 		cancel()
