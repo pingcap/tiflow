@@ -169,6 +169,11 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 	errg.Go(func() error {
 		i := 0
 		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
 				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
