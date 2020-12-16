@@ -69,6 +69,10 @@ func main() {
 	ctx0, cancel := context.WithCancel(context.Background())
 	errg, ctx := errgroup.WithContext(ctx0)
 
+	errg.Go(func() error {
+		return pullerSorter.RunWorkerPool(ctx)
+	})
+
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
 		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir, fmt.Sprintf("test-%d", i), "0.0.0.0:0")

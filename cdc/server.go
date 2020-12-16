@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
+
 	"github.com/pingcap/ticdc/cdc/kv"
 
 	"github.com/pingcap/errors"
@@ -331,6 +333,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return s.campaignOwnerLoop(cctx)
+	})
+
+	wg.Go(func() error {
+		return sorter.RunWorkerPool(cctx)
 	})
 
 	wg.Go(func() error {

@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/workerpool"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -50,6 +52,8 @@ type heapSorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *flushTask
 	heap        sortHeap
+
+	runtimeState *heapSorterRuntimeState
 }
 
 func newHeapSorter(id int, out chan *flushTask) *heapSorter {
@@ -189,63 +193,67 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	return nil
 }
 
-func (h *heapSorter) run(ctx context.Context) error {
-	var (
-		maxResolved           uint64
-		heapSizeBytesEstimate int64
-		rateCounter           int
-	)
+var heapSorterPool = workerpool.NewDefaultWorkerPool()
 
-	rateTicker := time.NewTicker(1 * time.Second)
-	defer rateTicker.Stop()
+type heapSorterRuntimeState struct {
+	maxResolved           uint64
+	heapSizeBytesEstimate int64
+	rateCounter           int
+	sorterConfig          *config.SorterConfig
+	poolHandle            workerpool.EventHandle
+	timerMultiplier       int
+}
 
-	flushTicker := time.NewTicker(5 * time.Second)
-	defer flushTicker.Stop()
-
-	sorterConfig := config.GetSorterConfig()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case event := <-h.inputCh:
-			heap.Push(&h.heap, &sortItem{entry: event})
-			isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
-
-			if isResolvedEvent {
-				if event.RawKV.CRTs < maxResolved {
-					log.Panic("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
-						zap.Uint64("max-resolvedTs", maxResolved))
-				}
-				maxResolved = event.RawKV.CRTs
-			}
-
-			if event.RawKV.CRTs < maxResolved {
-				log.Panic("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", maxResolved))
-			}
-
-			// 5 * 8 is for the 5 fields in PolymorphicEvent
-			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
-			needFlush := heapSizeBytesEstimate >= int64(sorterConfig.ChunkSizeLimit) ||
-				(isResolvedEvent && rateCounter < flushRateLimitPerSecond)
-
-			if needFlush {
-				rateCounter++
-				err := h.flush(ctx, maxResolved)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				heapSizeBytesEstimate = 0
-			}
-		case <-flushTicker.C:
-			if rateCounter < flushRateLimitPerSecond {
-				err := h.flush(ctx, maxResolved)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				heapSizeBytesEstimate = 0
-			}
-		case <-rateTicker.C:
-			rateCounter = 0
-		}
+func (h *heapSorter) init(onError func(err error)) {
+	state := &heapSorterRuntimeState{
+		sorterConfig: config.GetSorterConfig(),
 	}
+
+	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
+		event := eventI.(*model.PolymorphicEvent)
+		heap.Push(&h.heap, &sortItem{entry: event})
+		isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
+
+		if isResolvedEvent {
+			if event.RawKV.CRTs < state.maxResolved {
+				log.Panic("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
+					zap.Uint64("max-resolvedTs", state.maxResolved))
+			}
+			state.maxResolved = event.RawKV.CRTs
+		}
+
+		if event.RawKV.CRTs < state.maxResolved {
+			log.Panic("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", state.maxResolved))
+		}
+
+		// 5 * 8 is for the 5 fields in PolymorphicEvent
+		state.heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
+		needFlush := state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit) ||
+			(isResolvedEvent && state.rateCounter < flushRateLimitPerSecond)
+
+		if needFlush {
+			state.rateCounter++
+			err := h.flush(ctx, state.maxResolved)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			state.heapSizeBytesEstimate = 0
+		}
+
+		return nil
+	}).SetTimer(1*time.Second, func(ctx context.Context) error {
+		state.rateCounter = 0
+		state.timerMultiplier = (state.timerMultiplier + 1) % 5
+		if state.timerMultiplier == 0 && state.rateCounter < flushRateLimitPerSecond {
+			err := h.flush(ctx, state.maxResolved)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			state.heapSizeBytesEstimate = 0
+		}
+		return nil
+	}).OnExit(onError)
+
+	state.poolHandle = poolHandle
+	h.runtimeState = state
 }

@@ -15,9 +15,14 @@ package workerpool
 
 import (
 	"context"
+	"log"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/notify"
+	"go.uber.org/zap"
 
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 
@@ -30,6 +35,11 @@ type defaultPoolImpl struct {
 	workers       []*worker
 	mu            sync.Mutex
 	nextHandlerID int64
+}
+
+// NewDefaultWorkerPool creates a new WorkerPool that uses the default implementation
+func NewDefaultWorkerPool() WorkerPool {
+	return newDefaultPoolImpl(&defaultHasher{}, runtime.NumCPU())
 }
 
 func newDefaultPoolImpl(hasher Hasher, numWorkers int) *defaultPoolImpl {
@@ -64,7 +74,7 @@ func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interf
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	handler := &defaultEventHandler{
+	handler := &defaultEventHandle{
 		f:     f,
 		errCh: make(chan error, 1),
 		id:    p.nextHandlerID,
@@ -78,7 +88,7 @@ func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interf
 	return handler
 }
 
-type defaultEventHandler struct {
+type defaultEventHandle struct {
 	f           func(ctx context.Context, event interface{}) error
 	isCancelled int32
 	errCh       chan error
@@ -89,9 +99,12 @@ type defaultEventHandler struct {
 	lastTimer     time.Time
 	timerInterval time.Duration
 	timerHandler  func(ctx context.Context) error
+
+	hasErrorHandler int32
+	errorHandler    func(err error)
 }
 
-func (h *defaultEventHandler) AddEvent(ctx context.Context, event interface{}) error {
+func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) error {
 	if atomic.LoadInt32(&h.isCancelled) == 1 {
 		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
 	}
@@ -111,47 +124,80 @@ func (h *defaultEventHandler) AddEvent(ctx context.Context, event interface{}) e
 	return nil
 }
 
-func (h *defaultEventHandler) SetTimer(interval time.Duration, f func(ctx context.Context) error) {
+func (h *defaultEventHandle) SetTimer(interval time.Duration, f func(ctx context.Context) error) EventHandle {
 	atomic.StoreInt32(&h.hasTimer, 0)
 	h.worker.handleCancelCh <- struct{}{}
 
 	h.timerInterval = interval
 	h.timerHandler = f
 	atomic.StoreInt32(&h.hasTimer, 1)
+	return h
 }
 
-func (h *defaultEventHandler) Unregister() {
+func (h *defaultEventHandle) Unregister() {
 	if !atomic.CompareAndSwapInt32(&h.isCancelled, 0, 1) {
 		// already cancelled
 		return
 	}
 
-	h.worker.handleCancelCh <- struct{}{}
-	h.worker.removeHandle(h)
-}
-
-func (h *defaultEventHandler) ErrCh() <-chan error {
-	return h.errCh
-}
-
-func (h *defaultEventHandler) HashCode() int64 {
-	return h.id
-}
-
-func (h *defaultEventHandler) cancelWithErr(err error) {
-	if atomic.SwapInt32(&h.isCancelled, 1) == 1 {
-		// Already cancelled
-		return
+	receiver, err := h.worker.stopNotifier.NewReceiver(time.Millisecond * 100)
+	if err != nil {
+		log.Panic("Unregister", zap.Error(err))
 	}
+
+	for {
+		select {
+		case h.worker.handleCancelCh <- struct{}{}:
+		case <-receiver.C:
+		}
+		if atomic.LoadInt32(&h.worker.isRunning) == 0 {
+			break
+		}
+	}
+
+	h.doCancel(errors.New("handle unregistered"))
+}
+
+func (h *defaultEventHandle) doCancel(err error) {
+	h.worker.removeHandle(h)
+
+	if atomic.LoadInt32(&h.hasErrorHandler) == 1 {
+		h.errorHandler(err)
+	}
+
 	h.errCh <- err
 	close(h.errCh)
 }
 
-func (h *defaultEventHandler) durationSinceLastTimer() time.Duration {
+func (h *defaultEventHandle) ErrCh() <-chan error {
+	return h.errCh
+}
+
+func (h *defaultEventHandle) OnExit(f func(err error)) EventHandle {
+	atomic.StoreInt32(&h.hasErrorHandler, 0)
+	h.errorHandler = f
+	atomic.StoreInt32(&h.hasErrorHandler, 1)
+	return h
+}
+
+func (h *defaultEventHandle) HashCode() int64 {
+	return h.id
+}
+
+func (h *defaultEventHandle) cancelWithErr(err error) {
+	if !atomic.CompareAndSwapInt32(&h.isCancelled, 0, 1) {
+		// already cancelled
+		return
+	}
+
+	h.doCancel(err)
+}
+
+func (h *defaultEventHandle) durationSinceLastTimer() time.Duration {
 	return time.Since(h.lastTimer)
 }
 
-func (h *defaultEventHandler) doTimer(ctx context.Context) error {
+func (h *defaultEventHandle) doTimer(ctx context.Context) error {
 	if atomic.LoadInt32(&h.hasTimer) == 0 {
 		return nil
 	}
@@ -175,28 +221,36 @@ func (h *defaultEventHandler) doTimer(ctx context.Context) error {
 }
 
 type task struct {
-	handle *defaultEventHandler
+	handle *defaultEventHandle
 	f      func(ctx context.Context) error
 }
 
 type worker struct {
 	taskCh         chan *task
-	handles        map[*defaultEventHandler]struct{}
+	handles        map[*defaultEventHandle]struct{}
 	handleRWLock   sync.RWMutex
 	handleCancelCh chan struct{}
+	isRunning      int32
+
+	stopNotifier notify.Notifier
 }
 
 func newWorker() *worker {
 	return &worker{
 		taskCh:         make(chan *task, 128000),
-		handles:        make(map[*defaultEventHandler]struct{}),
+		handles:        make(map[*defaultEventHandle]struct{}),
 		handleCancelCh: make(chan struct{}), // this channel must be unbuffered, i.e. blocking
 	}
 }
 
 func (w *worker) run(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	atomic.StoreInt32(&w.isRunning, 1)
+	defer func() {
+		ticker.Stop()
+		atomic.StoreInt32(&w.isRunning, 0)
+		w.stopNotifier.Notify()
+	}()
 
 	for {
 		select {
@@ -234,14 +288,14 @@ func (w *worker) run(ctx context.Context) error {
 	}
 }
 
-func (w *worker) addHandle(handle *defaultEventHandler) {
+func (w *worker) addHandle(handle *defaultEventHandle) {
 	w.handleRWLock.Lock()
 	defer w.handleRWLock.Unlock()
 
 	w.handles[handle] = struct{}{}
 }
 
-func (w *worker) removeHandle(handle *defaultEventHandler) {
+func (w *worker) removeHandle(handle *defaultEventHandle) {
 	w.handleRWLock.Lock()
 	defer w.handleRWLock.Unlock()
 

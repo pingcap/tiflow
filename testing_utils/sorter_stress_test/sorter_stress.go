@@ -70,6 +70,10 @@ func main() {
 	eg, ctx := errgroup.WithContext(ctx1)
 
 	eg.Go(func() error {
+		return pullerSorter.RunWorkerPool(ctx)
+	})
+
+	eg.Go(func() error {
 		return sorter.Run(ctx)
 	})
 

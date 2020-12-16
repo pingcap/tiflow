@@ -115,6 +115,10 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 		return sorter.Run(ctx)
 	})
 
+	errg.Go(func() error {
+		return sorter2.RunWorkerPool(ctx)
+	})
+
 	producerProgress := make([]uint64, numProducers)
 
 	// launch the producers

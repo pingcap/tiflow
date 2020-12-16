@@ -29,7 +29,8 @@ type WorkerPool interface {
 // Since events are executed asynchronously, errors should be collected from ErrCh().
 type EventHandle interface {
 	AddEvent(ctx context.Context, event interface{}) error
-	SetTimer(interval time.Duration, f func(ctx context.Context) error)
+	SetTimer(interval time.Duration, f func(ctx context.Context) error) EventHandle
 	Unregister()
 	ErrCh() <-chan error
+	OnExit(f func(err error)) EventHandle
 }
