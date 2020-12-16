@@ -147,11 +147,13 @@ func (h *defaultEventHandle) Unregister() {
 	defer receiver.Stop()
 
 	for {
+		workerHasFinishedLoop := false
 		select {
 		case h.worker.handleCancelCh <- struct{}{}:
+			workerHasFinishedLoop = true
 		case <-receiver.C:
 		}
-		if atomic.LoadInt32(&h.worker.isRunning) == 0 {
+		if workerHasFinishedLoop || atomic.LoadInt32(&h.worker.isRunning) == 0 {
 			break
 		}
 	}
