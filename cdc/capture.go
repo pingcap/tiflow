@@ -26,11 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/ticdc/pkg/util"
 	pd "github.com/tikv/pd/client"
->>>>>>> 2a09a89... *: Using the global singleton for pd client and tikv client, and fix pd client freeze (#1217)
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"

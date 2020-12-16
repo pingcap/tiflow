@@ -66,13 +66,6 @@ const (
 	schemaStorageGCLag = time.Minute * 20
 )
 
-<<<<<<< HEAD
-var (
-	fNewPDCli = pd.NewClientWithContext
-)
-
-=======
->>>>>>> 2a09a89... *: Using the global singleton for pd client and tikv client, and fix pd client freeze (#1217)
 type processor struct {
 	id           string
 	captureInfo  model.CaptureInfo
