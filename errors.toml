@@ -151,6 +151,16 @@ error = '''
 encode failed: %s
 '''
 
+["CDC:ErrEtcdIgnore"]
+error = '''
+this patch should be excluded from the current etcd txn
+'''
+
+["CDC:ErrEtcdTryAgain"]
+error = '''
+the etcd txn should be aborted and retried immediately
+'''
+
 ["CDC:ErrEventFeedAborted"]
 error = '''
 single event feed aborted
@@ -529,6 +539,11 @@ new pulsar producer
 ["CDC:ErrPulsarSendMessage"]
 error = '''
 pulsar send message failed
+'''
+
+["CDC:ErrReactorFinished"]
+error = '''
+the reactor has done its job and should no longer be executed
 '''
 
 ["CDC:ErrRegionsNotCoverSpan"]
