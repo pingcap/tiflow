@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"golang.org/x/sync/errgroup"
@@ -69,23 +70,26 @@ func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interf
 	p.nextHandlerID++
 
 	workerID := p.hasher.Hash(handler) % int64(len(p.workers))
-	p.workers[workerID].addHandler(handler)
+	p.workers[workerID].addHandle(handler)
 	handler.worker = p.workers[workerID]
 
 	return handler
 }
 
 type defaultEventHandler struct {
-	f           func(ctx context.Context, event interface{}) error
-	isCancelled int32
-	errCh       chan error
-	worker      *worker
-	id          int64
+	f             func(ctx context.Context, event interface{}) error
+	lastTimer     time.Time
+	timerInterval time.Duration
+	timerHandler  func(ctx context.Context) error
+	isCancelled   int32
+	errCh         chan error
+	worker        *worker
+	id            int64
 }
 
 func (h *defaultEventHandler) AddEvent(ctx context.Context, event interface{}) error {
 	task := &task{
-		handler: h,
+		handle: h,
 		f: func(ctx context.Context) error {
 			return h.f(ctx, event)
 		},
@@ -99,8 +103,19 @@ func (h *defaultEventHandler) AddEvent(ctx context.Context, event interface{}) e
 	return nil
 }
 
+func (h *defaultEventHandler) SetTimer(interval time.Duration, f func(ctx context.Context) error) {
+	h.timerInterval = interval
+	h.timerHandler = f
+}
+
 func (h *defaultEventHandler) Unregister() {
-	panic("implement me")
+	if !atomic.CompareAndSwapInt32(&h.isCancelled, 0, 1) {
+		// already cancelled
+		return
+	}
+
+	h.worker.handleCancelCh <- struct{}{}
+	h.worker.removeHandle(h)
 }
 
 func (h *defaultEventHandler) ErrCh() <-chan error {
@@ -120,23 +135,47 @@ func (h *defaultEventHandler) cancelWithErr(err error) {
 	close(h.errCh)
 }
 
+func (h *defaultEventHandler) durationSinceLastTimer() time.Duration {
+	return time.Since(h.lastTimer)
+}
+
+func (h *defaultEventHandler) doTimer(ctx context.Context) error {
+	if h.durationSinceLastTimer() < h.timerInterval {
+		return nil
+	}
+
+	if h.timerHandler == nil {
+		return nil
+	}
+
+	err := h.timerHandler(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
 type task struct {
-	handler *defaultEventHandler
-	f       func(ctx context.Context) error
+	handle *defaultEventHandler
+	f      func(ctx context.Context) error
 }
 
 type worker struct {
-	taskCh   chan *task
-	cancelCh chan struct{}
-	status   int32
-	handlers []*defaultEventHandler
+	taskCh         chan *task
+	cancelCh       chan struct{}
+	status         int32
+	handles        map[*defaultEventHandler]struct{}
+	handleRWLock   sync.RWMutex
+	handleCancelCh chan struct{}
 }
 
 func newWorker() *worker {
 	return &worker{
-		taskCh:   make(chan *task, 128000),
-		cancelCh: make(chan struct{}, 1),
-		handlers: make([]*defaultEventHandler, 0),
+		taskCh:         make(chan *task, 128000),
+		cancelCh:       make(chan struct{}, 1),
+		handles:        make(map[*defaultEventHandler]struct{}),
+		handleCancelCh: make(chan struct{}), // this channel must be unbuffered, i.e. blocking
 	}
 }
 
@@ -152,6 +191,9 @@ func (w *worker) run(ctx context.Context) error {
 		return errors.New("worker status not consistent")
 	}
 
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -165,21 +207,45 @@ func (w *worker) run(ctx context.Context) error {
 				return errors.New("empty task")
 			}
 
-			if atomic.LoadInt32(&task.handler.isCancelled) == 1 {
-				// ignored cancelled handler
+			if atomic.LoadInt32(&task.handle.isCancelled) == 1 {
+				// ignored cancelled handle
 				continue
 			}
 
 			err := task.f(ctx)
 			if err != nil {
-				task.handler.cancelWithErr(err)
+				task.handle.cancelWithErr(err)
 			}
+		case <-ticker.C:
+			w.handleRWLock.RLock()
+			for handle := range w.handles {
+				err := handle.doTimer(ctx)
+				if err != nil {
+					if atomic.LoadInt32(&handle.isCancelled) == 1 {
+						// ignored cancelled handle
+						continue
+					}
+					handle.cancelWithErr(err)
+				}
+			}
+			w.handleRWLock.RUnlock()
 		case <-w.cancelCh:
 			atomic.StoreInt32(&w.status, workerStatusDying)
+		case <-w.handleCancelCh:
 		}
 	}
 }
 
-func (w *worker) addHandler(handler *defaultEventHandler) {
-	w.handlers = append(w.handlers, handler)
+func (w *worker) addHandle(handle *defaultEventHandler) {
+	w.handleRWLock.Lock()
+	defer w.handleRWLock.Unlock()
+
+	w.handles[handle] = struct{}{}
+}
+
+func (w *worker) removeHandle(handle *defaultEventHandler) {
+	w.handleRWLock.Lock()
+	defer w.handleRWLock.Unlock()
+
+	delete(w.handles, handle)
 }

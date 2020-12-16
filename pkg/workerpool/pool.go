@@ -15,6 +15,7 @@ package workerpool
 
 import (
 	"context"
+	"time"
 )
 
 // WorkerPool runs a number of Goroutines that process the submitted events.
@@ -28,6 +29,7 @@ type WorkerPool interface {
 // Since events are executed asynchronously, errors should be collected from ErrCh().
 type EventHandle interface {
 	AddEvent(ctx context.Context, event interface{}) error
+	SetTimer(interval time.Duration, f func(ctx context.Context) error)
 	Unregister()
 	ErrCh() <-chan error
 }
