@@ -296,6 +296,7 @@ func (w *worker) synchronize() {
 	}
 	defer receiver.Stop()
 
+	startTime := time.Now()
 	for {
 		workerHasFinishedLoop := false
 		select {
@@ -305,6 +306,10 @@ func (w *worker) synchronize() {
 		}
 		if workerHasFinishedLoop || atomic.LoadInt32(&w.isRunning) == 0 {
 			break
+		}
+
+		if time.Since(startTime) > time.Second*10 {
+			panic("synchronize taking too long")
 		}
 	}
 }
