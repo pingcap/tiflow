@@ -3,7 +3,7 @@
 
     services:
       controller:
-        image: pingcap/ticdc:v4.0.8
+        image: my_cdc:latest
         volumes:
           - /data
           - ./docker/logs:/logs
@@ -18,7 +18,7 @@
         restart: on-failure
 
       capturer0:
-        image: pingcap/ticdc:v4.0.8
+        image: my_cdc:latest
         volumes:
           - /data
           - ./docker/logs:/logs
