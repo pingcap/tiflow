@@ -167,7 +167,14 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			if ev.Err != nil {
 				return errors.Trace(ev.Err)
 			}
+			failpoint.Inject("captureHandleTaskDelay", nil)
 			if err := c.handleTaskEvent(ctx, ev); err != nil {
+				select {
+				case <-c.session.Done():
+					log.Warn("handle task event failed because session is done", zap.Error(err))
+					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+				default:
+				}
 				return errors.Trace(err)
 			}
 		}
