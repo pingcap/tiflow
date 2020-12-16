@@ -1237,6 +1237,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
 	p.stateMu.Unlock()
+	failpoint.Inject("processorStopDelay", nil)
 	atomic.StoreInt32(&p.stopped, 1)
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
