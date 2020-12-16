@@ -238,6 +238,18 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		err := kvStore.Close()
+		if err != nil {
+			log.Warn("kv store close failed", zap.Error(err))
+		}
+	}()
+	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 	// When a capture suicided, restart it
 	for {
 		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
@@ -306,20 +318,9 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
-	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		err := kvStore.Close()
-		if err != nil {
-			log.Warn("kv store close failed", zap.Error(err))
-		}
-	}()
-	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
 	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr, procOpts)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, s.opts.advertiseAddr, procOpts)
 	if err != nil {
 		return err
 	}
