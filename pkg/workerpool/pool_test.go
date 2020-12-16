@@ -16,6 +16,7 @@ package workerpool
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,6 +67,142 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 		c.Assert(err, check.ErrorMatches, "test error")
 	}
 	cancel()
+
+	err := errg.Wait()
+	c.Assert(err, check.ErrorMatches, "context canceled")
+}
+
+func (s *workerPoolSuite) TestMultiError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return pool.Run(ctx)
+	})
+
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		if event.(int) >= 3 {
+			return errors.New("test error")
+		}
+		return nil
+	})
+
+	errg.Go(func() error {
+		for i := 0; i < 10; i++ {
+			err := handle.AddEvent(ctx, i)
+			c.Assert(err, check.IsNil)
+		}
+		return nil
+	})
+
+	select {
+	case <-ctx.Done():
+		c.FailNow()
+	case err := <-handle.ErrCh():
+		c.Assert(err, check.ErrorMatches, "test error")
+	}
+	cancel()
+
+	err := errg.Wait()
+	c.Assert(err, check.ErrorMatches, "context canceled")
+}
+
+func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return pool.Run(ctx)
+	})
+
+	var num int32
+	once := &sync.Once{}
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		once.Do(func() {
+			// delay processing a bit to get the workers running
+			time.Sleep(time.Millisecond * 300)
+		})
+
+		atomic.StoreInt32(&num, int32(event.(int)))
+		return nil
+	})
+
+	errg.Go(func() error {
+		i := 0
+		for {
+			err := handle.AddEvent(ctx, i)
+			if err != nil {
+				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				c.Assert(i, check.GreaterEqual, 5000)
+				return nil
+			}
+			i++
+		}
+	})
+
+	for {
+		if atomic.LoadInt32(&num) > 5000 {
+			break
+		}
+	}
+
+	handle.Unregister()
+	handle.Unregister() // Unregistering many times does not matter
+	handle.Unregister()
+
+	lastNum := atomic.LoadInt32(&num)
+	for i := 0; i <= 1000; i++ {
+		c.Assert(atomic.LoadInt32(&num), check.Equals, lastNum)
+	}
+
+	cancel()
+
+	err := errg.Wait()
+	c.Assert(err, check.ErrorMatches, "context canceled")
+}
+
+func (s *workerPoolSuite) TestTimer(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return pool.Run(ctx)
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		if event.(int) == 3 {
+			return errors.New("test error")
+		}
+		return nil
+	})
+
+	var lastTime time.Time
+	count := 0
+	handle.SetTimer(time.Second*1, func(ctx context.Context) error {
+		if !lastTime.IsZero() {
+			c.Assert(time.Since(lastTime), check.GreaterEqual, 900*time.Millisecond)
+			c.Assert(time.Since(lastTime), check.LessEqual, 1200*time.Millisecond)
+		}
+		if count == 3 {
+			cancel()
+			return nil
+		}
+		count++
+
+		lastTime = time.Now()
+		return nil
+	})
 
 	err := errg.Wait()
 	c.Assert(err, check.ErrorMatches, "context canceled")

@@ -186,4 +186,8 @@ var (
 
 	// pipeline errors
 	ErrSendToClosedPipeline = errors.Normalize("pipeline is closed, cannot send message", errors.RFCCodeText("CDC:ErrSendToClosedPipeline"))
+
+	// workerpool errors
+	ErrWorkerPoolHandleCancelled = errors.Normalize("workerpool handle is cancelled, cannot add more events", errors.RFCCodeText("CDC:ErrWorkerPoolHandleCancelled"))
+	ErrWorkerPoolEmptyTask       = errors.Normalize("workerpool received an empty task, please report a bug", errors.RFCCodeText("CDC:ErrWorkerPoolEmptyTask"))
 )

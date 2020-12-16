@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+
 	"github.com/pingcap/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -77,17 +79,23 @@ func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interf
 }
 
 type defaultEventHandler struct {
-	f             func(ctx context.Context, event interface{}) error
+	f           func(ctx context.Context, event interface{}) error
+	isCancelled int32
+	errCh       chan error
+	worker      *worker
+	id          int64
+
+	hasTimer      int32
 	lastTimer     time.Time
 	timerInterval time.Duration
 	timerHandler  func(ctx context.Context) error
-	isCancelled   int32
-	errCh         chan error
-	worker        *worker
-	id            int64
 }
 
 func (h *defaultEventHandler) AddEvent(ctx context.Context, event interface{}) error {
+	if atomic.LoadInt32(&h.isCancelled) == 1 {
+		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
+	}
+
 	task := &task{
 		handle: h,
 		f: func(ctx context.Context) error {
@@ -104,8 +112,12 @@ func (h *defaultEventHandler) AddEvent(ctx context.Context, event interface{}) e
 }
 
 func (h *defaultEventHandler) SetTimer(interval time.Duration, f func(ctx context.Context) error) {
+	atomic.StoreInt32(&h.hasTimer, 0)
+	h.worker.handleCancelCh <- struct{}{}
+
 	h.timerInterval = interval
 	h.timerHandler = f
+	atomic.StoreInt32(&h.hasTimer, 1)
 }
 
 func (h *defaultEventHandler) Unregister() {
@@ -140,6 +152,10 @@ func (h *defaultEventHandler) durationSinceLastTimer() time.Duration {
 }
 
 func (h *defaultEventHandler) doTimer(ctx context.Context) error {
+	if atomic.LoadInt32(&h.hasTimer) == 0 {
+		return nil
+	}
+
 	if h.durationSinceLastTimer() < h.timerInterval {
 		return nil
 	}
@@ -153,6 +169,8 @@ func (h *defaultEventHandler) doTimer(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	h.lastTimer = time.Now()
+
 	return nil
 }
 
@@ -163,8 +181,6 @@ type task struct {
 
 type worker struct {
 	taskCh         chan *task
-	cancelCh       chan struct{}
-	status         int32
 	handles        map[*defaultEventHandler]struct{}
 	handleRWLock   sync.RWMutex
 	handleCancelCh chan struct{}
@@ -173,24 +189,12 @@ type worker struct {
 func newWorker() *worker {
 	return &worker{
 		taskCh:         make(chan *task, 128000),
-		cancelCh:       make(chan struct{}, 1),
 		handles:        make(map[*defaultEventHandler]struct{}),
 		handleCancelCh: make(chan struct{}), // this channel must be unbuffered, i.e. blocking
 	}
 }
 
-const (
-	workerStatusNotRunning = iota
-	workerStatusRunning
-	workerStatusDying
-	workerStatusDead
-)
-
 func (w *worker) run(ctx context.Context) error {
-	if !atomic.CompareAndSwapInt32(&w.status, workerStatusNotRunning, workerStatusRunning) {
-		return errors.New("worker status not consistent")
-	}
-
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -200,11 +204,7 @@ func (w *worker) run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case task := <-w.taskCh:
 			if task == nil {
-				if atomic.CompareAndSwapInt32(&w.status, workerStatusDying, workerStatusDead) {
-					// normal dying
-					return nil
-				}
-				return errors.New("empty task")
+				return cerrors.ErrWorkerPoolEmptyTask.GenWithStackByArgs()
 			}
 
 			if atomic.LoadInt32(&task.handle.isCancelled) == 1 {
@@ -229,8 +229,6 @@ func (w *worker) run(ctx context.Context) error {
 				}
 			}
 			w.handleRWLock.RUnlock()
-		case <-w.cancelCh:
-			atomic.StoreInt32(&w.status, workerStatusDying)
 		case <-w.handleCancelCh:
 		}
 	}
