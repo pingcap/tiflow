@@ -144,6 +144,7 @@ func (h *defaultEventHandle) Unregister() {
 	if err != nil {
 		log.Panic("Unregister", zap.Error(err))
 	}
+	defer receiver.Stop()
 
 	for {
 		select {
