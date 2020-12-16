@@ -24,7 +24,7 @@ function prepare() {
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/captureServerRecovered=1*return(true);github.com/pingcap/ticdc/cdc/captureGetCurrentVersionAfterServerRecovered=return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-    TOPIC_NAME="ticdc-simple-test-$RANDOM"
+    TOPIC_NAME="ticdc-pd-freeze-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=cdc_test_simple";;
         *) SINK_URI="mysql+ssl://root@127.0.0.1:3306/";;
