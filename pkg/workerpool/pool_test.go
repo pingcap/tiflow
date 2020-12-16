@@ -20,10 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
@@ -162,13 +161,7 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 	})
 
 	var num int32
-	once := &sync.Once{}
 	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
-		once.Do(func() {
-			// delay processing a bit to get the workers running
-			time.Sleep(time.Millisecond * 300)
-		})
-
 		atomic.StoreInt32(&num, int32(event.(int)))
 		return nil
 	})

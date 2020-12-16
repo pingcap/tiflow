@@ -21,13 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"go.uber.org/zap"
-
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
-
-	"github.com/pingcap/errors"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
