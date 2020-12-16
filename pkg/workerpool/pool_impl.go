@@ -21,10 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/notify"
 
 	"github.com/pingcap/errors"
 	"golang.org/x/sync/errgroup"
@@ -126,11 +127,12 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 
 func (h *defaultEventHandle) SetTimer(interval time.Duration, f func(ctx context.Context) error) EventHandle {
 	atomic.StoreInt32(&h.hasTimer, 0)
-	h.worker.handleCancelCh <- struct{}{}
+	h.worker.synchronize()
 
 	h.timerInterval = interval
 	h.timerHandler = f
 	atomic.StoreInt32(&h.hasTimer, 1)
+
 	return h
 }
 
@@ -140,23 +142,9 @@ func (h *defaultEventHandle) Unregister() {
 		return
 	}
 
-	receiver, err := h.worker.stopNotifier.NewReceiver(time.Millisecond * 100)
-	if err != nil {
-		log.Panic("Unregister", zap.Error(err))
-	}
-	defer receiver.Stop()
+	failpoint.Inject("unregisterDelayPoint", func() {})
 
-	for {
-		workerHasFinishedLoop := false
-		select {
-		case h.worker.handleCancelCh <- struct{}{}:
-			workerHasFinishedLoop = true
-		case <-receiver.C:
-		}
-		if workerHasFinishedLoop || atomic.LoadInt32(&h.worker.isRunning) == 0 {
-			break
-		}
-	}
+	h.worker.synchronize()
 
 	h.doCancel(errors.New("handle unregistered"))
 }
@@ -178,6 +166,7 @@ func (h *defaultEventHandle) ErrCh() <-chan error {
 
 func (h *defaultEventHandle) OnExit(f func(err error)) EventHandle {
 	atomic.StoreInt32(&h.hasErrorHandler, 0)
+	h.worker.synchronize()
 	h.errorHandler = f
 	atomic.StoreInt32(&h.hasErrorHandler, 1)
 	return h
@@ -206,10 +195,6 @@ func (h *defaultEventHandle) doTimer(ctx context.Context) error {
 	}
 
 	if h.durationSinceLastTimer() < h.timerInterval {
-		return nil
-	}
-
-	if h.timerHandler == nil {
 		return nil
 	}
 
@@ -260,10 +245,6 @@ func (w *worker) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case task := <-w.taskCh:
-			if task == nil {
-				return cerrors.ErrWorkerPoolEmptyTask.GenWithStackByArgs()
-			}
-
 			if atomic.LoadInt32(&task.handle.isCancelled) == 1 {
 				// ignored cancelled handle
 				continue
@@ -274,19 +255,58 @@ func (w *worker) run(ctx context.Context) error {
 				task.handle.cancelWithErr(err)
 			}
 		case <-ticker.C:
+			var handleErrs []struct {
+				h *defaultEventHandle
+				e error
+			}
+
 			w.handleRWLock.RLock()
 			for handle := range w.handles {
+				if atomic.LoadInt32(&handle.isCancelled) == 1 {
+					// ignored cancelled handle
+					continue
+				}
 				err := handle.doTimer(ctx)
 				if err != nil {
-					if atomic.LoadInt32(&handle.isCancelled) == 1 {
-						// ignored cancelled handle
-						continue
-					}
-					handle.cancelWithErr(err)
+					handleErrs = append(handleErrs, struct {
+						h *defaultEventHandle
+						e error
+					}{handle, err})
 				}
 			}
 			w.handleRWLock.RUnlock()
+
+			for _, handleErr := range handleErrs {
+				handleErr.h.cancelWithErr(handleErr.e)
+			}
 		case <-w.handleCancelCh:
+		}
+	}
+}
+
+func (w *worker) synchronize() {
+	if atomic.LoadInt32(&w.isRunning) == 0 {
+		return
+	}
+
+	receiver, err := w.stopNotifier.NewReceiver(time.Millisecond * 100)
+	if err != nil {
+		if cerrors.ErrOperateOnClosedNotifier.Equal(errors.Cause(err)) {
+			return
+		}
+		log.Panic("unexpected error", zap.Error(err))
+	}
+	defer receiver.Stop()
+
+	for {
+		workerHasFinishedLoop := false
+		select {
+		case w.handleCancelCh <- struct{}{}:
+			workerHasFinishedLoop = true
+		case <-receiver.C:
+		}
+		if workerHasFinishedLoop || atomic.LoadInt32(&w.isRunning) == 0 {
+			break
 		}
 	}
 }

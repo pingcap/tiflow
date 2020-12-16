@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -50,6 +52,8 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 			return errors.New("test error")
 		}
 		return nil
+	}).OnExit(func(err error) {
+		c.Assert(err, check.ErrorMatches, "test error")
 	})
 
 	errg.Go(func() error {
@@ -65,6 +69,40 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 		c.FailNow()
 	case err := <-handle.ErrCh():
 		c.Assert(err, check.ErrorMatches, "test error")
+	}
+	cancel()
+
+	err := errg.Wait()
+	c.Assert(err, check.ErrorMatches, "context canceled")
+}
+
+func (s *workerPoolSuite) TestTimerError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return pool.Run(ctx)
+	})
+
+	counter := 0
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		return nil
+	}).SetTimer(time.Millisecond*200, func(ctx context.Context) error {
+		if counter == 3 {
+			return errors.New("timer error")
+		}
+		counter++
+		return nil
+	})
+
+	select {
+	case <-ctx.Done():
+		c.FailNow()
+	case err := <-handle.ErrCh():
+		c.Assert(err, check.ErrorMatches, "timer error")
 	}
 	cancel()
 
@@ -93,7 +131,9 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 	errg.Go(func() error {
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
-			c.Assert(err, check.IsNil)
+			if err != nil {
+				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+			}
 		}
 		return nil
 	})
@@ -164,6 +204,48 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 	cancel()
 
 	err := errg.Wait()
+	c.Assert(err, check.ErrorMatches, "context canceled")
+}
+
+func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return pool.Run(ctx)
+	})
+
+	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint", "sleep(5000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint")
+	}()
+
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		return nil
+	}).SetTimer(200*time.Millisecond, func(ctx context.Context) error {
+		return nil
+	})
+
+	errg.Go(func() error {
+		i := 0
+		for {
+			err := handle.AddEvent(ctx, i)
+			if err != nil {
+				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				return nil
+			}
+			i++
+		}
+	})
+
+	handle.Unregister()
+
+	cancel()
+	err = errg.Wait()
 	c.Assert(err, check.ErrorMatches, "context canceled")
 }
 
