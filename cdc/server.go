@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/kv"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/kv"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -256,6 +256,9 @@ func (s *Server) Run(ctx context.Context) error {
 			return err
 		}
 		log.Info("server recovered", zap.String("capture-id", s.capture.info.ID))
+		failpoint.Inject("captureGetCurrentVersionAfterServerRecovered", func() {
+			kvStore.CurrentVersion() //nolint:errcheck
+		})
 	}
 }
 
@@ -325,6 +328,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return err
 	}
 	s.capture = capture
+	failpoint.Inject("captureServerRecovered", func() error {
+		return cerror.ErrCaptureSuicide
+	})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
