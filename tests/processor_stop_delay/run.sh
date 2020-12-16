@@ -46,9 +46,9 @@ function run() {
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     export GO_FAILPOINTS=''
-    # cleanup_process $CDC_BINARY
+    cleanup_process $CDC_BINARY
 }
 
-# trap stop_tidb_cluster EXIT
+trap stop_tidb_cluster EXIT
 run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
