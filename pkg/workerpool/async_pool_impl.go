@@ -21,10 +21,9 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
+	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
-
-	"github.com/pingcap/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -81,7 +80,7 @@ func (p *defaultAsyncPoolImpl) doGo(ctx context.Context, f func()) error {
 	defer worker.chLock.RUnlock()
 
 	if atomic.LoadInt32(&worker.isClosed) == 1 {
-		return nil
+		return cerrors.ErrAsyncPoolExited.GenWithStackByArgs()
 	}
 
 	select {

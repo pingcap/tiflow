@@ -19,13 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/workerpool"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/workerpool"
 	"go.uber.org/zap"
 )
 
@@ -152,6 +151,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			select {
 			case <-ctx.Done():
 				task.finished <- ctx.Err()
+				return
 			default:
 			}
 
