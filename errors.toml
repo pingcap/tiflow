@@ -703,7 +703,7 @@ workerpool received an empty task, please report a bug
 
 ["CDC:ErrWorkerPoolHandleCancelled"]
 error = '''
-workerpool handle is cancelled, cannot add more events
+workerpool handle is cancelled
 '''
 
 ["CDC:ErrWriteTsConflict"]

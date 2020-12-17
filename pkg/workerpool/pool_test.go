@@ -58,7 +58,10 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 	errg.Go(func() error {
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
-			c.Assert(err, check.IsNil)
+			if err != nil {
+				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				return nil
+			}
 		}
 		return nil
 	})
@@ -195,6 +198,12 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 		}
 	}
 
+	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint", "1*sleep(500)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint")
+	}()
+
 	handle.Unregister()
 	handle.Unregister() // Unregistering many times does not matter
 	handle.Unregister()
@@ -204,9 +213,10 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 		c.Assert(atomic.LoadInt32(&num), check.Equals, lastNum)
 	}
 
+	time.Sleep(1 * time.Second)
 	cancel()
 
-	err := errg.Wait()
+	err = errg.Wait()
 	c.Assert(err, check.ErrorMatches, "context canceled")
 }
 

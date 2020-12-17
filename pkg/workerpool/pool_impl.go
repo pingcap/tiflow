@@ -108,6 +108,8 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
 	}
 
+	failpoint.Inject("addEventDelayPoint", func() {})
+
 	task := &task{
 		handle: h,
 		f: func(ctx context.Context) error {
@@ -144,7 +146,7 @@ func (h *defaultEventHandle) Unregister() {
 
 	h.worker.synchronize()
 
-	h.doCancel(errors.New("handle unregistered"))
+	h.doCancel(cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs())
 }
 
 func (h *defaultEventHandle) doCancel(err error) {
@@ -243,6 +245,9 @@ func (w *worker) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case task := <-w.taskCh:
+			if task == nil {
+				return cerrors.ErrWorkerPoolEmptyTask.GenWithStackByArgs()
+			}
 			if atomic.LoadInt32(&task.handle.isCancelled) == 1 {
 				// ignored cancelled handle
 				continue
