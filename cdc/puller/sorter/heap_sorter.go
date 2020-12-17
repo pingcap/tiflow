@@ -148,13 +148,6 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}()
 
 		for oldHeap.Len() > 0 {
-			select {
-			case <-ctx.Done():
-				task.finished <- ctx.Err()
-				return
-			default:
-			}
-
 			event := heap.Pop(&oldHeap).(*sortItem).entry
 			err := writer.writeNext(event)
 			if err != nil {
