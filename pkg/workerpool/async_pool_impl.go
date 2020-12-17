@@ -18,8 +18,11 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
-	"github.com/pingcap/log"
+	"github.com/cenkalti/backoff"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/retry"
 
 	"github.com/pingcap/errors"
 	"golang.org/x/sync/errgroup"
@@ -28,6 +31,8 @@ import (
 type defaultAsyncPoolImpl struct {
 	workers      []*asyncWorker
 	nextWorkerID int32
+	isRunning    int32
+	runningLock  sync.RWMutex
 }
 
 // NewDefaultAsyncPool creates a new AsyncPool that uses the default implementation
@@ -37,9 +42,6 @@ func NewDefaultAsyncPool() AsyncPool {
 
 func newDefaultAsyncPoolImpl(numWorkers int) *defaultAsyncPoolImpl {
 	workers := make([]*asyncWorker, numWorkers)
-	for i := range workers {
-		workers[i] = newAsyncWorker()
-	}
 
 	return &defaultAsyncPoolImpl{
 		workers: workers,
@@ -47,6 +49,31 @@ func newDefaultAsyncPoolImpl(numWorkers int) *defaultAsyncPoolImpl {
 }
 
 func (p *defaultAsyncPoolImpl) Go(ctx context.Context, f func()) error {
+	if p.doGo(ctx, f) == nil {
+		return nil
+	}
+	return errors.Trace(retry.Run(time.Millisecond*1, 25, func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		err := errors.Trace(p.doGo(ctx, f))
+		if err != nil && cerrors.ErrAsyncPoolExited.NotEqual(errors.Cause(err)) {
+			return backoff.Permanent(err)
+		}
+		return err
+	}))
+}
+
+func (p *defaultAsyncPoolImpl) doGo(ctx context.Context, f func()) error {
+	p.runningLock.RLock()
+	defer p.runningLock.RUnlock()
+
+	if atomic.LoadInt32(&p.isRunning) == 0 {
+		return cerrors.ErrAsyncPoolExited.GenWithStackByArgs()
+	}
+
 	task := &asyncTask{f: f}
 	worker := p.workers[int(atomic.AddInt32(&p.nextWorkerID, 1))%len(p.workers)]
 
@@ -67,30 +94,50 @@ func (p *defaultAsyncPoolImpl) Go(ctx context.Context, f func()) error {
 }
 
 func (p *defaultAsyncPoolImpl) Run(ctx context.Context) error {
+	p.prepare()
 	errg := &errgroup.Group{}
 
 	subctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	p.runningLock.Lock()
+	atomic.StoreInt32(&p.isRunning, 1)
+	p.runningLock.Unlock()
+
+	defer func() {
+		p.runningLock.Lock()
+		atomic.StoreInt32(&p.isRunning, 0)
+		p.runningLock.Unlock()
+	}()
+
 	for _, worker := range p.workers {
 		workerFinal := worker
 		errg.Go(func() error {
-			return workerFinal.run(subctx)
+			err := workerFinal.run(subctx)
+			if err != nil && cerrors.ErrAsyncPoolExited.Equal(errors.Cause(err)) {
+				return nil
+			}
+			return errors.Trace(err)
 		})
 	}
 
 	errg.Go(func() error {
 		<-ctx.Done()
 
-		log.Info("AsyncPool Cancelled")
 		for _, worker := range p.workers {
 			worker.close()
 		}
 
-		return nil
+		return ctx.Err()
 	})
 
 	return errors.Trace(errg.Wait())
+}
+
+func (p *defaultAsyncPoolImpl) prepare() {
+	for i := range p.workers {
+		p.workers[i] = newAsyncWorker()
+	}
 }
 
 type asyncTask struct {
@@ -114,7 +161,7 @@ func (w *asyncWorker) run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case task := <-w.inputCh:
 			if task == nil {
-				return nil
+				return cerrors.ErrAsyncPoolExited.GenWithStackByArgs()
 			}
 
 			task.f()
