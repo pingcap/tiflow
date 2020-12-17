@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -50,7 +52,7 @@ func main() {
 	}
 
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  4,
+		NumConcurrentWorker:  8,
 		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:    60,
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
@@ -148,7 +150,8 @@ func printError(err error) error {
 	if err != nil && errors.Cause(err) != context.Canceled &&
 		errors.Cause(err) != context.DeadlineExceeded &&
 		!strings.Contains(err.Error(), "context canceled") &&
-		!strings.Contains(err.Error(), "context deadline exceeded") {
+		!strings.Contains(err.Error(), "context deadline exceeded") &&
+		cerrors.ErrWorkerPoolHandleCancelled.NotEqual(errors.Cause(err)) {
 
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}

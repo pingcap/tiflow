@@ -61,7 +61,7 @@ func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd
 }
 
 func (f *fileBackEnd) reader() (backEndReader, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_RDONLY, 0o644)
+	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

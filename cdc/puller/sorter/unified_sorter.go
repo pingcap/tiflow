@@ -169,11 +169,16 @@ func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 // RunWorkerPool runs the worker pool used by the heapSorters
 // It **must** be running for Unified Sorter to work.
 func RunWorkerPool(ctx context.Context) error {
-	err := heapSorterPool.Run(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return errors.Trace(heapSorterPool.Run(ctx))
+	})
+
+	errg.Go(func() error {
+		return errors.Trace(heapSorterIOPool.Run(ctx))
+	})
+
+	return errors.Trace(errg.Wait())
 }
 
 // tableNameFromCtx is used for retrieving the table's name from a context within the Unified Sorter

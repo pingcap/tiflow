@@ -123,7 +123,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		zap.Int("heap-id", task.heapSorterID),
 		zap.Uint64("resolvedTs", task.maxResolvedTs))
 
-	go func() {
+	err := heapSorterIOPool.Go(ctx, func() {
 		if isEmptyFlush {
 			return
 		}
@@ -183,7 +183,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			zap.Uint64("resolvedTs", task.maxResolvedTs),
 			zap.Uint64("data-size", dataSize),
 			zap.Int("size", eventCount))
-	}()
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	select {
 	case <-ctx.Done():
@@ -193,7 +196,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	return nil
 }
 
-var heapSorterPool = workerpool.NewDefaultWorkerPool()
+var (
+	heapSorterPool   = workerpool.NewDefaultWorkerPool()
+	heapSorterIOPool = workerpool.NewDefaultAsyncPool()
+)
 
 type heapSorterRuntimeState struct {
 	maxResolved           uint64
