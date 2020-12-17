@@ -32,7 +32,7 @@ function run_length_limit() {
 
     TOPIC_NAME="ticdc-kafka-message-test-$RANDOM"
     SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-message-bytes=4096"
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-dir="$sort_dir"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-message-bytes=4096"
     fi
