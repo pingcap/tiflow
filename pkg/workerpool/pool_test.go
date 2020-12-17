@@ -185,6 +185,11 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 	})
 
 	for {
+		select {
+		case <-ctx.Done():
+			c.FailNow()
+		default:
+		}
 		if atomic.LoadInt32(&num) > 5000 {
 			break
 		}
