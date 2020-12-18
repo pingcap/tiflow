@@ -38,7 +38,7 @@ import (
 
 var (
 	sorterDir          = flag.String("dir", "./sorter", "temporary directory used for sorting")
-	numSorters         = flag.Int("num-sorters", 64, "number of instances of sorters")
+	numSorters         = flag.Int("num-sorters", 256, "number of instances of sorters")
 	numEvents          = flag.Int("num-events-per-sorter", 10000, "number of events sent to a sorter")
 	percentageResolves = flag.Int("percentage-resolve-events", 70, "percentage of resolved events")
 )
@@ -49,6 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not enable failpoint", zap.Error(err))
 	}
+	// log.SetLevel(zapcore.DebugLevel)
 
 	config.SetSorterConfig(&config.SorterConfig{
 		NumConcurrentWorker:  8,

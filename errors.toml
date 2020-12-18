@@ -16,6 +16,11 @@ error = '''
 Async broadcasts not supported
 '''
 
+["CDC:ErrAsyncPoolExited"]
+error = '''
+asyncPool has exited. Report a bug if seen externally.
+'''
+
 ["CDC:ErrAvroEncodeFailed"]
 error = '''
 encode to avro native data

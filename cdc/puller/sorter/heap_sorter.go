@@ -71,15 +71,17 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	_, tableName := util.TableIDFromCtx(ctx)
 	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName).Observe(float64(h.heap.Len()))
 
-	isEmptyFlush := h.heap.Len() == 0
-	if isEmptyFlush {
-		return nil
+	if h.heap.Len() == 1 && h.heap[0].entry.RawKV.OpType == model.OpTypeResolved {
+		h.heap.Pop()
 	}
+
+	isEmptyFlush := h.heap.Len() == 0
 	var (
 		backEnd    backEnd
 		lowerBound uint64
 	)
 
+	var finishCh chan error
 	if !isEmptyFlush {
 		var err error
 		backEnd, err = pool.alloc(ctx)
@@ -88,6 +90,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 
 		lowerBound = h.heap[0].entry.CRTs
+		finishCh = make(chan error, 1)
 	}
 
 	task := &flushTask{
@@ -96,7 +99,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		backend:       backEnd,
 		tsLowerBound:  lowerBound,
 		maxResolvedTs: maxResolvedTs,
-		finished:      make(chan error, 2),
+		finished:      finishCh,
 	}
 	h.taskCounter++
 
@@ -122,63 +125,63 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		zap.Int("heap-id", task.heapSorterID),
 		zap.Uint64("resolvedTs", task.maxResolvedTs))
 
-	err := heapSorterIOPool.Go(ctx, func() {
-		if isEmptyFlush {
-			return
-		}
+	if !isEmptyFlush {
 		backEndFinal := backEnd
-		writer, err := backEnd.writer()
-		if err != nil {
-			if backEndFinal != nil {
-				_ = task.dealloc()
+		err := heapSorterIOPool.Go(ctx, func() {
+			writer, err := backEnd.writer()
+			if err != nil {
+				if backEndFinal != nil {
+					_ = task.dealloc()
+				}
+				task.finished <- errors.Trace(err)
+				return
 			}
-			task.finished <- errors.Trace(err)
-			return
-		}
 
-		defer func() {
-			// handle errors (or aborts) gracefully to prevent resource leaking (especially FD's)
-			if writer != nil {
-				_ = writer.flushAndClose()
-			}
-			if backEndFinal != nil {
-				_ = task.dealloc()
-			}
-			close(task.finished)
-		}()
+			defer func() {
+				// handle errors (or aborts) gracefully to prevent resource leaking (especially FD's)
+				if writer != nil {
+					_ = writer.flushAndClose()
+				}
+				if backEndFinal != nil {
+					_ = task.dealloc()
+				}
+				close(task.finished)
+			}()
 
-		for oldHeap.Len() > 0 {
-			event := heap.Pop(&oldHeap).(*sortItem).entry
-			err := writer.writeNext(event)
+			for oldHeap.Len() > 0 {
+				event := heap.Pop(&oldHeap).(*sortItem).entry
+				err := writer.writeNext(event)
+				if err != nil {
+					task.finished <- errors.Trace(err)
+					return
+				}
+			}
+
+			dataSize := writer.dataSize()
+			atomic.StoreInt64(&task.dataSize, int64(dataSize))
+			eventCount := writer.writtenCount()
+
+			writer1 := writer
+			writer = nil
+			err = writer1.flushAndClose()
 			if err != nil {
 				task.finished <- errors.Trace(err)
 				return
 			}
-		}
 
-		dataSize := writer.dataSize()
-		atomic.StoreInt64(&task.dataSize, int64(dataSize))
-		eventCount := writer.writtenCount()
-
-		writer1 := writer
-		writer = nil
-		err = writer1.flushAndClose()
+			backEndFinal = nil
+			task.finished <- nil // DO NOT access `task` beyond this point in this function
+			log.Debug("Unified Sorter flushTask finished",
+				zap.Int("heap-id", task.heapSorterID),
+				zap.String("table", tableNameFromCtx(ctx)),
+				zap.Uint64("resolvedTs", task.maxResolvedTs),
+				zap.Uint64("data-size", dataSize),
+				zap.Int("size", eventCount))
+		})
 		if err != nil {
-			task.finished <- errors.Trace(err)
-			return
+			close(task.finished)
+			return errors.Trace(err)
 		}
-
-		backEndFinal = nil
-		task.finished <- nil // DO NOT access `task` beyond this point in this function
-		log.Debug("Unified Sorter flushTask finished",
-			zap.Int("heap-id", task.heapSorterID),
-			zap.String("table", tableNameFromCtx(ctx)),
-			zap.Uint64("resolvedTs", task.maxResolvedTs),
-			zap.Uint64("data-size", dataSize),
-			zap.Int("size", eventCount))
-	})
-	if err != nil {
-		return errors.Trace(err)
 	}
 
 	select {
