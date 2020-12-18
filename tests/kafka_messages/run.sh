@@ -96,7 +96,7 @@ function run_batch_size_limit() {
     # Add a check table to reduce check time, or if we check data with sync diff
     # directly, there maybe a lot of diff data at first because of the incremental scan
     run_sql "CREATE table kafka_message.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    check_table_exists "kafka_message.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists "kafka_message.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_table_exists "kafka_message.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
@@ -114,7 +114,7 @@ function run_batch_size_limit() {
     run_sql "create table kafka_message.USERTABLE2 like kafka_message.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "insert into kafka_message.USERTABLE2 select * from kafka_message.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "create table kafka_message.check4(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    check_table_exists "kafka_message.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists "kafka_message.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_table_exists "kafka_message.check4" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
 
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
