@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -119,11 +121,12 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			return nil
 		}
 	}
-
-	log.Debug("Unified Sorter new flushTask",
-		zap.String("table", tableNameFromCtx(ctx)),
-		zap.Int("heap-id", task.heapSorterID),
-		zap.Uint64("resolvedTs", task.maxResolvedTs))
+	failpoint.Inject("sorterDebug", func() {
+		log.Debug("Unified Sorter new flushTask",
+			zap.String("table", tableNameFromCtx(ctx)),
+			zap.Int("heap-id", task.heapSorterID),
+			zap.Uint64("resolvedTs", task.maxResolvedTs))
+	})
 
 	if !isEmptyFlush {
 		backEndFinal := backEnd
@@ -170,13 +173,17 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			}
 
 			backEndFinal = nil
+
+			failpoint.Inject("sorterDebug", func() {
+				log.Debug("Unified Sorter flushTask finished",
+					zap.Int("heap-id", task.heapSorterID),
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Uint64("resolvedTs", task.maxResolvedTs),
+					zap.Uint64("data-size", dataSize),
+					zap.Int("size", eventCount))
+			})
+
 			task.finished <- nil // DO NOT access `task` beyond this point in this function
-			log.Debug("Unified Sorter flushTask finished",
-				zap.Int("heap-id", task.heapSorterID),
-				zap.String("table", tableNameFromCtx(ctx)),
-				zap.Uint64("resolvedTs", task.maxResolvedTs),
-				zap.Uint64("data-size", dataSize),
-				zap.Int("size", eventCount))
 		})
 		if err != nil {
 			close(task.finished)
