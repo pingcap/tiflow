@@ -63,12 +63,12 @@ func (s *contextSuite) TestCancel(c *check.C) {
 
 func (s *contextSuite) TestCancelCascade(c *check.C) {
 	defer testleak.AfterTest(c)()
+	startTime := time.Now()
 	stdCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(1*time.Second))
 	ctx := NewContext(stdCtx, &Vars{})
 	ctx1, _ := WithCancel(ctx)
 	ctx2, cancel2 := WithCancel(ctx)
 	cancel2()
-	startTime := time.Now()
 	<-ctx2.StdContext().Done()
 	<-ctx2.Done()
 	c.Assert(time.Since(startTime), check.Less, time.Second)
