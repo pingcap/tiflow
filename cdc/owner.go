@@ -1095,11 +1095,13 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				return
 			default:
 			}
-			wch := o.etcdClient.Client.Watch(ctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
+			cctx, cancel := context.WithCancel(ctx)
+			wch := o.etcdClient.Client.Watch(cctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
 
 			for resp := range wch {
 				if resp.Err() != nil {
 					log.Error("position watcher restarted with error", zap.Error(resp.Err()))
+					cancel()
 					break
 				}
 
@@ -1108,8 +1110,10 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// operations should be resolved in future release.
 
 				select {
-				case <-ctx.Done():
+				case <-cctx.Done():
 				case output <- struct{}{}:
+				default:
+					// in case output channel is full, just ignore this event
 				}
 			}
 		}
