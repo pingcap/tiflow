@@ -90,15 +90,19 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	}
 
 	errg.Go(func() error {
-		// must wait for all writers to exit to close the channel.
-		defer close(heapSorterCollectCh)
+		defer func() {
+			// cancelling the heapSorters from the outside
+			for _, hs := range heapSorters {
+				hs.runtimeState.poolHandle.Unregister()
+			}
+			// must wait for all writers to exit to close the channel.
+			close(heapSorterCollectCh)
+		}()
+
 		for {
 			select {
 			case <-subctx.Done():
-				// cancelling the heapSorters from the outside
-				for _, hs := range heapSorters {
-					hs.runtimeState.poolHandle.Unregister()
-				}
+				return errors.Trace(subctx.Err())
 			case err := <-heapSorterErrCh:
 				return errors.Trace(err)
 			}
