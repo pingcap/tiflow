@@ -45,6 +45,31 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type ownership struct {
+	lastTickTime time.Time
+	tickDuration time.Duration
+}
+
+func newOwnersip(captureID model.CaptureID, tickDuration time.Duration) ownership {
+	minTickDuration := 5 * time.Second
+	if tickDuration > minTickDuration {
+		panic("ownership counter must be incearsed every 5 seconds")
+	}
+	return ownership{
+		tickDuration: minTickDuration,
+	}
+}
+
+func (o *ownership) inc() {
+	now := time.Now()
+	if now.Sub(o.lastTickTime) > o.tickDuration {
+		// Keep the value of promtheus expression `rate(counter)` = 1
+		// Please also change alert rule in ticdc.rules.yml when change the expression value.
+		ownershipCounter.Add(float64(o.tickDuration / time.Second))
+		o.lastTickTime = now
+	}
+}
+
 // Owner manages the cdc cluster
 type Owner struct {
 	done        chan struct{}
@@ -1001,8 +1026,8 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 }
 
 // Run the owner
-// TODO avoid this tick style, this means we get `tickTime` latency here.
-func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
+// TODO avoid this tick style, this means we get `tickDuration` latency here.
+func (o *Owner) Run(ctx context.Context, captureID model.CaptureID, tickDuration time.Duration) error {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(errors.New("owner run with injected error"))
 	})
@@ -1024,7 +1049,8 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer cancel1()
 	changedFeeds := o.watchFeedChange(ctx1)
 
-	ticker := time.NewTicker(tickTime)
+	ownership := newOwnersip(captureID, tickDuration)
+	ticker := time.NewTicker(tickDuration)
 	defer ticker.Stop()
 
 	var err error
@@ -1041,6 +1067,7 @@ loop:
 			break loop
 		case <-changedFeeds:
 		case <-ticker.C:
+			ownership.inc()
 		}
 
 		err = o.run(ctx)

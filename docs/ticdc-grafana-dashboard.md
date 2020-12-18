@@ -55,6 +55,8 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - Uptime ： TiKV 节点和 TiCDC 节点已经运行的时间
 - Goroutine count ： TiCDC 节点 Goroutine 的个数
 - Open FD count ： TiCDC 节点打开的文件句柄个数
+- Ownership ： TiCDC 集群中节点的当前状态
+- Ownership history ： TiCDC 集群中 Owner 节点的历史记录
 - CPU usage ： TiCDC 节点使用的 CPU
 - Memory usage ： TiCDC 节点使用的内存
 

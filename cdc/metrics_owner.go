@@ -30,10 +30,18 @@ var (
 			Name:      "checkpoint_ts_lag",
 			Help:      "checkpoint ts lag of changefeeds",
 		}, []string{"changefeed"})
+	ownershipCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "ownership_counter",
+			Help:      "The counter of ownership increases every 5 seconds on a owner capture",
+		})
 )
 
 // initOwnerMetrics registers all metrics used in owner
 func initOwnerMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedCheckpointTsGauge)
 	registry.MustRegister(changefeedCheckpointTsLagGauge)
+	registry.MustRegister(ownershipCounter)
 }
