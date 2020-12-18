@@ -1110,7 +1110,6 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// operations should be resolved in future release.
 
 				select {
-				case <-cctx.Done():
 				case output <- struct{}{}:
 				default:
 					// in case output channel is full, just ignore this event
