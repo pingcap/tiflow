@@ -1101,7 +1101,6 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 			for resp := range wch {
 				if resp.Err() != nil {
 					log.Error("position watcher restarted with error", zap.Error(resp.Err()))
-					cancel()
 					break
 				}
 
@@ -1115,6 +1114,7 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 					// in case output channel is full, just ignore this event
 				}
 			}
+			cancel()
 		}
 	}()
 	return output
