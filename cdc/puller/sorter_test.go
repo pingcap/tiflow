@@ -15,8 +15,6 @@ package puller
 
 import (
 	"context"
-	"github.com/pingcap/failpoint"
-	sorter2 "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"math"
 	"os"
 	"sync/atomic"
@@ -24,9 +22,12 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	sorter2 "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	_ "net/http/pprof"
@@ -53,6 +54,7 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 }
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
+	defer testleak.AfterTest(c)()
 	config.SetSorterConfig(&config.SorterConfig{
 		NumConcurrentWorker:  8,
 		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
@@ -60,7 +62,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
 	})
 
-	err := os.MkdirAll("./sorter", 0755)
+	err := os.MkdirAll("./sorter", 0o755)
 	c.Assert(err, check.IsNil)
 	sorter := sorter2.NewUnifiedSorter("./sorter", "test", "0.0.0.0:0")
 
@@ -70,6 +72,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 }
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
+	defer testleak.AfterTest(c)()
 	config.SetSorterConfig(&config.SorterConfig{
 		NumConcurrentWorker:  8,
 		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
@@ -77,7 +80,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 		MaxMemoryConsumption: 0,
 	})
 
-	err := os.MkdirAll("./sorter", 0755)
+	err := os.MkdirAll("./sorter", 0o755)
 	c.Assert(err, check.IsNil)
 	sorter := sorter2.NewUnifiedSorter("./sorter", "test", "0.0.0.0:0")
 

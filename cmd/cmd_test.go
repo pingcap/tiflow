@@ -64,7 +64,7 @@ sync-ddl = true
 type = "manual"
 polling-time = 5
 `
-	err := ioutil.WriteFile(path, []byte(content), 0644)
+	err := ioutil.WriteFile(path, []byte(content), 0o644)
 	c.Assert(err, check.IsNil)
 
 	cfg := config.GetDefaultReplicaConfig()
@@ -155,7 +155,7 @@ filter-replica-ids = [2,3]
 # Whether to replicate DDL
 sync-ddl = true
 `
-	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
+	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0o644)
 	c.Assert(err, check.IsNil)
 
 	cfg := config.GetDefaultReplicaConfig()
@@ -190,7 +190,7 @@ func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `filter-case-insensitive = true`
-	err := ioutil.WriteFile(path, []byte(content), 0644)
+	err := ioutil.WriteFile(path, []byte(content), 0o644)
 	c.Assert(err, check.IsNil)
 
 	cfg := config.GetDefaultReplicaConfig()

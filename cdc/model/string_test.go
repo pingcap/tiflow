@@ -23,6 +23,7 @@ type stringSuite struct{}
 var _ = check.Suite(&stringSuite{})
 
 func (s *stringSuite) TestHolderString(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		count    int
 		expected string

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -36,6 +37,7 @@ type mountTxnsSuite struct{}
 var _ = check.Suite(&mountTxnsSuite{})
 
 func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
@@ -122,12 +124,20 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 		);`,
 		values: [][]interface{}{
 			{1},
-			{2, "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A",
-				"89504E470D0A1A0A", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}},
-			{3, "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free",
-				"bug free", "bug free", "bug free", "bug free"},
+			{
+				2, "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A",
+				"89504E470D0A1A0A",
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+			},
+			{
+				3, "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free",
+				"bug free", "bug free", "bug free", "bug free",
+			},
 			{4, "", "", "", "", "", "", "", "", "", "", "", ""},
 			{5, "你好", "我好", "大家好", "道路", "千万条", "安全", "第一条", "行车", "不规范", "亲人", "两行泪", "！"},
 			{6, "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "☺️", "😊", "😇", "🙂"},
