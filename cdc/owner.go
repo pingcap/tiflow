@@ -83,7 +83,6 @@ type Owner struct {
 	lastFlushChangefeeds    time.Time
 	flushChangefeedInterval time.Duration
 	feedChangeNotifier      *notify.Notifier
-	feedChangeReceiver      *notify.Receiver
 }
 
 const (
@@ -105,12 +104,6 @@ func NewOwner(
 	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
 	endpoints := sess.Client().Endpoints()
 
-	feedChangeNotifier := new(notify.Notifier)
-	feedChangeReceiver, err := feedChangeNotifier.NewReceiver(ownerRunInterval)
-	if err != nil {
-		return nil, err
-	}
-
 	owner := &Owner{
 		done:                    make(chan struct{}),
 		session:                 sess,
@@ -127,8 +120,7 @@ func NewOwner(
 		etcdClient:              cli,
 		gcTTL:                   gcTTL,
 		flushChangefeedInterval: flushChangefeedInterval,
-		feedChangeNotifier:      feedChangeNotifier,
-		feedChangeReceiver:      feedChangeReceiver,
+		feedChangeNotifier:      new(notify.Notifier),
 	}
 
 	return owner, nil
@@ -1026,10 +1018,13 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
+	feedChangeReceiver, err := o.feedChangeNotifier.NewReceiver(tickTime)
+	if err != nil {
+		return err
+	}
+	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
-	defer o.feedChangeNotifier.Close()
 
-	var err error
 loop:
 	for {
 		select {
@@ -1041,7 +1036,7 @@ loop:
 			// Anyway we just break loop here to ensure the following destruction.
 			err = ctx.Err()
 			break loop
-		case <-o.feedChangeReceiver.C:
+		case <-feedChangeReceiver.C:
 		}
 
 		err = o.run(ctx)
