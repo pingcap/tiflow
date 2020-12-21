@@ -117,7 +117,9 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 	task := &task{
 		handle: h,
 		f: func(ctx1 context.Context) error {
-			return h.f(MergeContexts(ctx, ctx1), event)
+			mContext, cancel := MergeContexts(ctx, ctx1)
+			defer cancel()
+			return h.f(mContext, event)
 		},
 	}
 
@@ -135,7 +137,9 @@ func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duratio
 
 	h.timerInterval = interval
 	h.timerHandler = func(ctx1 context.Context) error {
-		return f(MergeContexts(ctx, ctx1))
+		mContext, cancel := MergeContexts(ctx, ctx1)
+		defer cancel()
+		return f(mContext)
 	}
 	atomic.StoreInt32(&h.hasTimer, 1)
 

@@ -38,7 +38,9 @@ func (s *contextSuite) TestDoneCase1(c *check.C) {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
 
-	merged := MergeContexts(ctx1, ctx2)
+	merged, cancelM := MergeContexts(ctx1, ctx2)
+	defer cancelM()
+
 	go func() {
 		<-merged.Done()
 	}()
@@ -56,7 +58,9 @@ func (s *contextSuite) TestDoneCase2(c *check.C) {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
 
-	merged := MergeContexts(ctx1, ctx2)
+	merged, cancelM := MergeContexts(ctx1, ctx2)
+	defer cancelM()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -65,6 +69,30 @@ func (s *contextSuite) TestDoneCase2(c *check.C) {
 	}()
 
 	cancel2()
+	wg.Wait()
+}
+
+func (s *contextSuite) TestDoneCaseCancel(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel0 := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel0()
+
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
+	ctx2, cancel2 := context.WithCancel(ctx)
+	defer cancel2()
+
+	merged, cancelM := MergeContexts(ctx1, ctx2)
+	defer cancelM()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		<-merged.Done()
+		wg.Done()
+	}()
+
+	cancelM()
 	wg.Wait()
 }
 
@@ -80,7 +108,8 @@ func (s *contextSuite) TestDoneContention(c *check.C) {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
 
-	merged := MergeContexts(ctx1, ctx2)
+	merged, cancelM := MergeContexts(ctx1, ctx2)
+	defer cancelM()
 
 	for i := 0; i < 32; i++ {
 		errg.Go(func() error {
@@ -131,7 +160,9 @@ func (s *contextSuite) TestErr(c *check.C) {
 	ctx1 := &mockContext{}
 	ctx2 := &mockContext{}
 
-	mContext := MergeContexts(ctx1, ctx2)
+	mContext, cancelM := MergeContexts(ctx1, ctx2)
+	defer cancelM()
+
 	c.Assert(mContext.Err(), check.IsNil)
 
 	ctx1.err = errors.New("error1")
@@ -150,7 +181,9 @@ func (s *contextSuite) TestDeadline(c *check.C) {
 	ctx1 := &mockContext{}
 	ctx2 := &mockContext{}
 
-	mContext := MergeContexts(ctx1, ctx2)
+	mContext, cancelM := MergeContexts(ctx1, ctx2)
+	defer cancelM()
+
 	_, ok := mContext.Deadline()
 	c.Assert(ok, check.IsFalse)
 
@@ -187,7 +220,9 @@ func (s *contextSuite) TestValues(c *check.C) {
 		values: map[string]string{"b": "2b", "c": "2c"},
 	}
 
-	mContext := MergeContexts(ctx1, ctx2)
+	mContext, cancelM := MergeContexts(ctx1, ctx2)
+	defer cancelM()
+
 	c.Assert(mContext.Value("a"), check.Equals, "1a")
 	c.Assert(mContext.Value("b"), check.Equals, "2b")
 	c.Assert(mContext.Value("c"), check.Equals, "1c")

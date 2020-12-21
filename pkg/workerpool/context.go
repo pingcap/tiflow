@@ -21,9 +21,11 @@ import (
 )
 
 type mergedContext struct {
-	doneChMu  sync.Mutex
-	hasDoneCh int32
-	doneCh    chan struct{}
+	doneChMu    sync.Mutex
+	hasDoneCh   int32
+	doneCh      chan struct{}
+	isCancelled int32
+	cancelCh    chan struct{}
 
 	ctx1 context.Context
 	ctx2 context.Context
@@ -31,11 +33,20 @@ type mergedContext struct {
 
 // MergeContexts merges two contexts.
 // In case of conflicting errors or values, ctx1 takes priority.
-func MergeContexts(ctx1, ctx2 context.Context) context.Context {
-	return &mergedContext{
-		ctx1: ctx1,
-		ctx2: ctx2,
+func MergeContexts(ctx1, ctx2 context.Context) (context.Context, context.CancelFunc) {
+	cancelCh := make(chan struct{})
+	ret := &mergedContext{
+		ctx1:     ctx1,
+		ctx2:     ctx2,
+		cancelCh: cancelCh,
 	}
+
+	cancelFunc := func() {
+		if atomic.SwapInt32(&ret.isCancelled, 1) == 0 {
+			close(cancelCh)
+		}
+	}
+	return ret, cancelFunc
 }
 
 func (m *mergedContext) Deadline() (deadline time.Time, ok bool) {
@@ -79,6 +90,7 @@ func (m *mergedContext) Done() <-chan struct{} {
 			select {
 			case <-m.ctx1.Done():
 			case <-m.ctx2.Done():
+			case <-m.cancelCh:
 			}
 			close(m.doneCh)
 		}()
