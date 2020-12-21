@@ -975,13 +975,14 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 		}
 	}()
 
-	ch := owner.watchFeedChange(ctx)
+	owner.watchFeedChange(ctx)
+	defer owner.feedChangeNotifier.Close()
 	wg.Add(1)
 	go func() {
 		defer func() {
-			// there could be one message remaining in chan, try to consume it
+			// there could be one message remaining in notification receiver, try to consume it
 			select {
-			case <-ch:
+			case <-owner.feedChangeReceiver.C:
 			default:
 			}
 			wg.Done()
@@ -990,7 +991,7 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 			select {
 			case <-ctx1.Done():
 				return
-			case <-ch:
+			case <-owner.feedChangeReceiver.C:
 				recvChangeCount++
 				// sleep to simulate some owner work
 				time.Sleep(time.Millisecond * 50)
@@ -1005,7 +1006,7 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 	c.Assert(recvChangeCount, check.Greater, 0)
 	c.Assert(recvChangeCount, check.Less, updateCount)
 	select {
-	case <-ch:
+	case <-owner.feedChangeReceiver.C:
 		c.Error("should not receive message from feed change chan any more")
 	default:
 	}
