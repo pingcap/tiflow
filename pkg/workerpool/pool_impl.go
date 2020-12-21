@@ -29,6 +29,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	workerPoolDefaultClockSourceInterval = time.Millisecond * 100
+)
+
 type defaultPoolImpl struct {
 	hasher        Hasher
 	workers       []*worker
@@ -112,8 +116,8 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 
 	task := &task{
 		handle: h,
-		f: func(ctx context.Context) error {
-			return h.f(ctx, event)
+		f: func(ctx1 context.Context) error {
+			return h.f(MergeContexts(ctx, ctx1), event)
 		},
 	}
 
@@ -232,7 +236,7 @@ func newWorker() *worker {
 }
 
 func (w *worker) run(ctx context.Context) error {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(workerPoolDefaultClockSourceInterval)
 	atomic.StoreInt32(&w.isRunning, 1)
 	defer func() {
 		ticker.Stop()
