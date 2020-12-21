@@ -16,7 +16,6 @@ package workerpool
 import (
 	"context"
 	"log"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -41,8 +40,8 @@ type defaultPoolImpl struct {
 }
 
 // NewDefaultWorkerPool creates a new WorkerPool that uses the default implementation
-func NewDefaultWorkerPool() WorkerPool {
-	return newDefaultPoolImpl(&defaultHasher{}, runtime.NumCPU()/2+1)
+func NewDefaultWorkerPool(numWorkers int) WorkerPool {
+	return newDefaultPoolImpl(&defaultHasher{}, numWorkers)
 }
 
 func newDefaultPoolImpl(hasher Hasher, numWorkers int) *defaultPoolImpl {

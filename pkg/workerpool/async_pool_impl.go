@@ -15,7 +15,6 @@ package workerpool
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,8 +34,8 @@ type defaultAsyncPoolImpl struct {
 }
 
 // NewDefaultAsyncPool creates a new AsyncPool that uses the default implementation
-func NewDefaultAsyncPool() AsyncPool {
-	return newDefaultAsyncPoolImpl(runtime.NumCPU() * 2)
+func NewDefaultAsyncPool(numWorkers int) AsyncPool {
+	return newDefaultAsyncPoolImpl(numWorkers)
 }
 
 func newDefaultAsyncPoolImpl(numWorkers int) *defaultAsyncPoolImpl {

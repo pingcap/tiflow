@@ -25,6 +25,8 @@ type SorterConfig struct {
 	MaxMemoryPressure int `toml:"max-memory-pressure" json:"max-memory-pressure"`
 	// the maximum memory consumption allowed for in-memory sorting
 	MaxMemoryConsumption uint64 `toml:"max-memory-consumption" json:"max-memory-consumption"`
+	// the size of workerpool
+	NumWorkerPoolGoroutine int `toml:"num-workerpool-goroutine" json:"num_worker_pool_goroutine"`
 }
 
 var (

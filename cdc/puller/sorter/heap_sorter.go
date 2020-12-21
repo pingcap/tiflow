@@ -16,6 +16,7 @@ package sorter
 import (
 	"container/heap"
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -199,8 +200,9 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 }
 
 var (
-	heapSorterPool   = workerpool.NewDefaultWorkerPool()
-	heapSorterIOPool = workerpool.NewDefaultAsyncPool()
+	heapSorterPool   workerpool.WorkerPool
+	heapSorterIOPool workerpool.AsyncPool
+	poolOnce         sync.Once
 )
 
 type heapSorterRuntimeState struct {
@@ -264,4 +266,12 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 
 	state.poolHandle = poolHandle
 	h.runtimeState = state
+}
+
+func lazyInitPool() {
+	poolOnce.Do(func() {
+		sorterConfig := config.GetSorterConfig()
+		heapSorterPool = workerpool.NewDefaultWorkerPool(sorterConfig.NumWorkerPoolGoroutine)
+		heapSorterIOPool = workerpool.NewDefaultAsyncPool(sorterConfig.NumWorkerPoolGoroutine * 2)
+	})
 }

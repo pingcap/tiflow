@@ -56,10 +56,11 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  8,
-		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:    60,
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
+		NumWorkerPoolGoroutine: 4,
 	})
 
 	err := os.MkdirAll("./sorter", 0o755)
@@ -74,10 +75,11 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  8,
-		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:    60,
-		MaxMemoryConsumption: 0,
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
 	})
 
 	err := os.MkdirAll("./sorter", 0o755)

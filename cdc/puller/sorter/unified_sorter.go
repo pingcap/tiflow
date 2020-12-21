@@ -47,6 +47,7 @@ func NewUnifiedSorter(dir string, tableName string, captureAddr string) *Unified
 		pool = newBackEndPool(dir, captureAddr)
 	}
 
+	lazyInitPool()
 	return &UnifiedSorter{
 		inputCh:   make(chan *model.PolymorphicEvent, 128000),
 		outputCh:  make(chan *model.PolymorphicEvent, 128000),
@@ -172,6 +173,7 @@ func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 // RunWorkerPool runs the worker pool used by the heapSorters
 // It **must** be running for Unified Sorter to work.
 func RunWorkerPool(ctx context.Context) error {
+	lazyInitPool()
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		return errors.Trace(heapSorterPool.Run(ctx))
