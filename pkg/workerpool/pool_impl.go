@@ -42,7 +42,7 @@ type defaultPoolImpl struct {
 
 // NewDefaultWorkerPool creates a new WorkerPool that uses the default implementation
 func NewDefaultWorkerPool() WorkerPool {
-	return newDefaultPoolImpl(&defaultHasher{}, runtime.NumCPU())
+	return newDefaultPoolImpl(&defaultHasher{}, runtime.NumCPU()/2+1)
 }
 
 func newDefaultPoolImpl(hasher Hasher, numWorkers int) *defaultPoolImpl {
