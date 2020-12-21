@@ -82,7 +82,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	for i := range heapSorters {
 		finalI := i
 		heapSorters[finalI] = newHeapSorter(finalI, heapSorterCollectCh)
-		heapSorters[finalI].init(func(err error) {
+		heapSorters[finalI].init(subctx, func(err error) {
 			heapSorterErrOnce.Do(func() {
 				heapSorterErrCh <- err
 			})

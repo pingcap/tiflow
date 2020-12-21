@@ -213,7 +213,7 @@ type heapSorterRuntimeState struct {
 	timerMultiplier       int
 }
 
-func (h *heapSorter) init(onError func(err error)) {
+func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	state := &heapSorterRuntimeState{
 		sorterConfig: config.GetSorterConfig(),
 	}
@@ -250,7 +250,7 @@ func (h *heapSorter) init(onError func(err error)) {
 		}
 
 		return nil
-	}).SetTimer(1*time.Second, func(ctx context.Context) error {
+	}).SetTimer(ctx, 1*time.Second, func(ctx context.Context) error {
 		state.rateCounter = 0
 		state.timerMultiplier = (state.timerMultiplier + 1) % 5
 		if state.timerMultiplier == 0 && state.rateCounter < flushRateLimitPerSecond {

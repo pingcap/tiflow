@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -61,6 +63,8 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 		MaxMemoryPressure:    60,
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
 	})
+
+	log.SetLevel(zapcore.DebugLevel)
 
 	err := os.MkdirAll("./sorter", 0o755)
 	c.Assert(err, check.IsNil)

@@ -92,7 +92,7 @@ func (s *workerPoolSuite) TestTimerError(c *check.C) {
 	counter := 0
 	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
 		return nil
-	}).SetTimer(time.Millisecond*200, func(ctx context.Context) error {
+	}).SetTimer(ctx, time.Millisecond*200, func(ctx context.Context) error {
 		if counter == 3 {
 			return errors.New("timer error")
 		}
@@ -239,7 +239,7 @@ func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
 
 	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
 		return nil
-	}).SetTimer(200*time.Millisecond, func(ctx context.Context) error {
+	}).SetTimer(ctx, 200*time.Millisecond, func(ctx context.Context) error {
 		return nil
 	})
 
@@ -284,7 +284,7 @@ func (s *workerPoolSuite) TestTimer(c *check.C) {
 
 	var lastTime time.Time
 	count := 0
-	handle.SetTimer(time.Second*1, func(ctx context.Context) error {
+	handle.SetTimer(ctx, time.Second*1, func(ctx context.Context) error {
 		if !lastTime.IsZero() {
 			c.Assert(time.Since(lastTime), check.GreaterEqual, 900*time.Millisecond)
 			c.Assert(time.Since(lastTime), check.LessEqual, 1200*time.Millisecond)

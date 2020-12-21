@@ -40,9 +40,7 @@ func (s *contextSuite) TestDoneCase1(c *check.C) {
 
 	merged := MergeContexts(ctx1, ctx2)
 	go func() {
-		select {
-		case <-merged.Done():
-		}
+		<-merged.Done()
 	}()
 
 	cancel1()
@@ -62,9 +60,7 @@ func (s *contextSuite) TestDoneCase2(c *check.C) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		select {
-		case <-merged.Done():
-		}
+		<-merged.Done()
 		wg.Done()
 	}()
 
@@ -88,9 +84,7 @@ func (s *contextSuite) TestDoneContention(c *check.C) {
 
 	for i := 0; i < 32; i++ {
 		errg.Go(func() error {
-			select {
-			case <-merged.Done():
-			}
+			<-merged.Done()
 			c.Assert(ctx.Err(), check.IsNil)
 			return nil
 		})
@@ -157,13 +151,13 @@ func (s *contextSuite) TestDeadline(c *check.C) {
 	ctx2 := &mockContext{}
 
 	mContext := MergeContexts(ctx1, ctx2)
-	ddl, ok := mContext.Deadline()
+	_, ok := mContext.Deadline()
 	c.Assert(ok, check.IsFalse)
 
 	startTime := time.Now()
 
 	ctx1.deadline = startTime.Add(time.Minute * 1)
-	ddl, ok = mContext.Deadline()
+	ddl, ok := mContext.Deadline()
 	c.Assert(ok, check.IsTrue)
 	c.Assert(ddl, check.Equals, startTime.Add(time.Minute*1))
 

@@ -129,12 +129,14 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 	return nil
 }
 
-func (h *defaultEventHandle) SetTimer(interval time.Duration, f func(ctx context.Context) error) EventHandle {
+func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duration, f func(ctx context.Context) error) EventHandle {
 	atomic.StoreInt32(&h.hasTimer, 0)
 	h.worker.synchronize()
 
 	h.timerInterval = interval
-	h.timerHandler = f
+	h.timerHandler = func(ctx1 context.Context) error {
+		return f(MergeContexts(ctx, ctx1))
+	}
 	atomic.StoreInt32(&h.hasTimer, 1)
 
 	return h

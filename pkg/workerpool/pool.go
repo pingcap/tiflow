@@ -43,7 +43,7 @@ type EventHandle interface {
 	// SetTimer is used to provide a function that is periodic called, as long as the EventHandle has not been unregistered.
 	// The current implementation uses as the base clock source a ticker whose interval is the const workerPoolDefaultClockSourceInterval.
 	// DO NOT set an interval less than workerPoolDefaultClockSourceInterval.
-	SetTimer(interval time.Duration, f func(ctx context.Context) error) EventHandle
+	SetTimer(ctx context.Context, interval time.Duration, f func(ctx context.Context) error) EventHandle
 
 	// Unregister removes the EventHandle from the WorkerPool.
 	// Note: Unregister WILL block until the operation has taken effect, i.e. the handler will not be executed after
