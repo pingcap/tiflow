@@ -31,11 +31,11 @@ How to obatin pictures in this document?
 
 # TiCDC 重要监控指标详解
 
-使用 TiUP 部署 TiDB 集群时，一键部署监控系统 (Prometheus & Grafana)，监控架构参见 [TiDB 监控框架概述](/tidb-monitoring-framework.md)。
+使用 TiUP 部署 TiDB 集群时，一键部署监控系统 (Prometheus & Grafana)，监控架构参见 [TiDB 监控框架概述](https://docs.pingcap.com/zh/tidb/stable/tidb-monitoring-framework)。
 
 对于日常运维，我们通过观察 TiCDC 面板上的 Metrics，可以了解 TiCDC 当前的状态。
 
-本文档使用默认配置创建一个同步到 MySQL 的同步任务为例，参见 [创建同步任务](/ticdc/deploy-ticdc.md#创建同步任务)。
+本文档使用默认配置创建一个同步到 MySQL 的同步任务为例，参见 [创建同步任务](https://docs.pingcap.com/zh/tidb/stable/manage-ticdc#%E5%88%9B%E5%BB%BA%E5%90%8C%E6%AD%A5%E4%BB%BB%E5%8A%A1)。
 
 ```shell
 cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:123456@127.0.0.1:3306/" --changefeed-id="simple-replication-task"
@@ -48,8 +48,7 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - Events ： TiCDC 内部数据流转的详细信息
 - TiKV ： TiKV 中和 TiCDC 相关的详细信息
 
-![TiCDC Dashboard - Overview](/media/ticdc/ticdc-dashboard-overview-v4.png)
-
+![TiCDC Dashboard - Overview](/docs/media/ticdc-dashboard-overview.png)
 ## Server
 
 - Uptime ： TiKV 节点和 TiCDC 节点已经运行的时间
@@ -60,8 +59,7 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - CPU usage ： TiCDC 节点使用的 CPU
 - Memory usage ： TiCDC 节点使用的内存
 
-![TiCDC Dashboard - Server metrics](/media/ticdc/ticdc-dashboard-server-v4.png)
-
+![TiCDC Dashboard - Server metrics](/docs/media/ticdc-dashboard-server.png)
 ## Changefeed
 
 - Changefeed table count ： 一个同步任务中分配到各个 TiCDC 节点同步的数据表个数
@@ -80,8 +78,9 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - MySQL sink conflict detect duration percentile ： 每秒钟中 95%，99% 和 99.9% 的情况下，MySQL 写入冲突检测耗时
 - MySQL sink worker load ： TiCDC 节点中写 MySQL 线程的负载情况
 
-![TiCDC Dashboard - Changefeed metrics 1](/media/ticdc/ticdc-dashboard-changefeed-1-v4.png)
-![TiCDC Dashboard - Changefeed metrics 2](/media/ticdc/ticdc-dashboard-changefeed-2-v4.png)
+![TiCDC Dashboard - Changefeed metrics 1](/docs/media/ticdc-dashboard-changefeed-1.png)
+![TiCDC Dashboard - Changefeed metrics 2](/docs/media/ticdc-dashboard-changefeed-2.png)
+![TiCDC Dashboard - Changefeed metrics 3](/docs/media/ticdc-dashboard-changefeed-3.png)
 
 ## Events
 
@@ -105,6 +104,10 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - KV client dispatch events/s ： TiCDC 节点内部 KV client 模块每秒分发数据变更的个数
 - KV client batch resolved size ： TiKV 批量发给 TiCDC 的 resolved ts 消息的大小
 
+![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-1.png)
+![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-2.png)
+![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-3.png)
+
 ## TiKV
 
 - CDC endpoint CPU ： TiKV 节点上 CDC endpoint 线程使用的 CPU
@@ -118,4 +121,5 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - CDC pending bytes in memory ： TiKV 节点中 CDC 模块使用的内存
 - Captured region count ： TiKV 节点上捕获数据变更的 region 个数
 
-![TiCDC Dashboard - TiKV](/media/ticdc-dashboard-tikv-v4.png)
+![TiCDC Dashboard - TiKV metrics 1](/docs/media/ticdc-dashboard-tikv-1.png)
+![TiCDC Dashboard - TiKV metrics 2](/docs/media/ticdc-dashboard-tikv-2.png)
