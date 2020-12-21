@@ -22,12 +22,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
-
-	"github.com/pingcap/ticdc/cdc/kv"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"

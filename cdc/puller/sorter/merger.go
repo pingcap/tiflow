@@ -20,9 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
