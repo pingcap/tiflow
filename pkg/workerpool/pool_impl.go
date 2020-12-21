@@ -15,10 +15,11 @@ package workerpool
 
 import (
 	"context"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/log"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -33,9 +34,11 @@ const (
 )
 
 type defaultPoolImpl struct {
-	hasher        Hasher
-	workers       []*worker
-	mu            sync.Mutex
+	// assume the hasher to be the trivial hasher for now
+	hasher Hasher
+	// do not resize this slice after creating the pool
+	workers []*worker
+	// used to generate handler IDs, must be accessed atomically
 	nextHandlerID int64
 }
 
@@ -73,15 +76,11 @@ func (p *defaultPoolImpl) Run(ctx context.Context) error {
 }
 
 func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interface{}) error) EventHandle {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	handler := &defaultEventHandle{
 		f:     f,
 		errCh: make(chan error, 1),
-		id:    p.nextHandlerID,
+		id:    atomic.AddInt64(&p.nextHandlerID, 1) - 1,
 	}
-	p.nextHandlerID++
 
 	workerID := p.hasher.Hash(handler) % int64(len(p.workers))
 	p.workers[workerID].addHandle(handler)
@@ -91,19 +90,32 @@ func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interf
 }
 
 type defaultEventHandle struct {
-	f           func(ctx context.Context, event interface{}) error
+	// the function to be run each time the event is triggered
+	f func(ctx context.Context, event interface{}) error
+	// whether this handle has been cancelled, must be accessed atomically
 	isCancelled int32
-	errCh       chan error
-	worker      *worker
-	id          int64
+	// channel for the error returned by f
+	errCh chan error
+	// the worker that the handle is associated with
+	worker *worker
+	// identifier for this handle. No significant usage for now.
+	// Might be used to support consistent hashing in the future,
+	// so that the pool can be resized efficiently.
+	id int64
 
-	hasTimer      int32
-	lastTimer     time.Time
+	// whether there is a valid timer handler, must be accessed atomically
+	hasTimer int32
+	// the time when timer was triggered the last time
+	lastTimer time.Time
+	// minimum interval between two timer calls
 	timerInterval time.Duration
-	timerHandler  func(ctx context.Context) error
+	// the handler for the timer
+	timerHandler func(ctx context.Context) error
 
+	// whether this is a valid errorHandler, must be accessed atomically
 	hasErrorHandler int32
-	errorHandler    func(err error)
+	// the error handler, called when the handle meets an error (which is returned by f)
+	errorHandler func(err error)
 }
 
 func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) error {
@@ -116,7 +128,11 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 	task := &task{
 		handle: h,
 		f: func(ctx1 context.Context) error {
+			// Here we merge the context passed down from WorkerPool.Run,
+			// with the context supplied by AddEvent,
+			// because we want operations to be cancellable by both contexts.
 			mContext, cancel := MergeContexts(ctx, ctx1)
+			// this cancels the merged context only.
 			defer cancel()
 			return h.f(mContext, event)
 		},
@@ -131,7 +147,9 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 }
 
 func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duration, f func(ctx context.Context) error) EventHandle {
+	// mark the timer handler function as invalid
 	atomic.StoreInt32(&h.hasTimer, 0)
+	// wait for `hasTimer` to take effect, otherwise we might have a data race, if there was a previous handler.
 	h.worker.synchronize()
 
 	h.timerInterval = interval
@@ -140,6 +158,7 @@ func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duratio
 		defer cancel()
 		return f(mContext)
 	}
+	// mark the timer handler function as valid
 	atomic.StoreInt32(&h.hasTimer, 1)
 
 	return h
@@ -153,11 +172,15 @@ func (h *defaultEventHandle) Unregister() {
 
 	failpoint.Inject("unregisterDelayPoint", func() {})
 
+	// call synchronize so that all function executions related to this handle will be
+	// linearized BEFORE Unregister.
 	h.worker.synchronize()
 
 	h.doCancel(cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs())
 }
 
+// callers of doCancel need to check h.isCancelled first.
+// DO NOT call doCancel multiple times on the same handle.
 func (h *defaultEventHandle) doCancel(err error) {
 	h.worker.removeHandle(h)
 
@@ -223,12 +246,15 @@ type task struct {
 }
 
 type worker struct {
-	taskCh         chan *task
-	handles        map[*defaultEventHandle]struct{}
-	handleRWLock   sync.RWMutex
+	taskCh       chan *task
+	handles      map[*defaultEventHandle]struct{}
+	handleRWLock sync.RWMutex
+	// A message is passed to handleCancelCh when we need to wait for the
+	// current execution of handler to finish. Should be BLOCKING.
 	handleCancelCh chan struct{}
-	isRunning      int32
-
+	// must be accessed atomically
+	isRunning int32
+	// notifies exits of run()
 	stopNotifier notify.Notifier
 }
 
@@ -288,6 +314,8 @@ func (w *worker) run(ctx context.Context) error {
 			}
 			w.handleRWLock.RUnlock()
 
+			// cancelWithErr must be called out side of the loop above,
+			// to avoid deadlock.
 			for _, handleErr := range handleErrs {
 				handleErr.h.cancelWithErr(handleErr.e)
 			}
@@ -296,6 +324,7 @@ func (w *worker) run(ctx context.Context) error {
 	}
 }
 
+// synchronize waits for the worker to loop at least once, or to exit.
 func (w *worker) synchronize() {
 	if atomic.LoadInt32(&w.isRunning) == 0 {
 		return
@@ -323,7 +352,8 @@ func (w *worker) synchronize() {
 		}
 
 		if time.Since(startTime) > time.Second*10 {
-			panic("synchronize taking too long")
+			// likely the workerpool has deadlocked, or there is a bug in the event handlers.
+			log.Warn("synchronize is taking too long, report a bug", zap.Duration("elapsed", time.Since(startTime)))
 		}
 	}
 }

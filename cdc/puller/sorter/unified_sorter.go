@@ -94,7 +94,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		defer func() {
 			// cancelling the heapSorters from the outside
 			for _, hs := range heapSorters {
-				hs.runtimeState.poolHandle.Unregister()
+				hs.poolHandle.Unregister()
 			}
 			// must wait for all writers to exit to close the channel.
 			close(heapSorterCollectCh)
@@ -129,7 +129,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 							return subctx.Err()
 						default:
 						}
-						err := sorter.runtimeState.poolHandle.AddEvent(subctx, event)
+						err := sorter.poolHandle.AddEvent(subctx, event)
 						if err != nil {
 							return errors.Trace(err)
 						}
@@ -144,7 +144,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				case <-subctx.Done():
 					return subctx.Err()
 				default:
-					err := heapSorters[targetID].runtimeState.poolHandle.AddEvent(subctx, event)
+					err := heapSorters[targetID].poolHandle.AddEvent(subctx, event)
 					if err != nil {
 						return errors.Trace(err)
 					}

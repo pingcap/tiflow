@@ -20,10 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"golang.org/x/sync/errgroup"
 )
@@ -78,7 +76,6 @@ func (s *asyncPoolSuite) TestEventuallyRun(c *check.C) {
 	errg.Go(func() error {
 		defer cancelLoop()
 		for i := 0; i < 10; i++ {
-			log.Info("start running pool")
 			err := runForDuration(ctx, time.Millisecond*500, func(ctx context.Context) error {
 				return pool.Run(ctx)
 			})

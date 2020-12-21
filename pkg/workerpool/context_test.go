@@ -28,6 +28,7 @@ type contextSuite struct{}
 
 var _ = check.Suite(&contextSuite{})
 
+// TestDoneCase1 tests cancelling the first context in the merge.
 func (s *contextSuite) TestDoneCase1(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel0 := context.WithTimeout(context.Background(), time.Second*3)
@@ -41,13 +42,18 @@ func (s *contextSuite) TestDoneCase1(c *check.C) {
 	merged, cancelM := MergeContexts(ctx1, ctx2)
 	defer cancelM()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		<-merged.Done()
+		wg.Done()
 	}()
 
 	cancel1()
+	wg.Wait()
 }
 
+// TestDoneCase2 tests cancelling the second context in the merge.
 func (s *contextSuite) TestDoneCase2(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel0 := context.WithTimeout(context.Background(), time.Second*3)
@@ -72,6 +78,7 @@ func (s *contextSuite) TestDoneCase2(c *check.C) {
 	wg.Wait()
 }
 
+// TestDoneCaseCancel tests cancelling the merged context.
 func (s *contextSuite) TestDoneCaseCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel0 := context.WithTimeout(context.Background(), time.Second*3)

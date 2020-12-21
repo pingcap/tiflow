@@ -54,7 +54,8 @@ type heapSorter struct {
 	outputCh    chan *flushTask
 	heap        sortHeap
 
-	runtimeState *heapSorterRuntimeState
+	poolHandle    workerpool.EventHandle
+	internalState *heapSorterInternalState
 }
 
 func newHeapSorter(id int, out chan *flushTask) *heapSorter {
@@ -66,13 +67,19 @@ func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 	}
 }
 
-// flush should only be called within the main loop in run().
+// flush should only be called in the same goroutine where the heap is being written to.
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	_, tableName := util.TableIDFromCtx(ctx)
 	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName).Observe(float64(h.heap.Len()))
 
+	// We check if the heap contains only one entry and that entry is a ResolvedEvent.
+	// As an optimization, when the condition is true, we clear the heap and send an empty flush.
+	// Sending an empty flush saves CPU and potentially IO.
+	// Since when a table is mostly idle or near-idle, most flushes would contain one ResolvedEvent alone,
+	// this optimization will greatly improve performance when (1) total number of table is large,
+	// and (2) most tables do not have many events.
 	if h.heap.Len() == 1 && h.heap[0].entry.RawKV.OpType == model.OpTypeResolved {
 		h.heap.Pop()
 	}
@@ -205,17 +212,16 @@ var (
 	poolOnce         sync.Once
 )
 
-type heapSorterRuntimeState struct {
+type heapSorterInternalState struct {
 	maxResolved           uint64
 	heapSizeBytesEstimate int64
 	rateCounter           int
 	sorterConfig          *config.SorterConfig
-	poolHandle            workerpool.EventHandle
 	timerMultiplier       int
 }
 
 func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
-	state := &heapSorterRuntimeState{
+	state := &heapSorterInternalState{
 		sorterConfig: config.GetSorterConfig(),
 	}
 
@@ -264,8 +270,8 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 		return nil
 	}).OnExit(onError)
 
-	state.poolHandle = poolHandle
-	h.runtimeState = state
+	h.poolHandle = poolHandle
+	h.internalState = state
 }
 
 func lazyInitPool() {

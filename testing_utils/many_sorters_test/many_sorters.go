@@ -23,8 +23,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -32,7 +30,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	pullerSorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -49,7 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not enable failpoint", zap.Error(err))
 	}
-	// log.SetLevel(zapcore.DebugLevel)
+	log.SetLevel(zapcore.DebugLevel)
 
 	config.SetSorterConfig(&config.SorterConfig{
 		NumConcurrentWorker:  8,
