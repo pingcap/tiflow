@@ -503,7 +503,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	defer sink.Close() //nolint:errcheck
 	sampleCF.sink = sink
 
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
@@ -802,7 +802,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 
 func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	ctx := context.Background()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
