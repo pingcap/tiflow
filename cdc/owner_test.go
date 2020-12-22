@@ -864,7 +864,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	defer cancel()
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, addr, &processorOpts{})
 	c.Assert(err, check.IsNil)
 	err = s.client.PutCaptureInfo(ctx, capture.info, capture.session.Lease())
