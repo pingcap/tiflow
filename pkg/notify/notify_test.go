@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -33,9 +34,12 @@ var _ = check.Suite(&notifySuite{})
 func (s *notifySuite) TestNotifyHub(c *check.C) {
 	defer testleak.AfterTest(c)()
 	notifier := new(Notifier)
-	r1 := notifier.NewReceiver(-1)
-	r2 := notifier.NewReceiver(-1)
-	r3 := notifier.NewReceiver(-1)
+	r1, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	r2, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	r3, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
 	finishedCh := make(chan struct{})
 	go func() {
 		for i := 0; i < 5; i++ {
@@ -52,12 +56,14 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 	r2.Stop()
 	r3.Stop()
 	c.Assert(len(notifier.receivers), check.Equals, 0)
-	r4 := notifier.NewReceiver(-1)
+	r4, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
 	<-r4.C
 	r4.Stop()
 
 	notifier2 := new(Notifier)
-	r5 := notifier2.NewReceiver(10 * time.Millisecond)
+	r5, err := notifier2.NewReceiver(10 * time.Millisecond)
+	c.Assert(err, check.IsNil)
 	<-r5.C
 	r5.Stop()
 	<-finishedCh // To make the leak checker happy
@@ -80,8 +86,10 @@ func (s *notifySuite) TestContinusStop(c *check.C) {
 	}()
 	n := 50
 	receivers := make([]*Receiver, n)
+	var err error
 	for i := 0; i < n; i++ {
-		receivers[i] = notifier.NewReceiver(10 * time.Millisecond)
+		receivers[i], err = notifier.NewReceiver(10 * time.Millisecond)
+		c.Assert(err, check.IsNil)
 	}
 	for i := 0; i < n; i++ {
 		i := i
@@ -99,4 +107,12 @@ func (s *notifySuite) TestContinusStop(c *check.C) {
 		receivers[i].Stop()
 	}
 	<-ctx.Done()
+}
+
+func (s *notifySuite) TestNewReceiverWithClosedNotifier(c *check.C) {
+	defer testleak.AfterTest(c)()
+	notifier := new(Notifier)
+	notifier.Close()
+	_, err := notifier.NewReceiver(50 * time.Millisecond)
+	c.Assert(errors.ErrOperateOnClosedNotifier.Equal(err), check.IsTrue)
 }

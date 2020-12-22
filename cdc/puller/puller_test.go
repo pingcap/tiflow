@@ -18,12 +18,14 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -165,7 +167,14 @@ func (s *pullerSuite) TestPullerResolvedForward(c *check.C) {
 	c.Assert(ev.OpType, check.Equals, model.OpTypeResolved)
 	c.Assert(ev.CRTs, check.Equals, uint64(1000))
 	c.Assert(plr.IsInitialized(), check.IsTrue)
-	c.Assert(plr.GetResolvedTs(), check.Equals, uint64(1000))
+	err := retry.Run(time.Millisecond*10, 10, func() error {
+		ts := plr.GetResolvedTs()
+		if ts != uint64(1000) {
+			return errors.Errorf("resolved ts %d of puller does not forward to 1000", ts)
+		}
+		return nil
+	})
+	c.Assert(err, check.IsNil)
 
 	store.Close()
 	cancel()
