@@ -106,7 +106,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
-		log.Fatal("Could not enable failpoint", zap.Error(err))
+		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

@@ -175,7 +175,7 @@ tools/bin/revive: tools/check/go.mod
 
 tools/bin/errdoc-gen: tools/check/go.mod
 	cd tools/check; test -e ../bin/errdoc-gen || \
-	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/tiup/components/errdoc/errdoc-gen
+	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
 
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \

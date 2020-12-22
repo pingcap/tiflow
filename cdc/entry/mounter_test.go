@@ -13,21 +13,14 @@
 
 package entry
 
-/*
 import (
 	"context"
-	"math"
-	"reflect"
-	"sync"
+	"strings"
+	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
-<<<<<<< HEAD
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/types"
-=======
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
@@ -35,28 +28,12 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"
-	"go.uber.org/zap"
->>>>>>> 1d32d72... tests: add leak test check in Makefile, complete leak tests (#1166)
 )
 
 type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-<<<<<<< HEAD
-func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *Storage) {
-	pm := puller.NewMockPullerManager(c, newRowFormat)
-	for _, sql := range sqls {
-		pm.MustExec(sql)
-	}
-	ddlPlr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetDDLSpan()})
-	go func() {
-		err := ddlPlr.Run(ctx)
-		if err != nil && errors.Cause(err) != context.Canceled {
-			c.Fail()
-		}
-	}()
-=======
 func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testCases := []struct {
@@ -89,479 +66,314 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			department_id INT NOT NULL,
 			INDEX (department_id)
 		)
->>>>>>> 1d32d72... tests: add leak test check in Makefile, complete leak tests (#1166)
-
-	jobs := pm.GetDDLJobs()
-	schemaBuilder,err := NewStorageBuilder(jobs, ddlPlr.SortedOutput(ctx))
-	c.Assert(err, check.IsNil)
-	schemaStorage := schemaBuilder.Build(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
-	err = schemaStorage.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
-	c.Assert(err, check.IsNil)
-	return pm, schemaStorage
-}
-
-func getFirstRealTxn(ctx context.Context, c *check.C, plr puller.Puller) (result model.RawTxn) {
-	ctx, cancel := context.WithCancel(ctx)
-	var once sync.Once
-	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
-		if rawTxn.IsFake() {
-			return nil
-		}
-		once.Do(func() {
-			result = rawTxn
-		})
-		cancel()
-		return nil
-	})
-	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-	return
-}
-
-func (cs *mountTxnsSuite) testInsertPkNotHandle(c *check.C, newRowFormat bool) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
-		"create database testDB",
-		"create table testDB.test1(id varchar(255) primary key, a int, index ci (a))",
-	)
-	tableInfo := pm.GetTableInfo("testDB", "test1")
-	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
-
-	pm.MustExec("insert into testDB.test1 values('ttt',6)")
-	rawTxn := getFirstRealTxn(ctx, c, plr)
-	t, err := mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-					"a":  types.NewIntDatum(6),
-				},
-			},
+		PARTITION BY RANGE(id)  (
+			PARTITION p0 VALUES LESS THAN (5),
+			PARTITION p1 VALUES LESS THAN (10),
+			PARTITION p2 VALUES LESS THAN (15),
+			PARTITION p3 VALUES LESS THAN (20)
+		)`,
+		values: [][]interface{}{
+			{1, "aa", "bb", 12, 12},
+			{6, "aac", "bab", 51, 51},
+			{11, "aad", "bsb", 71, 61},
+			{18, "aae", "bbf", 21, 14},
+			{15, "afa", "bbc", 11, 12},
 		},
-	})
-
-	pm.MustExec("update testDB.test1 set id = 'vvv' where a = 6")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("vvv")),
-					"a":  types.NewIntDatum(6),
-				},
-			},
+	}, {
+		tableName: "tp_int",
+		createTableDDL: `create table tp_int
+		(
+			id          int auto_increment,
+			c_tinyint   tinyint   null,
+			c_smallint  smallint  null,
+			c_mediumint mediumint null,
+			c_int       int       null,
+			c_bigint    bigint    null,
+			constraint pk
+				primary key (id)
+		);`,
+		values: [][]interface{}{
+			{1, 1, 2, 3, 4, 5},
+			{2},
+			{3, 3, 4, 5, 6, 7},
+			{4, 127, 32767, 8388607, 2147483647, 9223372036854775807},
+			{5, -128, -32768, -8388608, -2147483648, -9223372036854775808},
 		},
-	})
-
-	pm.MustExec("delete from testDB.test1 where a = 6")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("vvv")),
-				},
-			},
+	}, {
+		tableName: "tp_text",
+		createTableDDL: `create table tp_text
+		(
+			id           int auto_increment,
+			c_tinytext   tinytext      null,
+			c_text       text          null,
+			c_mediumtext mediumtext    null,
+			c_longtext   longtext      null,
+			c_varchar    varchar(16)   null,
+			c_char       char(16)      null,
+			c_tinyblob   tinyblob      null,
+			c_blob       blob          null,
+			c_mediumblob mediumblob    null,
+			c_longblob   longblob      null,
+			c_binary     binary(16)    null,
+			c_varbinary  varbinary(16) null,
+			constraint pk
+				primary key (id)
+		);`,
+		values: [][]interface{}{
+			{1},
+			{2, "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A",
+				"89504E470D0A1A0A", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}},
+			{3, "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free",
+				"bug free", "bug free", "bug free", "bug free"},
+			{4, "", "", "", "", "", "", "", "", "", "", "", ""},
+			{5, "你好", "我好", "大家好", "道路", "千万条", "安全", "第一条", "行车", "不规范", "亲人", "两行泪", "！"},
+			{6, "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "☺️", "😊", "😇", "🙂"},
 		},
-	})
-}
-
-func (cs *mountTxnsSuite) testIncompleteRow(c *check.C, newRowFormat bool) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
-		"create database testDB",
-		"create table testDB.test1 (id int primary key, val int);",
-	)
-	tableInfo := pm.GetTableInfo("testDB", "test1")
-	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
-
-	pm.MustExec("insert into testDB.test1(id) values (16),(32);")
-	rawTxn := getFirstRealTxn(ctx, c, plr)
-	t, err := mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id":  types.NewIntDatum(16),
-					"val": types.NewDatum(nil),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id":  types.NewIntDatum(32),
-					"val": types.NewDatum(nil),
-				},
-			},
+	}, {
+		tableName: "tp_time",
+		createTableDDL: `create table tp_time
+		(
+			id          int auto_increment,
+			c_date      date      null,
+			c_datetime  datetime  null,
+			c_timestamp timestamp null,
+			c_time      time      null,
+			c_year      year      null,
+			constraint pk
+				primary key (id)
+		);`,
+		values: [][]interface{}{
+			{1},
+			{2, "2020-02-20", "2020-02-20 02:20:20", "2020-02-20 02:20:20", "02:20:20", "2020"},
 		},
-	})
-
-	pm.MustExec("insert into testDB.test1(id,val) values (18, 6);")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id":  types.NewIntDatum(18),
-					"val": types.NewIntDatum(6),
-				},
-			},
+	}, {
+		tableName: "tp_real",
+		createTableDDL: `create table tp_real
+		(
+			id        int auto_increment,
+			c_float   float   null,
+			c_double  double  null,
+			c_decimal decimal null,
+			constraint pk
+				primary key (id)
+		);`,
+		values: [][]interface{}{
+			{1},
+			{2, "2020.0202", "2020.0303", "2020.0404"},
 		},
-	})
-
-}
-
-func (cs *mountTxnsSuite) testInsertPkIsHandle(c *check.C, newRowFormat bool) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
-		"create database testDB",
-		"create table testDB.test1(id int primary key, a int unique key not null)",
-	)
-	tableInfo := pm.GetTableInfo("testDB", "test1")
-	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
-
-	pm.MustExec("insert into testDB.test1 values(777,888)")
-	rawTxn := getFirstRealTxn(ctx, c, plr)
-	t, err := mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewIntDatum(777),
-					"a":  types.NewIntDatum(888),
-				},
-			},
+	}, {
+		tableName: "tp_other",
+		createTableDDL: `create table tp_other
+		(
+			id     int auto_increment,
+			c_enum enum ('a','b','c') null,
+			c_set  set ('a','b','c')  null,
+			c_bit  bit(64)            null,
+			c_json json               null,
+			constraint pk
+				primary key (id)
+		);`,
+		values: [][]interface{}{
+			{1},
+			{2, "a", "a,c", 888, `{"aa":"bb"}`},
 		},
-	})
-
-	pm.MustExec("update testDB.test1 set id = 999 where a = 888")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewIntDatum(777),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewIntDatum(999),
-					"a":  types.NewIntDatum(888),
-				},
-			},
+	}, {
+		tableName:      "clustered_index1",
+		createTableDDL: "CREATE TABLE clustered_index1 (id VARCHAR(255) PRIMARY KEY, data INT);",
+		values: [][]interface{}{
+			{"hhh"},
+			{"你好😘", 666},
+			{"世界🤪", 888},
 		},
-	})
-
-	pm.MustExec("delete from testDB.test1 where id = 999")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewIntDatum(999),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(888),
-				},
-			},
+	}, {
+		tableName:      "clustered_index2",
+		createTableDDL: "CREATE TABLE clustered_index2 (id VARCHAR(255), data INT, ddaa date, PRIMARY KEY (id, data, ddaa), UNIQUE KEY (id, data, ddaa));",
+		values: [][]interface{}{
+			{"你好😘", 666, "2020-11-20"},
+			{"世界🤪", 888, "2020-05-12"},
 		},
-	})
-}
-
-func (cs *mountTxnsSuite) testUk(c *check.C, newRowFormat bool) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
-		"create database testDB",
-		`create table testDB.test1(
-			a int unique key not null,
-			b int unique key,
-			c int not null,
-			d int not null,
-			e int not null,
-			f int,
-			UNIQUE (c, d),
-			UNIQUE (e, f))`,
-	)
-	tableInfo := pm.GetTableInfo("testDB", "test1")
-	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
-
-	pm.MustExec("insert into testDB.test1 values(1, 2, 3, 4, 5, 6)")
-	rawTxn := getFirstRealTxn(ctx, c, plr)
-	t, err := mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(1),
-					"b": types.NewIntDatum(2),
-					"c": types.NewIntDatum(3),
-					"d": types.NewIntDatum(4),
-					"e": types.NewIntDatum(5),
-					"f": types.NewIntDatum(6),
-				},
-			},
-		},
-	})
-
-	pm.MustExec("update testDB.test1 set a = 11, b = 22, c = 33, d = 44, e = 55, f = 66 where f = 6")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(1),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"c": types.NewIntDatum(3),
-					"d": types.NewIntDatum(4),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(11),
-					"b": types.NewIntDatum(22),
-					"c": types.NewIntDatum(33),
-					"d": types.NewIntDatum(44),
-					"e": types.NewIntDatum(55),
-					"f": types.NewIntDatum(66),
-				},
-			},
-		},
-	})
-
-	pm.MustExec("delete from testDB.test1 where a = 11")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(11),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"c": types.NewIntDatum(33),
-					"d": types.NewIntDatum(44),
-				},
-			},
-		},
-	})
-}
-
-func (cs *mountTxnsSuite) testLargeInteger(c *check.C, newRowFormat bool) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
-		"create database testDB",
-		"CREATE TABLE testDB.large_int(id BIGINT UNSIGNED PRIMARY KEY, a int)",
-	)
-	tableInfo := pm.GetTableInfo("testDB", "large_int")
-	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
-
-	pm.MustExec("insert into testDB.large_int values(?, ?)", uint64(math.MaxUint64), 123)
-	rawTxn := getFirstRealTxn(ctx, c, plr)
-	t, err := mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "large_int",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewUintDatum(uint64(math.MaxUint64)),
-					"a":  types.NewIntDatum(123),
-				},
-			},
-		},
-	})
-
-	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
-	pm, schema = setUpPullerAndSchema(ctx, c, newRowFormat,
-		"create database testDB",
-		"CREATE TABLE testDB.large_int(id BIGINT PRIMARY KEY, a int)",
-	)
-	tableInfo = pm.GetTableInfo("testDB", "large_int")
-	tableID = tableInfo.ID
-	mounter = NewTxnMounter(schema)
-	plr = pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
-
-	pm.MustExec("insert into testDB.large_int values(?, ?)", int64(math.MinInt64), 123)
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "large_int",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewIntDatum(int64(math.MinInt64)),
-					"a":  types.NewIntDatum(123),
-				},
-			},
-		},
-	})
-
-}
-
-func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
-		defer testleak.AfterTest(c)()
-	cs.testInsertPkNotHandle(c, true)
-	cs.testInsertPkNotHandle(c, false)
-}
-func (cs *mountTxnsSuite) TestIncompleteRow(c *check.C) {
-		defer testleak.AfterTest(c)()
-	cs.testIncompleteRow(c, true)
-	cs.testIncompleteRow(c, false)
-}
-func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
-		defer testleak.AfterTest(c)()
-	cs.testInsertPkIsHandle(c, true)
-	cs.testInsertPkIsHandle(c, false)
-}
-func (cs *mountTxnsSuite) TestUk(c *check.C) {
-		defer testleak.AfterTest(c)()
-	cs.testUk(c, true)
-	cs.testUk(c, false)
-}
-func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
-		defer testleak.AfterTest(c)()
-	cs.testLargeInteger(c, true)
-	cs.testLargeInteger(c, false)
-}
-
-func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
-	obtained, expected model.Txn) {
-	obtainedDMLs := obtained.DMLs
-	expectedDMLs := expected.DMLs
-	obtained.DMLs = nil
-	expected.DMLs = nil
-	c.Assert(obtained, check.DeepEquals, expected)
-	assertContain := func(obtained []*model.DML, expected []*model.DML) {
-		c.Assert(len(obtained), check.Equals, len(expected))
-		for _, oDML := range obtained {
-			match := false
-			for _, eDML := range expected {
-				if reflect.DeepEqual(oDML, eDML) {
-					match = true
-					break
-				}
-			}
-			if !match {
-				c.Errorf("obtained DML %#v isn't contained by expected DML", oDML)
-			}
-		}
+	}}
+	for _, tc := range testCases {
+		testMounterDisableOldValue(c, tc)
 	}
-	assertContain(obtainedDMLs, expectedDMLs)
 }
-*/
+
+func testMounterDisableOldValue(c *check.C, tc struct {
+	tableName      string
+	createTableDDL string
+	values         [][]interface{}
+}) {
+	store, err := mockstore.NewMockTikvStore()
+	c.Assert(err, check.IsNil)
+	defer store.Close() //nolint:errcheck
+	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
+		// we can update the tidb config here
+	})
+	session.SetSchemaLease(0)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	c.Assert(err, check.IsNil)
+	defer domain.Close()
+	domain.SetStatsUpdating(true)
+	tk := testkit.NewTestKit(c, store)
+	tk.MustExec("use test;")
+
+	tk.MustExec(tc.createTableDDL)
+
+	jobs, err := getAllHistoryDDLJob(store)
+	c.Assert(err, check.IsNil)
+	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+	c.Assert(err, check.IsNil)
+	for _, job := range jobs {
+		err := scheamStorage.HandleDDLJob(job)
+		c.Assert(err, check.IsNil)
+	}
+	tableInfo, ok := scheamStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
+	c.Assert(ok, check.IsTrue)
+	for _, params := range tc.values {
+		insertSQL := prepareInsertSQL(c, tableInfo, len(params))
+		tk.MustExec(insertSQL, params...)
+	}
+
+	ver, err := store.CurrentVersion()
+	c.Assert(err, check.IsNil)
+	scheamStorage.AdvanceResolvedTs(ver.Ver)
+	mounter := NewMounter(scheamStorage, 1, false).(*mounterImpl)
+	mounter.tz = time.Local
+	ctx := context.Background()
+
+	mountAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
+		var rows int
+		walkTableSpanInStore(c, store, tableID, func(key []byte, value []byte) {
+			rawKV := f(key, value)
+			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+			c.Assert(err, check.IsNil)
+			if row == nil {
+				return
+			}
+			rows++
+			c.Assert(row.Table.Table, check.Equals, tc.tableName)
+			c.Assert(row.Table.Schema, check.Equals, "test")
+			// TODO: test column flag, column type and index columns
+			if len(row.Columns) != 0 {
+				checkSQL, params := prepareCheckSQL(c, tc.tableName, row.Columns)
+				result := tk.MustQuery(checkSQL, params...)
+				result.Check([][]interface{}{{"1"}})
+			}
+			if len(row.PreColumns) != 0 {
+				checkSQL, params := prepareCheckSQL(c, tc.tableName, row.PreColumns)
+				result := tk.MustQuery(checkSQL, params...)
+				result.Check([][]interface{}{{"1"}})
+			}
+		})
+		return rows
+	}
+
+	mountAndCheckRow := func(f func(key []byte, value []byte) *model.RawKVEntry) int {
+		partitionInfo := tableInfo.GetPartitionInfo()
+		if partitionInfo == nil {
+			return mountAndCheckRowInTable(tableInfo.ID, f)
+		}
+		var rows int
+		for _, p := range partitionInfo.Definitions {
+			rows += mountAndCheckRowInTable(p.ID, f)
+		}
+		return rows
+	}
+
+	rows := mountAndCheckRow(func(key []byte, value []byte) *model.RawKVEntry {
+		return &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ver.Ver - 1,
+			CRTs:    ver.Ver,
+		}
+	})
+	c.Assert(rows, check.Equals, len(tc.values))
+
+	rows = mountAndCheckRow(func(key []byte, value []byte) *model.RawKVEntry {
+		return &model.RawKVEntry{
+			OpType:  model.OpTypeDelete,
+			Key:     key,
+			Value:   nil, // delete event doesn't include a value when old-value is disabled
+			StartTs: ver.Ver - 1,
+			CRTs:    ver.Ver,
+		}
+	})
+	c.Assert(rows, check.Equals, len(tc.values))
+}
+
+func prepareInsertSQL(c *check.C, tableInfo *model.TableInfo, columnLens int) string {
+	var sb strings.Builder
+	_, err := sb.WriteString("INSERT INTO " + tableInfo.Name.O + "(")
+	c.Assert(err, check.IsNil)
+	for i := 0; i < columnLens; i++ {
+		col := tableInfo.Columns[i]
+		if i != 0 {
+			_, err = sb.WriteString(", ")
+			c.Assert(err, check.IsNil)
+		}
+		_, err = sb.WriteString(col.Name.O)
+		c.Assert(err, check.IsNil)
+	}
+	_, err = sb.WriteString(") VALUES (")
+	c.Assert(err, check.IsNil)
+	for i := 0; i < columnLens; i++ {
+		if i != 0 {
+			_, err = sb.WriteString(", ")
+			c.Assert(err, check.IsNil)
+		}
+		_, err = sb.WriteString("?")
+		c.Assert(err, check.IsNil)
+	}
+	_, err = sb.WriteString(")")
+	c.Assert(err, check.IsNil)
+	return sb.String()
+}
+
+func prepareCheckSQL(c *check.C, tableName string, cols []*model.Column) (string, []interface{}) {
+	var sb strings.Builder
+	_, err := sb.WriteString("SELECT count(1) FROM " + tableName + " WHERE ")
+	c.Assert(err, check.IsNil)
+	params := make([]interface{}, 0, len(cols))
+	for i, col := range cols {
+		if col == nil {
+			continue
+		}
+		if i != 0 {
+			_, err = sb.WriteString(" AND ")
+			c.Assert(err, check.IsNil)
+		}
+		if col.Value == nil {
+			_, err = sb.WriteString(col.Name + " IS NULL")
+			c.Assert(err, check.IsNil)
+			continue
+		}
+		params = append(params, col.Value)
+		if col.Type == mysql.TypeJSON {
+			_, err = sb.WriteString(col.Name + " = CAST(? AS JSON)")
+		} else {
+			_, err = sb.WriteString(col.Name + " = ?")
+		}
+		c.Assert(err, check.IsNil)
+	}
+	return sb.String(), params
+}
+
+func walkTableSpanInStore(c *check.C, store tidbkv.Storage, tableID int64, f func(key []byte, value []byte)) {
+	txn, err := store.Begin()
+	c.Assert(err, check.IsNil)
+	defer txn.Rollback() //nolint:errcheck
+	tableSpan := regionspan.GetTableSpan(tableID, false)
+	kvIter, err := txn.Iter(tableSpan.Start, tableSpan.End)
+	c.Assert(err, check.IsNil)
+	defer kvIter.Close()
+	for kvIter.Valid() {
+		f(kvIter.Key(), kvIter.Value())
+		err = kvIter.Next()
+		c.Assert(err, check.IsNil)
+	}
+}
