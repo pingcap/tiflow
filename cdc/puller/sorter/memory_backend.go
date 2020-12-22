@@ -34,7 +34,7 @@ func newMemoryBackEnd() *memoryBackEnd {
 func (m *memoryBackEnd) reader() (backEndReader, error) {
 	failpoint.Inject("sorterDebug", func() {
 		if atomic.SwapInt32(&m.borrowed, 1) != 0 {
-			log.Fatal("memoryBackEnd: already borrowed")
+			log.Panic("memoryBackEnd: already borrowed")
 		}
 	})
 
@@ -47,7 +47,7 @@ func (m *memoryBackEnd) reader() (backEndReader, error) {
 func (m *memoryBackEnd) writer() (backEndWriter, error) {
 	failpoint.Inject("sorterDebug", func() {
 		if atomic.SwapInt32(&m.borrowed, 1) != 0 {
-			log.Fatal("memoryBackEnd: already borrowed")
+			log.Panic("memoryBackEnd: already borrowed")
 		}
 	})
 
@@ -57,7 +57,7 @@ func (m *memoryBackEnd) writer() (backEndWriter, error) {
 func (m *memoryBackEnd) free() error {
 	failpoint.Inject("sorterDebug", func() {
 		if atomic.LoadInt32(&m.borrowed) != 0 {
-			log.Fatal("fileBackEnd: trying to free borrowed file")
+			log.Panic("fileBackEnd: trying to free borrowed file")
 		}
 	})
 
@@ -104,7 +104,7 @@ func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 
 	failpoint.Inject("sorterDebug", func() {
 		if event.CRTs < w.maxTs {
-			log.Fatal("memoryBackEnd: ts regressed, bug?",
+			log.Panic("memoryBackEnd: ts regressed, bug?",
 				zap.Uint64("prev-ts", w.maxTs),
 				zap.Uint64("cur-ts", event.CRTs))
 		}
