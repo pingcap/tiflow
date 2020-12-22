@@ -263,6 +263,8 @@ func getRowDataByClomns(colFlag int32, colums []*model.Column, rowdataBuilder ds
 		columnBuilder.ColValue = &columnValue
 		if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
 			colType = "integer"
+		} else if column.Type == 246 {
+			colType = "decimal"
 		} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
 			//if column.Flag.IsBinary() {
 			//	colType = "blob"
