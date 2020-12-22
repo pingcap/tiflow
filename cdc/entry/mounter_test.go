@@ -66,7 +66,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			department_id INT NOT NULL,
 			INDEX (department_id)
 		)
-		
+
 		PARTITION BY RANGE(id)  (
 			PARTITION p0 VALUES LESS THAN (5),
 			PARTITION p1 VALUES LESS THAN (10),
