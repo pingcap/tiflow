@@ -112,7 +112,7 @@ func (s *pullerSuite) newPullerForTest(
 ) (*mockInjectedPuller, context.CancelFunc, *sync.WaitGroup, tidbkv.Storage) {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-	store, err := mockstore.NewMockStore()
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, check.IsNil)
 	enableOldValue := true
 	backupNewCDCKVClient := kv.NewCDCKVClient
