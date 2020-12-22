@@ -361,7 +361,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
-		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", newStatus))
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", newStatus))
 	}
 
 	for tableID := range cleanedTables {
@@ -389,7 +389,7 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
-		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", status))
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", status))
 	}
 	return nil
 }
@@ -802,7 +802,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 		if appliedTs != math.MaxUint64 {
 			log.Debug("some operation is still unapplied",
-				zap.String("captureID", captureID),
+				zap.String("capture-id", captureID),
 				zap.Uint64("appliedTs", appliedTs),
 				zap.Stringer("status", status))
 		}

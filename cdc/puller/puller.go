@@ -246,7 +246,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					}
 					log.Info("puller is initialized",
 						zap.Duration("duration", time.Since(start)),
-						zap.String("changefeedid", changefeedID),
+						zap.String("changefeed", changefeedID),
 						zap.Int64("tableID", tableID),
 						zap.Strings("spans", spans),
 						zap.Uint64("resolvedTs", resolvedTs))
