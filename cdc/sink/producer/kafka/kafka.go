@@ -105,7 +105,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
-		log.Fatal("SinkFlushDMLPanic")
+		log.Panic("SinkFlushDMLPanic")
 	})
 
 	select {

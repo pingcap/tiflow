@@ -28,13 +28,13 @@ require (
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v0.0.0-20200921112226-ee2e962f5e4b
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20201029093017-5a7df2af2ac7
+	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 <<<<<<< HEAD
 	github.com/pingcap/kvproto v0.0.0-20200909045102-2ac90648531b
 	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
-	github.com/pingcap/parser v0.0.0-20201123083041-dfb0acc7c2fa
-	github.com/pingcap/tidb v1.1.0-beta.0.20201127015152-86582a3191b7
+	github.com/pingcap/parser v0.0.0-20201130080042-c3ddfec58248
+	github.com/pingcap/tidb v1.1.0-beta.0.20201214152324-ce2f365189d3
 	github.com/pingcap/tidb-tools v4.0.6-0.20200828085514-03575b185007+incompatible
 =======
 	github.com/pingcap/kvproto v0.0.0-20201130052818-5dfa7b1325a3
