@@ -26,6 +26,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -48,6 +50,7 @@ type processorOpts struct {
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	etcdClient kv.CDCEtcdClient
+	pdCli      pd.Client
 	credential *security.Credential
 
 	processors map[string]*processor
@@ -66,6 +69,7 @@ type Capture struct {
 func NewCapture(
 	ctx context.Context,
 	pdEndpoints []string,
+	pdCli pd.Client,
 	credential *security.Credential,
 	advertiseAddr string,
 	opts *processorOpts,
@@ -115,8 +119,7 @@ func NewCapture(
 		ID:            id,
 		AdvertiseAddr: advertiseAddr,
 	}
-	log.Info("creating capture",
-		zap.String("capture-id", id), zap.String("advertise-addr", advertiseAddr))
+	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(ctx))
 
 	c = &Capture{
 		processors: make(map[string]*processor),
@@ -126,6 +129,7 @@ func NewCapture(
 		election:   elec,
 		info:       info,
 		opts:       opts,
+		pdCli:      pdCli,
 	}
 
 	return
@@ -145,7 +149,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
 		ChannelSize: 128,
 	})
-	log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
+	log.Info("waiting for tasks", zap.String("capture-id", c.info.ID))
 	var ev *TaskEvent
 	wch := taskWatcher.Watch(ctx)
 	for {
@@ -157,7 +161,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		select {
 		case <-c.session.Done():
 			if ctx.Err() != context.Canceled {
-				log.Info("capture session done, capture suicide itself", zap.String("capture", c.info.ID))
+				log.Info("capture session done, capture suicide itself", zap.String("capture-id", c.info.ID))
 				return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 			}
 		case ev = <-wch:
@@ -167,7 +171,14 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			if ev.Err != nil {
 				return errors.Trace(ev.Err)
 			}
+			failpoint.Inject("captureHandleTaskDelay", nil)
 			if err := c.handleTaskEvent(ctx, ev); err != nil {
+				select {
+				case <-c.session.Done():
+					log.Warn("handle task event failed because session is done", zap.Error(err))
+					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+				default:
+				}
 				return errors.Trace(err)
 			}
 		}
@@ -230,8 +241,9 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 	cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
 	if err != nil {
 		log.Error("get change feed info failed",
-			zap.String("changefeedid", task.ChangeFeedID),
-			zap.String("captureid", c.info.ID),
+			zap.String("changefeed", task.ChangeFeedID),
+			zap.String("capture-id", c.info.ID),
+			util.ZapFieldCapture(ctx),
 			zap.Error(err))
 		return nil, err
 	}
@@ -239,16 +251,17 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 	if err != nil {
 		return nil, err
 	}
-	log.Info("run processor", zap.String("captureid", c.info.ID),
-		zap.String("changefeedid", task.ChangeFeedID))
+	log.Info("run processor",
+		zap.String("capture-id", c.info.ID), util.ZapFieldCapture(ctx),
+		zap.String("changefeed", task.ChangeFeedID))
 
 	p, err := runProcessor(
-		ctx, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
+		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
 	if err != nil {
 		log.Error("run processor failed",
-			zap.String("changefeedid", task.ChangeFeedID),
-			zap.String("captureid", c.info.ID),
-			zap.String("captureaddr", c.info.AdvertiseAddr),
+			zap.String("changefeed", task.ChangeFeedID),
+			zap.String("capture-id", c.info.ID),
+			util.ZapFieldCapture(ctx),
 			zap.Error(err))
 		return nil, err
 	}

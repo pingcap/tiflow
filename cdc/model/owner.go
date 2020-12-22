@@ -209,6 +209,8 @@ type TaskStatus struct {
 	Operation    map[TableID]*TableOperation   `json:"operation"`
 	AdminJobType AdminJobType                  `json:"admin-job-type"`
 	ModRevision  int64                         `json:"-"`
+	// true means Operation record has been changed
+	Dirty bool `json:"-"`
 }
 
 // String implements fmt.Stringer interface.

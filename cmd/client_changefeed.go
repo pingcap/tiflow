@@ -38,6 +38,13 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	forceEnableOldValueProtocols = []string{
+		"canal",
+		"maxwell",
+	}
+)
+
 func newChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "changefeed",
@@ -264,9 +271,13 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 		}
 
-		if strings.ToLower(sinkURIParsed.Scheme) == "kafka" && sinkURIParsed.Query().Get("protocol") == "canal" {
-			log.Warn("Attempting to use Canal without old value. CDC will enable old value and continue.")
-			cfg.EnableOldValue = true
+		protocol := sinkURIParsed.Query().Get("protocol")
+		for _, fp := range forceEnableOldValueProtocols {
+			if protocol == fp {
+				log.Warn("Attemping to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+				cfg.EnableOldValue = true
+				break
+			}
 		}
 
 		if cfg.ForceReplicate {

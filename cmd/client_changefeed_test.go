@@ -44,9 +44,10 @@ enable-old-value = false
 	sinkURI = "blackhole:///?protocol=maxwell"
 	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
 	c.Assert(err, check.IsNil)
-	c.Assert(info.Config.EnableOldValue, check.IsFalse)
 
 	sinkURI = ""
 	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil)
 	c.Assert(err, check.NotNil)
+
+	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 }

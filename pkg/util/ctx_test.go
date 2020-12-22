@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"go.uber.org/zap"
 )
 
 type ctxValueSuite struct{}
@@ -43,9 +44,31 @@ func (s *ctxValueSuite) TestShouldReturnChangefeedID(c *check.C) {
 	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "ello")
 }
 
+func (s *ctxValueSuite) TestCanceledContext(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := PutChangefeedIDInCtx(context.Background(), "test-cf")
+	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "test-cf")
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "test-cf")
+}
+
 func (s *ctxValueSuite) TestChangefeedIDNotSet(c *check.C) {
 	defer testleak.AfterTest(c)()
 	c.Assert(ChangefeedIDFromCtx(context.Background()), check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
 	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "")
+}
+
+func (s *ctxValueSuite) TestZapFieldWithContext(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var (
+		capture    string = "127.0.0.1:8200"
+		changefeed string = "test-cf"
+	)
+	ctx := context.Background()
+	ctx = PutCaptureAddrInCtx(ctx, capture)
+	ctx = PutChangefeedIDInCtx(ctx, changefeed)
+	c.Assert(ZapFieldCapture(ctx), check.DeepEquals, zap.String("capture", capture))
+	c.Assert(ZapFieldChangefeed(ctx), check.DeepEquals, zap.String("changefeed", changefeed))
 }
