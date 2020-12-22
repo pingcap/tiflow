@@ -51,6 +51,7 @@ type Puller interface {
 
 type pullerImpl struct {
 	pdCli          pd.Client
+	kvCli          kv.CDCKVClient
 	credential     *security.Credential
 	kvStorage      tikv.Storage
 	checkpointTs   uint64
@@ -66,6 +67,7 @@ type pullerImpl struct {
 // NewPuller create a new Puller fetch event start from checkpointTs
 // and put into buf.
 func NewPuller(
+	ctx context.Context,
 	pdCli pd.Client,
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
@@ -76,7 +78,7 @@ func NewPuller(
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
-		log.Fatal("can't create puller for non-tikv storage")
+		log.Panic("can't create puller for non-tikv storage")
 	}
 	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
 	for i := range spans {
@@ -86,8 +88,10 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, credential)
 	p := &pullerImpl{
 		pdCli:          pdCli,
+		kvCli:          kvCli,
 		credential:     credential,
 		kvStorage:      tikvStorage,
 		checkpointTs:   checkpointTs,
@@ -108,12 +112,7 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(ctx, p.pdCli, p.kvStorage, p.credential)
-	if err != nil {
-		return errors.Annotate(err, "create cdc client failed")
-	}
-
-	defer cli.Close()
+	defer p.kvCli.Close()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -125,7 +124,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return cli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
 		})
 	}
 
@@ -200,7 +199,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Fatal("The CRTs must be greater than the resolvedTs",
+				log.Panic("The CRTs must be greater than the resolvedTs",
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
@@ -229,7 +228,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
-					log.Fatal("the resolved span is not in the total span", zap.Reflect("resolved", e.Resolved), zap.Int64("tableID", tableID))
+					log.Panic("the resolved span is not in the total span",
+						zap.Reflect("resolved", e.Resolved),
+						zap.Int64("tableID", tableID),
+						zap.Reflect("spans", p.spans),
+					)
 				}
 				// Forward is called in a single thread
 				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
@@ -246,7 +249,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					}
 					log.Info("puller is initialized",
 						zap.Duration("duration", time.Since(start)),
-						zap.String("changefeedid", changefeedID),
+						zap.String("changefeed", changefeedID),
 						zap.Int64("tableID", tableID),
 						zap.Strings("spans", spans),
 						zap.Uint64("resolvedTs", resolvedTs))

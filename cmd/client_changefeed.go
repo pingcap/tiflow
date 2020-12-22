@@ -38,6 +38,13 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	forceEnableOldValueProtocols = []string{
+		"canal",
+		"maxwell",
+	}
+)
+
 func newChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "changefeed",
@@ -213,6 +220,9 @@ func newQueryChangefeedCommand() *cobra.Command {
 
 func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential) (*model.ChangeFeedInfo, error) {
 	if isCreate {
+		if sinkURI == "" {
+			return nil, errors.New("Creating chengfeed without a sink-uri")
+		}
 		if startTs == 0 {
 			ts, logical, err := pdCli.GetTS(ctx)
 			if err != nil {
@@ -261,9 +271,13 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 		}
 
-		if strings.ToLower(sinkURIParsed.Scheme) == "kafka" && sinkURIParsed.Query().Get("protocol") == "canal" {
-			log.Warn("Attempting to use Canal without old value. CDC will enable old value and continue.")
-			cfg.EnableOldValue = true
+		protocol := sinkURIParsed.Query().Get("protocol")
+		for _, fp := range forceEnableOldValueProtocols {
+			if protocol == fp {
+				log.Warn("Attemping to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+				cfg.EnableOldValue = true
+				break
+			}
 		}
 
 		if cfg.ForceReplicate {
@@ -359,7 +373,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().Uint64Var(&startTs, "start-ts", 0, "Start ts of changefeed")
 	command.PersistentFlags().Uint64Var(&targetTs, "target-ts", 0, "Target ts of changefeed")
-	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "mysql://root:123456@127.0.0.1:3306/", "sink uri")
+	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "", "sink uri")
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")

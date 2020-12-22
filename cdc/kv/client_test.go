@@ -51,10 +51,8 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	pdCli := mocktikv.NewPDClient(cluster)
 	defer pdCli.Close() //nolint:errcheck
 
-	cli, err := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
-	c.Assert(err, check.IsNil)
-
-	err = cli.Close()
+	cli := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
+	err := cli.Close()
 	c.Assert(err, check.IsNil)
 }
 
@@ -158,8 +156,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient, err := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	c.Assert(err, check.IsNil)
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	defer cdcClient.Close() //nolint:errcheck
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -239,8 +236,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient, err := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	c.Assert(err, check.IsNil)
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -300,8 +296,7 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient, err := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	c.Assert(err, check.IsNil)
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	eventCh := make(chan *model.RegionFeedEvent, 10)

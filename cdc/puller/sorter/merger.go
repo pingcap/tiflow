@@ -128,7 +128,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 
 				if event == nil {
-					log.Fatal("Unexpected end of backEnd data, bug?",
+					log.Panic("Unexpected end of backEnd data, bug?",
 						zap.Uint64("minResolvedTs", task.maxResolvedTs))
 				}
 			}
@@ -178,7 +178,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			} else {
 				pendingSet[task] = nextEvent
 				if nextEvent.CRTs < minResolvedTs {
-					log.Fatal("remaining event CRTs too small", zap.Uint64("next-ts", nextEvent.CRTs), zap.Uint64("minResolvedTs", minResolvedTs))
+					log.Panic("remaining event CRTs too small", zap.Uint64("next-ts", nextEvent.CRTs), zap.Uint64("minResolvedTs", minResolvedTs))
 				}
 			}
 			return nil
@@ -197,7 +197,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			event := item.entry
 
 			if event.CRTs < task.lastTs {
-				log.Fatal("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
+				log.Panic("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
 			}
 			task.lastTs = event.CRTs
 
@@ -209,7 +209,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						event := item.entry
 						log.Debug("dump", zap.Reflect("event", event), zap.Int("heap-id", task.heapSorterID))
 					}
-					log.Fatal("unified sorter: output ts regressed, bug?",
+					log.Panic("unified sorter: output ts regressed, bug?",
 						zap.Int("counter", counter),
 						zap.Uint64("minResolvedTs", minResolvedTs),
 						zap.Int("cur-heap-id", task.heapSorterID),
@@ -294,7 +294,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		}
 
 		if len(workingSet) != 0 {
-			log.Fatal("unified sorter: merging ended prematurely, bug?", zap.Uint64("resolvedTs", minResolvedTs))
+			log.Panic("unified sorter: merging ended prematurely, bug?", zap.Uint64("resolvedTs", minResolvedTs))
 		}
 
 		if counter > 0 {
