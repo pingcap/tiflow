@@ -26,23 +26,15 @@ require (
 	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/philhofer/fwd v1.0.0 // indirect
-	github.com/pingcap/br v0.0.0-20200921112226-ee2e962f5e4b
+	github.com/pingcap/br v4.0.9-0.20201215065036-804aa9087197+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
-<<<<<<< HEAD
-	github.com/pingcap/kvproto v0.0.0-20200909045102-2ac90648531b
+	github.com/pingcap/kvproto v0.0.0-20201126113434-70db5fb4b0dc
 	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
 	github.com/pingcap/parser v0.0.0-20201130080042-c3ddfec58248
-	github.com/pingcap/tidb v1.1.0-beta.0.20201214152324-ce2f365189d3
-	github.com/pingcap/tidb-tools v4.0.6-0.20200828085514-03575b185007+incompatible
-=======
-	github.com/pingcap/kvproto v0.0.0-20201130052818-5dfa7b1325a3
-	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
-	github.com/pingcap/parser v0.0.0-20201123080035-8f4c6ab94e11
-	github.com/pingcap/tidb v1.1.0-beta.0.20201130072759-1c8fb2bd2d06
+	github.com/pingcap/tidb v1.1.0-beta.0.20201222030240-39da88186a2d
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
->>>>>>> 2de76f6... *: update the tidb dependence  and remove the replace line in go mod (#1139)
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
