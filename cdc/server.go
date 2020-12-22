@@ -238,12 +238,24 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		err := kvStore.Close()
+		if err != nil {
+			log.Warn("kv store close failed", zap.Error(err))
+		}
+	}()
+	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 	// When a capture suicided, restart it
 	for {
 		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
 			return err
 		}
-		log.Info("server recovered", zap.String("capture", s.capture.info.ID))
+		log.Info("server recovered", zap.String("capture-id", s.capture.info.ID))
 	}
 }
 
@@ -278,7 +290,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			log.Warn("campaign owner failed", zap.Error(err))
 			continue
 		}
-		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
+		log.Info("campaign owner successfully", zap.String("capture-id", s.capture.info.ID))
 		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
@@ -288,7 +300,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		s.setOwner(owner)
 		if err := owner.Run(ctx, ownerRunInterval); err != nil {
 			if errors.Cause(err) == context.Canceled {
-				log.Info("owner exited", zap.String("capture", s.capture.info.ID))
+				log.Info("owner exited", zap.String("capture-id", s.capture.info.ID))
 				return nil
 			}
 			err2 := s.capture.Resign(ctx)
@@ -306,20 +318,9 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
-	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		err := kvStore.Close()
-		if err != nil {
-			log.Warn("kv store close failed", zap.Error(err))
-		}
-	}()
-	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
 	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr, procOpts)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, s.opts.advertiseAddr, procOpts)
 	if err != nil {
 		return err
 	}

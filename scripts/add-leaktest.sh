@@ -29,6 +29,7 @@ for i in $@; do
     goimports -w $i
     gofmt -w $i
   fi
-echo $i
   rm -f $i~
 done
+
+git --no-pager diff --exit-code

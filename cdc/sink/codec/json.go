@@ -89,7 +89,7 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 		if c.Flag.IsBinary() {
 			str, err = strconv.Unquote("\"" + str + "\"")
 			if err != nil {
-				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 		}
 		col.Value = []byte(str)
@@ -107,14 +107,14 @@ func formatColumnVal(c column) column {
 			var err error
 			c.Value, err = base64.StdEncoding.DecodeString(s)
 			if err != nil {
-				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 		}
 	case mysql.TypeBit:
 		if s, ok := c.Value.(json.Number); ok {
 			intNum, err := s.Int64()
 			if err != nil {
-				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 			c.Value = uint64(intNum)
 		}
@@ -464,7 +464,7 @@ func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 // MixedBuild implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 	if !d.supportMixedBuild {
-		log.Fatal("mixedBuildSupport not enabled!")
+		log.Panic("mixedBuildSupport not enabled!")
 		return nil
 	}
 	keyBytes := d.keyBuf.Bytes()

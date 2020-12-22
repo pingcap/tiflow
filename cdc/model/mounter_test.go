@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type mounterSuite struct{}
@@ -25,6 +26,7 @@ type mounterSuite struct{}
 var _ = check.Suite(&mounterSuite{})
 
 func (s *mounterSuite) TestPolymorphicEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
 	raw := &RawKVEntry{
 		StartTs:  99,
 		CRTs:     100,
@@ -50,6 +52,7 @@ func (s *mounterSuite) TestPolymorphicEvent(c *check.C) {
 }
 
 func (s *mounterSuite) TestPolymorphicEventPrepare(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	polyEvent := NewPolymorphicEvent(&RawKVEntry{OpType: OpTypeResolved})
 	c.Assert(polyEvent.WaitPrepare(ctx), check.IsNil)

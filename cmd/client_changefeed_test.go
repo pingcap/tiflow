@@ -11,29 +11,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package cmd
 
 import (
+	"context"
+	"io/ioutil"
+	"path/filepath"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/spf13/cobra"
 )
 
-type captureSuite struct{}
+type clientChangefeedSuite struct{}
 
-var _ = check.Suite(&captureSuite{})
+var _ = check.Suite(&clientChangefeedSuite{})
 
-func (s *captureSuite) TestMarshalUnmarshal(c *check.C) {
+func (s *clientChangefeedSuite) TestVerifyChangefeedParams(c *check.C) {
 	defer testleak.AfterTest(c)()
-	info := &CaptureInfo{
-		ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7890",
-		AdvertiseAddr: "127.0.0.1:8300",
-	}
-	expected := []byte(`{"id":"9ff52aca-aea6-4022-8ec4-fbee3f2c7890","address":"127.0.0.1:8300"}`)
-	data, err := info.Marshal()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := &cobra.Command{}
+
+	dir := c.MkDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+enable-old-value = false
+`
+	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
-	c.Assert(data, check.DeepEquals, expected)
-	decodedInfo := &CaptureInfo{}
-	err = decodedInfo.Unmarshal(data)
+
+	sinkURI = "blackhole:///?protocol=maxwell"
+	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
 	c.Assert(err, check.IsNil)
-	c.Assert(decodedInfo, check.DeepEquals, info)
+	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 }

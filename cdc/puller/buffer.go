@@ -156,7 +156,7 @@ func entrySize(e model.RegionFeedEvent) int {
 	} else if e.Resolved != nil {
 		return int(sizeOfResolve)
 	} else {
-		log.Fatal("unknow event type")
+		log.Panic("unknow event type")
 	}
 
 	return 0
