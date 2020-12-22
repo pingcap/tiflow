@@ -357,7 +357,7 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
 		wg.Done()
@@ -435,7 +435,7 @@ consumePreResolvedTs:
 		select {
 		case event = <-eventCh:
 			c.Assert(event.Resolved, check.NotNil)
-			c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(1))
+			c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(100))
 		case <-time.After(time.Second):
 			break consumePreResolvedTs
 		}
@@ -467,15 +467,17 @@ consumePreResolvedTs:
 			},
 		}
 	}
-	c.Assert(err, check.IsNil)
-	ch2 <- makeEvent(100)
+	// fallback resolved ts event from TiKV
+	ch2 <- makeEvent(90)
+	// normal resolved ts evnet
+	ch2 <- makeEvent(120)
 	select {
 	case event = <-eventCh:
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
 	c.Assert(event.Resolved, check.NotNil)
-	c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(100))
+	c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(120))
 
 	cancel()
 }
