@@ -74,6 +74,7 @@ type commonDataStructureSuite struct{}
 var _ = check.Suite(&commonDataStructureSuite{})
 
 func (s *commonDataStructureSuite) TestTableNameFuncs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	t := &TableName{
 		Schema:  "test",
 		Table:   "t1",
@@ -87,6 +88,7 @@ func (s *commonDataStructureSuite) TestTableNameFuncs(c *check.C) {
 }
 
 func (s *commonDataStructureSuite) TestRowChangedEventFuncs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	deleteRow := &RowChangedEvent{
 		Table: &TableName{
 			Schema: "test",
@@ -146,6 +148,7 @@ func (s *commonDataStructureSuite) TestRowChangedEventFuncs(c *check.C) {
 }
 
 func (s *commonDataStructureSuite) TestColumnValueString(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		val      interface{}
 		expected string
@@ -175,6 +178,7 @@ func (s *commonDataStructureSuite) TestColumnValueString(c *check.C) {
 }
 
 func (s *commonDataStructureSuite) TestFromTiColumnInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
 	col := &ColumnInfo{}
 	col.FromTiColumnInfo(&timodel.ColumnInfo{
 		Name:      timodel.CIStr{O: "col1"},
@@ -185,6 +189,7 @@ func (s *commonDataStructureSuite) TestFromTiColumnInfo(c *check.C) {
 }
 
 func (s *commonDataStructureSuite) TestDDLEventFromJob(c *check.C) {
+	defer testleak.AfterTest(c)()
 	job := &timodel.Job{
 		ID:         1071,
 		TableID:    49,

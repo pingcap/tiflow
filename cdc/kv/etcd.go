@@ -299,7 +299,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	}
 	if !resp.Succeeded {
 		log.Warn("changefeed already exists, ignore create changefeed",
-			zap.String("changefeedid", changeFeedID))
+			zap.String("changefeed", changeFeedID))
 		return cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changeFeedID)
 	}
 	return errors.Trace(err)
