@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -28,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"
-	"go.uber.org/zap"
 )
 
 type mountTxnsSuite struct{}
@@ -206,7 +204,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	createTableDDL string
 	values         [][]interface{}
 }) {
-	store, err := mockstore.NewMockStore()
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, check.IsNil)
 	defer store.Close() //nolint:errcheck
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
@@ -219,7 +217,6 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	defer domain.Close()
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(c, store)
-	tk.MustExec("set @@tidb_enable_clustered_index=1;")
 	tk.MustExec("use test;")
 
 	tk.MustExec(tc.createTableDDL)
@@ -234,11 +231,6 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	}
 	tableInfo, ok := scheamStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
 	c.Assert(ok, check.IsTrue)
-	if tableInfo.IsCommonHandle {
-		// we can check this log to make sure if the clustered-index is enabled
-		log.Info("this table is enable the clustered index", zap.String("tableName", tableInfo.Name.L))
-	}
-
 	for _, params := range tc.values {
 		insertSQL := prepareInsertSQL(c, tableInfo, len(params))
 		tk.MustExec(insertSQL, params...)
