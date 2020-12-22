@@ -18,6 +18,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type schemaStorageSuite struct{}
@@ -25,6 +26,7 @@ type schemaStorageSuite struct{}
 var _ = check.Suite(&schemaStorageSuite{})
 
 func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *check.C) {
+	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
@@ -88,6 +90,7 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 }
 
 func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *check.C) {
+	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		Indices: []*timodel.IndexInfo{
 			{
@@ -130,6 +133,7 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *chec
 }
 
 func (s *schemaStorageSuite) TestUniqueKeyIsHandle(c *check.C) {
+	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
@@ -177,6 +181,7 @@ func (s *schemaStorageSuite) TestUniqueKeyIsHandle(c *check.C) {
 }
 
 func (s *schemaStorageSuite) TestHandleKeyPriority(c *check.C) {
+	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
@@ -281,6 +286,7 @@ func (s *schemaStorageSuite) TestHandleKeyPriority(c *check.C) {
 }
 
 func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		ID:   1071,
 		Name: timodel.CIStr{O: "t1"},
@@ -385,6 +391,7 @@ func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
 }
 
 func (s *schemaStorageSuite) TestTableInfoClone(c *check.C) {
+	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		ID:   1071,
 		Name: timodel.CIStr{O: "t1"},
