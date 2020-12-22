@@ -461,6 +461,11 @@ error = '''
 old value is not enabled
 '''
 
+["CDC:ErrOperateOnClosedNotifier"]
+error = '''
+operate on a closed notifier
+'''
+
 ["CDC:ErrOwnerCampaignKeyDeleted"]
 error = '''
 owner campaign key deleted
