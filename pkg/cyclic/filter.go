@@ -30,7 +30,7 @@ func ExtractReplicaID(markRow *model.RowChangedEvent) uint64 {
 			return c.Value.(uint64)
 		}
 	}
-	log.Fatal("bad mark table, " + mark.CyclicReplicaIDCol + " not found")
+	log.Panic("bad mark table, " + mark.CyclicReplicaIDCol + " not found")
 	return 0
 }
 
@@ -48,7 +48,7 @@ func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64, repl
 	}
 	from := ExtractReplicaID(markRow)
 	if from == replicaID {
-		log.Fatal("cyclic replication loopback detected",
+		log.Panic("cyclic replication loopback detected",
 			zap.Any("markRow", markRow),
 			zap.Uint64("replicaID", replicaID))
 	}
@@ -78,7 +78,7 @@ func FilterAndReduceTxns(
 					// TiKV may emit the same row multiple times.
 					if event.CommitTs != first.CommitTs ||
 						event.RowID != first.RowID {
-						log.Fatal(
+						log.Panic(
 							"there should be at most one mark row for each txn",
 							zap.Uint64("start-ts", event.StartTs),
 							zap.Any("first", first),

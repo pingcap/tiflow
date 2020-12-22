@@ -202,7 +202,7 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	m.mvccStore = mvccListener
 	store, err := mockstore.NewMockTikvStore()
 	if err != nil {
-		log.Fatal("create mock puller failed", zap.Error(err))
+		log.Panic("create mock puller failed", zap.Error(err))
 	}
 	m.store = store
 
@@ -210,7 +210,7 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	session.DisableStats4Test()
 	m.domain, err = session.BootstrapSession(m.store)
 	if err != nil {
-		log.Fatal("create mock puller failed", zap.Error(err))
+		log.Panic("create mock puller failed", zap.Error(err))
 	}
 
 	m.domain.SetStatsUpdating(true)
@@ -271,7 +271,7 @@ func (m *MockPullerManager) postCommit(keys [][]byte, startTs, commitTs uint64, 
 	}
 	prewrite, exist := m.txnMap[startTs]
 	if !exist {
-		log.Fatal("txn not found", zap.Uint64("startTs", startTs))
+		log.Panic("txn not found", zap.Uint64("startTs", startTs))
 	}
 	delete(m.txnMap, startTs)
 	m.txnMapMu.Unlock()

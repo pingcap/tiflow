@@ -218,7 +218,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 	for i := range c.resolvedBuf {
 		value, err := json.Marshal(c.resolvedBuf[i])
 		if err != nil {
-			log.Fatal("CanalFlatEventBatchEncoder", zap.Error(err))
+			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
 		ret[i] = NewMQMessage(nil, value, c.resolvedBuf[i].tikvTs)
