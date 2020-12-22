@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -85,6 +86,11 @@ func (b *Statistics) SubRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, ^uint64(count-1))
 }
 
+// TotalRowsCount returns total number of rows
+func (b *Statistics) TotalRowsCount() uint64 {
+	return atomic.LoadUint64(&b.totalRows)
+}
+
 // RecordBatchExecution records the cost time of batch execution and batch size
 func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	startTime := time.Now()
@@ -101,7 +107,7 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 }
 
 // PrintStatus prints the status of the Sink
-func (b *Statistics) PrintStatus() {
+func (b *Statistics) PrintStatus(ctx context.Context) {
 	since := time.Since(b.lastPrintStatusTime)
 	if since < printStatusInterval {
 		return
@@ -118,7 +124,7 @@ func (b *Statistics) PrintStatus() {
 	log.Info("sink replication status",
 		zap.String("name", b.name),
 		zap.String("changefeed", b.changefeedID),
-		zap.String("captureaddr", b.captureAddr),
+		util.ZapFieldCapture(ctx),
 		zap.Uint64("count", count),
 		zap.Uint64("qps", qps))
 }

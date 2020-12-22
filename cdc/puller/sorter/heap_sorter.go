@@ -213,14 +213,14 @@ func (h *heapSorter) run(ctx context.Context) error {
 
 			if isResolvedEvent {
 				if event.RawKV.CRTs < maxResolved {
-					log.Fatal("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
+					log.Panic("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
 						zap.Uint64("max-resolvedTs", maxResolved))
 				}
 				maxResolved = event.RawKV.CRTs
 			}
 
 			if event.RawKV.CRTs < maxResolved {
-				log.Fatal("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", maxResolved))
+				log.Panic("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", maxResolved))
 			}
 
 			// 5 * 8 is for the 5 fields in PolymorphicEvent

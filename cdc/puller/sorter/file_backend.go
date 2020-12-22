@@ -81,7 +81,7 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 
 	failpoint.Inject("sorterDebug", func() {
 		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
-			log.Fatal("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
+			log.Panic("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
 		}
 	})
 
@@ -103,7 +103,7 @@ func (f *fileBackEnd) writer() (backEndWriter, error) {
 
 	failpoint.Inject("sorterDebug", func() {
 		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
-			log.Fatal("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
+			log.Panic("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
 		}
 	})
 
@@ -117,7 +117,7 @@ func (f *fileBackEnd) writer() (backEndWriter, error) {
 func (f *fileBackEnd) free() error {
 	failpoint.Inject("sorterDebug", func() {
 		if atomic.LoadInt32(&f.borrowed) != 0 {
-			log.Fatal("fileBackEnd: trying to free borrowed file", zap.String("fileName", f.fileName))
+			log.Panic("fileBackEnd: trying to free borrowed file", zap.String("fileName", f.fileName))
 		}
 	})
 
@@ -162,7 +162,7 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	}
 
 	if m != magic {
-		log.Fatal("fileSorterBackEnd: wrong magic. Damaged file or bug?", zap.Uint32("magic", m))
+		log.Panic("fileSorterBackEnd: wrong magic. Damaged file or bug?", zap.Uint32("magic", m))
 	}
 
 	var size uint32
@@ -196,7 +196,7 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	failpoint.Inject("sorterDebug", func() {
 		r.readBytes += int64(4 + 4 + int(size))
 		if r.readBytes > r.totalSize {
-			log.Fatal("fileSorterBackEnd: read more bytes than expected, check concurrent use of file",
+			log.Panic("fileSorterBackEnd: read more bytes than expected, check concurrent use of file",
 				zap.String("fileName", r.backEnd.fileName))
 		}
 	})
@@ -219,7 +219,7 @@ func (r *fileBackEndReader) resetAndClose() error {
 
 	if r.f == nil {
 		failpoint.Inject("sorterDebug", func() {
-			log.Fatal("Double closing of file", zap.String("filename", r.backEnd.fileName))
+			log.Panic("Double closing of file", zap.String("filename", r.backEnd.fileName))
 		})
 		log.Warn("Double closing of file", zap.String("filename", r.backEnd.fileName))
 		return nil
@@ -274,7 +274,7 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 
 	size := len(w.rawBytesBuf)
 	if size == 0 {
-		log.Fatal("fileSorterBackEnd: serialized to empty byte array. Bug?")
+		log.Panic("fileSorterBackEnd: serialized to empty byte array. Bug?")
 	}
 
 	err = binary.Write(w.writer, binary.LittleEndian, uint32(magic))

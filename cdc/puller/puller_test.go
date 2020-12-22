@@ -114,7 +114,7 @@ func (s *pullerSuite) newPullerForTest(
 ) (*mockInjectedPuller, context.CancelFunc, *sync.WaitGroup, tidbkv.Storage) {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-	store, err := mockstore.NewMockStore()
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, check.IsNil)
 	enableOldValue := true
 	backupNewCDCKVClient := kv.NewCDCKVClient
@@ -152,20 +152,17 @@ func (s *pullerSuite) TestPullerResolvedForward(c *check.C) {
 		Resolved: &model.ResolvedSpan{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_a"), End: []byte("t_c")}),
 			ResolvedTs: uint64(1001),
-		},
-	})
+		}})
 	plr.cli.Returns(&model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_c"), End: []byte("t_d")}),
 			ResolvedTs: uint64(1002),
-		},
-	})
+		}})
 	plr.cli.Returns(&model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_d"), End: []byte("t_e")}),
 			ResolvedTs: uint64(1000),
-		},
-	})
+		}})
 	ev := <-plr.Output()
 	c.Assert(ev.OpType, check.Equals, model.OpTypeResolved)
 	c.Assert(ev.CRTs, check.Equals, uint64(1000))
@@ -199,16 +196,14 @@ func (s *pullerSuite) TestPullerRawKV(c *check.C) {
 			Key:    []byte("a"),
 			Value:  []byte("test-value"),
 			CRTs:   uint64(1002),
-		},
-	})
+		}})
 	plr.cli.Returns(&model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
 			OpType: model.OpTypePut,
 			Key:    []byte("d"),
 			Value:  []byte("test-value"),
 			CRTs:   uint64(1003),
-		},
-	})
+		}})
 	ev := <-plr.Output()
 	c.Assert(ev.OpType, check.Equals, model.OpTypePut)
 	c.Assert(ev.Key, check.DeepEquals, []byte("d"))

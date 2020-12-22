@@ -33,6 +33,7 @@ PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'kv_gen')
+TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration')
 CDC_PKG := github.com/pingcap/ticdc
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
 FAILPOINT := bin/failpoint-ctl
@@ -133,6 +134,11 @@ check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
 
+check-leaktest-added:
+	GO111MODULE=off go get golang.org/x/tools/cmd/goimports
+	@echo "check leak test added in all unit tests"
+	./scripts/add-leaktest.sh $(TEST_FILES)
+
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -141,7 +147,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: check-copyright fmt lint check-static tidy errdoc
+check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -170,7 +176,7 @@ tools/bin/revive: tools/check/go.mod
 
 tools/bin/errdoc-gen: tools/check/go.mod
 	cd tools/check; test -e ../bin/errdoc-gen || \
-	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/tiup/components/errdoc/errdoc-gen
+	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
 
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \

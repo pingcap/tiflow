@@ -27,13 +27,19 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/infoschema"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -377,12 +383,12 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 	ctx := context.Background()
 
 	notifier := new(notify.Notifier)
+	receiver, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
 	for i, tc := range testCases {
 		cctx, cancel := context.WithCancel(ctx)
 		var outputRows [][]*model.RowChangedEvent
 		var outputReplicaIDs []uint64
-		receiver, err := notifier.NewReceiver(-1)
-		c.Assert(err, check.IsNil)
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
 			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
 			receiver,
@@ -962,8 +968,6 @@ func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
 	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
 }
 
-<<<<<<< HEAD
-=======
 func mockTestDB() (*sql.DB, error) {
 	// mock for test db, which is used querying TiDB session variable
 	db, mock, err := sqlmock.New()
@@ -1244,7 +1248,6 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
->>>>>>> 415aa00... pkg/notify: fix create receiver on closed notifier (#1185)
 /*
    import (
    	"context"
