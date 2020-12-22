@@ -78,7 +78,7 @@ func NewPuller(
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
-		log.Fatal("can't create puller for non-tikv storage")
+		log.Panic("can't create puller for non-tikv storage")
 	}
 	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
 	for i := range spans {
@@ -199,7 +199,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Fatal("The CRTs must be greater than the resolvedTs",
+				log.Panic("The CRTs must be greater than the resolvedTs",
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
@@ -228,15 +228,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
-<<<<<<< HEAD
-					log.Fatal("the resolved span is not in the total span", zap.Reflect("resolved", e.Resolved), zap.Int64("tableID", tableID))
-=======
 					log.Panic("the resolved span is not in the total span",
 						zap.Reflect("resolved", e.Resolved),
 						zap.Int64("tableID", tableID),
 						zap.Reflect("spans", p.spans),
 					)
->>>>>>> 0f71b07... tests: add unit tests for cdc/puller/puller.go (#1156)
 				}
 				// Forward is called in a single thread
 				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)

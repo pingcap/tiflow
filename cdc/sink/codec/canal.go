@@ -383,12 +383,12 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 
 	err := d.refreshPacketBody()
 	if err != nil {
-		log.Fatal("Error when generating Canal packet", zap.Error(err))
+		log.Panic("Error when generating Canal packet", zap.Error(err))
 	}
 
 	value, err := proto.Marshal(d.packet)
 	if err != nil {
-		log.Fatal("Error when serializing Canal packet", zap.Error(err))
+		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
 	ret := NewMQMessage(nil, value, 0)
 	d.messages.Reset()

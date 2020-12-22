@@ -71,7 +71,7 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 			m, err := memory.Get()
 			if err != nil {
 				failpoint.Inject("sorterDebug", func() {
-					log.Fatal("unified sorter: getting system memory usage failed", zap.Error(err))
+					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
 				})
 
 				log.Warn("unified sorter: getting system memory usage failed", zap.Error(err))
@@ -169,7 +169,7 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 
 		return nil
 	default:
-		log.Fatal("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
+		log.Panic("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
 	}
 	return nil
 }

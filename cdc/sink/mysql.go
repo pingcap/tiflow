@@ -770,7 +770,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 	ctx context.Context, dmls *preparedDMLs, maxRetries uint64, bucket int,
 ) error {
 	if len(dmls.sqls) != len(dmls.values) {
-		log.Fatal("unexpected number of sqls and values",
+		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}

@@ -373,14 +373,20 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
-			conn.Close()
+			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
+			// state. If the store recovers, the gPRC conn can be reused. But if
+			// store goes away forever, the conn will be leaked, we need a better
+			// connection pool.
 			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return errors.Trace(err)
 		}
 		client := cdcpb.NewChangeDataClient(conn)
 		stream, err = client.EventFeed(ctx)
 		if err != nil {
-			conn.Close()
+			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
+			// state. If the store recovers, the gPRC conn can be reused. But if
+			// store goes away forever, the conn will be leaked, we need a better
+			// connection pool.
 			err = cerror.WrapError(cerror.ErrTiKVEventFeed, err)
 			log.Info("establish stream to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return err
@@ -1000,7 +1006,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			log.Fatal("tikv reported duplicated request to the same region, which is not expected",
+			log.Panic("tikv reported duplicated request to the same region, which is not expected",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
 			return nil
 		} else if compatibility := innerErr.GetCompatibility(); compatibility != nil {
@@ -1426,7 +1432,7 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
-							log.Fatal("The CommitTs must be greater than the resolvedTs",
+							log.Panic("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMITTED"),
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
@@ -1444,7 +1450,7 @@ func (s *eventFeedSession) singleEventFeed(
 					case cdcpb.Event_COMMIT:
 						metricPullEventCommitCounter.Inc()
 						if entry.CommitTs <= lastResolvedTs {
-							log.Fatal("The CommitTs must be greater than the resolvedTs",
+							log.Panic("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMIT"),
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
