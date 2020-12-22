@@ -259,8 +259,7 @@ func getRowDataByClomns(colFlag int32, colums []*model.Column, rowdataBuilder ds
 		var colType string
 		columnBuilder := &dsgpb.Column{}
 		columnBuilder.ColName = &column.Name
-		columnValue := model.ColumnValueString(column.Value, column.Flag)
-		columnBuilder.ColValue = &columnValue
+		columnBuilder.ColValue = model.ColumnValueString(column.Value, column.Flag)
 		if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
 			colType = "integer"
 		} else if column.Type == 246 {

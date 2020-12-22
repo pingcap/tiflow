@@ -293,11 +293,11 @@ type Column struct {
 }
 
 // ColumnValueString returns the string representation of the column value
-func ColumnValueString(c interface{}, flag ColumnFlagType) string {
+func ColumnValueString(c interface{}, flag ColumnFlagType) *string {
 	var data string
 	switch v := c.(type) {
 	case nil:
-		data = "null"
+		return nil
 	case bool:
 		if v {
 			data = "1"
@@ -337,7 +337,7 @@ func ColumnValueString(c interface{}, flag ColumnFlagType) string {
 	default:
 		data = fmt.Sprintf("%v", v)
 	}
-	return data
+	return &data
 }
 
 // ColumnInfo represents the name and type information passed to the sink

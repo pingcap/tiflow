@@ -128,7 +128,12 @@ func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) 
 		if columns[i] == nil || columns[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
 			return nil
 		}
-		key = append(key, []byte(model.ColumnValueString(columns[i].Value, columns[i].Flag))...)
+		val := model.ColumnValueString(columns[i].Value, columns[i].Flag)
+		if val == nil {
+			key = append(key, []byte{0}...)
+		} else {
+			key = append(key, []byte(*val)...)
+		}
 		key = append(key, 0)
 	}
 	if len(key) == 0 {
