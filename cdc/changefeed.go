@@ -607,7 +607,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 	if len(c.ddlJobHistory) == 0 {
-		log.Fatal("ddl job history can not be empty in changefeed when should to execute DDL")
+		log.Panic("ddl job history can not be empty in changefeed when should to execute DDL")
 	}
 	todoDDLJob := c.ddlJobHistory[0]
 

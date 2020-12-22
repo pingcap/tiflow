@@ -86,6 +86,11 @@ func (b *Statistics) SubRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, ^uint64(count-1))
 }
 
+// TotalRowsCount returns total number of rows
+func (b *Statistics) TotalRowsCount() uint64 {
+	return atomic.LoadUint64(&b.totalRows)
+}
+
 // RecordBatchExecution records the cost time of batch execution and batch size
 func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	startTime := time.Now()

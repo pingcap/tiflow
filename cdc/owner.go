@@ -509,6 +509,27 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			}
 			continue
 		}
+
+		// remaining task status means some processors are not exited, wait until
+		// all these statuses cleaned. If the capture of pending processor loses
+		// etcd session, the cleanUpStaleTasks will clean these statuses later.
+		allMetadataCleaned := true
+		allTaskStatus, err := o.etcdClient.GetAllTaskStatus(ctx, changeFeedID)
+		if err != nil {
+			return err
+		}
+		for _, taskStatus := range allTaskStatus {
+			if taskStatus.AdminJobType == model.AdminStop || taskStatus.AdminJobType == model.AdminRemove {
+				log.Info("stale task status is not deleted, wait metadata cleaned to create new changefeed",
+					zap.Reflect("task status", taskStatus), zap.String("changefeed", changeFeedID))
+				allMetadataCleaned = false
+				break
+			}
+		}
+		if !allMetadataCleaned {
+			continue
+		}
+
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
 		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
@@ -1074,7 +1095,8 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				return
 			default:
 			}
-			wch := o.etcdClient.Client.Watch(ctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
+			cctx, cancel := context.WithCancel(ctx)
+			wch := o.etcdClient.Client.Watch(cctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
 
 			for resp := range wch {
 				if resp.Err() != nil {
@@ -1087,10 +1109,12 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// operations should be resolved in future release.
 
 				select {
-				case <-ctx.Done():
 				case output <- struct{}{}:
+				default:
+					// in case output channel is full, just ignore this event
 				}
 			}
+			cancel()
 		}
 	}()
 	return output
