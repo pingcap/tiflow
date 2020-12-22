@@ -73,6 +73,16 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	_, tableName := util.TableIDFromCtx(ctx)
 	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName).Observe(float64(h.heap.Len()))
+	var (
+		backEnd    backEnd
+		lowerBound uint64
+	)
+
+	if h.heap.Len() > 0 {
+		lowerBound = h.heap[0].entry.CRTs
+	} else {
+		return nil
+	}
 
 	// We check if the heap contains only one entry and that entry is a ResolvedEvent.
 	// As an optimization, when the condition is true, we clear the heap and send an empty flush.
@@ -85,11 +95,6 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	}
 
 	isEmptyFlush := h.heap.Len() == 0
-	var (
-		backEnd    backEnd
-		lowerBound uint64
-	)
-
 	var finishCh chan error
 	if !isEmptyFlush {
 		var err error
@@ -98,7 +103,6 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			return errors.Trace(err)
 		}
 
-		lowerBound = h.heap[0].entry.CRTs
 		finishCh = make(chan error, 1)
 	}
 

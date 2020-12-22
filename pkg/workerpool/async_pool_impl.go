@@ -93,10 +93,7 @@ func (p *defaultAsyncPoolImpl) doGo(ctx context.Context, f func()) error {
 
 func (p *defaultAsyncPoolImpl) Run(ctx context.Context) error {
 	p.prepare()
-	errg := &errgroup.Group{}
-
-	subctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	errg := errgroup.Group{}
 
 	p.runningLock.Lock()
 	atomic.StoreInt32(&p.isRunning, 1)
@@ -108,25 +105,33 @@ func (p *defaultAsyncPoolImpl) Run(ctx context.Context) error {
 		p.runningLock.Unlock()
 	}()
 
+	errCh := make(chan error, len(p.workers))
+	defer close(errCh)
+
 	for _, worker := range p.workers {
 		workerFinal := worker
 		errg.Go(func() error {
-			err := workerFinal.run(subctx)
-			if err != nil && cerrors.ErrAsyncPoolExited.Equal(errors.Cause(err)) {
-				return nil
+			err := workerFinal.run()
+			if err != nil && cerrors.ErrAsyncPoolExited.NotEqual(errors.Cause(err)) {
+				errCh <- err
 			}
-			return errors.Trace(err)
+			return nil
 		})
 	}
 
 	errg.Go(func() error {
-		<-ctx.Done()
+		var err error
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+		case err = <-errCh:
+		}
 
 		for _, worker := range p.workers {
 			worker.close()
 		}
 
-		return ctx.Err()
+		return err
 	})
 
 	return errors.Trace(errg.Wait())
@@ -152,18 +157,13 @@ func newAsyncWorker() *asyncWorker {
 	return &asyncWorker{inputCh: make(chan *asyncTask, 12800)}
 }
 
-func (w *asyncWorker) run(ctx context.Context) error {
+func (w *asyncWorker) run() error {
 	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case task := <-w.inputCh:
-			if task == nil {
-				return cerrors.ErrAsyncPoolExited.GenWithStackByArgs()
-			}
-
-			task.f()
+		task := <-w.inputCh
+		if task == nil {
+			return cerrors.ErrAsyncPoolExited.GenWithStackByArgs()
 		}
+		task.f()
 	}
 }
 
