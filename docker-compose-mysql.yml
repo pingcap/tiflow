@@ -1,0 +1,275 @@
+---
+    version: '2.1'
+
+    services:
+      controller:
+        image: ticdc:latest
+        build:
+          context: .
+          dockerfile: ./Dockerfile.development
+        volumes:
+          - /data
+          - ./docker/logs:/logs
+          - ./docker/config:/config
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
+        command: -c "/usr/bin/tail -f /dev/null"
+        entrypoint: "/bin/sh"
+        depends_on:
+          - "upstream-tidb"
+          - "downstream-tidb"
+        restart: on-failure
+
+      capturer0:
+        image: ticdc:latest
+        build:
+          context: .
+          dockerfile: ./Dockerfile.development
+        volumes:
+          - /data
+          - ./docker/logs:/logs
+        ports:
+          - "8300:8300"
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
+        entrypoint: "/cdc server"
+        command:
+          - --addr=0.0.0.0:8300
+          - --pd=http://upstream-pd:2379
+          - --log-file=/logs/capturer0.log
+          - --log-level=debug
+          - --advertise-addr=capturer0:8300
+        depends_on:
+          - "upstream-tidb"
+          - "downstream-tidb"
+        restart: on-failure
+
+      capturer1:
+        image: ticdc:latest
+        build:
+          context: .
+          dockerfile: ./Dockerfile.development
+        volumes:
+          - /data
+          - ./docker/logs:/logs
+        ports:
+          - "8301:8300"
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
+        entrypoint: "/cdc server"
+        command:
+          - --addr=0.0.0.0:8300
+          - --pd=http://upstream-pd:2379
+          - --log-file=/logs/capturer1.log
+          - --log-level=debug
+          - --advertise-addr=capturer1:8300
+        depends_on:
+          - "upstream-tidb"
+          - "downstream-tidb"
+        restart: on-failure
+
+      capturer2:
+        image: ticdc:latest
+        build:
+          context: .
+          dockerfile: ./Dockerfile.development
+        volumes:
+          - /data
+          - ./docker/logs:/logs
+        ports:
+          - "8302:8300"
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
+        entrypoint: "/cdc server"
+        command:
+          - --addr=0.0.0.0:8300
+          - --pd=http://upstream-pd:2379
+          - --log-file=/logs/capturer2.log
+          - --log-level=debug
+          - --advertise-addr=capturer2:8300
+        depends_on:
+          - "upstream-tidb"
+          - "downstream-tidb"
+        restart: on-failure
+
+      upstream-pd:
+        image: pingcap/pd:nightly
+        ports:
+          - "2379:2379"
+        volumes:
+          - ./docker/config/pd.toml:/pd.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --name=upstream-pd
+          - --client-urls=http://0.0.0.0:2379
+          - --peer-urls=http://0.0.0.0:2380
+          - --advertise-client-urls=http://upstream-pd:2379
+          - --advertise-peer-urls=http://upstream-pd:2380
+          - --initial-cluster=upstream-pd=http://upstream-pd:2380
+          - --data-dir=/data/upstream-pd
+          - --config=/pd.toml
+          - --log-file=/logs/upstream-pd.log
+        restart: on-failure
+
+      upstream-tikv0:
+        image: pingcap/tikv:nightly
+        volumes:
+          - ./docker/config/tikv.toml:/tikv.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --addr=0.0.0.0:20160
+          - --advertise-addr=upstream-tikv0:20160
+          - --data-dir=/data/upstream-tikv0
+          - --pd=upstream-pd:2379
+          - --config=/tikv.toml
+          - --log-file=/logs/upstream-tikv0.log
+        depends_on:
+          - "upstream-pd"
+        restart: on-failure
+
+      upstream-tikv1:
+        image: pingcap/tikv:nightly
+        volumes:
+          - ./docker/config/tikv.toml:/tikv.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --addr=0.0.0.0:20160
+          - --advertise-addr=upstream-tikv1:20160
+          - --data-dir=/data/upstream-tikv1
+          - --pd=upstream-pd:2379
+          - --config=/tikv.toml
+          - --log-file=/logs/upstream-tikv1.log
+        depends_on:
+          - "upstream-pd"
+        restart: on-failure
+
+      upstream-tikv2:
+        image: pingcap/tikv:nightly
+        volumes:
+          - ./docker/config/tikv.toml:/tikv.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --addr=0.0.0.0:20160
+          - --advertise-addr=upstream-tikv2:20160
+          - --data-dir=/data/upstream-tikv2
+          - --pd=upstream-pd:2379
+          - --config=/tikv.toml
+          - --log-file=/logs/upstream-tikv2.log
+        depends_on:
+          - "upstream-pd"
+        restart: on-failure
+
+      upstream-tidb:
+        image: pingcap/tidb:nightly
+        ports:
+          - "4000:4000"
+          - "10080:10080"
+        volumes:
+          - ./docker/config/tidb.toml:/tidb.toml:ro
+          - ./docker/logs:/logs
+        command:
+          - --store=tikv
+          - --path=upstream-pd:2379
+          - --config=/tidb.toml
+          - --log-file=/logs/upstream-tidb.log
+          - --advertise-address=upstream-tidb
+        depends_on:
+          - "upstream-tikv0"
+          - "upstream-tikv1"
+          - "upstream-tikv2"
+        restart: on-failure
+
+      downstream-pd:
+        image: pingcap/pd:nightly
+        ports:
+          - "3379:2379"
+        volumes:
+          - ./docker/config/pd.toml:/pd.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --name=downstream-pd
+          - --client-urls=http://0.0.0.0:2379
+          - --peer-urls=http://0.0.0.0:2380
+          - --advertise-client-urls=http://downstream-pd:2379
+          - --advertise-peer-urls=http://downstream-pd:2380
+          - --initial-cluster=downstream-pd=http://downstream-pd:2380
+          - --data-dir=/data/downstream-pd
+          - --config=/pd.toml
+          - --log-file=/logs/downstream-pd.log
+        restart: on-failure
+
+      downstream-tikv0:
+        image: pingcap/tikv:nightly
+        volumes:
+          - ./docker/config/tikv.toml:/tikv.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --addr=0.0.0.0:20160
+          - --advertise-addr=downstream-tikv0:20160
+          - --data-dir=/data/downstream-tikv0
+          - --pd=downstream-pd:2379
+          - --config=/tikv.toml
+          - --log-file=/logs/downstream-tikv0.log
+        depends_on:
+          - "downstream-pd"
+        restart: on-failure
+
+      downstream-tikv1:
+        image: pingcap/tikv:nightly
+        volumes:
+          - ./docker/config/tikv.toml:/tikv.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --addr=0.0.0.0:20160
+          - --advertise-addr=downstream-tikv1:20160
+          - --data-dir=/data/downstream-tikv1
+          - --pd=downstream-pd:2379
+          - --config=/tikv.toml
+          - --log-file=/logs/downstream-tikv1.log
+        depends_on:
+          - "downstream-pd"
+        restart: on-failure
+
+      downstream-tikv2:
+        image: pingcap/tikv:nightly
+        volumes:
+          - ./docker/config/tikv.toml:/tikv.toml:ro
+          - /data
+          - ./docker/logs:/logs
+        command:
+          - --addr=0.0.0.0:20160
+          - --advertise-addr=downstream-tikv2:20160
+          - --data-dir=/data/downstream-tikv2
+          - --pd=downstream-pd:2379
+          - --config=/tikv.toml
+          - --log-file=/logs/downstream-tikv2.log
+        depends_on:
+          - "downstream-pd"
+        restart: on-failure
+
+      downstream-tidb:
+        image: pingcap/tidb:nightly
+        ports:
+          - "5000:4000"
+          - "20080:10080"
+        volumes:
+          - ./docker/config/tidb.toml:/tidb.toml:ro
+          - ./docker/logs:/logs
+        command:
+          - --store=tikv
+          - --path=downstream-pd:2379
+          - --config=/tidb.toml
+          - --log-file=/logs/downstream-tidb.log
+          - --advertise-address=downstream-tidb
+        depends_on:
+          - "downstream-tikv0"
+          - "downstream-tikv1"
+          - "downstream-tikv2"
+        restart: on-failure

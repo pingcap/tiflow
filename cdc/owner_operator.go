@@ -21,16 +21,17 @@ import (
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	pd "github.com/tikv/pd/client"
 	"golang.org/x/sync/errgroup"
 )
 
-//TODO: add tests
+// TODO: add tests
 type ddlHandler struct {
 	puller     puller.Puller
 	resolvedTS uint64
@@ -41,18 +42,17 @@ type ddlHandler struct {
 	cancel func()
 }
 
-func newDDLHandler(pdCli pd.Client, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
-	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
-	// so we set `needEncode` to false.
-	plr := puller.NewPuller(pdCli, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, nil)
+func newDDLHandler(pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
+	// TODO: context should be passed from outter caller
 	ctx, cancel := context.WithCancel(context.Background())
+	plr := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
 	h := &ddlHandler{
 		puller: plr,
 		cancel: cancel,
 	}
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
-	ctx = util.PutTableIDInCtx(ctx, -1)
+	ctx = util.PutTableInfoInCtx(ctx, -1, "")
 
 	// FIXME: user of ddlHandler can't know error happen.
 	errg.Go(func() error {

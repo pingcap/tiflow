@@ -16,31 +16,37 @@ package util
 import (
 	"context"
 	"time"
+
+	"github.com/pingcap/errors"
+
+	"github.com/pingcap/tidb/kv"
+	"go.uber.org/zap"
 )
 
 type ctxKey string
 
 const (
 	ctxKeyTableID      = ctxKey("tableID")
-	ctxKeyCaptureID    = ctxKey("captureID")
+	ctxKeyCaptureAddr  = ctxKey("captureAddr")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyIsOwner      = ctxKey("isOwner")
 	ctxKeyTimezone     = ctxKey("timezone")
+	ctxKeyKVStorage    = ctxKey("kvStorage")
 )
 
-// CaptureIDFromCtx returns a capture ID stored in the specified context.
+// CaptureAddrFromCtx returns a capture ID stored in the specified context.
 // It returns an empty string if there's no valid capture ID found.
-func CaptureIDFromCtx(ctx context.Context) string {
-	captureID, ok := ctx.Value(ctxKeyCaptureID).(string)
+func CaptureAddrFromCtx(ctx context.Context) string {
+	captureAddr, ok := ctx.Value(ctxKeyCaptureAddr).(string)
 	if !ok {
 		return ""
 	}
-	return captureID
+	return captureAddr
 }
 
-// PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
-func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
-	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
+// PutCaptureAddrInCtx returns a new child context with the specified capture ID stored.
+func PutCaptureAddrInCtx(ctx context.Context, captureAddr string) context.Context {
+	return context.WithValue(ctx, ctxKeyCaptureAddr, captureAddr)
 }
 
 // PutTimezoneInCtx returns a new child context with the given timezone
@@ -48,18 +54,28 @@ func PutTimezoneInCtx(ctx context.Context, timezone *time.Location) context.Cont
 	return context.WithValue(ctx, ctxKeyTimezone, timezone)
 }
 
-// PutTableIDInCtx returns a new child context with the specified table ID stored.
-func PutTableIDInCtx(ctx context.Context, tableID int64) context.Context {
-	return context.WithValue(ctx, ctxKeyTableID, tableID)
+// PutKVStorageInCtx returns a new child context with the given tikv store
+func PutKVStorageInCtx(ctx context.Context, store kv.Storage) context.Context {
+	return context.WithValue(ctx, ctxKeyKVStorage, store)
+}
+
+type tableinfo struct {
+	id   int64
+	name string
+}
+
+// PutTableInfoInCtx returns a new child context with the specified table ID and name stored.
+func PutTableInfoInCtx(ctx context.Context, tableID int64, tableName string) context.Context {
+	return context.WithValue(ctx, ctxKeyTableID, tableinfo{id: tableID, name: tableName})
 }
 
 // TableIDFromCtx returns a table ID
-func TableIDFromCtx(ctx context.Context) int64 {
-	tableID, ok := ctx.Value(ctxKeyTableID).(int64)
+func TableIDFromCtx(ctx context.Context) (int64, string) {
+	info, ok := ctx.Value(ctxKeyTableID).(tableinfo)
 	if !ok {
-		return 0
+		return 0, ""
 	}
-	return tableID
+	return info.id, info.name
 }
 
 // TimezoneFromCtx returns a timezone
@@ -69,6 +85,15 @@ func TimezoneFromCtx(ctx context.Context) *time.Location {
 		return nil
 	}
 	return tz
+}
+
+// KVStorageFromCtx returns a tikv store
+func KVStorageFromCtx(ctx context.Context) (kv.Storage, error) {
+	store, ok := ctx.Value(ctxKeyKVStorage).(kv.Storage)
+	if !ok {
+		return nil, errors.Errorf("context can not find the value associated with key: %s", ctxKeyKVStorage)
+	}
+	return store, nil
 }
 
 // SetOwnerInCtx returns a new child context with the owner flag set.
@@ -95,4 +120,15 @@ func ChangefeedIDFromCtx(ctx context.Context) string {
 // PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
 func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
+}
+
+// ZapFieldCapture returns a zap field containing capture address
+// TODO: log redact for capture address
+func ZapFieldCapture(ctx context.Context) zap.Field {
+	return zap.String("capture", CaptureAddrFromCtx(ctx))
+}
+
+// ZapFieldChangefeed returns a zap field containing changefeed id
+func ZapFieldChangefeed(ctx context.Context) zap.Field {
+	return zap.String("changefeed", ChangefeedIDFromCtx(ctx))
 }

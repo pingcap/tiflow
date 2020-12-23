@@ -16,12 +16,17 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"regexp"
+	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 )
 
 // SortEngine is the sorter engine
@@ -31,6 +36,32 @@ type SortEngine string
 const (
 	SortInMemory SortEngine = "memory"
 	SortInFile   SortEngine = "file"
+	SortUnified  SortEngine = "unified"
+)
+
+// FeedState represents the running state of a changefeed
+type FeedState string
+
+// All FeedStates
+const (
+	StateNormal   FeedState = "normal"
+	StateFailed   FeedState = "failed"
+	StateStopped  FeedState = "stopped"
+	StateRemoved  FeedState = "removed"
+	StateFinished FeedState = "finished"
+)
+
+const (
+	// errorHistoryGCInterval represents how long we keep error record in changefeed info
+	errorHistoryGCInterval = time.Minute * 10
+
+	// errorHistoryCheckInterval represents time window for failure check
+	errorHistoryCheckInterval = time.Minute * 2
+
+	// errorHistoryThreshold represents failure upper limit in time window.
+	// Before a changefeed is initialized, check the the failure count of this
+	// changefeed, if it is less than errorHistoryThreshold, then initialize it.
+	errorHistoryThreshold = 5
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -47,7 +78,46 @@ type ChangeFeedInfo struct {
 	Engine       SortEngine   `json:"sort-engine"`
 	SortDir      string       `json:"sort-dir"`
 
-	Config *config.ReplicaConfig `json:"config"`
+	Config   *config.ReplicaConfig `json:"config"`
+	State    FeedState             `json:"state"`
+	ErrorHis []int64               `json:"history"`
+	Error    *RunningError         `json:"error"`
+
+	SyncPointEnabled  bool          `json:"sync-point-enabled"`
+	SyncPointInterval time.Duration `json:"sync-point-interval"`
+}
+
+var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
+
+// ValidateChangefeedID returns true if the changefeed ID matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
+func ValidateChangefeedID(changefeedID string) error {
+	if !changeFeedIDRe.MatchString(changefeedID) {
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs()
+	}
+	return nil
+}
+
+// String implements fmt.Stringer interface, but hide some sensitive information
+func (info *ChangeFeedInfo) String() (str string) {
+	var err error
+	str, err = info.Marshal()
+	if err != nil {
+		log.Error("failed to marshal changefeed info", zap.Error(err))
+		return
+	}
+	clone := new(ChangeFeedInfo)
+	err = clone.Unmarshal([]byte(str))
+	if err != nil {
+		log.Error("failed to unmarshal changefeed info", zap.Error(err))
+		return
+	}
+	clone.SinkURI = "***"
+	str, err = clone.Marshal()
+	if err != nil {
+		log.Error("failed to marshal changefeed info", zap.Error(err))
+	}
+	return
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
@@ -78,22 +148,75 @@ func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 // Marshal returns the json marshal format of a ChangeFeedInfo
 func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
-	return string(data), errors.Trace(err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
 func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
-		return errors.Annotatef(err, "Unmarshal data: %v", data)
+		return errors.Annotatef(
+			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
 	// TODO(neil) find a better way to let sink know cyclic is enabled.
 	if info.Config != nil && info.Config.Cyclic.IsEnabled() {
 		cyclicCfg, err := info.Config.Cyclic.Marshal()
 		if err != nil {
-			return errors.Annotatef(err, "Marshal data: %v", data)
+			return errors.Annotatef(
+				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
-		info.Opts[filter.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
 	}
 	return nil
+}
+
+// VerifyAndFix verifies changefeed info and may fillin some fields.
+// If a must field is not provided, return an error.
+// If some necessary filed is missing but can use a default value, fillin it.
+func (info *ChangeFeedInfo) VerifyAndFix() error {
+	defaultConfig := config.GetDefaultReplicaConfig()
+	if info.Engine == "" {
+		info.Engine = SortInMemory
+	}
+	if info.Config.Filter == nil {
+		info.Config.Filter = defaultConfig.Filter
+	}
+	if info.Config.Mounter == nil {
+		info.Config.Mounter = defaultConfig.Mounter
+	}
+	if info.Config.Sink == nil {
+		info.Config.Sink = defaultConfig.Sink
+	}
+	if info.Config.Cyclic == nil {
+		info.Config.Cyclic = defaultConfig.Cyclic
+	}
+	if info.Config.Scheduler == nil {
+		info.Config.Scheduler = defaultConfig.Scheduler
+	}
+	return nil
+}
+
+// CheckErrorHistory checks error history of a changefeed
+// if having error record older than GC interval, set needSave to true.
+// if error counts reach threshold, set canInit to false.
+func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
+	i := sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryGCInterval
+	})
+	if i == len(info.ErrorHis) {
+		info.ErrorHis = info.ErrorHis[:]
+	} else {
+		info.ErrorHis = info.ErrorHis[i:]
+	}
+	if i > 0 {
+		needSave = true
+	}
+
+	i = sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
+	})
+	canInit = len(info.ErrorHis)-i < errorHistoryThreshold
+	return
 }

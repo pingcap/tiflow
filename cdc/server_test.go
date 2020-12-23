@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type serverOptionSuite struct{}
@@ -22,27 +23,49 @@ type serverOptionSuite struct{}
 var _ = check.Suite(&serverOptionSuite{})
 
 func (s *serverOptionSuite) TestNewServer(c *check.C) {
+	defer testleak.AfterTest(c)()
 	svr, err := NewServer()
+	c.Assert(err, check.ErrorMatches, ".*empty PD address")
 	c.Assert(svr, check.IsNil)
-	c.Assert(err, check.ErrorMatches, "empty PD address")
 
-	svr, err = NewServer(PDEndpoints("pd"))
+	svr, err = NewServer(PDEndpoints("http://pd"))
+	c.Assert(err, check.ErrorMatches, ".*empty address")
 	c.Assert(svr, check.IsNil)
-	c.Assert(err, check.ErrorMatches, "empty address")
 
-	svr, err = NewServer(PDEndpoints("pd"), Address("cdc"))
+	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"))
+	c.Assert(err, check.ErrorMatches, ".*empty GC TTL is not allowed")
 	c.Assert(svr, check.IsNil)
-	c.Assert(err, check.ErrorMatches, "empty GC TTL is not allowed")
 
-	svr, err = NewServer(PDEndpoints("pd"), Address("cdc"), GCTTL(DefaultCDCGCSafePointTTL))
-	c.Assert(svr, check.NotNil)
+	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL))
 	c.Assert(err, check.IsNil)
-	c.Assert(svr.opts.advertiseAddr, check.Equals, "cdc")
+	c.Assert(svr, check.NotNil)
+	c.Assert(svr.opts.advertiseAddr, check.Equals, "cdc:1234")
 
-	svr, err = NewServer(PDEndpoints("pd"), Address("cdc"), GCTTL(DefaultCDCGCSafePointTTL),
+	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
+		AdvertiseAddress("advertise:1234"))
+	c.Assert(err, check.IsNil)
+	c.Assert(svr, check.NotNil)
+	c.Assert(svr.opts.addr, check.Equals, "cdc:1234")
+	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise:1234")
+
+	svr, err = NewServer(PDEndpoints("http://pd"), Address("0.0.0.0:1234"), GCTTL(DefaultCDCGCSafePointTTL),
+		AdvertiseAddress("advertise:1234"))
+	c.Assert(err, check.IsNil)
+	c.Assert(svr, check.NotNil)
+	c.Assert(svr.opts.addr, check.Equals, "0.0.0.0:1234")
+	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise:1234")
+
+	svr, err = NewServer(PDEndpoints("http://pd"), Address("0.0.0.0:1234"), GCTTL(DefaultCDCGCSafePointTTL))
+	c.Assert(err, check.ErrorMatches, ".*must be specified.*")
+	c.Assert(svr, check.IsNil)
+
+	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
+		AdvertiseAddress("0.0.0.0:1234"))
+	c.Assert(err, check.ErrorMatches, ".*must be specified.*")
+	c.Assert(svr, check.IsNil)
+
+	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
 		AdvertiseAddress("advertise"))
-	c.Assert(svr, check.NotNil)
-	c.Assert(err, check.IsNil)
-	c.Assert(svr.opts.addr, check.Equals, "cdc")
-	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise")
+	c.Assert(err, check.ErrorMatches, ".*does not contain a port")
+	c.Assert(svr, check.IsNil)
 }

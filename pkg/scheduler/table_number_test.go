@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 )
@@ -26,18 +27,22 @@ type tableNumberSuite struct{}
 var _ = check.Suite(&tableNumberSuite{})
 
 func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
-	scheduler := NewTableNumberScheduler()
+	defer testleak.AfterTest(c)()
+	scheduler := newTableNumberScheduler()
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
-		2: model.WorkloadInfo{Workload: 1}})
+		2: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture2", model.TaskWorkload{
 		3: model.WorkloadInfo{Workload: 1},
-		4: model.WorkloadInfo{Workload: 1}})
+		4: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture3", model.TaskWorkload{
 		5: model.WorkloadInfo{Workload: 1},
 		6: model.WorkloadInfo{Workload: 1},
 		7: model.WorkloadInfo{Workload: 1},
-		8: model.WorkloadInfo{Workload: 1}})
+		8: model.WorkloadInfo{Workload: 1},
+	})
 	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "35.36%")
 	tableToAdd := map[model.TableID]model.Ts{10: 1, 11: 2, 12: 3, 13: 4, 14: 5, 15: 6, 16: 7, 17: 8}
 	result := scheduler.DistributeTables(tableToAdd)
@@ -58,20 +63,24 @@ func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
 }
 
 func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
-	scheduler := NewTableNumberScheduler()
+	defer testleak.AfterTest(c)()
+	scheduler := newTableNumberScheduler()
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
-		2: model.WorkloadInfo{Workload: 1}})
+		2: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture2", model.TaskWorkload{
 		3: model.WorkloadInfo{Workload: 1},
-		4: model.WorkloadInfo{Workload: 1}})
+		4: model.WorkloadInfo{Workload: 1},
+	})
 	scheduler.ResetWorkloads("capture3", model.TaskWorkload{
 		5:  model.WorkloadInfo{Workload: 1},
 		6:  model.WorkloadInfo{Workload: 1},
 		7:  model.WorkloadInfo{Workload: 1},
 		8:  model.WorkloadInfo{Workload: 1},
 		9:  model.WorkloadInfo{Workload: 1},
-		10: model.WorkloadInfo{Workload: 1}})
+		10: model.WorkloadInfo{Workload: 1},
+	})
 	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "56.57%")
 	skewness, moveJobs := scheduler.CalRebalanceOperates(0)
 
@@ -84,4 +93,23 @@ func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
 	}
 
 	c.Assert(fmt.Sprintf("%.2f%%", skewness*100), check.Equals, "14.14%")
+
+	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
+		1: model.WorkloadInfo{Workload: 1},
+		2: model.WorkloadInfo{Workload: 1},
+		3: model.WorkloadInfo{Workload: 1},
+	})
+	scheduler.ResetWorkloads("capture2", model.TaskWorkload{})
+	scheduler.ResetWorkloads("capture3", model.TaskWorkload{})
+	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "141.42%")
+	skewness, moveJobs = scheduler.CalRebalanceOperates(0)
+
+	for tableID, job := range moveJobs {
+		c.Assert(len(job.From), check.Greater, 0)
+		c.Assert(len(job.To), check.Greater, 0)
+		c.Assert(job.TableID, check.Equals, tableID)
+		c.Assert(job.From, check.Not(check.Equals), job.To)
+		c.Assert(job.Status, check.Equals, model.MoveTableStatusNone)
+	}
+	c.Assert(fmt.Sprintf("%.2f%%", skewness*100), check.Equals, "0.00%")
 }

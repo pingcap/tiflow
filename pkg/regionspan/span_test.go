@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 type spanSuite struct{}
@@ -28,6 +28,7 @@ var _ = check.Suite(&spanSuite{})
 func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *spanSuite) TestStartCompare(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		lhs []byte
 		rhs []byte
@@ -48,6 +49,7 @@ func (s *spanSuite) TestStartCompare(c *check.C) {
 }
 
 func (s *spanSuite) TestEndCompare(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		lhs []byte
 		rhs []byte
@@ -68,17 +70,18 @@ func (s *spanSuite) TestEndCompare(c *check.C) {
 }
 
 func (s *spanSuite) TestIntersect(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
-		lhs Span
-		rhs Span
+		lhs ComparableSpan
+		rhs ComparableSpan
 		// Set nil for non-intersect
-		res *Span
+		res *ComparableSpan
 	}{
-		{Span{nil, []byte{1}}, Span{[]byte{1}, nil}, nil},
-		{Span{nil, nil}, Span{nil, nil}, &Span{nil, nil}},
-		{Span{nil, nil}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
-		{Span{[]byte{0}, []byte{3}}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
-		{Span{[]byte{0}, []byte{2}}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
+		{ComparableSpan{nil, []byte{1}}, ComparableSpan{[]byte{1}, nil}, nil},
+		{ComparableSpan{nil, nil}, ComparableSpan{nil, nil}, &ComparableSpan{nil, nil}},
+		{ComparableSpan{nil, nil}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{ComparableSpan{[]byte{0}, []byte{3}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{ComparableSpan{[]byte{0}, []byte{2}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
 	}
 
 	for _, t := range tests {
@@ -101,22 +104,24 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 }
 
 func (s *spanSuite) TestGetTableSpan(c *check.C) {
-	span := GetTableSpan(123, true)
+	defer testleak.AfterTest(c)()
+	span := GetTableSpan(123, false)
 	c.Assert(span.Start, check.Less, span.End)
 	prefix := []byte(tablecodec.GenTablePrefix(123))
-	c.Assert(span.Start, check.Greater, codec.EncodeBytes(nil, prefix))
-	prefix[len(prefix)-1]++
-	c.Assert(span.End, check.Less, codec.EncodeBytes(nil, prefix))
-
-	span = GetTableSpan(123, false)
-	c.Assert(span.Start, check.Less, span.End)
-	prefix = []byte(tablecodec.GenTablePrefix(123))
 	c.Assert(span.Start, check.Greater, prefix)
 	prefix[len(prefix)-1]++
 	c.Assert(span.End, check.Less, prefix)
+
+	span = GetTableSpan(123, true)
+	c.Assert(span.Start, check.Less, span.End)
+	prefix = []byte(tablecodec.GenTableRecordPrefix(123))
+	c.Assert(span.Start, check.GreaterEqual, prefix)
+	prefix[len(prefix)-1]++
+	c.Assert(span.End, check.LessEqual, prefix)
 }
 
 func (s *spanSuite) TestSpanHack(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input  Span
 		expect Span

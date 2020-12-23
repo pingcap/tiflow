@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 )
@@ -49,10 +50,9 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 
 	// Create a task watcher
 	capture := &Capture{
-		pdEndpoints: s.endpoints,
-		etcdClient:  kv.NewCDCEtcdClient(client),
-		processors:  make(map[string]*processor),
-		info:        &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
+		etcdClient: kv.NewCDCEtcdClient(context.TODO(), client),
+		processors: make(map[string]*processor),
+		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
 	watcher := NewTaskWatcher(capture, &TaskWatcherConfig{
@@ -65,21 +65,23 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 	s.w = watcher
 	s.endpoints = endpoints
 }
+
 func (s *taskSuite) TearDownTest(c *check.C) {
 	s.s.Close()
 	s.c.Close()
 }
 
 func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	// Create a capture instance by initialize the struct,
 	// NewCapture can not be used because it requires to
 	// initialize the PD service witch does not support to
 	// be embeded.
 	capture := &Capture{
-		pdEndpoints: s.endpoints,
-		etcdClient:  kv.NewCDCEtcdClient(s.c),
-		processors:  make(map[string]*processor),
-		info:        &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
+		etcdClient: kv.NewCDCEtcdClient(context.TODO(), s.c),
+		processors: make(map[string]*processor),
+		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
 	c.Assert(NewTaskWatcher(capture, &TaskWatcherConfig{
@@ -89,7 +91,7 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 }
 
 func (s *taskSuite) setupFeedInfo(c *check.C, changeFeedID string) {
-	client := kv.NewCDCEtcdClient(s.c)
+	client := kv.NewCDCEtcdClient(context.TODO(), s.c)
 	// Create the change feed
 	c.Assert(client.SaveChangeFeedInfo(s.c.Ctx(), &model.ChangeFeedInfo{
 		SinkURI:    "mysql://fake",
@@ -105,6 +107,7 @@ func (s *taskSuite) setupFeedInfo(c *check.C, changeFeedID string) {
 			CheckpointTs: 1,
 		}), check.IsNil)
 }
+
 func (s *taskSuite) teardownFeedInfo(c *check.C, changeFeedID string) {
 	etcd := s.c
 	// Delete change feed info
@@ -119,6 +122,8 @@ func (s *taskSuite) teardownFeedInfo(c *check.C, changeFeedID string) {
 }
 
 func (s *taskSuite) TestParseTask(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changeFeedID := "task-suite-changefeed"
@@ -132,9 +137,11 @@ func (s *taskSuite) TestParseTask(c *check.C) {
 	}{
 		{"nil task key", nil, nil},
 		{"short task key", []byte("test"), nil},
-		{"normal task key",
+		{
+			"normal task key",
 			[]byte(kv.GetEtcdKeyTaskStatus(changeFeedID, s.w.capture.info.ID)),
-			&Task{changeFeedID, 1}},
+			&Task{changeFeedID, 1},
+		},
 	}
 	for _, t := range tests {
 		c.Log("testing ", t.Desc)
@@ -149,12 +156,16 @@ func (s *taskSuite) TestParseTask(c *check.C) {
 }
 
 func (s *taskSuite) TestWatch(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	client := kv.NewCDCEtcdClient(ctx, s.c)
+	defer client.Close() //nolint:errcheck
+
 	s.setupFeedInfo(c, "changefeed-1")
 	defer s.teardownFeedInfo(c, "changefeed-1")
 
-	client := kv.NewCDCEtcdClient(s.c)
 	// Watch with a canceled context
 	failedCtx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -224,6 +235,8 @@ func (s *taskSuite) TestWatch(c *check.C) {
 }
 
 func (s *taskSuite) TestRebuildTaskEvents(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	type T map[string]*TaskEvent
 	tests := []struct {
 		desc     string

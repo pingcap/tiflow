@@ -16,10 +16,13 @@ package puller
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type mockEntrySorterSuite struct{}
@@ -31,6 +34,7 @@ func TestSuite(t *testing.T) {
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input      []*model.RawKVEntry
 		resolvedTs uint64
@@ -41,16 +45,19 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{CRTs: 1, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 4, OpType: model.OpTypeDelete},
-				{CRTs: 2, OpType: model.OpTypeDelete}},
+				{CRTs: 2, OpType: model.OpTypeDelete},
+			},
 			resolvedTs: 0,
 			expect: []*model.RawKVEntry{
-				{CRTs: 0, OpType: model.OpTypeResolved}},
+				{CRTs: 0, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input: []*model.RawKVEntry{
 				{CRTs: 3, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypePut},
-				{CRTs: 5, OpType: model.OpTypePut}},
+				{CRTs: 5, OpType: model.OpTypePut},
+			},
 			resolvedTs: 3,
 			expect: []*model.RawKVEntry{
 				{CRTs: 1, OpType: model.OpTypePut},
@@ -58,7 +65,8 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 3, OpType: model.OpTypePut},
-				{CRTs: 3, OpType: model.OpTypeResolved}},
+				{CRTs: 3, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{},
@@ -67,18 +75,21 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 		},
 		{
 			input: []*model.RawKVEntry{
-				{CRTs: 7, OpType: model.OpTypePut}},
+				{CRTs: 7, OpType: model.OpTypePut},
+			},
 			resolvedTs: 6,
 			expect: []*model.RawKVEntry{
 				{CRTs: 4, OpType: model.OpTypeDelete},
 				{CRTs: 5, OpType: model.OpTypePut},
-				{CRTs: 6, OpType: model.OpTypeResolved}},
+				{CRTs: 6, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
 			resolvedTs: 6,
 			expect: []*model.RawKVEntry{
-				{CRTs: 6, OpType: model.OpTypeResolved}},
+				{CRTs: 6, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
@@ -87,45 +98,57 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{CRTs: 7, OpType: model.OpTypeDelete},
 				{CRTs: 7, OpType: model.OpTypeDelete},
 				{CRTs: 7, OpType: model.OpTypePut},
-				{CRTs: 8, OpType: model.OpTypeResolved}},
+				{CRTs: 8, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{},
 			resolvedTs: 15,
 			expect: []*model.RawKVEntry{
-				{CRTs: 15, OpType: model.OpTypeResolved}},
+				{CRTs: 15, OpType: model.OpTypeResolved},
+			},
 		},
 	}
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(err, check.IsNil)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
 			es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(tc.resolvedTs))
+		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
 			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
 		}
 	}
+	cancel()
+	wg.Wait()
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
+	defer testleak.AfterTest(c)()
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(err, check.IsNil)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	maxTs := uint64(1000000)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
@@ -140,9 +163,9 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
+			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(maxTs))
+		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 	var lastTs uint64
 	var resolvedTs uint64
@@ -162,22 +185,28 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 			break
 		}
 	}
+	cancel()
+	wg.Wait()
 }
 
 func BenchmarkSorter(b *testing.B) {
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := es.Run(ctx)
-		if err != nil {
-			panic(err)
+		if errors.Cause(err) != context.Canceled {
+			panic(errors.Annotate(err, "unexpected error"))
 		}
 	}()
 
 	maxTs := uint64(10000000)
 	b.ResetTimer()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
@@ -192,9 +221,9 @@ func BenchmarkSorter(b *testing.B) {
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
+			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(maxTs))
+		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 	var resolvedTs uint64
 	for entry := range es.Output() {
@@ -205,4 +234,6 @@ func BenchmarkSorter(b *testing.B) {
 			break
 		}
 	}
+	cancel()
+	wg.Wait()
 }

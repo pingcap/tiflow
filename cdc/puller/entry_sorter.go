@@ -16,19 +16,17 @@ package puller
 import (
 	"context"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
-	"golang.org/x/sync/errgroup"
-
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
@@ -38,28 +36,28 @@ type EntrySorter struct {
 	resolvedTsGroup []uint64
 	closed          int32
 
-	outputCh       chan *model.PolymorphicEvent
-	resolvedNotify chan struct{}
+	outputCh         chan *model.PolymorphicEvent
+	resolvedNotifier *notify.Notifier
 }
 
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedNotify: make(chan struct{}, 128000),
-		outputCh:       make(chan *model.PolymorphicEvent, 128000),
+		resolvedNotifier: new(notify.Notifier),
+		outputCh:         make(chan *model.PolymorphicEvent, 128000),
 	}
 }
 
 // Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) error {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
-	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
+	_, tableName := util.TableIDFromCtx(ctx)
+	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureAddr, changefeedID, tableName)
 
 	lessFunc := func(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
 		if i.CRTs == j.CRTs {
@@ -105,14 +103,19 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case <-time.After(defaultMetricInterval):
-				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedNotify)))
 				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 				es.lock.Lock()
+				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
 				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 				es.lock.Unlock()
 			}
 		}
 	})
+	receiver, err := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
+	if err != nil {
+		return err
+	}
+	defer es.resolvedNotifier.Close()
 	errg.Go(func() error {
 		var sorted []*model.PolymorphicEvent
 		for {
@@ -121,7 +124,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				atomic.StoreInt32(&es.closed, 1)
 				close(es.outputCh)
 				return errors.Trace(ctx.Err())
-			case <-es.resolvedNotify:
+			case <-receiver.C:
 				es.lock.Lock()
 				if len(es.resolvedTsGroup) == 0 {
 					es.lock.Unlock()
@@ -135,7 +138,8 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 
 				resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
 				for i, rts := range resolvedTsGroup {
-					resEvents[i] = model.NewResolvedPolymorphicEvent(rts)
+					// regionID = 0 means the event is produced by TiCDC
+					resEvents[i] = model.NewResolvedPolymorphicEvent(0, rts)
 				}
 				toSort = append(toSort, resEvents...)
 				startTime := time.Now()
@@ -170,13 +174,11 @@ func (es *EntrySorter) AddEntry(ctx context.Context, entry *model.PolymorphicEve
 	es.lock.Lock()
 	if entry.RawKV.OpType == model.OpTypeResolved {
 		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.CRTs)
+		es.resolvedNotifier.Notify()
 	} else {
 		es.unsorted = append(es.unsorted, entry)
 	}
 	es.lock.Unlock()
-	if entry.RawKV.OpType == model.OpTypeResolved {
-		es.resolvedNotify <- struct{}{}
-	}
 }
 
 // Output returns the sorted raw kv output channel

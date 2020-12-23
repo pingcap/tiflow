@@ -15,19 +15,41 @@ package util
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
+
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // GetTimezone returns the timezone specified by the name
-func GetTimezone(name string) (*time.Location, error) {
+func GetTimezone(name string) (tz *time.Location, err error) {
 	switch strings.ToLower(name) {
 	case "", "system", "local":
-		return GetLocalTimezone()
+		tz, err = GetLocalTimezone()
+		err = cerror.WrapError(cerror.ErrLoadTimezone, err)
 	default:
-		return time.LoadLocation(name)
+		tz, err = time.LoadLocation(name)
+		err = cerror.WrapError(cerror.ErrLoadTimezone, err)
 	}
+	return
+}
+
+func getTimezoneFromZonefile(zonefile string) (tz *time.Location, err error) {
+	// the linked path of `/etc/localtime` sample:
+	// MacOS: /var/db/timezone/zoneinfo/Asia/Shanghai
+	// Linux: /usr/share/zoneinfo/Asia/Shanghai
+	region := filepath.Base(filepath.Dir(zonefile))
+	zone := filepath.Base(zonefile)
+	var tzName string
+	if region == "zoneinfo" {
+		tzName = zone
+	} else {
+		tzName = filepath.Join(region, zone)
+	}
+	tz, err = time.LoadLocation(tzName)
+	err = cerror.WrapError(cerror.ErrLoadTimezone, err)
+	return
 }
 
 // GetLocalTimezone returns the timezone in local system
@@ -37,11 +59,7 @@ func GetLocalTimezone() (*time.Location, error) {
 	}
 	str, err := os.Readlink("/etc/localtime")
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrLoadTimezone, err)
 	}
-	// the linked path of `/etc/localtime`
-	// MacOS: /var/db/timezone/zoneinfo/Asia/Shanghai
-	// Linux: /etc/usr/share/zoneinfo/Asia/Shanghai
-	tzName := path.Join(path.Base(path.Dir(str)), path.Base(str))
-	return time.LoadLocation(tzName)
+	return getTimezoneFromZonefile(str)
 }

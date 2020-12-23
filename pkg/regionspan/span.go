@@ -15,10 +15,15 @@ package regionspan
 
 import (
 	"bytes"
+	"encoding/hex"
+	"fmt"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
+	"go.uber.org/zap"
 )
 
 // Span represents a arbitrary kv range
@@ -27,40 +32,61 @@ type Span struct {
 	End   []byte
 }
 
+// String returns a string that encodes Span in hex format.
+func (s Span) String() string {
+	return fmt.Sprintf("[%s, %s)", hex.EncodeToString(s.Start), hex.EncodeToString(s.End))
+}
+
 // UpperBoundKey represents the maximum value.
 var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
+// ComparableSpan represents a arbitrary kv range which is comparable
+type ComparableSpan Span
+
+// String returns a string that encodes ComparableSpan in hex format.
+func (s ComparableSpan) String() string {
+	return Span(s).String()
+}
+
+// Hack will set End as UpperBoundKey if End is Nil.
+func (s ComparableSpan) Hack() ComparableSpan {
+	s.Start, s.End = hackSpan(s.Start, s.End)
+	return s
+}
+
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s Span) Hack() Span {
-	if s.End != nil && s.Start != nil {
-		return s
+	s.Start, s.End = hackSpan(s.Start, s.End)
+	return s
+}
+
+func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
+	start = originStart
+	end = originEnd
+
+	if originStart == nil {
+		start = []byte{}
 	}
 
-	r := Span{
-		Start: s.Start,
-		End:   s.End,
+	if originEnd == nil {
+		end = UpperBoundKey
 	}
-
-	if r.Start == nil {
-		r.Start = []byte{}
-	}
-
-	if r.End == nil {
-		r.End = UpperBoundKey
-	}
-
-	return r
+	return
 }
 
 // GetTableSpan returns the span to watch for the specified table
-func GetTableSpan(tableID int64, needEncode bool) Span {
+func GetTableSpan(tableID int64, exceptIndexSpan bool) Span {
 	sep := byte('_')
+	recordMarker := byte('r')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
-	start := append(tablePrefix, sep)
-	end := append(tablePrefix, sep+1)
-	if needEncode {
-		start = codec.EncodeBytes(nil, start)
-		end = codec.EncodeBytes(nil, end)
+	var start, end kv.Key
+	// ignore index keys if we don't need them
+	if exceptIndexSpan {
+		start = append(tablePrefix, sep, recordMarker)
+		end = append(tablePrefix, sep, recordMarker+1)
+	} else {
+		start = append(tablePrefix, sep)
+		end = append(tablePrefix, sep+1)
 	}
 	return Span{
 		Start: start,
@@ -96,13 +122,9 @@ func getMetaListKey(key string) Span {
 }
 
 // KeyInSpans check if k in the range of spans.
-func KeyInSpans(k []byte, spans []Span, needEncode bool) bool {
-	encodedK := k
-	if needEncode {
-		encodedK = codec.EncodeBytes(nil, k)
-	}
+func KeyInSpans(k []byte, spans []ComparableSpan) bool {
 	for _, span := range spans {
-		if KeyInSpan(encodedK, span) {
+		if KeyInSpan(k, span) {
 			return true
 		}
 	}
@@ -111,7 +133,7 @@ func KeyInSpans(k []byte, spans []Span, needEncode bool) bool {
 }
 
 // KeyInSpan check if k in the span range.
-func KeyInSpan(k []byte, span Span) bool {
+func KeyInSpan(k []byte, span ComparableSpan) bool {
 	if StartCompare(k, span.Start) >= 0 &&
 		EndCompare(k, span.End) < 0 {
 		return true
@@ -160,10 +182,10 @@ func EndCompare(lhs []byte, rhs []byte) int {
 
 // Intersect return the intersect part of lhs and rhs span.
 // Return error if there's no intersect part
-func Intersect(lhs Span, rhs Span) (span Span, err error) {
+func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err error) {
 	if lhs.Start != nil && EndCompare(lhs.Start, rhs.End) >= 0 ||
 		rhs.Start != nil && EndCompare(rhs.Start, lhs.End) >= 0 {
-		return Span{}, errors.Errorf("span do not overlap: %+v vs %+v", lhs, rhs)
+		return ComparableSpan{}, cerror.ErrIntersectNoOverlap.GenWithStackByArgs(lhs, rhs)
 	}
 
 	start := lhs.Start
@@ -178,5 +200,32 @@ func Intersect(lhs Span, rhs Span) (span Span, err error) {
 		end = rhs.End
 	}
 
-	return Span{Start: start, End: end}, nil
+	return ComparableSpan{Start: start, End: end}, nil
+}
+
+// IsSubSpan returns true if the sub span is parents spans
+func IsSubSpan(sub ComparableSpan, parents ...ComparableSpan) bool {
+	if bytes.Compare(sub.Start, sub.End) >= 0 {
+		log.Panic("the sub span is invalid", zap.Reflect("sub span", sub))
+	}
+	for _, parent := range parents {
+		if StartCompare(parent.Start, sub.Start) <= 0 &&
+			EndCompare(sub.End, parent.End) <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// ToComparableSpan returns a memcomparable span
+func ToComparableSpan(span Span) ComparableSpan {
+	return ComparableSpan{
+		Start: codec.EncodeBytes(nil, span.Start),
+		End:   codec.EncodeBytes(nil, span.End),
+	}
+}
+
+// ToComparableKey returns a memcomparable key.
+func ToComparableKey(key []byte) []byte {
+	return codec.EncodeBytes(nil, key)
 }

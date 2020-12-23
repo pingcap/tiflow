@@ -24,10 +24,16 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
+	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -36,13 +42,16 @@ const (
 	captureSessionTTL = 3
 )
 
-// ErrSuicide causes a panic
-var ErrSuicide = errors.New("Suicide")
+// processorOpts records options for processor
+type processorOpts struct {
+	flushCheckpointInterval time.Duration
+}
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	pdEndpoints []string
-	etcdClient  kv.CDCEtcdClient
+	etcdClient kv.CDCEtcdClient
+	pdCli      pd.Client
+	credential *security.Credential
 
 	processors map[string]*processor
 	procLock   sync.Mutex
@@ -52,15 +61,37 @@ type Capture struct {
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
 	election *concurrency.Election
+
+	opts *processorOpts
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(ctx context.Context, pdEndpoints []string, advertiseAddr string) (c *Capture, err error) {
+func NewCapture(
+	ctx context.Context,
+	pdEndpoints []string,
+	pdCli pd.Client,
+	credential *security.Credential,
+	advertiseAddr string,
+	opts *processorOpts,
+) (c *Capture, err error) {
+	tlsConfig, err := credential.ToTLSConfig()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	grpcTLSOption, err := credential.ToGRPCDialOption()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
+		TLS:         tlsConfig,
 		Context:     ctx,
+		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
@@ -74,30 +105,31 @@ func NewCapture(ctx context.Context, pdEndpoints []string, advertiseAddr string)
 		},
 	})
 	if err != nil {
-		return nil, errors.Annotate(err, "new etcd client")
+		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 	sess, err := concurrency.NewSession(etcdCli,
 		concurrency.WithTTL(captureSessionTTL))
 	if err != nil {
-		return nil, errors.Annotate(err, "create capture session")
+		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	elec := concurrency.NewElection(sess, kv.CaptureOwnerKey)
-	cli := kv.NewCDCEtcdClient(etcdCli)
+	cli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	id := uuid.New().String()
 	info := &model.CaptureInfo{
 		ID:            id,
 		AdvertiseAddr: advertiseAddr,
 	}
-	log.Info("creating capture",
-		zap.String("capture-id", id), zap.String("advertise-addr", advertiseAddr))
+	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(ctx))
 
 	c = &Capture{
-		processors:  make(map[string]*processor),
-		pdEndpoints: pdEndpoints,
-		etcdClient:  cli,
-		session:     sess,
-		election:    elec,
-		info:        info,
+		processors: make(map[string]*processor),
+		etcdClient: cli,
+		credential: credential,
+		session:    sess,
+		election:   elec,
+		info:       info,
+		opts:       opts,
+		pdCli:      pdCli,
 	}
 
 	return
@@ -117,7 +149,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
 		ChannelSize: 128,
 	})
-	log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
+	log.Info("waiting for tasks", zap.String("capture-id", c.info.ID))
 	var ev *TaskEvent
 	wch := taskWatcher.Watch(ctx)
 	for {
@@ -129,8 +161,8 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		select {
 		case <-c.session.Done():
 			if ctx.Err() != context.Canceled {
-				log.Info("capture session done, capture suicide itself", zap.String("capture", c.info.ID))
-				return errors.Trace(ErrSuicide)
+				log.Info("capture session done, capture suicide itself", zap.String("capture-id", c.info.ID))
+				return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 			}
 		case ev = <-wch:
 			if ev == nil {
@@ -139,7 +171,14 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			if ev.Err != nil {
 				return errors.Trace(ev.Err)
 			}
+			failpoint.Inject("captureHandleTaskDelay", nil)
 			if err := c.handleTaskEvent(ctx, ev); err != nil {
+				select {
+				case <-c.session.Done():
+					log.Warn("handle task event failed because session is done", zap.Error(err))
+					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+				default:
+				}
 				return errors.Trace(err)
 			}
 		}
@@ -151,7 +190,7 @@ func (c *Capture) Campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
-	return c.election.Campaign(ctx, c.info.ID)
+	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(ctx, c.info.ID))
 }
 
 // Resign lets a owner start a new election.
@@ -159,7 +198,7 @@ func (c *Capture) Resign(ctx context.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
-	return c.election.Resign(ctx)
+	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 
 // Cleanup cleans all dynamic resources
@@ -202,19 +241,27 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 	cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
 	if err != nil {
 		log.Error("get change feed info failed",
-			zap.String("changefeedid", task.ChangeFeedID),
-			zap.String("captureid", c.info.ID),
+			zap.String("changefeed", task.ChangeFeedID),
+			zap.String("capture-id", c.info.ID),
+			util.ZapFieldCapture(ctx),
 			zap.Error(err))
+		return nil, err
 	}
-	log.Info("run processor", zap.String("captureid", c.info.ID),
-		zap.String("changefeedid", task.ChangeFeedID))
+	err = cf.VerifyAndFix()
+	if err != nil {
+		return nil, err
+	}
+	log.Info("run processor",
+		zap.String("capture-id", c.info.ID), util.ZapFieldCapture(ctx),
+		zap.String("changefeed", task.ChangeFeedID))
 
-	p, err := runProcessor(ctx, c.session, *cf, task.ChangeFeedID,
-		c.info.ID, task.CheckpointTS)
+	p, err := runProcessor(
+		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
 	if err != nil {
 		log.Error("run processor failed",
-			zap.String("changefeedid", task.ChangeFeedID),
-			zap.String("captureid", c.info.ID),
+			zap.String("changefeed", task.ChangeFeedID),
+			zap.String("capture-id", c.info.ID),
+			util.ZapFieldCapture(ctx),
 			zap.Error(err))
 		return nil, err
 	}
@@ -223,5 +270,6 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 
 // register registers the capture information in etcd
 func (c *Capture) register(ctx context.Context) error {
-	return errors.Trace(c.etcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease()))
+	err := c.etcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
+	return cerror.WrapError(cerror.ErrCaptureRegister, err)
 }

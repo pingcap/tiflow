@@ -16,49 +16,41 @@ function run() {
 
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
 
 
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    # TODO(neil) use cdc cli to create mark tabls.
-    run_sql "CREATE database tidb_cdc;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table tidb_cdc.repl_mark_test_simple (
-        bucket INT NOT NULL, \
-        replica_id BIGINT UNSIGNED NOT NULL, \
-        val BIGINT DEFAULT 0, \
-        PRIMARY KEY (bucket, replica_id) \
-    );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    # create an ineligible table to make sure cyclic replication works fine even with some ineligible tables.
+    run_sql "CREATE table test.ineligible(id int, val int);"
 
     # create table to downsteam.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    run_sql "CREATE database tidb_cdc;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    run_sql "CREATE table tidb_cdc.repl_mark_test_simple (
-        bucket INT NOT NULL, \
-        replica_id BIGINT UNSIGNED NOT NULL, \
-        val BIGINT DEFAULT 0, \
-        PRIMARY KEY (bucket, replica_id) \
-    );" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    # record tso before we create tables to skip the system table DDLs
-    # and make sure mark table is created.
-    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    run_cdc_cli changefeed cyclic create-marktables \
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+
+    run_cdc_cli changefeed cyclic create-marktables \
+        --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
+
+    # make sure create-marktables does not create mark table for mark table.
+    for c in $(seq 1 10); do {
+        # must not cause an error table name too long.
+        run_cdc_cli changefeed cyclic create-marktables \
+            --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+    } done
+
+    # record tso after we create tables to not block on waiting mark tables DDLs.
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
     run_cdc_server \
         --workdir $WORK_DIR \
         --binary $CDC_BINARY \
         --logsuffix "_${TEST_NAME}_upsteam" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --addr "127.0.0.1:8300"
-
-    cdc cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
-        --cyclic-replica-id 1 \
-        --cyclic-filter-replica-ids 2 \
-        --cyclic-sync-ddl true
 
     run_cdc_server \
         --workdir $WORK_DIR \
@@ -67,17 +59,26 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --addr "127.0.0.1:8301"
 
-    cdc cli changefeed create --start-ts=$start_ts \
+    # Echo y to ignore ineligible tables
+    echo "y" | run_cdc_cli changefeed create --start-ts=$start_ts \
+        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
+        --cyclic-replica-id 1 \
+        --cyclic-filter-replica-ids 2 \
+        --cyclic-sync-ddl true
+
+    run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 1 \
-        --cyclic-sync-ddl false
+        --cyclic-sync-ddl false \
+        --config $CUR/conf/only_test_simple.toml
 
-    for i in $(seq 1 10); do {
+    for i in $(seq 11 20); do {
         sqlup="START TRANSACTION;"
         sqldown="START TRANSACTION;"
-        for j in $(seq 1 4); do {
+        for j in $(seq 21 24); do {
             if [ $((j%2)) -eq 0 ]; then
                 sqldown+="INSERT INTO test.simple(id1, id2, source) VALUES (${i}, ${j}, 2);"
             else
@@ -93,19 +94,18 @@ function run() {
         run_sql "${sqldown}" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     } done;
 
+    # sync-diff creates table which may block cyclic replication.
+    # Sleep a while to make sure all changes has been replicated.
+    sleep 10
+
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    # Sleep a while to make sure no more events will be created in cyclic.
-    sleep 5
-
-    # Why 30? 20 insert + 10 mark table insert.
-    expect=30
-    uuid=$(cdc cli changefeed list --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
-    count=$(curl -sSf 127.0.0.1:8300/metrics | grep txn_batch_size_sum | grep ${uuid} | awk -F ' ' '{print $2}')
-    if [[ $count != $expect ]]; then
-        echo "[$(date)] <<<<< found extra mysql events! expect to ${expect} got ${count} >>>>>"
-        exit 1
-    fi
+    # At the time of writing, tso is at least 18 digits long in decimal format.
+    # $ pd-ctl tso 418252158551982113
+    # system:  2020-07-23 19:56:05.57 +0800 CST
+    # logic:  33
+    run_sql "SELECT start_timestamp FROM tidb_cdc.repl_mark_test_simple LIMIT 1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && \
+    check_contains "start_timestamp: [0-9]{18,}"
 
     cleanup_process $CDC_BINARY
 }

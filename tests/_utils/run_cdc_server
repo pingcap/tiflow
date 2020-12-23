@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # --workdir: work directory
+# --tlsdir: work directory
+# --cert-allowed-cn: cert allowed cn
 # --binary: path to cdc test binary
 # --logsuffix: log suffix
 # --addr: address
@@ -9,16 +11,29 @@
 set -e
 
 workdir=
+tls=
+certcn=
 binary=
 logsuffix=
 addr=
 pd_addr=
 pwd=$pwd
+log_level=debug
+restart=
+failpoint=$GO_FAILPOINTS
 
 while [[ ${1} ]]; do
     case "${1}" in
         --workdir)
             workdir=${2}
+            shift
+            ;;
+        --tlsdir)
+            tls="--ca ${2}/ca.pem --cert ${2}/server.pem --key ${2}/server-key.pem"
+            shift
+            ;;
+        --cert-allowed-cn)
+            certcn="--cert-allowed-cn ${2}"
             shift
             ;;
         --binary)
@@ -37,6 +52,18 @@ while [[ ${1} ]]; do
             pd_addr="--pd ${2}"
             shift
             ;;
+        --loglevel)
+            log_level=${2}
+            shift
+            ;;
+        --restart)
+            restart=${2}
+            shift
+            ;;
+        --failpoint)
+            failpoint=${2}
+            shift
+            ;;
         *)
             echo "Unknown parameter: ${1}" >&2
             exit 1
@@ -51,5 +78,33 @@ done
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
 pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level info $addr $pd_addr >> $workdir/stdout$log_suffix.log 2>&1 &
+# Uncomment to turn on grpc versbose log.
+# GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=debug \
+
+if [[ "$restart" == "true" ]]; then
+  while true; do
+      GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
+        --log-file $workdir/cdc$logsuffix.log \
+        --log-level $log_level \
+        $tls \
+        $certcn \
+        $addr \
+        $pd_addr &>> $workdir/stdout$logsuffix.log
+      if [ $? -eq 143 ]; then
+        break
+      fi
+      sleep 1
+  done &
+else
+  GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
+    --log-file $workdir/cdc$logsuffix.log \
+    --log-level $log_level \
+    $tls \
+    $certcn \
+    $addr \
+    $pd_addr &>> $workdir/stdout$log_suffix.log &
+fi
+
 cd $pwd
+
+

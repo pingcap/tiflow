@@ -18,8 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
@@ -107,7 +105,6 @@ func (l *mvccListener) registerPostRollback(fn func(keys [][]byte, startTs uint6
 
 // MockPullerManager keeps track of transactions for mock pullers
 type MockPullerManager struct {
-	cluster   *mocktikv.Cluster
 	mvccStore mocktikv.MVCCStore
 	store     tidbkv.Storage
 	domain    *domain.Domain
@@ -128,7 +125,7 @@ var _ Puller = &mockPuller{}
 
 type mockPuller struct {
 	pm          *MockPullerManager
-	spans       []regionspan.Span
+	spans       []regionspan.ComparableSpan
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
@@ -149,7 +146,7 @@ func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 					continue
 				}
 				p.resolvedTs = rawKV.StartTs
-				if !regionspan.KeyInSpans(rawKV.Key, p.spans, false) {
+				if !regionspan.KeyInSpans(rawKV.Key, p.spans) {
 					continue
 				}
 				select {
@@ -179,6 +176,10 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 	return p.resolvedTs
 }
 
+func (p *mockPuller) IsInitialized() bool {
+	return false
+}
+
 // NewMockPullerManager creates and sets up a mock puller manager
 func NewMockPullerManager(c *check.C, newRowFormat bool) *MockPullerManager {
 	m := &MockPullerManager{
@@ -196,18 +197,12 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	log.SetLevel(zap.FatalLevel)
 	defer log.SetLevel(logLevel)
 
-	m.cluster = mocktikv.NewCluster()
-	mocktikv.BootstrapWithSingleStore(m.cluster)
-
 	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
 
 	m.mvccStore = mvccListener
-	store, err := mockstore.NewMockTikvStore(
-		mockstore.WithCluster(m.cluster),
-		mockstore.WithMVCCStore(m.mvccStore),
-	)
+	store, err := mockstore.NewMockStore()
 	if err != nil {
-		log.Fatal("create mock puller failed", zap.Error(err))
+		log.Panic("create mock puller failed", zap.Error(err))
 	}
 	m.store = store
 
@@ -215,7 +210,7 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	session.DisableStats4Test()
 	m.domain, err = session.BootstrapSession(m.store)
 	if err != nil {
-		log.Fatal("create mock puller failed", zap.Error(err))
+		log.Panic("create mock puller failed", zap.Error(err))
 	}
 
 	m.domain.SetStatsUpdating(true)
@@ -229,14 +224,20 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	mvccListener.registerPostRollback(m.postRollback)
 }
 
+// TearDown release all resources in a mock puller manager
+func (m *MockPullerManager) TearDown() {
+	m.mvccStore.Close() //nolint:errcheck
+	m.store.Close()     //nolint:errcheck
+	m.domain.Close()
+}
+
 // CreatePuller returns a mock puller with the specified start ts and spans
-func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.Span) Puller {
-	//return &mockPuller{
-	//	spans:   spans,
-	//	pm:      m,
-	//	startTs: startTs,
-	//}
-	return nil
+func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.ComparableSpan) Puller {
+	return &mockPuller{
+		spans:   spans,
+		pm:      m,
+		startTs: startTs,
+	}
 }
 
 // MustExec delegates to TestKit.MustExec
@@ -245,13 +246,13 @@ func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 }
 
 // GetTableInfo queries the info schema with the table name and returns the TableInfo
-func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.TableInfo {
+func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *model.TableInfo {
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
 	m.c.Assert(exist, check.IsTrue)
-	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, tbl.Meta())
+	return model.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, 0, tbl.Meta())
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
@@ -270,7 +271,7 @@ func (m *MockPullerManager) postCommit(keys [][]byte, startTs, commitTs uint64, 
 	}
 	prewrite, exist := m.txnMap[startTs]
 	if !exist {
-		log.Fatal("txn not found", zap.Uint64("startTs", startTs))
+		log.Panic("txn not found", zap.Uint64("startTs", startTs))
 	}
 	delete(m.txnMap, startTs)
 	m.txnMapMu.Unlock()

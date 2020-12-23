@@ -34,7 +34,7 @@ function test_kill_owner() {
     echo "owner id" $owner_id
 
     # run another server
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "0.0.0.0:8301" --logsuffix test_kill_owner.server2
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_kill_owner.server2
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
     echo "capture_id:" $capture_id
@@ -65,7 +65,7 @@ function test_hang_up_owner() {
     echo "owner id" $owner_id
 
     # run another server
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "0.0.0.0:8301" --logsuffix test_hang_up_owner.server2
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_hang_up_owner.server2
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
     echo "capture_id:" $capture_id
@@ -130,7 +130,7 @@ function test_owner_cleanup_stale_tasks() {
     echo "owner id" $owner_id
 
     # run another server
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "0.0.0.0:8301" --logsuffix test_owner_cleanup_stale_tasks.server2
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_owner_cleanup_stale_tasks.server2
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
@@ -143,7 +143,7 @@ function test_owner_cleanup_stale_tasks() {
 
     # simulate task status is deleted but task position stales
     etcdctl del /tidb/cdc/task/status --prefix
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "0.0.0.0:8302" --logsuffix test_owner_cleanup_stale_tasks.server3
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8302" --logsuffix test_owner_cleanup_stale_tasks.server3
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
 
     run_sql "INSERT INTO test.availability1(id, val) VALUES (1, 1);"
@@ -176,7 +176,7 @@ function test_owner_retryable_error() {
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner-run-with-error=1*return(true);github.com/pingcap/ticdc/cdc/capture-resign-failed=1*return(true)'
 
     # run another server
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_owner_retryable_error.server2 --addr "0.0.0.0:8301"
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_owner_retryable_error.server2 --addr "127.0.0.1:8301"
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
@@ -210,7 +210,7 @@ function test_gap_between_watch_capture() {
     echo "owner id" $owner_id
 
     # run another server
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "0.0.0.0:8301" --logsuffix test_gap_between_watch_capture.server2
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_gap_between_watch_capture.server2
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")

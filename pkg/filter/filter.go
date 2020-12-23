@@ -14,38 +14,49 @@
 package filter
 
 import (
-	"strings"
-
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
+	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
-
-// OptCyclicConfig is the key that adds to changefeed options
-// automatically is cyclic replication is on.
-const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
-	filter           *filter.Filter
+	filter           filterV2.Filter
 	ignoreTxnStartTs []uint64
-	ddlWhitelist     []model.ActionType
+	ddlAllowlist     []model.ActionType
+	isCyclicEnabled  bool
 }
 
 // NewFilter creates a filter
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
-	filter, err := filter.New(cfg.CaseSensitive, cfg.Filter.Rules)
+	var f filterV2.Filter
+	var err error
+	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
+		f, err = filterV2.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
+	} else {
+		rules := cfg.Filter.Rules
+		if len(rules) == 0 {
+			rules = []string{"*.*"}
+		}
+		f, err = filterV2.Parse(rules)
+	}
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+	}
+	if !cfg.CaseSensitive {
+		f = filterV2.CaseInsensitive(f)
 	}
 	return &Filter{
-		filter:           filter,
+		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
-		ddlWhitelist:     cfg.Filter.DDLWhitelist,
+		ddlAllowlist:     cfg.Filter.DDLAllowlist,
+		isCyclicEnabled:  cfg.Cyclic.IsEnabled(),
 	}, nil
 }
 
-// ShouldIgnoreTxn returns true is the given txn should be ignored
 func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
 	for _, ignoreTs := range f.ignoreTxnStartTs {
 		if ignoreTs == ts {
@@ -61,9 +72,11 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
 	}
-	// TODO: Change filter to support simple check directly
-	left := f.filter.ApplyOn([]*filter.Table{{Schema: db, Name: tbl}})
-	return len(left) == 0
+	if f.isCyclicEnabled && mark.IsMarkTable(db, tbl) {
+		// Always replicate mark tables.
+		return false
+	}
+	return !f.filter.MatchTable(db, tbl)
 }
 
 // ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
@@ -74,24 +87,32 @@ func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
 
 // ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
-	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
+func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, ddlType model.ActionType, schema, table string) bool {
+	var shouldIgnoreTableOrSchema bool
+	switch ddlType {
+	case model.ActionCreateSchema, model.ActionDropSchema,
+		model.ActionModifySchemaCharsetAndCollate:
+		shouldIgnoreTableOrSchema = !f.filter.MatchSchema(schema)
+	default:
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(schema, table)
+	}
+	return f.shouldIgnoreStartTs(ts) || shouldIgnoreTableOrSchema
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded
 func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
-	if !f.shouldDiscardByBuiltInDDLWhitelist(ddlType) {
+	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
-	for _, whiteDDLType := range f.ddlWhitelist {
-		if whiteDDLType == ddlType {
+	for _, allowDDLType := range f.ddlAllowlist {
+		if allowDDLType == ddlType {
 			return false
 		}
 	}
 	return true
 }
 
-func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bool {
+func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bool {
 	/* The following DDL will be filter:
 	ActionAddForeignKey                 ActionType = 9
 	ActionDropForeignKey                ActionType = 10
@@ -105,6 +126,16 @@ func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bo
 	ActionCreateSequence                ActionType = 34
 	ActionAlterSequence                 ActionType = 35
 	ActionDropSequence                  ActionType = 36
+	ActionModifyTableAutoIdCache        ActionType = 39
+	ActionRebaseAutoRandomBase          ActionType = 40
+	ActionAlterIndexVisibility          ActionType = 41
+	ActionExchangeTablePartition        ActionType = 42
+	ActionAddCheckConstraint            ActionType = 43
+	ActionDropCheckConstraint           ActionType = 44
+	ActionAlterCheckConstraint          ActionType = 45
+	ActionAlterTableAlterPartition      ActionType = 46
+
+	... Any Action which of value is greater than 46 ...
 	*/
 	switch ddlType {
 	case model.ActionCreateSchema,
@@ -130,7 +161,9 @@ func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bo
 		model.ActionRecoverTable,
 		model.ActionModifySchemaCharsetAndCollate,
 		model.ActionAddPrimaryKey,
-		model.ActionDropPrimaryKey:
+		model.ActionDropPrimaryKey,
+		model.ActionAddColumns,
+		model.ActionDropColumns:
 		return false
 	}
 	return true
@@ -138,11 +171,5 @@ func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bo
 
 // IsSysSchema returns true if the given schema is a system schema
 func IsSysSchema(db string) bool {
-	db = strings.ToUpper(db)
-	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "METRIC_SCHEMA"} {
-		if schema == db {
-			return true
-		}
-	}
-	return false
+	return filterV1.IsSystemSchema(db)
 }

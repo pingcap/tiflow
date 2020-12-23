@@ -16,6 +16,7 @@ package regionspan
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type regionSuite struct{}
@@ -23,30 +24,31 @@ type regionSuite struct{}
 var _ = check.Suite(&regionSuite{})
 
 func (s *regionSuite) TestCheckRegionsLeftCover(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cases := []struct {
 		regions []*metapb.Region
-		span    Span
+		span    ComparableSpan
 		cover   bool
 	}{
-		{[]*metapb.Region{}, Span{[]byte{1}, []byte{2}}, false},
-		{[]*metapb.Region{{StartKey: nil, EndKey: nil}}, Span{[]byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{1}, EndKey: []byte{2}}}, Span{[]byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{0}, EndKey: []byte{4}}}, Span{[]byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{}, ComparableSpan{[]byte{1}, []byte{2}}, false},
+		{[]*metapb.Region{{StartKey: nil, EndKey: nil}}, ComparableSpan{[]byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{{StartKey: []byte{1}, EndKey: []byte{2}}}, ComparableSpan{[]byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{{StartKey: []byte{0}, EndKey: []byte{4}}}, ComparableSpan{[]byte{1}, []byte{2}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, Span{[]byte{1}, []byte{3}}, true},
+		}, ComparableSpan{[]byte{1}, []byte{3}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{3}, EndKey: []byte{4}},
-		}, Span{[]byte{1}, []byte{4}}, false},
+		}, ComparableSpan{[]byte{1}, []byte{4}}, false},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, Span{[]byte{1}, []byte{4}}, true},
+		}, ComparableSpan{[]byte{1}, []byte{4}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, Span{[]byte{1}, []byte{3}}, false},
+		}, ComparableSpan{[]byte{1}, []byte{3}}, false},
 	}
 
 	for _, tc := range cases {

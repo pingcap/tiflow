@@ -2,11 +2,28 @@
 # parameter 1: sql
 # parameter 2: database host
 # parameter 3: database port
+# parameter 4: other mysql client settings
 
 set -e
 
-host=${2:-127.0.0.1}
-port=${3:-4000}
+sql=${1}
 
-echo "[$(date)] Executing SQL: $1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
-mysql -uroot -h${host} -P${port} --default-character-set utf8mb4 -E -e "$1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
+host=127.0.0.1
+if [ $# -gt 1 ]; then
+    shift
+    host=${1}
+fi
+
+port=4000
+if [ $# -gt 1 ]; then
+    shift
+    port=${1}
+fi
+
+if [ $# -gt 1 ]; then
+    shift
+    other=${*}
+fi
+
+echo "[$(date)] Executing SQL: ${sql}" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
+mysql -uroot -h${host} -P${port} ${other} --default-character-set utf8mb4 -E -e "${sql}" > "$OUT_DIR/sql_res.$TEST_NAME.txt"

@@ -20,8 +20,8 @@ type TableNumberScheduler struct {
 	workloads workloads
 }
 
-// NewTableNumberScheduler creates a new table number scheduler
-func NewTableNumberScheduler() *TableNumberScheduler {
+// newTableNumberScheduler creates a new table number scheduler
+func newTableNumberScheduler() *TableNumberScheduler {
 	return &TableNumberScheduler{
 		workloads: make(workloads),
 	}
@@ -49,12 +49,12 @@ func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64) (
 	for _, captureWorkloads := range t.workloads {
 		totalTableNumber += uint64(len(captureWorkloads))
 	}
-	limitTableNumber := (totalTableNumber / uint64(len(t.workloads))) + 1
+	limitTableNumber := (float64(totalTableNumber) / float64(len(t.workloads))) + 1
 	appendTables := make(map[model.TableID]model.Ts)
 	moveTableJobs = make(map[model.TableID]*model.MoveTableJob)
 
 	for captureID, captureWorkloads := range t.workloads {
-		for uint64(len(captureWorkloads)) > limitTableNumber {
+		for float64(len(captureWorkloads)) >= limitTableNumber {
 			for tableID := range captureWorkloads {
 				// find a table in this capture
 				appendTables[tableID] = 0

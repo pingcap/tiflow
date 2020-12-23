@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate msgp
+
 package model
 
 import (
@@ -32,9 +34,13 @@ const (
 
 // RegionFeedEvent from the kv layer.
 // Only one of the event will be setted.
+//msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
 	Resolved *ResolvedSpan
+
+	// Additonal debug info
+	RegionID uint64
 }
 
 // GetValue returns the underlying value
@@ -50,23 +56,39 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 
 // ResolvedSpan guarantees all the KV value event
 // with commit ts less than ResolvedTs has been emitted.
+//msgp:ignore ResolvedSpan
 type ResolvedSpan struct {
-	Span       regionspan.Span
+	Span       regionspan.ComparableSpan
 	ResolvedTs uint64
+}
+
+// String implements fmt.Stringer interface.
+func (rs *ResolvedSpan) String() string {
+	return fmt.Sprintf("span: %si, resolved-ts: %d", rs.Span, rs.ResolvedTs)
 }
 
 // RawKVEntry notify the KV operator
 type RawKVEntry struct {
-	OpType OpType
-	Key    []byte
-	// Nil fro delete type
-	Value   []byte
-	StartTs uint64
+	OpType OpType `msg:"op_type"`
+	Key    []byte `msg:"key"`
+	// nil for delete type
+	Value []byte `msg:"value"`
+	// nil for insert type
+	OldValue []byte `msg:"old_value"`
+	StartTs  uint64 `msg:"start_ts"`
 	// Commit or resolved TS
-	CRTs uint64
+	CRTs uint64 `msg:"crts"`
+
+	// Additonal debug info
+	RegionID uint64 `msg:"region_id"`
 }
 
 func (v *RawKVEntry) String() string {
-	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d",
-		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs)
+	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d, RegionID: %d",
+		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs, v.RegionID)
+}
+
+// ApproximateSize calculate the approximate size of this event
+func (v *RawKVEntry) ApproximateSize() int64 {
+	return int64(len(v.Key) + len(v.Value) + len(v.OldValue))
 }

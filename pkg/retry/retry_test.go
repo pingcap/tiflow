@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -29,6 +30,7 @@ type runSuite struct{}
 var _ = check.Suite(&runSuite{})
 
 func (s *runSuite) TestShouldRetryAtMostSpecifiedTimes(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
 		callCount++
@@ -46,6 +48,7 @@ func (s *runSuite) TestShouldRetryAtMostSpecifiedTimes(c *check.C) {
 }
 
 func (s *runSuite) TestShouldStopOnSuccess(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
 		callCount++
@@ -61,6 +64,7 @@ func (s *runSuite) TestShouldStopOnSuccess(c *check.C) {
 }
 
 func (s *runSuite) TestShouldBeCtxAware(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
 		callCount++
@@ -79,4 +83,41 @@ func (s *runSuite) TestShouldBeCtxAware(c *check.C) {
 	err = Run(500*time.Millisecond, 3, f)
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	c.Assert(callCount, check.Equals, 1)
+}
+
+func (s *runSuite) TestInfiniteRetry(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var callCount int
+	f := func() error {
+		callCount++
+		return context.Canceled
+	}
+
+	var reportedElapsed time.Duration
+	notify := func(elapsed time.Duration) {
+		reportedElapsed = elapsed
+	}
+
+	err := RunWithInfiniteRetry(10*time.Millisecond, f, notify)
+	c.Assert(err, check.Equals, context.Canceled)
+	c.Assert(callCount, check.Equals, 1)
+	c.Assert(reportedElapsed, check.Equals, 0*time.Second)
+
+	callCount = 0
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	f = func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		callCount++
+		return errors.New("test")
+	}
+
+	err = RunWithInfiniteRetry(10*time.Millisecond, f, notify)
+	c.Assert(err, check.Equals, context.DeadlineExceeded)
+	c.Assert(reportedElapsed, check.Greater, time.Second)
+	c.Assert(reportedElapsed, check.LessEqual, 3*time.Second)
 }

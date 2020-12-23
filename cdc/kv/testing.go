@@ -21,15 +21,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -113,7 +114,7 @@ func CreateStorage(pdAddr string) (storage kv.Storage, err error) {
 }
 
 func mustGetTimestamp(t require.TestingT, storage kv.Storage) uint64 {
-	ts, err := storage.GetOracle().GetTimestamp(context.Background())
+	ts, err := storage.GetOracle().GetTimestamp(context.Background(), nil)
 	require.NoError(t, err)
 
 	return ts
@@ -134,11 +135,16 @@ func mustGetValue(t require.TestingT, eventCh <-chan *model.RegionFeedEvent, val
 	}
 }
 
+type mockPullerInit struct{}
+
+func (*mockPullerInit) IsInitialized() bool {
+	return true
+}
+
 // TestSplit try split on every region, and test can get value event from
 // every region after split.
 func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage))
-	require.NoError(t, err)
+	cli := NewCDCClient(context.Background(), pdCli, storage.(tikv.Storage), &security.Credential{})
 	defer cli.Close()
 
 	eventCh := make(chan *model.RegionFeedEvent, 1<<20)
@@ -147,12 +153,15 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 
 	startTS := mustGetTimestamp(t, storage)
 
+	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
-	preRegions, _, err := pdCli.ScanRegions(context.Background(), nil, nil, 10000)
+	mockTableID := int64(999)
+	preRegions, err := pdCli.ScanRegions(context.Background(), nil, nil, 10000)
 	require.NoError(t, err)
 
 	for i := 0; i < 2; i++ {
@@ -162,21 +171,21 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 			splitStore, ok := storage.(kv.SplittableStore)
 			require.True(t, ok)
 			for _, r := range preRegions {
-				splitKey := r.GetStartKey()
+				splitKey := r.Meta.GetStartKey()
 				if len(splitKey) == 0 {
 					splitKey = []byte{0}
 				} else {
 					splitKey = append(splitKey, 0)
 				}
 				splitKeys := [][]byte{splitKey}
-				_, err := splitStore.SplitRegions(context.Background(), splitKeys, false)
+				_, err := splitStore.SplitRegions(context.Background(), splitKeys, false, &mockTableID)
 				require.NoError(t, err)
 			}
 
 			time.Sleep(time.Second * 3)
 
-			var afterRegions []*metapb.Region
-			afterRegions, _, err = pdCli.ScanRegions(context.Background(), nil, nil, 10000)
+			var afterRegions []*pd.Region
+			afterRegions, err = pdCli.ScanRegions(context.Background(), nil, nil, 10000)
 			require.NoError(t, err)
 			require.Greater(t, len(afterRegions), len(preRegions))
 
@@ -185,7 +194,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 
 		// Put a key on every region and check we can get the event.
 		for _, r := range regions {
-			key := r.GetStartKey()
+			key := r.Meta.GetStartKey()
 			if len(key) == 0 {
 				key = []byte{0}
 			}
@@ -224,8 +233,7 @@ func mustDeleteKey(t require.TestingT, storage kv.Storage, key []byte) {
 
 // TestGetKVSimple test simple KV operations
 func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage))
-	require.NoError(t, err)
+	cli := NewCDCClient(context.Background(), pdCli, storage.(tikv.Storage), &security.Credential{})
 	defer cli.Close()
 
 	checker := newEventChecker(t)
@@ -233,9 +241,10 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	defer cancel()
 
 	startTS := mustGetTimestamp(t, storage)
-
+	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -257,7 +266,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}

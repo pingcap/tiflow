@@ -36,5 +36,5 @@ ignore:
   - "*.yaml"
   - "*.toml"
   - "*.md"
-  - "cmd/.*"
   - "docs/.*"
+  - "testing_utils/.*"

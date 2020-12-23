@@ -16,6 +16,8 @@ package notify
 import (
 	"sync"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/errors"
 )
 
 // Notifier provides a one-to-many notification mechanism
@@ -26,6 +28,7 @@ type Notifier struct {
 	}
 	maxIndex int
 	mu       sync.RWMutex
+	closed   bool
 }
 
 // Notify sends a signal to the Receivers
@@ -60,7 +63,12 @@ func (r *Receiver) signalNonBlocking() bool {
 func (r *Receiver) signalTickLoop() {
 	go func() {
 	loop:
-		for range r.ticker.C {
+		for {
+			select {
+			case <-r.closeCh:
+				break
+			case <-r.ticker.C:
+			}
 			exit := r.signalNonBlocking()
 			if exit {
 				break loop
@@ -72,9 +80,12 @@ func (r *Receiver) signalTickLoop() {
 
 // NewReceiver creates a receiver
 // returns a channel to receive notifications and a function to close this receiver
-func (n *Notifier) NewReceiver(tickTime time.Duration) *Receiver {
+func (n *Notifier) NewReceiver(tickTime time.Duration) (*Receiver, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.closed {
+		return nil, errors.ErrOperateOnClosedNotifier.GenWithStackByArgs()
+	}
 	currentIndex := n.maxIndex
 	n.maxIndex++
 	receiverCh := make(chan struct{}, 1)
@@ -99,7 +110,7 @@ func (n *Notifier) NewReceiver(tickTime time.Duration) *Receiver {
 		rec   *Receiver
 		index int
 	}{rec: rec, index: currentIndex})
-	return rec
+	return rec, nil
 }
 
 func (n *Notifier) remove(index int) {
@@ -118,6 +129,8 @@ func (n *Notifier) remove(index int) {
 }
 
 // Close closes the notify and stops all receiver in this notifier
+// Note we must `Close` the notifier if we can't ensure each receiver of this
+// notifier is called `Stop` in order to prevent goroutine leak.
 func (n *Notifier) Close() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -128,4 +141,5 @@ func (n *Notifier) Close() {
 		close(receiver.rec.closeCh)
 	}
 	n.receivers = nil
+	n.closed = true
 }

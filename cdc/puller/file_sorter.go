@@ -19,7 +19,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -34,6 +33,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -41,7 +42,7 @@ import (
 var (
 	defaultSorterBufferSize        = 1000
 	defaultAutoResolvedRows        = 1000
-	defaultInitFileCount           = 10
+	defaultInitFileCount           = 3
 	defaultFileSizeLimit    uint64 = 1 << 31 // 2GB per file at most
 )
 
@@ -107,12 +108,23 @@ func (cache *fileCache) increase(idx, size int) {
 	}
 }
 
-func (cache *fileCache) gc() {
-	// TODO: control gc running time, in case of the delete operation of
-	// some large files blocks sorting
+func (cache *fileCache) gc(maxRunDuration time.Duration) {
 	cache.fileLock.Lock()
-	defer cache.fileLock.Unlock()
-	for _, f := range cache.toRemoveFiles {
+	index := 0
+	defer func() {
+		cache.toRemoveFiles = cache.toRemoveFiles[index:len(cache.toRemoveFiles)]
+		cache.fileLock.Unlock()
+	}()
+	start := time.Now()
+	for i, f := range cache.toRemoveFiles {
+		duration := time.Since(start)
+		if duration > maxRunDuration {
+			log.Warn("gc runs execeeds max run duration",
+				zap.Duration("duration", duration),
+				zap.Duration("maxRunDuration", maxRunDuration),
+			)
+			return
+		}
 		fpath := filepath.Join(cache.dir, f)
 		if _, err := os.Stat(fpath); err == nil {
 			err2 := os.Remove(fpath)
@@ -120,8 +132,8 @@ func (cache *fileCache) gc() {
 				log.Warn("remove file failed", zap.Error(err2))
 			}
 		}
+		index = i + 1
 	}
-	cache.toRemoveFiles = cache.toRemoveFiles[:0]
 }
 
 // prepareSorting checks whether the file cache can start a new sorting round
@@ -181,17 +193,10 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 	dataBuf := new(bytes.Buffer)
 	var dataLen [8]byte
 	for _, entry := range entries {
-		err := entry.WaitPrepare(ctx)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		if entry.Row == nil {
-			continue
-		}
 		dataBuf.Reset()
-		err = gob.NewEncoder(dataBuf).Encode(entry)
+		err := msgpack.NewEncoder(dataBuf).Encode(entry)
 		if err != nil {
-			return 0, errors.Trace(err)
+			return 0, cerror.WrapError(cerror.ErrFileSorterEncode, err)
 		}
 		binary.BigEndian.PutUint64(dataLen[:], uint64(dataBuf.Len()))
 		buf.Write(dataLen[:])
@@ -200,18 +205,18 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 	if buf.Len() == 0 {
 		return 0, nil
 	}
-	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrFileSorterOpenFile, err)
 	}
 	w := bufio.NewWriter(f)
 	_, err = w.Write(buf.Bytes())
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrFileSorterWriteFile, err)
 	}
 	err = w.Flush()
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrFileSorterWriteFile, err)
 	}
 	return buf.Len(), nil
 }
@@ -235,12 +240,23 @@ type sortItem struct {
 
 type sortHeap []*sortItem
 
-func (h sortHeap) Len() int           { return len(h) }
-func (h sortHeap) Less(i, j int) bool { return h[i].entry.CRTs < h[j].entry.CRTs }
-func (h sortHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h sortHeap) Len() int { return len(h) }
+func (h sortHeap) Less(i, j int) bool {
+	if h[i].entry.CRTs == h[j].entry.CRTs {
+		if h[j].entry.RawKV != nil && h[j].entry.RawKV.OpType == model.OpTypeResolved && h[i].entry.RawKV.OpType != model.OpTypeResolved {
+			return true
+		}
+		if h[i].entry.RawKV != nil && h[i].entry.RawKV.OpType == model.OpTypeDelete && h[j].entry.RawKV.OpType != model.OpTypeDelete {
+			return true
+		}
+	}
+	return h[i].entry.CRTs < h[j].entry.CRTs
+}
+func (h sortHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 func (h *sortHeap) Push(x interface{}) {
 	*h = append(*h, x.(*sortItem))
 }
+
 func (h *sortHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
@@ -259,27 +275,27 @@ func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.Polym
 		if err == io.EOF {
 			return nil, nil
 		}
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFileSorterWriteFile, err)
 	}
 	if n < 8 {
-		return nil, errors.Errorf("invalid length data %s, read %d bytes", byteLen, n)
+		return nil, cerror.ErrFileSorterInvalidData.GenWithStack("invalid length data %s, read %d bytes", byteLen, n)
 	}
 	dataLen := int(binary.BigEndian.Uint64(byteLen[:]))
 
 	data := make([]byte, dataLen)
 	n, err = io.ReadFull(rd, data)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFileSorterReadFile, err)
 	}
 	if n != dataLen {
-		return nil, errors.Errorf("truncated data %s n: %d dataLen: %d", data, n, dataLen)
+		return nil, cerror.ErrFileSorterInvalidData.GenWithStack("truncated data %s n: %d dataLen: %d", data, n, dataLen)
 	}
 
 	readBuf.Reset(data)
 	ev := &model.PolymorphicEvent{}
-	err = gob.NewDecoder(readBuf).Decode(ev)
+	err = msgpack.NewDecoder(readBuf).Decode(ev)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFileSorterDecode, err)
 	}
 	return ev, nil
 }
@@ -303,7 +319,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		}
 		data, err := ioutil.ReadFile(fpath)
 		if err != nil {
-			return "", errors.Trace(err)
+			return "", cerror.WrapError(cerror.ErrFileSorterReadFile, err)
 		}
 		evs := make([]*model.PolymorphicEvent, 0)
 		idx := 0
@@ -311,14 +327,13 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		for idx < len(data) {
 			dataLen := int(binary.BigEndian.Uint64(data[idx : idx+8]))
 			if idx+8+dataLen > len(data) {
-				return "", errors.New("unsorted file unexpected truncated")
+				return "", cerror.ErrFileSorterInvalidData.GenWithStack("unsorted file unexpected truncated")
 			}
 			ev := &model.PolymorphicEvent{}
 			reader.Reset(data[idx+8 : idx+8+dataLen])
-			err = gob.NewDecoder(reader).Decode(ev)
-
+			err = msgpack.NewDecoder(reader).Decode(ev)
 			if err != nil {
-				return "", errors.Trace(err)
+				return "", cerror.WrapError(cerror.ErrFileSorterDecode, err)
 			}
 			evs = append(evs, ev)
 			idx = idx + 8 + dataLen
@@ -380,7 +395,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		toRemoveFiles = append(toRemoveFiles, fs.cache.lastSortedFile)
 		fd, err := os.Open(filepath.Join(fs.dir, fs.cache.lastSortedFile))
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrFileSorterOpenFile, err)
 		}
 		rd := bufio.NewReader(fd)
 		readers = append(readers, rd)
@@ -413,9 +428,12 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			// If we don't output a resovled ts event, the processor will still
 			// cache all events in memory until it receives the resolved ts when
 			// file sorter outputs all events in this rotate round.
+			// Events after this one could have the same commit ts with
+			// `item.entry.CRTs`, so we can't output a resolved event with
+			// `item.entry.CRTs`. But it is safe to output with `item.entry.CRTs-1`.
 			rowCount += 1
 			if rowCount%defaultAutoResolvedRows == 0 {
-				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs))
+				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.RegionID(), item.entry.CRTs-1))
 			}
 		} else {
 			lastSortedFileUpdated = true
@@ -449,7 +467,8 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	}
 
 	fs.cache.finishSorting(newLastSortedFile, toRemoveFiles)
-	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
+	// regionID = 0 means the event is produced by TiCDC
+	fs.output(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 
 	return nil
 }
@@ -527,9 +546,10 @@ func (fs *FileSorter) gcRemovedFiles(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			fs.cache.gc(time.Second * 3)
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			fs.cache.gc()
+			fs.cache.gc(time.Second * 10)
 		}
 	}
 }

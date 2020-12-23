@@ -15,8 +15,7 @@ package cmd
 
 import (
 	_ "github.com/go-sql-driver/mysql" // mysql driver
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -55,19 +54,19 @@ func newQueryProcessorCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			_, status, err := cdcEtcdCli.GetTaskStatus(ctx, changefeedID, captureID)
-			if err != nil && errors.Cause(err) != model.ErrTaskStatusNotExists {
+			if err != nil && cerror.ErrTaskStatusNotExists.Equal(err) {
 				return err
 			}
 			_, position, err := cdcEtcdCli.GetTaskPosition(ctx, changefeedID, captureID)
-			if err != nil && errors.Cause(err) != model.ErrTaskPositionNotExists {
+			if err != nil && cerror.ErrTaskPositionNotExists.Equal(err) {
 				return err
 			}
 			meta := &processorMeta{Status: status, Position: position}
 			return jsonPrint(cmd, meta)
 		},
 	}
-	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
-	command.PersistentFlags().StringVar(&captureID, "capture-id", "", "Capture ID")
+	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().StringVarP(&captureID, "capture-id", "p", "", "Capture ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	_ = command.MarkPersistentFlagRequired("capture-id")
 	return command

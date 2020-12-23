@@ -13,37 +13,39 @@
 
 package cdc
 
-/*
 import (
 	"context"
-	"math"
+	"fmt"
 	"net/url"
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
-	"go.etcd.io/etcd/mvcc/mvccpb"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/roles"
-	"github.com/pingcap/ticdc/cdc/roles/storage"
+	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/store/mockstore"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
 
 type ownerSuite struct {
-	owner     *ownerImpl
 	e         *embed.Etcd
 	clientURL *url.URL
 	client    kv.CDCEtcdClient
@@ -64,7 +66,7 @@ func (s *ownerSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	s.client = kv.NewCDCEtcdClient(client)
+	s.client = kv.NewCDCEtcdClient(context.TODO(), client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
@@ -76,8 +78,35 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 	if err != nil {
 		c.Errorf("Error group error: %s", err)
 	}
+	s.client.Close() //nolint:errcheck
 }
 
+type mockPDClient struct {
+	pd.Client
+	invokeCounter int
+}
+
+func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	m.invokeCounter++
+	return 0, errors.New("mock error")
+}
+
+func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDCli := &mockPDClient{}
+	mockOwner := Owner{
+		pdClient:              mockPDCli,
+		gcSafepointLastUpdate: time.Now(),
+	}
+
+	// Owner should ignore UpdateServiceGCSafePoint error.
+	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+	s.TearDownTest(c)
+}
+
+/*
 type handlerForPrueDMLTest struct {
 	mu               sync.RWMutex
 	index            int
@@ -92,7 +121,7 @@ func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, ddl []*model.DDL, 
 	return uint64(math.MaxUint64), nil, nil
 }
 
-func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, map[string]string, model.Txn) error {
+func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, map[string]string, model.SingleTableTxn) error {
 	panic("unreachable")
 }
 
@@ -120,7 +149,7 @@ func (h *handlerForPrueDMLTest) GetChangeFeeds(ctx context.Context) (int64, map[
 
 func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed)
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -133,7 +162,7 @@ func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeed
 
 func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed)
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -149,7 +178,7 @@ func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changef
 }
 
 func (h *handlerForPrueDMLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
-	return nil, model.ErrChangeFeedNotExists
+	return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(id)
 }
 
 func (h *handlerForPrueDMLTest) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
@@ -167,6 +196,7 @@ func (h *handlerForPrueDMLTest) PutAllChangeFeedStatus(ctx context.Context, info
 }
 
 func (s *ownerSuite) TestPureDML(c *check.C) {
+		defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 	handler := &handlerForPrueDMLTest{
 		index:            -1,
@@ -177,7 +207,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		c:                c,
 	}
 
-	tables := map[uint64]entry.TableName{1: {Schema: "any"}}
+	tables := map[uint64]model.TableName{1: {Schema: "any"}}
 
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
@@ -243,7 +273,7 @@ func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*model.DDL, err
 	return h.ddlResolvedTs[h.ddlIndex], []*model.DDL{h.ddls[h.ddlIndex]}, nil
 }
 
-func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, _ map[string]string, txn model.Txn) error {
+func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, _ map[string]string, txn model.SingleTableTxn) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ddlExpectIndex++
@@ -274,7 +304,7 @@ func (h *handlerForDDLTest) GetChangeFeeds(ctx context.Context) (int64, map[stri
 
 func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed")
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -289,7 +319,7 @@ func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID s
 
 func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed")
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -309,7 +339,7 @@ func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedI
 }
 
 func (h *handlerForDDLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
-	return nil, model.ErrChangeFeedNotExists
+	return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(id)
 }
 
 func (h *handlerForDDLTest) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
@@ -329,6 +359,7 @@ func (h *handlerForDDLTest) PutAllChangeFeedStatus(ctx context.Context, infos ma
 }
 
 func (s *ownerSuite) TestDDL(c *check.C) {
+		defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	handler := &handlerForDDLTest{
@@ -392,7 +423,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		c:      c,
 	}
 
-	tables := map[uint64]entry.TableName{1: {Schema: "any"}}
+	tables := map[uint64]model.TableName{1: {Schema: "any"}}
 
 	filter, err := newTxnFilter(&model.ReplicaConfig{})
 	c.Assert(err, check.IsNil)
@@ -432,9 +463,22 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	err = owner.Run(ctx, 50*time.Millisecond)
 	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
 }
+*/
 
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	cfID := "test_handle_admin"
+
+	ctx, cancel0 := context.WithCancel(context.Background())
+	defer cancel0()
+	cctx, cancel := context.WithCancel(ctx)
+	errg, _ := errgroup.WithContext(cctx)
+
+	replicaConf := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(replicaConf)
+	c.Assert(err, check.IsNil)
+
 	sampleCF := &changeFeed{
 		id:       cfID,
 		info:     &model.ChangeFeedInfo{},
@@ -448,17 +492,28 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},
 		},
-		infoWriter: storage.NewOwnerTaskStatusEtcdWriter(s.client),
-		ddlHandler: &handlerForDDLTest{},
+		ddlHandler: &ddlHandler{
+			cancel: cancel,
+			wg:     errg,
+		},
+		cancel: cancel,
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	manager := roles.NewMockManager(uuid.New().String(), cancel)
-	owner := &ownerImpl{
-		cancelWatchCapture: cancel,
-		manager:            manager,
-		etcdClient:         s.client,
-		cfRWriter:          s.client,
-	}
+	errCh := make(chan error, 1)
+	sink, err := sink.NewSink(ctx, cfID, "blackhole://", f, replicaConf, map[string]string{}, errCh)
+	c.Assert(err, check.IsNil)
+	defer sink.Close() //nolint:errcheck
+	sampleCF.sink = sink
+
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+	c.Assert(err, check.IsNil)
+	err = capture.Campaign(ctx)
+	c.Assert(err, check.IsNil)
+
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+
+	sampleCF.etcdCli = owner.etcdClient
 	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
 	for cid, pinfo := range sampleCF.taskPositions {
 		key := kv.GetEtcdKeyTaskStatus(cfID, cid)
@@ -467,15 +522,15 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		_, err = s.client.Client.Put(ctx, key, pinfoStr)
 		c.Assert(err, check.IsNil)
 	}
+	err = owner.etcdClient.PutChangeFeedStatus(ctx, cfID, &model.ChangeFeedStatus{})
+	c.Assert(err, check.IsNil)
+	err = owner.etcdClient.SaveChangeFeedInfo(ctx, sampleCF.info, cfID)
+	c.Assert(err, check.IsNil)
 	checkAdminJobLen := func(length int) {
 		owner.adminJobsLock.Lock()
 		c.Assert(owner.adminJobs, check.HasLen, length)
 		owner.adminJobsLock.Unlock()
 	}
-
-	err := owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop})
-	c.Assert(errors.Cause(err), check.Equals, concurrency.ErrElectionNotLeader)
-	c.Assert(manager.CampaignOwner(ctx), check.IsNil)
 
 	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop}), check.IsNil)
 	checkAdminJobLen(1)
@@ -493,9 +548,18 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
 	}
 	// check changefeed status is set admin job
-	st, err := owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
+	st, _, err := owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminStop)
+	// check changefeed context is canceled
+	select {
+	case <-cctx.Done():
+	default:
+		c.Fatal("changefeed context is expected canceled")
+	}
+
+	cctx, cancel = context.WithCancel(ctx)
+	sampleCF.cancel = cancel
 
 	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminResume}), check.IsNil)
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
@@ -505,7 +569,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.AdminJobType, check.Equals, model.AdminResume)
 	// check changefeed status is set admin job
-	st, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
+	st, _, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminResume)
 
@@ -516,7 +580,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(len(owner.changeFeeds), check.Equals, 0)
 	// check changefeed info is deleted
 	_, err = owner.etcdClient.GetChangeFeedInfo(ctx, cfID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
 	// check processor is set admin job
 	for cid := range sampleCF.taskPositions {
 		_, subInfo, err := owner.etcdClient.GetTaskStatus(ctx, cfID, cid)
@@ -524,12 +588,20 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
 	}
 	// check changefeed status is set admin job
-	st, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
+	st, _, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
+	// check changefeed context is canceled
+	select {
+	case <-cctx.Done():
+	default:
+		c.Fatal("changefeed context is expected canceled")
+	}
+	owner.etcdClient.Close() //nolint:errcheck
 }
 
 func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		jobs = []*timodel.Job{
 			{
@@ -559,8 +631,12 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name: timodel.NewCIStr("test"),
 					},
 					TableInfo: &timodel.TableInfo{
-						ID:   47,
-						Name: timodel.NewCIStr("t1"),
+						ID:         47,
+						Name:       timodel.NewCIStr("t1"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
+						},
 					},
 				},
 			},
@@ -577,8 +653,12 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name: timodel.NewCIStr("test"),
 					},
 					TableInfo: &timodel.TableInfo{
-						ID:   49,
-						Name: timodel.NewCIStr("t2"),
+						ID:         49,
+						Name:       timodel.NewCIStr("t2"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
+						},
 					},
 				},
 			},
@@ -615,8 +695,12 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name: timodel.NewCIStr("test"),
 					},
 					TableInfo: &timodel.TableInfo{
-						ID:   51,
-						Name: timodel.NewCIStr("t1"),
+						ID:         51,
+						Name:       timodel.NewCIStr("t1"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
+						},
 					},
 				},
 			},
@@ -655,7 +739,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			},
 		}
 
-		expectSchemas = []map[uint64]tableIDMap{
+		expectSchemas = []map[int64]tableIDMap{
 			{1: make(tableIDMap)},
 			{1: {47: struct{}{}}},
 			{1: {47: struct{}{}, 49: struct{}{}}},
@@ -665,7 +749,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{},
 		}
 
-		expectTables = []map[uint64]entry.TableName{
+		expectTables = []map[int64]model.TableName{
 			{},
 			{47: {Schema: "test", Table: "t1"}},
 			{47: {Schema: "test", Table: "t1"}, 49: {Schema: "test", Table: "t2"}},
@@ -675,60 +759,262 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{},
 		}
 	)
-	schemaStorage, err := entry.NewStorage(nil)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
-	filter, err := newTxnFilter(&model.ReplicaConfig{})
+
+	store, err := mockstore.NewMockStore()
 	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	txn, err := store.Begin()
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = txn.Rollback()
+	}()
+	t := meta.NewMeta(txn)
+
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(t, 0, false)
+	c.Assert(err, check.IsNil)
+
 	cf := &changeFeed{
-		schema:        schemaStorage,
-		schemas:       make(map[uint64]map[uint64]struct{}),
-		tables:        make(map[uint64]entry.TableName),
-		orphanTables:  make(map[uint64]model.ProcessTableInfo),
-		toCleanTables: make(map[uint64]struct{}),
-		filter:        filter,
+		schema:        schemaSnap,
+		schemas:       make(map[model.SchemaID]tableIDMap),
+		tables:        make(map[model.TableID]model.TableName),
+		partitions:    make(map[model.TableID][]int64),
+		orphanTables:  make(map[model.TableID]model.Ts),
+		toCleanTables: make(map[model.TableID]model.Ts),
+		filter:        f,
+		info:          &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()},
 	}
 	for i, job := range jobs {
-		err = cf.applyJob(job)
+		err = cf.schema.HandleDDL(job)
+		c.Assert(err, check.IsNil)
+		err = cf.schema.FillSchemaName(job)
+		c.Assert(err, check.IsNil)
+		_, err = cf.applyJob(context.TODO(), job)
 		c.Assert(err, check.IsNil)
 		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
 		c.Assert(cf.tables, check.DeepEquals, expectTables[i])
 	}
+	s.TearDownTest(c)
 }
 
-type changefeedInfoSuite struct {
+func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
+	c.Assert(err, check.IsNil)
+	err = capture.Campaign(ctx)
+	c.Assert(err, check.IsNil)
+
+	ctx1, cancel1 := context.WithCancel(ctx)
+	owner, err := NewOwner(ctx1, nil, &security.Credential{}, capture.session,
+		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+
+	// check campaign key deleted can be detected
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := owner.watchCampaignKey(ctx1)
+		c.Assert(cerror.ErrOwnerCampaignKeyDeleted.Equal(err), check.IsTrue)
+		cancel1()
+	}()
+	// ensure the watch loop has started
+	time.Sleep(time.Millisecond * 100)
+	etcdCli := owner.etcdClient.Client.Unwrap()
+	key := fmt.Sprintf("%s/%x", kv.CaptureOwnerKey, owner.session.Lease())
+	_, err = etcdCli.Delete(ctx, key)
+	c.Assert(err, check.IsNil)
+	wg.Wait()
+
+	// check key is deleted before watch loop starts
+	ctx1, cancel1 = context.WithCancel(ctx)
+	err = owner.watchCampaignKey(ctx1)
+	c.Assert(cerror.ErrOwnerCampaignKeyDeleted.Equal(err), check.IsTrue)
+
+	// check the watch routine can be canceled
+	err = capture.Campaign(ctx)
+	c.Assert(err, check.IsNil)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := owner.watchCampaignKey(ctx1)
+		c.Assert(err, check.IsNil)
+	}()
+	// ensure the watch loop has started
+	time.Sleep(time.Millisecond * 100)
+	cancel1()
+	wg.Wait()
+
+	err = capture.etcdClient.Close()
+	c.Assert(err, check.IsNil)
 }
 
-var _ = check.Suite(&changefeedInfoSuite{})
+func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr := "127.0.0.1:12034"
+	ctx = util.PutCaptureAddrInCtx(ctx, addr)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, addr, &processorOpts{})
+	c.Assert(err, check.IsNil)
+	err = s.client.PutCaptureInfo(ctx, capture.info, capture.session.Lease())
+	c.Assert(err, check.IsNil)
 
-func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
-	cf := &changeFeed{
-		taskStatus: map[model.CaptureID]*model.TaskStatus{
-			"c1": {
-				TableInfos: make([]*model.ProcessTableInfo, 2),
-			},
-			"c2": {
-				TableInfos: make([]*model.ProcessTableInfo, 1),
-			},
-			"c3": {
-				TableInfos: make([]*model.ProcessTableInfo, 3),
-			},
+	changefeed := "changefeed-name"
+	invalidCapture := uuid.New().String()
+	for _, captureID := range []string{capture.info.ID, invalidCapture} {
+		taskStatus := &model.TaskStatus{}
+		if captureID == invalidCapture {
+			taskStatus.Tables = map[model.TableID]*model.TableReplicaInfo{
+				51: {StartTs: 110},
+			}
+		}
+		err = s.client.PutTaskStatus(ctx, changefeed, captureID, taskStatus)
+		c.Assert(err, check.IsNil)
+		_, err = s.client.PutTaskPositionOnChange(ctx, changefeed, captureID, &model.TaskPosition{CheckPointTs: 100, ResolvedTs: 120})
+		c.Assert(err, check.IsNil)
+		err = s.client.PutTaskWorkload(ctx, changefeed, captureID, &model.TaskWorkload{})
+		c.Assert(err, check.IsNil)
+	}
+	err = s.client.SaveChangeFeedInfo(ctx, &model.ChangeFeedInfo{}, changefeed)
+	c.Assert(err, check.IsNil)
+
+	_, captureList, err := s.client.GetCaptures(ctx)
+	c.Assert(err, check.IsNil)
+	captures := make(map[model.CaptureID]*model.CaptureInfo)
+	for _, c := range captureList {
+		captures[c.ID] = c
+	}
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+	// It is better to update changefeed information by `loadChangeFeeds`, however
+	// `loadChangeFeeds` is too overweight, just mock enough information here.
+	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{
+		changefeed: {
+			id:           changefeed,
+			orphanTables: make(map[model.TableID]model.Ts),
 		},
 	}
+	err = owner.rebuildCaptureEvents(ctx, captures)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(owner.captures), check.Equals, 1)
+	c.Assert(owner.captures, check.HasKey, capture.info.ID)
+	c.Assert(owner.changeFeeds[changefeed].orphanTables, check.DeepEquals, map[model.TableID]model.Ts{51: 100})
+	// check stale tasks are cleaned up
+	statuses, err := s.client.GetAllTaskStatus(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(statuses), check.Equals, 1)
+	c.Assert(statuses, check.HasKey, capture.info.ID)
+	positions, err := s.client.GetAllTaskPositions(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(positions), check.Equals, 1)
+	c.Assert(positions, check.HasKey, capture.info.ID)
+	workloads, err := s.client.GetAllTaskWorkloads(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(workloads), check.Equals, 1)
+	c.Assert(workloads, check.HasKey, capture.info.ID)
 
-	captures := map[string]*model.CaptureInfo{
-		"c1": {},
-		"c2": {},
-		"c3": {},
+	err = capture.etcdClient.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr := "127.0.0.1:12034"
+	ctx = util.PutCaptureAddrInCtx(ctx, addr)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, addr, &processorOpts{})
+	c.Assert(err, check.IsNil)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+
+	var (
+		wg              sync.WaitGroup
+		updateCount     = 0
+		recvChangeCount = 0
+	)
+	ctx1, cancel1 := context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		changefeedID := "test-changefeed"
+		pos := &model.TaskPosition{CheckPointTs: 100, ResolvedTs: 102}
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			default:
+			}
+			pos.ResolvedTs++
+			pos.CheckPointTs++
+			updated, err := capture.etcdClient.PutTaskPositionOnChange(ctx1, changefeedID, capture.info.ID, pos)
+			if errors.Cause(err) == context.Canceled {
+				return
+			}
+			c.Assert(err, check.IsNil)
+			c.Assert(updated, check.IsTrue)
+			updateCount++
+			// sleep to avoid other goroutine starvation
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	feedChangeReceiver, err := owner.feedChangeNotifier.NewReceiver(ownerRunInterval)
+	c.Assert(err, check.IsNil)
+	defer feedChangeReceiver.Stop()
+	owner.watchFeedChange(ctx)
+	wg.Add(1)
+	go func() {
+		defer func() {
+			// there could be one message remaining in notification receiver, try to consume it
+			select {
+			case <-feedChangeReceiver.C:
+			default:
+			}
+			wg.Done()
+		}()
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			case <-feedChangeReceiver.C:
+				recvChangeCount++
+				// sleep to simulate some owner work
+				time.Sleep(time.Millisecond * 50)
+			}
+		}
+	}()
+
+	time.Sleep(time.Second * 2)
+	// use cancel1 to avoid cancel the watchFeedChange
+	cancel1()
+	wg.Wait()
+	c.Assert(recvChangeCount, check.Greater, 0)
+	c.Assert(recvChangeCount, check.Less, updateCount)
+	select {
+	case <-feedChangeReceiver.C:
+		c.Error("should not receive message from feed change chan any more")
+	default:
 	}
 
-	c.Assert(cf.minimumTablesCapture(captures), check.Equals, "c2")
-
-	captures["c4"] = &model.CaptureInfo{}
-	c.Assert(cf.minimumTablesCapture(captures), check.Equals, "c4")
+	err = capture.etcdClient.Close()
+	if err != nil {
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	}
 }
-
-// TODO Test watchCapture
-func (s *ownerSuite) TestWatchCapture(c *check.C){
-	FIXME
-}
-*/

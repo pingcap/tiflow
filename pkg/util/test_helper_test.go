@@ -17,16 +17,23 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
+
+func Test(t *testing.T) {
+	check.TestingT(t)
+}
 
 type testHelperSuite struct{}
 
 var _ = check.Suite(&testHelperSuite{})
 
 func (s *testHelperSuite) TestWaitSomething(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		backoff  = 10
 		waitTime = 10 * time.Millisecond
@@ -53,6 +60,7 @@ func (s *testHelperSuite) TestWaitSomething(c *check.C) {
 }
 
 func (s *testHelperSuite) TestHandleErr(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		ctx, cancel = context.WithCancel(context.Background())
 		errCh       = make(chan error)

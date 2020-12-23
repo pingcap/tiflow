@@ -1,260 +1,63 @@
 #!/bin/bash
-# parameter 1: full path of output directory
+
+# --workdir: work directory
+# --tidb-config: path to tidb config file
+# --retry: retry times
 
 set -e
+
+OUT_DIR=
+tidb_config=
+retry_times=3
+multiple_upstream_pd="false"
+
+while [[ ${1} ]]; do
+    case "${1}" in
+        --workdir)
+            OUT_DIR=${2}
+            shift
+            ;;
+        --tidb-config)
+            tidb_config=${2}
+            shift
+            ;;
+        --retry)
+            retry_times=${2}
+            shift
+            ;;
+        --multiple-upstream-pd)
+            multiple_upstream_pd=${2}
+            shift
+            ;;
+        *)
+            echo "Unknown parameter: ${1}" >&2
+            exit 1
+    esac
+
+    if ! shift; then
+        echo 'Missing parameter argument.' >&2
+        exit 1
+    fi
+done
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 
-OUT_DIR=$1
-if [[ -z $OUT_DIR ]]; then
-    echo "wrong out_dir value: $1"
-    exit 1
-fi
+set +e
+i=1
+while [ $i -le $retry_times ]
+do
+    echo "The ${i} times to try to start tidb cluster..."
 
-stop_tidb_cluster
-
-cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
-
-cat - >"$OUT_DIR/pd-config.toml" <<EOF
-[replication]
-# Set it to 1 to make sure we have enough replicas to run placement-rules.
-max-replicas = 1
-enable-placement-rules = true
-EOF
-
-echo "Starting Upstream PD..."
-pd-server \
-    --client-urls http://${UP_PD_HOST}:${UP_PD_PORT} \
-    --peer-urls http://${UP_PD_HOST}:${UP_PD_PEER_PORT} \
-    --config "$OUT_DIR/pd-config.toml" \
-    --log-file "$OUT_DIR/pd.log" \
-    --data-dir "$OUT_DIR/pd" &
-
-echo "Starting Downstream PD..."
-pd-server \
-    --client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-    --peer-urls http://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT} \
-    --config "$OUT_DIR/pd-config.toml" \
-    --log-file "$OUT_DIR/down_pd.log" \
-    --data-dir "$OUT_DIR/down_pd" &
-
-# wait until PD is online...
-while ! curl -o /dev/null -sf http://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
-    sleep 1
-done
-
-while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
-    sleep 1
-done
-
-# Tries to limit the max number of open files under the system limit
-cat - >"$OUT_DIR/tikv-config.toml" <<EOF
-[rocksdb]
-max-open-files = 4096
-[raftdb]
-max-open-files = 4096
-[raftstore]
-# true (default value) for high reliability, this can prevent data loss when power failure.
-sync-log = false
-
-
-# [coprocessor]
-# region-max-keys = 6000
-# region-split-keys = 5000
-EOF
-
-# tidb server config file
-cat - >"$OUT_DIR/tidb-config.toml" <<EOF
-split-table = true
-EOF
-
-echo "Starting Upstream TiKV..."
-tikv-server \
-    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
-    -A ${UP_TIKV_HOST_1}:${UP_TIKV_PORT_1} \
-    --log-file "$OUT_DIR/tikv1.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv1" &
-
-tikv-server \
-    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
-    -A ${UP_TIKV_HOST_2}:${UP_TIKV_PORT_2} \
-    --log-file "$OUT_DIR/tikv2.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv2" &
-
-tikv-server \
-    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
-    -A ${UP_TIKV_HOST_3}:${UP_TIKV_PORT_3} \
-    --log-file "$OUT_DIR/tikv3.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv3" &
-
-echo "Starting Downstream TiKV..."
-tikv-server \
-    --pd ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-    -A ${DOWN_TIKV_HOST}:${DOWN_TIKV_PORT} \
-    --log-file "$OUT_DIR/tikv_down.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv_down" &
-
-sleep 2
-
-echo "Starting Upstream TiDB..."
-tidb-server \
-    -P ${UP_TIDB_PORT} \
-    -config "$OUT_DIR/tidb-config.toml" \
-    --store tikv \
-    --path ${UP_PD_HOST}:${UP_PD_PORT} \
-    --status=${UP_TIDB_STATUS} \
-    --log-file "$OUT_DIR/tidb.log" &
-
-tidb-server \
-    -P ${UP_TIDB_OTHER_PORT} \
-    -config "$OUT_DIR/tidb-config.toml" \
-    --store tikv \
-    --path ${UP_PD_HOST}:${UP_PD_PORT} \
-    --status=${UP_TIDB_OTHER_STATUS} \
-    --log-file "$OUT_DIR/tidb_other.log" &
-
-echo "Starting Downstream TiDB..."
-tidb-server \
-    -P ${DOWN_TIDB_PORT} \
-    -config "$OUT_DIR/tidb-config.toml" \
-    --store tikv \
-    --path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-    --status=${DOWN_TIDB_STATUS} \
-    --log-file "$OUT_DIR/down_tidb.log" &
-
-echo "Verifying Upstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start upstream TiDB'
-        exit 2
+    if [[ "$tidb_config" != "" ]]; then
+        start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config}
+    else
+        start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}
     fi
-    sleep 2
-done
 
-i=0
-while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start upstream TiDB'
-        exit 2
+    if [ $? -eq 0 ]; then
+        break
     fi
-    sleep 2
-done
-
-echo "Verifying Downstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start downstream TiDB'
-        exit 1
-    fi
-    sleep 2
-done
-
-run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-
-cat - >"$OUT_DIR/tiflash-config.toml" <<EOF
-tmp_path = "${OUT_DIR}/tiflash/tmp"
-display_name = "TiFlash"
-default_profile = "default"
-users_config = "${OUT_DIR}/tiflash/users.toml"
-path = "${OUT_DIR}/tiflash/db"
-mark_cache_size = 5368709120
-listen_host = "127.0.0.1"
-tcp_port = 5000
-http_port = 4500
-interserver_http_port = 5500
-
-[flash]
-tidb_status_addr = "127.0.0.1:8500"
-service_addr = "127.0.0.1:9500"
-overlap_threshold = 0.6
-
-[flash.flash_cluster]
-master_ttl = 60
-refresh_interval = 20
-update_rule_interval = 5
-cluster_manager_path = "${CUR}/../../bin/flash_cluster_manager"
-
-[flash.proxy]
-addr = "127.0.0.1:9000"
-advertise-addr = "127.0.0.1:9000"
-data-dir = "${OUT_DIR}/tiflash/db/proxy"
-config = "${OUT_DIR}/tiflash-proxy.toml"
-log-file = "${OUT_DIR}/tiflash/log/proxy.log"
-
-[logger]
-level = "trace"
-log = "${OUT_DIR}/tiflash/log/server.log"
-errorlog = "${OUT_DIR}/tiflash/log/error.log"
-size = "4000M"
-count = 10
-
-[application]
-runAsDaemon = true
-
-[raft]
-kvstore_path = "${OUT_DIR}/tiflash/kvstore"
-pd_addr = "${UP_PD_HOST}:${UP_PD_PORT}"
-ignore_databases = "system,default"
-storage_engine = "tmt"
-EOF
-
-cat - >"$OUT_DIR/tiflash-proxy.toml" <<EOF
-log-level = "info"
-
-[server]
-engine-addr = "127.0.0.1:9500"
-status-addr = "127.0.0.1:17000"
-
-[raftstore]
-sync-log = true
-capacity = "100GB"
-hibernate-regions = false
-
-[rocksdb]
-wal-dir = ""
-max-open-files = 1000
-
-[rocksdb.defaultcf]
-block-cache-size = "10GB"
-
-[rocksdb.lockcf]
-block-cache-size = "4GB"
-
-[rocksdb.writecf]
-block-cache-size = "4GB"
-
-[raftdb]
-max-open-files = 1000
-
-[raftdb.defaultcf]
-block-cache-size = "1GB"
-EOF
-
-echo "Starting Upstream TiFlash..."
-mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
-tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
-
-echo "Verifying Upsteam TiFlash is started..."
-# Make sure TiFlash is started.
-while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; do
-    i=$((i + 1))
-    if [ "$i" -gt 10 ]; then
-        cat ${OUT_DIR}/tiflash/log/proxy.log
-        cat ${OUT_DIR}/tiflash/log/server.log
-        cat ${OUT_DIR}/tiflash/log/error.log
-        echo 'Failed to start TiFlash'
-        exit 1
-    fi
-    sleep 2
+    let i++
+    echo "start tidb cluster failed"
 done

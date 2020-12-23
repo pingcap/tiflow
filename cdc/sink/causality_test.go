@@ -14,7 +14,13 @@
 package sink
 
 import (
+	"bytes"
+	"sort"
+
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type testCausalitySuite struct{}
@@ -22,10 +28,11 @@ type testCausalitySuite struct{}
 var _ = check.Suite(&testCausalitySuite{})
 
 func (s *testCausalitySuite) TestCausality(c *check.C) {
-	rows := [][]string{
-		{"a"},
-		{"b"},
-		{"c"},
+	defer testleak.AfterTest(c)()
+	rows := [][][]byte{
+		{[]byte("a")},
+		{[]byte("b")},
+		{[]byte("c")},
 	}
 	ca := newCausality()
 	for i, row := range rows {
@@ -40,20 +47,20 @@ func (s *testCausalitySuite) TestCausality(c *check.C) {
 	}
 	c.Assert(len(ca.relations), check.Equals, 3)
 	cases := []struct {
-		keys     []string
+		keys     [][]byte
 		conflict bool
 		idx      int
 	}{
 		// Test for single key index conflict.
-		{[]string{"a", "ab"}, true, 0},
-		{[]string{"b", "ba"}, true, 1},
-		{[]string{"a", "a"}, true, 0},
-		{[]string{"b", "b"}, true, 1},
-		{[]string{"c", "c"}, true, 2},
+		{[][]byte{[]byte("a"), []byte("ab")}, true, 0},
+		{[][]byte{[]byte("b"), []byte("ba")}, true, 1},
+		{[][]byte{[]byte("a"), []byte("a")}, true, 0},
+		{[][]byte{[]byte("b"), []byte("b")}, true, 1},
+		{[][]byte{[]byte("c"), []byte("c")}, true, 2},
 		// Test for multi-key index conflict.
-		{[]string{"a", "b"}, true, -1},
-		{[]string{"b", "a"}, true, -1},
-		{[]string{"b", "c"}, true, -1},
+		{[][]byte{[]byte("a"), []byte("b")}, true, -1},
+		{[][]byte{[]byte("b"), []byte("a")}, true, -1},
+		{[][]byte{[]byte("b"), []byte("c")}, true, -1},
 	}
 	for _, cas := range cases {
 		conflict, idx := ca.detectConflict(cas.keys)
@@ -63,4 +70,151 @@ func (s *testCausalitySuite) TestCausality(c *check.C) {
 	}
 	ca.reset()
 	c.Assert(len(ca.relations), check.Equals, 0)
+}
+
+func (s *testCausalitySuite) TestGenKeys(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		txn      *model.SingleTableTxn
+		expected [][]byte
+	}{{
+		txn:      &model.SingleTableTxn{},
+		expected: nil,
+	}, {
+		txn: &model.SingleTableTxn{
+			Rows: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 12,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				}, {
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 21,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+		},
+		expected: [][]byte{
+			{'1', '2', 0x0, '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+			{'1', 0x0, '2', '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+		},
+	}, {
+		txn: &model.SingleTableTxn{
+			Rows: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.HandleKeyFlag,
+						Value: 12,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.HandleKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1}, {2}},
+				}, {
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.HandleKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.HandleKeyFlag,
+						Value: 21,
+					}},
+					IndexColumns: [][]int{{1}, {2}},
+				},
+			},
+		},
+		expected: [][]byte{
+			{'2', '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+			{'1', '2', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+			{'1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+			{'1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+		},
+	}, {
+		txn: &model.SingleTableTxn{
+			Rows: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.NullableFlag,
+						Value: nil,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.NullableFlag,
+						Value: nil,
+					}},
+					IndexColumns: [][]int{{1}, {2}},
+				}, {
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.HandleKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.HandleKeyFlag,
+						Value: 21,
+					}},
+					IndexColumns: [][]int{{1}, {2}},
+				},
+			},
+		},
+		expected: [][]uint8{
+			{'2', '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+			{'1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+			{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
+		},
+	}}
+	for _, tc := range testCases {
+		keys := genTxnKeys(tc.txn)
+		sort.Slice(keys, func(i, j int) bool {
+			return bytes.Compare(keys[i], keys[j]) > 0
+		})
+		c.Assert(keys, check.DeepEquals, tc.expected)
+	}
 }

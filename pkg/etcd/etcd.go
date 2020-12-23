@@ -15,24 +15,17 @@ package etcd
 
 import (
 	"net/url"
-	"strconv"
 	"time"
 
-	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
+	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/embed"
 )
 
 // getFreeListenURLs get free ports and localhost as url.
 func getFreeListenURLs(n int) (urls []*url.URL, retErr error) {
-	ports, err := freeport.GetFreePorts(n)
-	if err != nil {
-		retErr = errors.Trace(err)
-		return
-	}
-
-	for _, port := range ports {
-		u, err := url.Parse("http://localhost:" + strconv.Itoa(port))
+	for i := 0; i < n; i++ {
+		u, err := url.Parse(tempurl.Alloc())
 		if err != nil {
 			retErr = errors.Trace(err)
 			return
@@ -55,6 +48,7 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 	cfg.LPUrls = []url.URL{*urls[0]}
 	cfg.LCUrls = []url.URL{*urls[1]}
 	cfg.Logger = "zap"
+	cfg.LogLevel = "error"
 	clientURL = urls[1]
 
 	e, err = embed.StartEtcd(cfg)

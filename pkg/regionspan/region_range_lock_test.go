@@ -15,20 +15,22 @@ package regionspan
 
 import (
 	"math"
+	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type regionRangeLockSuit struct{}
+type regionRangeLockSuite struct{}
 
-var _ = check.Suite(&regionRangeLockSuit{})
+var _ = check.Suite(&regionRangeLockSuite{})
 
 func mustSuccess(c *check.C, res LockRangeResult, expectedCheckpointTs uint64) {
 	c.Assert(res.Status, check.Equals, LockRangeStatusSuccess)
 	c.Assert(res.CheckpointTs, check.Equals, expectedCheckpointTs)
 }
 
-func mustStale(c *check.C, res LockRangeResult, expectedRetryRanges ...Span) {
+func mustStale(c *check.C, res LockRangeResult, expectedRetryRanges ...ComparableSpan) {
 	c.Assert(res.Status, check.Equals, LockRangeStatusStale)
 	c.Assert(res.RetryRanges, check.DeepEquals, expectedRetryRanges)
 }
@@ -38,65 +40,102 @@ func mustWaitFn(c *check.C, res LockRangeResult) func() LockRangeResult {
 	return res.WaitFn
 }
 
-func mustLockRangeSuccess(c *check.C, l *RegionRangeLock, startKey, endKey string, version uint64, expectedCheckpointTs uint64) {
-	res := l.LockRange([]byte(startKey), []byte(endKey), 1, version)
+func mustLockRangeSuccess(c *check.C, l *RegionRangeLock, startKey, endKey string, regionID, version uint64, expectedCheckpointTs uint64) {
+	res := l.LockRange([]byte(startKey), []byte(endKey), regionID, version)
 	mustSuccess(c, res, expectedCheckpointTs)
 }
 
-func mustLockRangeStale(c *check.C, l *RegionRangeLock, startKey, endKey string, version uint64, expectRetrySpans ...string) {
-	res := l.LockRange([]byte(startKey), []byte(endKey), 1, version)
-	spans := make([]Span, 0)
+func mustLockRangeStale(c *check.C, l *RegionRangeLock, startKey, endKey string, regionID, version uint64, expectRetrySpans ...string) {
+	res := l.LockRange([]byte(startKey), []byte(endKey), regionID, version)
+	spans := make([]ComparableSpan, 0)
 	for i := 0; i < len(expectRetrySpans); i += 2 {
-		spans = append(spans, Span{Start: []byte(expectRetrySpans[i]), End: []byte(expectRetrySpans[i+1])})
+		spans = append(spans, ComparableSpan{Start: []byte(expectRetrySpans[i]), End: []byte(expectRetrySpans[i+1])})
 	}
 	mustStale(c, res, spans...)
 }
 
-func mustLockRangeWait(c *check.C, l *RegionRangeLock, startKey, endKey string, version uint64) func() LockRangeResult {
-	res := l.LockRange([]byte(startKey), []byte(endKey), 1, version)
+func mustLockRangeWait(c *check.C, l *RegionRangeLock, startKey, endKey string, regionID, version uint64) func() LockRangeResult {
+	res := l.LockRange([]byte(startKey), []byte(endKey), regionID, version)
 	return mustWaitFn(c, res)
 }
 
-func unlockRange(l *RegionRangeLock, startKey, endKey string, version uint64, checkpointTs uint64) {
-	l.UnlockRange([]byte(startKey), []byte(endKey), version, checkpointTs)
+func unlockRange(l *RegionRangeLock, startKey, endKey string, regionID, version uint64, checkpointTs uint64) {
+	l.UnlockRange([]byte(startKey), []byte(endKey), regionID, version, checkpointTs)
 }
 
-func (s *regionRangeLockSuit) TestRegionRangeLock(c *check.C) {
-	l := NewRegionRangeLock()
-	mustLockRangeSuccess(c, l, "a", "e", 1, math.MaxUint64)
-	unlockRange(l, "a", "e", 1, 100)
+func (s *regionRangeLockSuite) TestRegionRangeLock(c *check.C) {
+	defer testleak.AfterTest(c)()
+	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64)
+	mustLockRangeSuccess(c, l, "a", "e", 1, 1, math.MaxUint64)
+	unlockRange(l, "a", "e", 1, 1, 100)
 
-	mustLockRangeSuccess(c, l, "a", "e", 2, 100)
-	mustLockRangeStale(c, l, "a", "e", 2)
-	wait := mustLockRangeWait(c, l, "a", "h", 3)
+	mustLockRangeSuccess(c, l, "a", "e", 1, 2, 100)
+	mustLockRangeStale(c, l, "a", "e", 1, 2)
+	wait := mustLockRangeWait(c, l, "a", "h", 1, 3)
 
-	unlockRange(l, "a", "e", 2, 110)
+	unlockRange(l, "a", "e", 1, 2, 110)
 	res := wait()
 	mustSuccess(c, res, 110)
-	unlockRange(l, "a", "h", 3, 120)
+	unlockRange(l, "a", "h", 1, 3, 120)
 }
 
-func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
-	l := NewRegionRangeLock()
-	mustLockRangeSuccess(c, l, "c", "g", 10, math.MaxUint64)
-	mustLockRangeSuccess(c, l, "j", "n", 8, math.MaxUint64)
+func (s *regionRangeLockSuite) TestRegionRangeLockStale(c *check.C) {
+	defer testleak.AfterTest(c)()
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
+	mustLockRangeSuccess(c, l, "c", "g", 1, 10, math.MaxUint64)
+	mustLockRangeSuccess(c, l, "j", "n", 2, 8, math.MaxUint64)
 
-	mustLockRangeStale(c, l, "c", "g", 10)
-	mustLockRangeStale(c, l, "c", "i", 9, "g", "i")
-	mustLockRangeStale(c, l, "a", "z", 9, "a", "c", "g", "j", "n", "z")
-	mustLockRangeStale(c, l, "a", "e", 9, "a", "c")
-	mustLockRangeStale(c, l, "e", "h", 9, "g", "h")
-	mustLockRangeStale(c, l, "e", "k", 9, "g", "j")
-	mustLockRangeSuccess(c, l, "g", "j", 1, math.MaxUint64)
-	unlockRange(l, "g", "j", 1, 2)
-	unlockRange(l, "c", "g", 10, 5)
-	unlockRange(l, "j", "n", 8, 8)
-	mustLockRangeSuccess(c, l, "a", "z", 11, 2)
-	unlockRange(l, "a", "z", 11, 2)
+	mustLockRangeStale(c, l, "c", "g", 1, 10)
+	mustLockRangeStale(c, l, "c", "i", 1, 9, "g", "i")
+	mustLockRangeStale(c, l, "a", "z", 1, 9, "a", "c", "g", "j", "n", "z")
+	mustLockRangeStale(c, l, "a", "e", 1, 9, "a", "c")
+	mustLockRangeStale(c, l, "e", "h", 1, 9, "g", "h")
+	mustLockRangeStale(c, l, "e", "k", 1, 9, "g", "j")
+	mustLockRangeSuccess(c, l, "g", "j", 3, 1, math.MaxUint64)
+	unlockRange(l, "g", "j", 3, 1, 2)
+	unlockRange(l, "c", "g", 1, 10, 5)
+	unlockRange(l, "j", "n", 2, 8, 8)
+	mustLockRangeSuccess(c, l, "a", "z", 1, 11, 2)
+	unlockRange(l, "a", "z", 1, 11, 2)
 }
 
-func (s *regionRangeLockSuit) TestRangeTsMap(c *check.C) {
-	m := NewRangeTsMap()
+func (s *regionRangeLockSuite) TestRegionRangeLockLockingRegionID(c *check.C) {
+	defer testleak.AfterTest(c)()
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
+	mustLockRangeSuccess(c, l, "c", "d", 1, 10, math.MaxUint64)
+
+	mustLockRangeStale(c, l, "e", "f", 1, 5, "e", "f")
+	mustLockRangeStale(c, l, "e", "f", 1, 10, "e", "f")
+	wait := mustLockRangeWait(c, l, "e", "f", 1, 11)
+	unlockRange(l, "c", "d", 1, 10, 10)
+	mustSuccess(c, wait(), math.MaxUint64)
+	// Now ["e", "f") is locked by region 1 at version 11 and ts 11.
+
+	mustLockRangeSuccess(c, l, "g", "h", 2, 10, math.MaxUint64)
+	wait = mustLockRangeWait(c, l, "g", "h", 1, 12)
+	ch := make(chan LockRangeResult, 1)
+	go func() {
+		ch <- wait()
+	}()
+	unlockRange(l, "g", "h", 2, 10, 20)
+	// Locking should still be blocked because the regionID 1 is still locked.
+	select {
+	case <-ch:
+		c.Fatalf("locking finished unexpectedly")
+	case <-time.After(time.Millisecond * 50):
+	}
+
+	unlockRange(l, "e", "f", 1, 11, 11)
+	res := <-ch
+	// CheckpointTS calculation should still be based on range and do not consider the regionID. So
+	// the result's checkpointTs should be 20 from of range ["g", "h"), instead of 11 from min(11, 20).
+	mustSuccess(c, res, 20)
+	unlockRange(l, "g", "h", 1, 12, 30)
+}
+
+func (s *regionRangeLockSuite) TestRangeTsMap(c *check.C) {
+	defer testleak.AfterTest(c)()
+	m := NewRangeTsMap([]byte("a"), []byte("z"), math.MaxUint64)
 
 	mustGetMin := func(startKey, endKey string, expectedTs uint64) {
 		ts := m.GetMin([]byte(startKey), []byte(endKey))

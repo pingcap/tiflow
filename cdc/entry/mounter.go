@@ -19,9 +19,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -29,8 +28,11 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -46,13 +48,20 @@ type baseKVEntry struct {
 	CRTs uint64
 
 	PhysicalTableID int64
-	RecordID        int64
+	RecordID        kv.Handle
 	Delete          bool
 }
 
 type rowKVEntry struct {
 	baseKVEntry
-	Row map[int64]types.Datum
+	Row    map[int64]types.Datum
+	PreRow map[int64]types.Datum
+
+	// In some cases, row data may exist but not contain any Datum,
+	// use this RowExist/PreRowExist variable to distinguish between row data that does not exist
+	// or row data that does not contain any Datum.
+	RowExist    bool
+	PreRowExist bool
 }
 
 type indexKVEntry struct {
@@ -61,7 +70,7 @@ type indexKVEntry struct {
 	IndexValue []types.Datum
 }
 
-func (idx *indexKVEntry) unflatten(tableInfo *TableInfo, tz *time.Location) error {
+func (idx *indexKVEntry) unflatten(tableInfo *model.TableInfo, tz *time.Location) error {
 	if tableInfo.ID != idx.PhysicalTableID {
 		isPartition := false
 		if pi := tableInfo.GetPartitionInfo(); pi != nil {
@@ -73,16 +82,20 @@ func (idx *indexKVEntry) unflatten(tableInfo *TableInfo, tz *time.Location) erro
 			}
 		}
 		if !isPartition {
-			return errors.New("wrong table info in unflatten")
+			return cerror.ErrWrongTableInfo.GenWithStackByArgs(tableInfo.ID, idx.PhysicalTableID)
 		}
 	}
 	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
-		return errors.NotFoundf("index info, indexID: %d", idx.IndexID)
+		return cerror.ErrIndexKeyTableNotFound.GenWithStackByArgs(idx.IndexID)
 	}
 	if !isDistinct(index, idx.IndexValue) {
-		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
-		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
+		idx.RecordID = idx.baseKVEntry.RecordID
+		if idx.baseKVEntry.RecordID.IsInt() {
+			idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
+		} else {
+			idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-idx.RecordID.NumCols()]
+		}
 	}
 	for i, v := range idx.IndexValue {
 		colOffset := index.Columns[i].Offset
@@ -122,10 +135,11 @@ type mounterImpl struct {
 	rawRowChangedChs []chan *model.PolymorphicEvent
 	tz               *time.Location
 	workerNum        int
+	enableOldValue   bool
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
+func NewMounter(schemaStorage *SchemaStorage, workerNum int, enableOldValue bool) Mounter {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
@@ -137,6 +151,7 @@ func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
 		schemaStorage:    schemaStorage,
 		rawRowChangedChs: chs,
 		workerNum:        workerNum,
+		enableOldValue:   enableOldValue,
 	}
 }
 
@@ -159,9 +174,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMountDuration := mountDuration.WithLabelValues(captureID, changefeedID)
+	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		var pEvent *model.PolymorphicEvent
@@ -192,9 +207,9 @@ func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
 }
 
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		select {
@@ -216,7 +231,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	}
 	key, physicalTableID, err := decodeTableID(raw.Key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	baseInfo := baseKVEntry{
 		StartTs:         raw.StartTs,
@@ -229,33 +244,37 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, errors.Trace(err)
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
+		if snap.IsIneligibleTableID(physicalTableID) {
+			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+			return nil, nil
+		}
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
 			if snap.IsTruncateTableID(physicalTableID) {
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
-			return nil, errors.NotFoundf("table in schema storage, id: %d", physicalTableID)
+			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		switch {
 		case bytes.HasPrefix(key, recordPrefix):
-			rowKV, err := m.unmarshalRowKVEntry(tableInfo, key, raw.Value, baseInfo)
+			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			if rowKV == nil {
 				return nil, nil
 			}
-			return m.mountRowKVEntry(tableInfo, rowKV)
+			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateSize())
 		case bytes.HasPrefix(key, indexPrefix):
-			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, baseInfo)
+			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			if indexKV == nil {
 				return nil, nil
 			}
-			return m.mountIndexKVEntry(tableInfo, indexKV)
+			return m.mountIndexKVEntry(tableInfo, indexKV, raw.ApproximateSize())
 		}
 		return nil, nil
 	}()
@@ -266,28 +285,56 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
-	key, recordID, err := decodeRecordID(restKey)
+func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+	recordID, err := tablecodec.DecodeRowKey(rawKey)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if len(key) != 0 {
-		return nil, errors.New("invalid record key")
+	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
+		if len(rawColValue) == 0 {
+			return nil, false, nil
+		}
+		row, err := decodeRow(rawColValue, recordID, tableInfo, m.tz)
+		if err != nil {
+			return nil, false, errors.Trace(err)
+		}
+		return row, true, nil
 	}
-	row, err := decodeRow(rawValue, recordID, tableInfo, m.tz)
+
+	row, rowExist, err := decodeRow(rawValue)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	preRow, preRowExist, err := decodeRow(rawOldValue)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if base.Delete && !m.enableOldValue && (tableInfo.PKIsHandle || tableInfo.IsCommonHandle) {
+		handleColIDs, fieldTps, _ := tableInfo.GetRowColInfos()
+		preRow, err = tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, fieldTps, m.tz, nil)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preRowExist = true
+	}
+
 	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
 		Row:         row,
+		PreRow:      preRow,
+		RowExist:    rowExist,
+		PreRowExist: preRowExist,
 	}, nil
 }
 
-func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
-	// skip set index KV
-	if !base.Delete {
+func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+	// Skip set index KV.
+	// By default we cannot get the old value of a deleted row, then we must get the value of unique key
+	// or primary key for seeking the deleted row through its index key.
+	// After the old value was enabled, we can skip the index key.
+	if !base.Delete || m.enableOldValue {
 		return nil, nil
 	}
 
@@ -295,17 +342,26 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var recordID int64
+	var handle kv.Handle
 
 	if len(rawValue) == 8 {
 		// primary key or unique index
+		var recordID int64
 		buf := bytes.NewBuffer(rawValue)
 		err = binary.Read(buf, binary.BigEndian, &recordID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		handle = kv.IntHandle(recordID)
+	} else if len(rawValue) > 0 && rawValue[0] == tablecodec.CommonHandleFlag {
+		handleLen := uint16(rawValue[1])<<8 + uint16(rawValue[2])
+		handleEndOff := 3 + handleLen
+		handle, err = kv.NewCommonHandle(rawValue[3:handleEndOff])
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
-	base.RecordID = recordID
+	base.RecordID = handle
 	return &indexKVEntry{
 		baseKVEntry: base,
 		IndexID:     indexID,
@@ -313,8 +369,10 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 	}, nil
 }
 
-const ddlJobListKey = "DDLJobList"
-const ddlAddIndexJobListKey = "DDLJobAddIdxList"
+const (
+	ddlJobListKey         = "DDLJobList"
+	ddlAddIndexJobListKey = "DDLJobAddIdxList"
+)
 
 // UnmarshalDDL unmarshals the ddl job from RawKVEntry
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
@@ -347,83 +405,108 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
-
-	if row.Delete && !tableInfo.PKIsHandle {
-		return nil, nil
-	}
-
-	datumsNum := 1
-	if !row.Delete {
-		datumsNum = len(tableInfo.Columns)
-	}
-	values := make(map[string]*model.Column, datumsNum)
-	for index, colValue := range row.Row {
-		colInfo, exist := tableInfo.GetColumnInfo(index)
-		if !exist {
-			return nil, errors.NotFoundf("column info, colID: %d", index)
-		}
-		if !row.Delete && !tableInfo.IsColWritable(colInfo) {
+func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
+	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
+	for _, colInfo := range tableInfo.Columns {
+		if !model.IsColCDCVisible(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
-		value, err := formatColVal(colValue, colInfo.Tp)
+		colDatums, exist := datums[colInfo.ID]
+		var colValue interface{}
+		if exist {
+			var err error
+			var warn string
+			colValue, warn, err = formatColVal(colDatums, colInfo.Tp)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			if warn != "" {
+				log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+			}
+		} else if fillWithDefaultValue {
+			colValue = getDefaultOrZeroValue(colInfo)
+		} else {
+			continue
+		}
+		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
+			Name:  colName,
+			Type:  colInfo.Tp,
+			Value: colValue,
+			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
+		}
+	}
+	return cols, nil
+}
+
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
+	// if m.enableOldValue == true, go into this function
+	// if m.enableNewValue == false and row.Delete == false, go into this function
+	// if m.enableNewValue == false and row.Delete == true and use explict row id, go into this function
+	// only if m.enableNewValue == false and row.Delete == true and use implicit row id(_tidb_rowid), skip this function
+	useImplicitTiDBRowID := !tableInfo.PKIsHandle && !tableInfo.IsCommonHandle
+	if !m.enableOldValue && row.Delete && useImplicitTiDBRowID {
+		return nil, nil
+	}
+
+	var err error
+	// Decode previous columns.
+	var preCols []*model.Column
+	if row.PreRowExist {
+		// FIXME(leoppro): using pre table info to mounter pre column datum
+		// the pre column and current column in one event may using different table info
+		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		col := &model.Column{
-			Type:  colInfo.Tp,
-			Value: value,
-		}
-		if tableInfo.IsColumnUnique(colInfo.ID) {
-			whereHandle := true
-			col.WhereHandle = &whereHandle
-		}
-		values[colName] = col
 	}
 
-	event := &model.RowChangedEvent{
-		StartTs:  row.StartTs,
-		CommitTs: row.CRTs,
-		RowID:    row.RecordID,
+	var cols []*model.Column
+	if row.RowExist {
+		cols, err = datum2Column(tableInfo, row.Row, true)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	schemaName := tableInfo.TableName.Schema
+	tableName := tableInfo.TableName.Table
+	var intRowID int64
+	if row.RecordID.IsInt() {
+		intRowID = row.RecordID.IntValue()
+	}
+	return &model.RowChangedEvent{
+		StartTs:          row.StartTs,
+		CommitTs:         row.CRTs,
+		RowID:            intRowID,
+		TableInfoVersion: tableInfo.TableInfoVersion,
 		Table: &model.TableName{
-			Schema: tableInfo.TableName.Schema,
-			Table:  tableInfo.TableName.Table,
+			Schema:      schemaName,
+			Table:       tableName,
+			TableID:     row.PhysicalTableID,
+			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
-		IndieMarkCol: tableInfo.IndieMarkCol,
-	}
-
-	if !row.Delete {
-		for _, col := range tableInfo.Columns {
-			_, ok := values[col.Name.O]
-			if !ok && tableInfo.IsColWritable(col) {
-				column := &model.Column{
-					Type:  col.Tp,
-					Value: getDefaultOrZeroValue(col),
-				}
-				if tableInfo.IsColumnUnique(col.ID) {
-					whereHandle := true
-					column.WhereHandle = &whereHandle
-				}
-				values[col.Name.O] = column
-			}
-		}
-	}
-	event.Delete = row.Delete
-	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Table.Schema, event.Table.Table))
-	return event, nil
+		Columns:         cols,
+		PreColumns:      preCols,
+		IndexColumns:    tableInfo.IndexColumnsOffset,
+		ApproximateSize: dataSize,
+	}, nil
 }
 
-func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	// skip set index KV
-	if !idx.Delete {
+	if !idx.Delete || m.enableOldValue {
+		return nil, nil
+	}
+	// skip any index that is not the handle
+	if idx.IndexID != tableInfo.HandleIndexID {
 		return nil, nil
 	}
 
 	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
-		return nil, errors.NotFoundf("index info %d", idx.IndexID)
+		log.Warn("index info not found", zap.Int64("indexID", idx.IndexID))
+		return nil, nil
 	}
 
 	if !tableInfo.IsIndexUnique(indexInfo) {
@@ -435,58 +518,85 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		return nil, errors.Trace(err)
 	}
 
-	values := make(map[string]*model.Column, len(idx.IndexValue))
+	preCols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for i, idxCol := range indexInfo.Columns {
-		value, err := formatColVal(idx.IndexValue[i], tableInfo.Columns[idxCol.Offset].Tp)
+		colInfo := tableInfo.Columns[idxCol.Offset]
+		value, warn, err := formatColVal(idx.IndexValue[i], colInfo.Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		whereHandle := true
-		values[idxCol.Name.O] = &model.Column{
-			Type:        tableInfo.Columns[idxCol.Offset].Tp,
-			WhereHandle: &whereHandle,
-			Value:       value,
+		if warn != "" {
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
+		preCols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
+			Name:  colInfo.Name.O,
+			Type:  colInfo.Tp,
+			Value: value,
+			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
+		}
+	}
+	var intRowID int64
+	if idx.RecordID != nil && idx.RecordID.IsInt() {
+		intRowID = idx.RecordID.IntValue()
 	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
 		CommitTs: idx.CRTs,
-		RowID:    idx.RecordID,
+		RowID:    intRowID,
 		Table: &model.TableName{
-			Schema: tableInfo.TableName.Schema,
-			Table:  tableInfo.TableName.Table,
+			Schema:      tableInfo.TableName.Schema,
+			Table:       tableInfo.TableName.Table,
+			TableID:     idx.PhysicalTableID,
+			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
-		IndieMarkCol: tableInfo.IndieMarkCol,
-		Delete:       true,
-		Columns:      values,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		PreColumns:      preCols,
+		IndexColumns:    tableInfo.IndexColumnsOffset,
+		ApproximateSize: dataSize,
 	}, nil
 }
 
-func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
+var emptyBytes = make([]byte, 0)
 
+func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, err error) {
+	if datum.IsNull() {
+		return nil, "", nil
+	}
 	switch tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
-		return datum.GetMysqlTime().String(), nil
+		return datum.GetMysqlTime().String(), "", nil
 	case mysql.TypeDuration:
-		return datum.GetMysqlDuration().String(), nil
+		return datum.GetMysqlDuration().String(), "", nil
 	case mysql.TypeJSON:
-		return datum.GetMysqlJSON().String(), nil
-	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+		return datum.GetMysqlJSON().String(), "", nil
+	case mysql.TypeNewDecimal:
 		v := datum.GetMysqlDecimal()
 		if v == nil {
-			return nil, nil
+			return nil, "", nil
 		}
-		return v.String(), nil
+		return v.String(), "", nil
 	case mysql.TypeEnum:
-		return datum.GetMysqlEnum().Value, nil
+		return datum.GetMysqlEnum().Value, "", nil
 	case mysql.TypeSet:
-		return datum.GetMysqlSet().Value, nil
+		return datum.GetMysqlSet().Value, "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		return datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		return v, "", err
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		b := datum.GetBytes()
+		if b == nil {
+			b = emptyBytes
+		}
+		return b, "", nil
+	case mysql.TypeFloat, mysql.TypeDouble:
+		v := datum.GetFloat64()
+		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
+			warn = fmt.Sprintf("the value is invalid in column: %f", v)
+			v = 0
+		}
+		return v, warn, nil
 	default:
-		return datum.GetValue(), nil
+		return datum.GetValue(), "", nil
 	}
 }
 
@@ -503,155 +613,16 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 		d := types.NewDatum(col.GetDefaultValue())
 		return d.GetValue()
 	}
-
-	if col.Tp == mysql.TypeEnum {
+	switch col.Tp {
+	case mysql.TypeEnum:
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
 		d := types.NewDatum(col.FieldType.Elems[0])
 		return d.GetValue()
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		return emptyBytes
 	}
 
 	d := table.GetZeroValue(col)
 	return d.GetValue()
-}
-
-func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
-	handleColOffset := -1
-	for i, col := range tableInfo.Columns {
-		if mysql.HasPriKeyFlag(col.Flag) {
-			handleColOffset = i
-			break
-		}
-	}
-	if handleColOffset == -1 {
-		return -1, nil, errors.New("can't find handle column, please check if the pk is handle")
-	}
-	handleCol := tableInfo.Columns[handleColOffset]
-	pkCoID = handleCol.ID
-	pkValue = &types.Datum{}
-	if mysql.HasUnsignedFlag(handleCol.Flag) {
-		pkValue.SetUint64(uint64(recordID))
-	} else {
-		pkValue.SetInt64(recordID)
-	}
-	return
-}
-
-func genMultipleKeys(ti *timodel.TableInfo, values map[string]*model.Column, table string) []string {
-	multipleKeys := make([]string, 0, len(ti.Indices)+1)
-	if ti.PKIsHandle {
-		if pk := ti.GetPkColInfo(); pk != nil && !pk.IsGenerated() {
-			cols := []*timodel.ColumnInfo{pk}
-			key := genKeyList(table, cols, values)
-			if len(key) > 0 { // ignore `null` value.
-				multipleKeys = append(multipleKeys, key)
-			} else {
-				log.L().Debug("ignore empty primary key", zap.String("table", table))
-			}
-		}
-	}
-
-	for _, indexCols := range ti.Indices {
-		if !indexCols.Unique {
-			continue
-		}
-		cols := getIndexColumns(ti.Columns, indexCols)
-		key := genKeyList(table, cols, values)
-		if len(key) > 0 { // ignore `null` value.
-			noGeneratedColumn := true
-			for _, col := range cols {
-				if col.IsGenerated() {
-					noGeneratedColumn = false
-					break
-				}
-			}
-			// If the index contain generated column, we can't use this key to detect conflict with other DML,
-			// Because such as insert can't specified the generated value.
-			if noGeneratedColumn {
-				multipleKeys = append(multipleKeys, key)
-			}
-		} else {
-			log.L().Debug("ignore empty index key", zap.String("table", table))
-		}
-	}
-
-	if len(multipleKeys) == 0 {
-		// use table name as key if no key generated (no PK/UK),
-		// no concurrence for rows in the same table.
-		log.L().Debug("use table name as the key", zap.String("table", table))
-		multipleKeys = append(multipleKeys, table)
-	}
-
-	return multipleKeys
-}
-
-func columnValue(value interface{}) string {
-	var data string
-	switch v := value.(type) {
-	case nil:
-		data = "null"
-	case bool:
-		if v {
-			data = "1"
-		} else {
-			data = "0"
-		}
-	case int:
-		data = strconv.FormatInt(int64(v), 10)
-	case int8:
-		data = strconv.FormatInt(int64(v), 10)
-	case int16:
-		data = strconv.FormatInt(int64(v), 10)
-	case int32:
-		data = strconv.FormatInt(int64(v), 10)
-	case int64:
-		data = strconv.FormatInt(int64(v), 10)
-	case uint8:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint16:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint32:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint64:
-		data = strconv.FormatUint(uint64(v), 10)
-	case float32:
-		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
-	case string:
-		data = v
-	case []byte:
-		data = string(v)
-	default:
-		data = fmt.Sprintf("%v", v)
-	}
-
-	return data
-}
-
-func genKeyList(table string, columns []*timodel.ColumnInfo, values map[string]*model.Column) string {
-	var buf strings.Builder
-	for _, col := range columns {
-		val, ok := values[col.Name.O]
-		if !ok || val.Value == nil {
-			log.L().Debug("ignore null value", zap.String("column", col.Name.O), zap.String("table", table))
-			continue // ignore `null` value.
-		}
-		buf.WriteString(columnValue(val.Value))
-	}
-	if buf.Len() == 0 {
-		log.L().Debug("all value are nil, no key generated", zap.String("table", table))
-		return "" // all values are `null`.
-	}
-
-	buf.WriteString(table)
-	return buf.String()
-}
-
-func getIndexColumns(columns []*timodel.ColumnInfo, indexColumns *timodel.IndexInfo) []*timodel.ColumnInfo {
-	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
-	for _, column := range indexColumns.Columns {
-		cols = append(cols, columns[column.Offset])
-	}
-	return cols
 }

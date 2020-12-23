@@ -18,26 +18,34 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
-	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/logutil"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
+	etcdlogutil "go.etcd.io/etcd/pkg/logutil"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
 
 func init() {
 	cliCmd := newCliCommand()
-	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
+	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
+	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
+	addSecurityFlags(cliCmd.PersistentFlags(), false /* isServer */)
 	rootCmd.AddCommand(cliCmd)
 }
 
@@ -55,22 +63,33 @@ var (
 	cyclicReplicaID        uint64
 	cyclicFilterReplicaIDs []uint
 	cyclicSyncDDL          bool
+	cyclicUpstreamDSN      string
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
 
-	interact bool
+	interact          bool
+	simplified        bool
+	cliLogLevel       string
+	changefeedListAll bool
 
-	changefeedID string
-	captureID    string
-	interval     uint
+	changefeedID            string
+	captureID               string
+	interval                uint
+	disableGCSafePointCheck bool
+
+	syncPointEnabled  bool
+	syncPointInterval time.Duration
+
+	optForceRemove bool
 
 	defaultContext context.Context
 )
 
-// cf holds changefeed id, which is used for output only
-type cf struct {
-	ID string `json:"id"`
+// changefeedCommonInfo holds some common used information of a changefeed
+type changefeedCommonInfo struct {
+	ID      string              `json:"id"`
+	Summary *cdc.ChangefeedResp `json:"summary"`
 }
 
 // capture holds capture information
@@ -110,10 +129,37 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			initCmd(cmd, &logutil.Config{Level: cliLogLevel})
+
+			credential := getCredential()
+			tlsConfig, err := credential.ToTLSConfig()
+			if err != nil {
+				return errors.Annotate(err, "fail to validate TLS settings")
+			}
+			if tlsConfig != nil {
+				if strings.Contains(cliPdAddr, "http://") {
+					return errors.New("PD endpoint scheme should be https")
+				}
+			} else if !strings.Contains(cliPdAddr, "http://") {
+				return errors.New("PD endpoint scheme should be http")
+			}
+			grpcTLSOption, err := credential.ToGRPCDialOption()
+			if err != nil {
+				return errors.Annotate(err, "fail to validate TLS settings")
+			}
+
+			pdEndpoints := strings.Split(cliPdAddr, ",")
+
+			logConfig := etcdlogutil.DefaultZapLoggerConfig
+			logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 			etcdCli, err := clientv3.New(clientv3.Config{
-				Endpoints:   []string{cliPdAddr},
+				Context:     defaultContext,
+				Endpoints:   pdEndpoints,
+				TLS:         tlsConfig,
+				LogConfig:   &logConfig,
 				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -128,11 +174,13 @@ func newCliCommand() *cobra.Command {
 			})
 			if err != nil {
 				// PD embeds an etcd server.
-				return errors.Annotate(err, "fail to open PD client")
+				return errors.Annotatef(err, "fail to open PD etcd client, pd-addr=\"%s\"", cliPdAddr)
 			}
-			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{},
+			cdcEtcdCli = kv.NewCDCEtcdClient(defaultContext, etcdCli)
+			pdCli, err = pd.NewClientWithContext(
+				defaultContext, pdEndpoints, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -145,10 +193,11 @@ func newCliCommand() *cobra.Command {
 					}),
 				))
 			if err != nil {
-				return errors.Annotate(err, "fail to open PD client")
+				return errors.Annotatef(err, "fail to open PD client, pd-addr=\"%s\"", cliPdAddr)
 			}
 			ctx := defaultContext
-			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr)
+			errorTiKVIncompatible := true // Error if TiKV is incompatible.
+			err = version.CheckClusterVersion(ctx, pdCli, pdEndpoints[0], credential, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}
@@ -165,7 +214,7 @@ func newCliCommand() *cobra.Command {
 		newCaptureCommand(),
 		newChangefeedCommand(),
 		newProcessorCommand(),
-		newMetadataCommand(),
+		newUnsafeCommand(),
 		newTsoCommand(),
 	)
 

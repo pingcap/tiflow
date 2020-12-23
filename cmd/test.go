@@ -18,14 +18,12 @@ import (
 	"os"
 	"strings"
 
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/spf13/cobra"
+	pd "github.com/tikv/pd/client"
 )
 
-var (
-	testPdAddr string
-)
+var testPdAddr string
 
 func init() {
 	rootCmd.AddCommand(testKVCmd)
@@ -53,7 +51,7 @@ var testKVCmd = &cobra.Command{
 	Long:   ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		addrs := strings.Split(testPdAddr, ",")
-		cli, err := pd.NewClient(addrs, pd.SecurityOption{})
+		cli, err := pd.NewClient(addrs, getCredential().PDSecurityOption())
 		if err != nil {
 			fmt.Println(err)
 			return

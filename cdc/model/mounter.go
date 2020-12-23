@@ -31,23 +31,35 @@ type PolymorphicEvent struct {
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
-		return NewResolvedPolymorphicEvent(rawKV.CRTs)
+		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
 		StartTs:  rawKV.StartTs,
 		CRTs:     rawKV.CRTs,
 		RawKV:    rawKV,
-		finished: make(chan struct{}),
+		finished: nil,
 	}
 }
 
 // NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts
-func NewResolvedPolymorphicEvent(resolvedTs uint64) *PolymorphicEvent {
+func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
 		CRTs:     resolvedTs,
-		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved},
+		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
 		Row:      nil,
 		finished: nil,
+	}
+}
+
+// RegionID returns the region ID where the event comes from.
+func (e *PolymorphicEvent) RegionID() uint64 {
+	return e.RawKV.RegionID
+}
+
+// SetUpFinishedChan creates an internal channel to support PrepareFinished and WaitPrepare
+func (e *PolymorphicEvent) SetUpFinishedChan() {
+	if e.finished == nil {
+		e.finished = make(chan struct{})
 	}
 }
 

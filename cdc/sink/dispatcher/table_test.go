@@ -16,6 +16,7 @@ package dispatcher
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type TableDispatcherSuite struct{}
@@ -23,6 +24,7 @@ type TableDispatcherSuite struct{}
 var _ = check.Suite(&TableDispatcherSuite{})
 
 func (s TableDispatcherSuite) TestTableDispatcher(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -69,8 +71,15 @@ func (s TableDispatcherSuite) TestTableDispatcher(c *check.C) {
 			},
 			CommitTs: 3,
 		}, exceptPartition: 5},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t3",
+			},
+			CommitTs: 3,
+		}, exceptPartition: 3},
 	}
-	p := &tableDispatcher{partitionNum: 16}
+	p := newTableDispatcher(16)
 	for _, tc := range testCases {
 		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
 	}

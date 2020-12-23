@@ -32,12 +32,13 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/tests/util"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/tablecodec"
+	pd "github.com/tikv/pd/client"
 )
 
 func main() {
@@ -78,7 +79,8 @@ func main() {
 func prepare(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
-		"create table t1 (a int primary key);"}
+		"create table t1 (a int primary key);",
+	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)
 		if err != nil {
@@ -92,7 +94,8 @@ func finishMark(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
 		"insert into t1 value (1);",
-		"create table t2 (a int primary key);"}
+		"create table t2 (a int primary key);",
+	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)
 		if err != nil {
@@ -223,7 +226,7 @@ func (c *Locker) lockKeys(ctx context.Context, rowIDs []int64) error {
 
 	keyPrefix := tablecodec.GenTableRecordPrefix(c.tableID)
 	for _, rowID := range rowIDs {
-		key := tablecodec.EncodeRecordKey(keyPrefix, rowID)
+		key := tablecodec.EncodeRecordKey(keyPrefix, kv.IntHandle(rowID))
 		keys = append(keys, key)
 	}
 
@@ -326,6 +329,7 @@ func (c *Locker) lockBatch(ctx context.Context, keys [][]byte, primary []byte) (
 		return lockedKeys, nil
 	}
 }
+
 func randStr() string {
 	length := rand.Intn(128)
 	res := ""

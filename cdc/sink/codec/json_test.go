@@ -16,14 +16,10 @@ package codec
 import (
 	"testing"
 
-	"github.com/pingcap/parser/mysql"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/ticdc/cdc/model"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -38,60 +34,58 @@ var _ = check.Suite(&batchSuite{
 	rowCases: [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}}, {{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}, {
 		CommitTs: 2,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+	}, {
+		CommitTs: 4,
+		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}}, {{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}, {
 		CommitTs: 2,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table b",
-		Type:     2,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table b",
+		Type:  2,
 	}, {
 		CommitTs: 3,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table c",
-		Type:     3,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table c",
+		Type:  3,
 	}}, {}},
 	resolvedTsCases: [][]uint64{{1}, {1, 2, 3}, {}},
 })
 
 func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
-	for _, cs := range s.rowCases {
-		encoder := newEncoder()
-		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		log.Info("a", zap.ByteStrings("a", [][]byte{key, value}))
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -106,18 +100,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
-
-	for _, cs := range s.ddlCases {
-		encoder := newEncoder()
-		for _, ddl := range cs {
-			err := encoder.AppendDDLEvent(ddl)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		log.Info("b", zap.ByteStrings("b", [][]byte{key, value}))
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkDDLDecoder := func(decoder EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -132,18 +115,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
-
-	for _, cs := range s.resolvedTsCases {
-		encoder := newEncoder()
-		for _, ts := range cs {
-			err := encoder.AppendResolvedEvent(ts)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		log.Info("c", zap.ByteStrings("c", [][]byte{key, value}))
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkTSDecoder := func(decoder EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -158,18 +130,176 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
+
+	for _, cs := range s.rowCases {
+		encoder := newEncoder()
+		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		c.Assert(err, check.IsNil)
+
+		mixedEncoder := newEncoder()
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+		for _, row := range cs {
+			_, err := encoder.AppendRowChangedEvent(row)
+			c.Assert(err, check.IsNil)
+
+			op, err := mixedEncoder.AppendRowChangedEvent(row)
+			c.Assert(op, check.Equals, EncoderNoOperation)
+			c.Assert(err, check.IsNil)
+		}
+		// test mixed decode
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkRowDecoder(mixedDecoder, cs)
+		// test normal decode
+		if len(cs) > 0 {
+			res := encoder.Build()
+			c.Assert(res, check.HasLen, 1)
+			decoder, err := newDecoder(res[0].Key, res[0].Value)
+			c.Assert(err, check.IsNil)
+			checkRowDecoder(decoder, cs)
+		}
+	}
+
+	for _, cs := range s.ddlCases {
+		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		c.Assert(err, check.IsNil)
+
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+		for i, ddl := range cs {
+			msg, err := encoder.EncodeDDLEvent(ddl)
+			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			decoder, err := newDecoder(msg.Key, msg.Value)
+			c.Assert(err, check.IsNil)
+			checkDDLDecoder(decoder, cs[i:i+1])
+
+			msg, err = mixedEncoder.EncodeDDLEvent(ddl)
+			c.Assert(msg, check.IsNil)
+			c.Assert(err, check.IsNil)
+		}
+
+		// test mixed encode
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkDDLDecoder(mixedDecoder, cs)
+	}
+
+	for _, cs := range s.resolvedTsCases {
+		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		c.Assert(err, check.IsNil)
+
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+		for i, ts := range cs {
+			msg, err := encoder.EncodeCheckpointEvent(ts)
+			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			decoder, err := newDecoder(msg.Key, msg.Value)
+			c.Assert(err, check.IsNil)
+			checkTSDecoder(decoder, cs[i:i+1])
+
+			msg, err = mixedEncoder.EncodeCheckpointEvent(ts)
+			c.Assert(msg, check.IsNil)
+			c.Assert(err, check.IsNil)
+		}
+
+		// test mixed encode
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkTSDecoder(mixedDecoder, cs)
+	}
+}
+
+func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "256"})
+	c.Check(err, check.IsNil)
+
+	testEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	for i := 0; i < 10000; i++ {
+		r, err := encoder.AppendRowChangedEvent(testEvent)
+		c.Check(r, check.Equals, EncoderNoOperation)
+		c.Check(err, check.IsNil)
+	}
+
+	messages := encoder.Build()
+	for _, msg := range messages {
+		c.Assert(msg.Length(), check.LessEqual, 256)
+	}
+}
+
+func (s *batchSuite) TestMaxBatchSize(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
+	c.Check(err, check.IsNil)
+
+	testEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	for i := 0; i < 10000; i++ {
+		r, err := encoder.AppendRowChangedEvent(testEvent)
+		c.Check(r, check.Equals, EncoderNoOperation)
+		c.Check(err, check.IsNil)
+	}
+
+	messages := encoder.Build()
+	sum := 0
+	for _, msg := range messages {
+		decoder, err := NewJSONEventBatchDecoder(msg.Key, msg.Value)
+		c.Check(err, check.IsNil)
+		count := 0
+		for {
+			t, hasNext, err := decoder.HasNext()
+			c.Check(err, check.IsNil)
+			if !hasNext {
+				break
+			}
+
+			c.Check(t, check.Equals, model.MqMessageTypeRow)
+			_, err = decoder.NextRowChangedEvent()
+			c.Check(err, check.IsNil)
+			count++
+		}
+		c.Check(count, check.LessEqual, 64)
+		sum += count
+	}
+	c.Check(sum, check.Equals, 10000)
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
-	s.testBatchCodec(c, NewJSONEventBatchEncoder, NewJSONEventBatchDecoder)
+	defer testleak.AfterTest(c)()
+	s.testBatchCodec(c, func() EventBatchEncoder {
+		encoder := NewJSONEventBatchEncoder()
+		return encoder
+	}, NewJSONEventBatchDecoder)
 }
 
-var _ = check.Suite(columnSuite{})
+var _ = check.Suite(&columnSuite{})
 
 type columnSuite struct{}
 
 func (s *columnSuite) TestFormatCol(c *check.C) {
-	row := &mqMessageRow{Update: map[string]*column{"test": {
+	defer testleak.AfterTest(c)()
+	row := &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeString,
 		Value: "测",
 	}}}
@@ -180,7 +310,7 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
 
-	row = &mqMessageRow{Update: map[string]*column{"test": {
+	row = &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeBlob,
 		Value: []byte("测"),
 	}}}
@@ -190,4 +320,26 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	err = row2.Decode(rowEncode)
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
+}
+
+func (s *columnSuite) TestVarBinaryCol(c *check.C) {
+	defer testleak.AfterTest(c)()
+	col := &model.Column{
+		Name:  "test",
+		Type:  mysql.TypeString,
+		Flag:  model.BinaryFlag,
+		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+	}
+	jsonCol := column{}
+	jsonCol.FromSinkColumn(col)
+	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+	jsonCol2 := row2.Update["test"]
+	col2 := jsonCol2.ToSinkColumn("test")
+	c.Assert(col2, check.DeepEquals, col)
 }

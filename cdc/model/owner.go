@@ -19,15 +19,23 @@ import (
 	"math"
 
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // AdminJobType represents for admin job type, both used in owner and processor
 type AdminJobType int
 
+// AdminJobOption records addition options of an admin job
+type AdminJobOption struct {
+	ForceRemove bool
+}
+
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID string
-	Type AdminJobType
+	CfID  string
+	Type  AdminJobType
+	Opts  *AdminJobOption
+	Error *RunningError
 }
 
 // All AdminJob types
@@ -36,6 +44,7 @@ const (
 	AdminStop
 	AdminResume
 	AdminRemove
+	AdminFinish
 )
 
 // String implements fmt.Stringer interface.
@@ -49,8 +58,19 @@ func (t AdminJobType) String() string {
 		return "resume changefeed"
 	case AdminRemove:
 		return "remove changefeed"
+	case AdminFinish:
+		return "finish changefeed"
 	}
 	return "unknown"
+}
+
+// IsStopState returns whether changefeed is in stop state with give admin job
+func (t AdminJobType) IsStopState() bool {
+	switch t {
+	case AdminStop, AdminRemove, AdminFinish:
+		return true
+	}
+	return false
 }
 
 // TaskPosition records the process information of a capture
@@ -61,18 +81,21 @@ type TaskPosition struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// The count of events were synchronized. This is updated by corresponding processor.
 	Count uint64 `json:"count"`
+	// Error code when error happens
+	Error *RunningError `json:"error"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus
 func (tp *TaskPosition) Marshal() (string, error) {
 	data, err := json.Marshal(tp)
-	return string(data), errors.Trace(err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
 func (tp *TaskPosition) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, tp)
-	return errors.Annotatef(err, "Unmarshal data: %v", data)
+	return errors.Annotatef(
+		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 }
 
 // String implements fmt.Stringer interface.
@@ -100,13 +123,34 @@ type MoveTableJob struct {
 	Status           MoveTableStatus
 }
 
+// All TableOperation status
+const (
+	OperDispatched uint64 = iota
+	OperProcessed
+	OperFinished
+)
+
 // TableOperation records the current information of a table migration
 type TableOperation struct {
 	Delete bool `json:"delete"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
 	// if the operation is a add operation, BoundaryTs is start ts
 	BoundaryTs uint64 `json:"boundary_ts"`
-	Done       bool   `json:"done"`
+	Done       bool   `json:"done"` // deprecated, will be removed in the next version
+	Status     uint64 `json:"status,omitempty"`
+}
+
+// TableProcessed returns whether the table has been processed by processor
+func (o *TableOperation) TableProcessed() bool {
+	// TODO: remove o.Done
+	return o.Status == OperProcessed || o.Status == OperFinished || o.Done
+}
+
+// TableApplied returns whether the table has finished the startup procedure.
+// Returns true if table has been processed by processor and resolved ts reaches global resolved ts.
+func (o *TableOperation) TableApplied() bool {
+	// TODO: remove o.Done
+	return o.Status == OperFinished || o.Done
 }
 
 // Clone returns a deep-clone of the struct
@@ -130,7 +174,8 @@ type WorkloadInfo struct {
 // Unmarshal unmarshals into *TaskWorkload from json marshal byte slice
 func (w *TaskWorkload) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, w)
-	return errors.Annotatef(err, "Unmarshal data: %v", data)
+	return errors.Annotatef(
+		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 }
 
 // Marshal returns the json marshal format of a TaskWorkload
@@ -139,13 +184,22 @@ func (w *TaskWorkload) Marshal() (string, error) {
 		return "{}", nil
 	}
 	data, err := json.Marshal(w)
-	return string(data), errors.Trace(err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // TableReplicaInfo records the table replica info
 type TableReplicaInfo struct {
 	StartTs     Ts      `json:"start-ts"`
 	MarkTableID TableID `json:"mark-table-id"`
+}
+
+// Clone clones a TableReplicaInfo
+func (i *TableReplicaInfo) Clone() *TableReplicaInfo {
+	if i == nil {
+		return nil
+	}
+	clone := *i
+	return &clone
 }
 
 // TaskStatus records the task information of a capture
@@ -155,6 +209,8 @@ type TaskStatus struct {
 	Operation    map[TableID]*TableOperation   `json:"operation"`
 	AdminJobType AdminJobType                  `json:"admin-job-type"`
 	ModRevision  int64                         `json:"-"`
+	// true means Operation record has been changed
+	Dirty bool `json:"-"`
 }
 
 // String implements fmt.Stringer interface.
@@ -199,13 +255,14 @@ func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs T
 	ts.Operation[id] = &TableOperation{
 		Delete:     false,
 		BoundaryTs: boundaryTs,
+		Status:     OperDispatched,
 	}
 }
 
 // SomeOperationsUnapplied returns true if there are some operations not applied
 func (ts *TaskStatus) SomeOperationsUnapplied() bool {
 	for _, o := range ts.Operation {
-		if !o.Done {
+		if !o.TableApplied() {
 			return true
 		}
 	}
@@ -216,7 +273,7 @@ func (ts *TaskStatus) SomeOperationsUnapplied() bool {
 func (ts *TaskStatus) AppliedTs() Ts {
 	appliedTs := uint64(math.MaxUint64)
 	for _, o := range ts.Operation {
-		if !o.Done {
+		if !o.TableApplied() {
 			if appliedTs > o.BoundaryTs {
 				appliedTs = o.BoundaryTs
 			}
@@ -237,7 +294,10 @@ func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpoin
 		if ts < table.StartTs {
 			ts = table.StartTs
 		}
-		snap.Tables[tableID] = &TableReplicaInfo{StartTs: ts, MarkTableID: table.MarkTableID}
+		snap.Tables[tableID] = &TableReplicaInfo{
+			StartTs:     ts,
+			MarkTableID: table.MarkTableID,
+		}
 	}
 	return snap
 }
@@ -245,13 +305,14 @@ func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpoin
 // Marshal returns the json marshal format of a TaskStatus
 func (ts *TaskStatus) Marshal() (string, error) {
 	data, err := json.Marshal(ts)
-	return string(data), errors.Trace(err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
 func (ts *TaskStatus) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, ts)
-	return errors.Annotatef(err, "Unmarshal data: %v", data)
+	return errors.Annotatef(
+		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 }
 
 // Clone returns a deep-clone of the struct
@@ -259,12 +320,12 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 	clone := *ts
 	tables := make(map[TableID]*TableReplicaInfo, len(ts.Tables))
 	for tableID, table := range ts.Tables {
-		tables[tableID] = &(*table)
+		tables[tableID] = table.Clone()
 	}
 	clone.Tables = tables
 	operation := make(map[TableID]*TableOperation, len(ts.Operation))
 	for tableID, opt := range ts.Operation {
-		operation[tableID] = opt
+		operation[tableID] = opt.Clone()
 	}
 	clone.Operation = operation
 	return &clone
@@ -341,13 +402,14 @@ type ChangeFeedStatus struct {
 // Marshal returns json encoded string of ChangeFeedStatus, only contains necessary fields stored in storage
 func (status *ChangeFeedStatus) Marshal() (string, error) {
 	data, err := json.Marshal(status)
-	return string(data), errors.Trace(err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedStatus from json marshal byte slice
 func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, status)
-	return errors.Annotatef(err, "Unmarshal data: %v", data)
+	return errors.Annotatef(
+		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 }
 
 // ProcInfoSnap holds most important replication information of a processor

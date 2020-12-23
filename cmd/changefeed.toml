@@ -11,27 +11,11 @@ case-sensitive = true
 # Transactions with the following StartTs will be ignored
 ignore-txn-start-ts = [1, 2]
 
-# 同步哪些库
-# The following databases(schema) will be replicated
-do-dbs = ["test1", "sys1"]
-
-# 同步哪些表
-# The following tables will be replicated
-do-tables = [
-	{db-name = "test", tbl-name = "tbl1"},
-	{db-name = "test", tbl-name = "tbl2"},
-]
-
-# 忽略哪些库
-# The following databases(schema) will be ignored
-ignore-dbs = ["test", "sys"]
-
-# 忽略哪些表
-# The following tables will be ignored
-ignore-tables = [
-	{db-name = "test", tbl-name = "tbl3"},
-	{db-name = "test", tbl-name = "tbl4"},
-]
+# 过滤器规则
+# 过滤规则语法：https://docs.pingcap.com/zh/tidb/stable/table-filter#%E8%A1%A8%E5%BA%93%E8%BF%87%E6%BB%A4%E8%AF%AD%E6%B3%95
+# The rules of the filter
+# Filter rules syntax: https://docs.pingcap.com/tidb/stable/table-filter#syntax
+rules = ['*.*', '!test.*']
 
 [mounter]
 # mounter 线程数
@@ -39,14 +23,19 @@ ignore-tables = [
 worker-num = 16
 
 [sink]
-# 对于 MQ 类的 Sink，可以通过 dispatch-rules 配置 event 分发规则
-# 分发规则支持 default, ts, rowid, table
-# For MQ Sinks, you can configure event distribution rules through dispatch-rules
-# Distribution rules support default, ts, rowid and table
-dispatch-rules = [
-	{db-name = "test", tbl-name = "tbl3", rule = "ts"},
-	{db-name = "test", tbl-name = "tbl4", rule = "rowid"},
+# 对于 MQ 类的 Sink，可以通过 dispatchers 配置 event 分发器
+# 分发器支持 default, ts, rowid, table 四种
+# For MQ Sinks, you can configure event distribution rules through dispatchers
+# Dispatchers support default, ts, rowid and table
+dispatchers = [
+	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
+	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
+# 对于 MQ 类的 Sink，可以指定消息的协议格式
+# 协议目前支持 default, canal, avro 和 maxwell 四种，default 为 ticdc-open-protocol
+# For MQ Sinks, you can configure the protocol of the messages sending to MQ
+# Currently the protocol support default, canal, avro and maxwell. Default is ticdc-open-protocol
+protocol = "default"
 
 [cyclic-replication]
 # 是否开启环形复制

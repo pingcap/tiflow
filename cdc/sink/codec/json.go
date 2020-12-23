@@ -18,23 +18,88 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
+	// DefaultMaxMessageBytes sets the default value for max-message-bytes
+	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
 )
 
-type column = model.Column
+type column struct {
+	Type byte `json:"t"`
 
-func formatColumnVal(c *column) {
+	// WhereHandle is deprecation
+	// WhereHandle is replaced by HandleKey in Flag
+	WhereHandle *bool                `json:"h,omitempty"`
+	Flag        model.ColumnFlagType `json:"f"`
+	Value       interface{}          `json:"v"`
+}
+
+func (c *column) FromSinkColumn(col *model.Column) {
+	c.Type = col.Type
+	c.Flag = col.Flag
+	if c.Flag.IsHandleKey() {
+		whereHandle := true
+		c.WhereHandle = &whereHandle
+	}
+	if col.Value == nil {
+		c.Value = nil
+		return
+	}
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := string(col.Value.([]byte))
+		if c.Flag.IsBinary() {
+			str = strconv.Quote(str)
+			str = str[1 : len(str)-1]
+		}
+		c.Value = str
+	default:
+		c.Value = col.Value
+	}
+}
+
+func (c *column) ToSinkColumn(name string) *model.Column {
+	col := new(model.Column)
+	col.Type = c.Type
+	col.Flag = c.Flag
+	col.Name = name
+	col.Value = c.Value
+	if c.Value == nil {
+		return col
+	}
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := col.Value.(string)
+		var err error
+		if c.Flag.IsBinary() {
+			str, err = strconv.Unquote("\"" + str + "\"")
+			if err != nil {
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+		}
+		col.Value = []byte(str)
+	default:
+		col.Value = c.Value
+	}
+	return col
+}
+
+func formatColumnVal(c column) column {
 	switch c.Type {
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,
 		mysql.TypeLongBlob, mysql.TypeBlob:
@@ -42,43 +107,49 @@ func formatColumnVal(c *column) {
 			var err error
 			c.Value, err = base64.StdEncoding.DecodeString(s)
 			if err != nil {
-				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 		}
 	case mysql.TypeBit:
 		if s, ok := c.Value.(json.Number); ok {
 			intNum, err := s.Int64()
 			if err != nil {
-				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 			c.Value = uint64(intNum)
 		}
 	}
+	return c
 }
 
 type mqMessageKey struct {
 	// TODO: should we rename it to CRTs
-	Ts     uint64              `json:"ts"`
-	Schema string              `json:"scm,omitempty"`
-	Table  string              `json:"tbl,omitempty"`
-	Type   model.MqMessageType `json:"t"`
+	Ts        uint64              `json:"ts"`
+	Schema    string              `json:"scm,omitempty"`
+	Table     string              `json:"tbl,omitempty"`
+	RowID     int64               `json:"rid,omitempty"`
+	Partition *int64              `json:"ptn,omitempty"`
+	Type      model.MqMessageType `json:"t"`
 }
 
 func (m *mqMessageKey) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 func (m *mqMessageKey) Decode(data []byte) error {
-	return json.Unmarshal(data, m)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }
 
 type mqMessageRow struct {
-	Update map[string]*column `json:"u,omitempty"`
-	Delete map[string]*column `json:"d,omitempty"`
+	Update     map[string]column `json:"u,omitempty"`
+	PreColumns map[string]column `json:"p,omitempty"`
+	Delete     map[string]column `json:"d,omitempty"`
 }
 
 func (m *mqMessageRow) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 func (m *mqMessageRow) Decode(data []byte) error {
@@ -86,13 +157,16 @@ func (m *mqMessageRow) Decode(data []byte) error {
 	decoder.UseNumber()
 	err := decoder.Decode(m)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
-	for _, column := range m.Update {
-		formatColumnVal(column)
+	for colName, column := range m.Update {
+		m.Update[colName] = formatColumnVal(column)
 	}
-	for _, column := range m.Delete {
-		formatColumnVal(column)
+	for colName, column := range m.Delete {
+		m.Delete[colName] = formatColumnVal(column)
+	}
+	for colName, column := range m.PreColumns {
+		m.PreColumns[colName] = formatColumnVal(column)
 	}
 	return nil
 }
@@ -103,11 +177,12 @@ type mqMessageDDL struct {
 }
 
 func (m *mqMessageDDL) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 func (m *mqMessageDDL) Decode(data []byte) error {
-	return json.Unmarshal(data, m)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }
 
 func newResolvedMessage(ts uint64) *mqMessageKey {
@@ -118,19 +193,57 @@ func newResolvedMessage(ts uint64) *mqMessageKey {
 }
 
 func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow) {
+	var partition *int64
+	if e.Table.IsPartition {
+		partition = &e.Table.TableID
+	}
 	key := &mqMessageKey{
-		Ts:     e.CommitTs,
-		Schema: e.Table.Schema,
-		Table:  e.Table.Table,
-		Type:   model.MqMessageTypeRow,
+		Ts:        e.CommitTs,
+		Schema:    e.Table.Schema,
+		Table:     e.Table.Table,
+		RowID:     e.RowID,
+		Partition: partition,
+		Type:      model.MqMessageTypeRow,
 	}
 	value := &mqMessageRow{}
-	if e.Delete {
-		value.Delete = e.Columns
+	if e.IsDelete() {
+		value.Delete = sinkColumns2JsonColumns(e.PreColumns)
 	} else {
-		value.Update = e.Columns
+		value.Update = sinkColumns2JsonColumns(e.Columns)
+		value.PreColumns = sinkColumns2JsonColumns(e.PreColumns)
 	}
 	return key, value
+}
+
+func sinkColumns2JsonColumns(cols []*model.Column) map[string]column {
+	jsonCols := make(map[string]column, len(cols))
+	for _, col := range cols {
+		if col == nil {
+			continue
+		}
+		c := column{}
+		c.FromSinkColumn(col)
+		jsonCols[col.Name] = c
+	}
+	if len(jsonCols) == 0 {
+		return nil
+	}
+	return jsonCols
+}
+
+func jsonColumns2SinkColumns(cols map[string]column) []*model.Column {
+	sinkCols := make([]*model.Column, 0, len(cols))
+	for name, col := range cols {
+		c := col.ToSinkColumn(name)
+		sinkCols = append(sinkCols, c)
+	}
+	if len(sinkCols) == 0 {
+		return nil
+	}
+	sort.Slice(sinkCols, func(i, j int) bool {
+		return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
+	})
+	return sinkCols
 }
 
 func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChangedEvent {
@@ -142,13 +255,17 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 		Schema: key.Schema,
 		Table:  key.Table,
 	}
+	// TODO: we lost the tableID from kafka message
+	if key.Partition != nil {
+		e.Table.TableID = *key.Partition
+		e.Table.IsPartition = true
+	}
 
 	if len(value.Delete) != 0 {
-		e.Delete = true
-		e.Columns = value.Delete
+		e.PreColumns = jsonColumns2SinkColumns(value.Delete)
 	} else {
-		e.Delete = false
-		e.Columns = value.Update
+		e.Columns = jsonColumns2SinkColumns(value.Update)
+		e.PreColumns = jsonColumns2SinkColumns(value.PreColumns)
 	}
 	return e
 }
@@ -156,8 +273,8 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 	key := &mqMessageKey{
 		Ts:     e.CommitTs,
-		Schema: e.Schema,
-		Table:  e.Table,
+		Schema: e.TableInfo.Schema,
+		Table:  e.TableInfo.Table,
 		Type:   model.MqMessageTypeDDL,
 	}
 	value := &mqMessageDDL{
@@ -169,11 +286,12 @@ func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 
 func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
+	e.TableInfo = new(model.SimpleTableInfo)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
-	e.Table = key.Table
-	e.Schema = key.Schema
+	e.TableInfo.Table = key.Table
+	e.TableInfo.Schema = key.Schema
 	e.Type = value.Type
 	e.Query = value.Query
 	return e
@@ -181,16 +299,34 @@ func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent
 
 // JSONEventBatchEncoder encodes the events into the byte of a batch into.
 type JSONEventBatchEncoder struct {
-	keyBuf   *bytes.Buffer
-	valueBuf *bytes.Buffer
+	// TODO remove deprecated fields
+	keyBuf            *bytes.Buffer // Deprecated: only used for MixedBuild for now
+	valueBuf          *bytes.Buffer // Deprecated: only used for MixedBuild for now
+	supportMixedBuild bool          // TODO decouple this out
+
+	messageBuf   []*MQMessage
+	curBatchSize int
+	// configs
+	maxKafkaMessageSize int
+	maxBatchSize        int
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+// SetMixedBuildSupport is used by CDC Log
+func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
+	d.supportMixedBuild = enabled
+}
+
+// AppendResolvedEvent is no-op
+func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+	return EncoderNoOperation, nil
+}
+
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -198,23 +334,37 @@ func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], 0)
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
+		d.valueBuf.Write(valueLenByte[:])
+		return nil, nil
+	}
 
-	d.valueBuf.Write(valueLenByte[:])
-	return nil
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
+
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	return ret, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -222,24 +372,50 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
 
-	d.valueBuf.Write(valueLenByte[:])
-	d.valueBuf.Write(value)
-	return nil
+		d.valueBuf.Write(valueLenByte[:])
+		d.valueBuf.Write(value)
+	} else {
+		if len(d.messageBuf) == 0 ||
+			d.curBatchSize >= d.maxBatchSize ||
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
+
+			versionHead := make([]byte, 8)
+			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
+
+			d.messageBuf = append(d.messageBuf, NewMQMessage(versionHead, nil, 0))
+			d.curBatchSize = 0
+		}
+
+		message := d.messageBuf[len(d.messageBuf)-1]
+		message.Key = append(message.Key, keyLenByte[:]...)
+		message.Key = append(message.Key, key...)
+		message.Value = append(message.Value, valueLenByte[:]...)
+		message.Value = append(message.Value, value...)
+
+		if message.Length() > d.maxKafkaMessageSize {
+			// `len(d.messageBuf) == 1` is implied
+			log.Warn("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
+				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
+		}
+		d.curBatchSize++
+	}
+	return EncoderNoOperation, nil
 }
 
-// AppendDDLEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+// EncodeDDLEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	keyMsg, valueMsg := ddlEventtoMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -247,22 +423,119 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
+		d.valueBuf.Write(valueLenByte[:])
+		d.valueBuf.Write(value)
+		return nil, nil
+	}
 
-	d.valueBuf.Write(valueLenByte[:])
-	d.valueBuf.Write(value)
-	return nil
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
+
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+	valueBuf.Write(value)
+
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs)
+	return ret, nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) Build() (key []byte, value []byte) {
-	return d.keyBuf.Bytes(), d.valueBuf.Bytes()
+func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
+	if d.supportMixedBuild {
+		if d.valueBuf.Len() == 0 {
+			return nil
+		}
+		ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+		return []*MQMessage{ret}
+	}
+
+	ret := d.messageBuf
+	d.messageBuf = make([]*MQMessage, 0)
+	return ret
+}
+
+// MixedBuild implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) MixedBuild(withVersion bool) []byte {
+	if !d.supportMixedBuild {
+		log.Panic("mixedBuildSupport not enabled!")
+		return nil
+	}
+	keyBytes := d.keyBuf.Bytes()
+	valueBytes := d.valueBuf.Bytes()
+	mixedBytes := make([]byte, len(keyBytes)+len(valueBytes))
+
+	index := uint64(0)
+	keyIndex := uint64(0)
+	valueIndex := uint64(0)
+
+	if withVersion {
+		// the first 8 bytes is the version, we should copy directly
+		// then skip 8 bytes for next round key value parse
+		copy(mixedBytes[:8], keyBytes[:8])
+		index = uint64(8)    // skip version
+		keyIndex = uint64(8) // skip version
+	}
+
+	for {
+		if keyIndex >= uint64(len(keyBytes)) {
+			break
+		}
+		keyLen := binary.BigEndian.Uint64(keyBytes[keyIndex : keyIndex+8])
+		offset := keyLen + 8
+		copy(mixedBytes[index:index+offset], keyBytes[keyIndex:keyIndex+offset])
+		keyIndex += offset
+		index += offset
+
+		valueLen := binary.BigEndian.Uint64(valueBytes[valueIndex : valueIndex+8])
+		offset = valueLen + 8
+		copy(mixedBytes[index:index+offset], valueBytes[valueIndex:valueIndex+offset])
+		valueIndex += offset
+		index += offset
+	}
+	return mixedBytes
 }
 
 // Size implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Size() int {
 	return d.keyBuf.Len() + d.valueBuf.Len()
+}
+
+// Reset implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) Reset() {
+	d.keyBuf.Reset()
+	d.valueBuf.Reset()
+}
+
+// SetParams reads relevant parameters for Open Protocol
+func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
+	var err error
+	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
+		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
+		if err != nil {
+			// TODO add error code
+			return errors.Trace(err)
+		}
+	} else {
+		d.maxKafkaMessageSize = DefaultMaxMessageBytes
+	}
+
+	if maxBatchSize, ok := params["max-batch-size"]; ok {
+		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
+		if err != nil {
+			// TODO add error code
+			return errors.Trace(err)
+		}
+	} else {
+		d.maxBatchSize = 4096
+	}
+	return nil
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
@@ -275,6 +548,106 @@ func NewJSONEventBatchEncoder() EventBatchEncoder {
 	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
 	batch.keyBuf.Write(versionByte[:])
 	return batch
+}
+
+// JSONEventBatchMixedDecoder decodes the byte of a batch into the original messages.
+type JSONEventBatchMixedDecoder struct {
+	mixedBytes []byte
+	nextKey    *mqMessageKey
+	nextKeyLen uint64
+}
+
+// HasNext implements the EventBatchDecoder interface
+func (b *JSONEventBatchMixedDecoder) HasNext() (model.MqMessageType, bool, error) {
+	if !b.hasNext() {
+		return 0, false, nil
+	}
+	if err := b.decodeNextKey(); err != nil {
+		return 0, false, err
+	}
+	return b.nextKey.Type, true, nil
+}
+
+// NextResolvedEvent implements the EventBatchDecoder interface
+func (b *JSONEventBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
+	if b.nextKey == nil {
+		if err := b.decodeNextKey(); err != nil {
+			return 0, err
+		}
+	}
+	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
+	if b.nextKey.Type != model.MqMessageTypeResolved {
+		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
+	}
+	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
+	b.mixedBytes = b.mixedBytes[valueLen+8:]
+	resolvedTs := b.nextKey.Ts
+	b.nextKey = nil
+	return resolvedTs, nil
+}
+
+// NextRowChangedEvent implements the EventBatchDecoder interface
+func (b *JSONEventBatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+	if b.nextKey == nil {
+		if err := b.decodeNextKey(); err != nil {
+			return nil, err
+		}
+	}
+	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
+	if b.nextKey.Type != model.MqMessageTypeRow {
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
+	}
+	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
+	value := b.mixedBytes[8 : valueLen+8]
+	b.mixedBytes = b.mixedBytes[valueLen+8:]
+	rowMsg := new(mqMessageRow)
+	if err := rowMsg.Decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+	rowEvent := mqMessageToRowEvent(b.nextKey, rowMsg)
+	b.nextKey = nil
+	return rowEvent, nil
+}
+
+// NextDDLEvent implements the EventBatchDecoder interface
+func (b *JSONEventBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+	if b.nextKey == nil {
+		if err := b.decodeNextKey(); err != nil {
+			return nil, err
+		}
+	}
+	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
+	if b.nextKey.Type != model.MqMessageTypeDDL {
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
+	}
+	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
+	value := b.mixedBytes[8 : valueLen+8]
+	b.mixedBytes = b.mixedBytes[valueLen+8:]
+	ddlMsg := new(mqMessageDDL)
+	if err := ddlMsg.Decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+	ddlEvent := mqMessageToDDLEvent(b.nextKey, ddlMsg)
+	b.nextKey = nil
+	return ddlEvent, nil
+}
+
+func (b *JSONEventBatchMixedDecoder) hasNext() bool {
+	return len(b.mixedBytes) > 0
+}
+
+func (b *JSONEventBatchMixedDecoder) decodeNextKey() error {
+	keyLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
+	key := b.mixedBytes[8 : keyLen+8]
+	// drop value bytes
+	msgKey := new(mqMessageKey)
+	err := msgKey.Decode(key)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	b.nextKey = msgKey
+	b.nextKeyLen = keyLen
+	return nil
 }
 
 // JSONEventBatchDecoder decodes the byte of a batch into the original messages.
@@ -305,7 +678,7 @@ func (b *JSONEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeResolved {
-		return 0, errors.NotFoundf("not found resolved event message")
+		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	b.valueBytes = b.valueBytes[valueLen+8:]
@@ -323,7 +696,7 @@ func (b *JSONEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, e
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeRow {
-		return nil, errors.NotFoundf("not found row event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -346,7 +719,7 @@ func (b *JSONEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeDDL {
-		return nil, errors.NotFoundf("not found ddl event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -382,7 +755,13 @@ func NewJSONEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, erro
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != BatchVersion1 {
-		return nil, errors.New("unexpected key format version")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("unexpected key format version")
+	}
+	// if only decode one byte slice, we choose MixedDecoder
+	if len(key) > 0 && len(value) == 0 {
+		return &JSONEventBatchMixedDecoder{
+			mixedBytes: key,
+		}, nil
 	}
 	return &JSONEventBatchDecoder{
 		keyBytes:   key,

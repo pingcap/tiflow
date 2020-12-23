@@ -17,9 +17,14 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 )
 
+type pendingValue struct {
+	value    []byte
+	oldValue []byte
+}
+
 type matcher struct {
 	// TODO : clear the single prewrite
-	unmatchedValue map[matchKey][]byte
+	unmatchedValue map[matchKey]*pendingValue
 	cachedCommit   []*cdcpb.Event_Row
 }
 
@@ -34,22 +39,26 @@ func newMatchKey(row *cdcpb.Event_Row) matchKey {
 
 func newMatcher() *matcher {
 	return &matcher{
-		unmatchedValue: make(map[matchKey][]byte),
+		unmatchedValue: make(map[matchKey]*pendingValue),
 	}
 }
 
 func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	key := newMatchKey(row)
 	value := row.GetValue()
-	// tikv may send a prewrite event with empty value
+	oldvalue := row.GetOldValue()
+	// tikv may send a prewrite event with empty value (txn heartbeat)
 	// here we need to avoid the invalid prewrite event overwrite the value
 	if _, exist := m.unmatchedValue[key]; exist && len(value) == 0 {
 		return
 	}
-	m.unmatchedValue[key] = value
+	m.unmatchedValue[key] = &pendingValue{
+		value:    value,
+		oldValue: oldvalue,
+	}
 }
 
-func (m *matcher) matchRow(row *cdcpb.Event_Row) ([]byte, bool) {
+func (m *matcher) matchRow(row *cdcpb.Event_Row) (*pendingValue, bool) {
 	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
 		delete(m.unmatchedValue, newMatchKey(row))
 		return value, true

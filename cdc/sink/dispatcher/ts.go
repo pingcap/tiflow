@@ -19,6 +19,12 @@ type tsDispatcher struct {
 	partitionNum int32
 }
 
+func newTsDispatcher(partitionNum int32) *tsDispatcher {
+	return &tsDispatcher{
+		partitionNum: partitionNum,
+	}
+}
+
 func (t *tsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	return int32(row.CommitTs % uint64(t.partitionNum))
 }

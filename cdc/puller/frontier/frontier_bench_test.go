@@ -40,16 +40,16 @@ func BenchmarkSpanFrontier(b *testing.B) {
 		n := test.n
 
 		b.Run(test.name, func(b *testing.B) {
-			spans := make([]regionspan.Span, 0, n)
+			spans := make([]regionspan.ComparableSpan, 0, n)
 			for i := 0; i < n; i++ {
-				span := regionspan.Span{
+				span := regionspan.ComparableSpan{
 					Start: toCMPBytes(i),
 					End:   toCMPBytes(i + 1),
 				}
 				spans = append(spans, span)
 			}
 
-			f := NewFrontier(spans...)
+			f := NewFrontier(0, spans...)
 
 			b.ResetTimer()
 
@@ -78,20 +78,20 @@ func BenchmarkSpanFrontierOverlap(b *testing.B) {
 
 		for _, step := range steps {
 			b.Run(fmt.Sprintf("%s_%d", test.name, step), func(b *testing.B) {
-				spans := make([]regionspan.Span, 0, n)
-				forward := make([]regionspan.Span, 0, n)
+				spans := make([]regionspan.ComparableSpan, 0, n)
+				forward := make([]regionspan.ComparableSpan, 0, n)
 				for i := 0; i < n; i++ {
-					spans = append(spans, regionspan.Span{
+					spans = append(spans, regionspan.ComparableSpan{
 						Start: toCMPBytes(i),
 						End:   toCMPBytes(i + 1),
 					})
-					forward = append(forward, regionspan.Span{
+					forward = append(forward, regionspan.ComparableSpan{
 						Start: toCMPBytes(i),
 						End:   toCMPBytes(i + step),
 					})
 				}
 
-				f := NewFrontier(spans...)
+				f := NewFrontier(0, spans...)
 
 				b.ResetTimer()
 

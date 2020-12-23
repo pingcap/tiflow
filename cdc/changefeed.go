@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -26,9 +27,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
+	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
@@ -55,9 +58,15 @@ type ChangeFeedRWriter interface {
 	// mapping from captureID to TaskStatus
 	GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error)
 
+	// RemoveAllTaskStatus removes all task status of a changefeed
+	RemoveAllTaskStatus(ctx context.Context, changefeedID string) error
+
 	// GetAllTaskPositions queries all task positions of a changefeed, and returns a map
 	// mapping from captureID to TaskPositions
 	GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error)
+
+	// RemoveAllTaskPositions removes all task partitions of a changefeed
+	RemoveAllTaskPositions(ctx context.Context, changefeedID string) error
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error)
@@ -70,14 +79,20 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema        *entry.SingleSchemaSnapshot
-	ddlState      model.ChangeFeedDDLState
-	targetTs      uint64
-	taskStatus    model.ProcessorsInfos
-	taskPositions map[model.CaptureID]*model.TaskPosition
-	filter        *filter.Filter
-	sink          sink.Sink
-	scheduler     scheduler.Scheduler
+	schema           *entry.SingleSchemaSnapshot
+	ddlState         model.ChangeFeedDDLState
+	targetTs         uint64
+	ddlTs            uint64
+	syncpointMutex   sync.Mutex
+	updateResolvedTs bool
+	startTimer       chan bool
+	syncpointStore   sink.SyncpointStore
+	syncCancel       context.CancelFunc
+	taskStatus       model.ProcessorsInfos
+	taskPositions    map[model.CaptureID]*model.TaskPosition
+	filter           *filter.Filter
+	sink             sink.Sink
+	scheduler        scheduler.Scheduler
 
 	cyclicEnabled bool
 
@@ -87,16 +102,21 @@ type changeFeed struct {
 	ddlExecutedTs uint64
 
 	schemas map[model.SchemaID]tableIDMap
-	tables  map[model.TableID]entry.TableName
+	tables  map[model.TableID]model.TableName
 	// value of partitions is the slice of partitions ID.
-	partitions    map[model.TableID][]int64
-	orphanTables  map[model.TableID]model.Ts
-	toCleanTables map[model.TableID]model.Ts
-	moveTableJobs map[model.TableID]*model.MoveTableJob
+	partitions         map[model.TableID][]int64
+	orphanTables       map[model.TableID]model.Ts
+	toCleanTables      map[model.TableID]model.Ts
+	moveTableJobs      map[model.TableID]*model.MoveTableJob
+	manualMoveCommands []*model.MoveTableJob
+	rebalanceNextTick  bool
 
-	lastRebanlanceTime time.Time
+	lastRebalanceTime time.Time
 
 	etcdCli kv.CDCEtcdClient
+
+	// context cancel function for all internal goroutines
+	cancel context.CancelFunc
 }
 
 // String implements fmt.Stringer interface.
@@ -136,32 +156,37 @@ func (c *changeFeed) dropSchema(schemaID model.SchemaID, targetTs model.Ts) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs model.Ts, table entry.TableName, tblInfo *timodel.TableInfo) {
-	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
+func (c *changeFeed) addTable(tblInfo *model.TableInfo, targetTs model.Ts) {
+	if c.filter.ShouldIgnoreTable(tblInfo.TableName.Schema, tblInfo.TableName.Table) {
 		return
 	}
-	if c.cyclicEnabled && cyclic.IsMarkTable(table.Schema, table.Table) {
-		return
-	}
-
-	if _, ok := c.tables[tid]; ok {
-		log.Warn("add table already exists", zap.Int64("tableID", tid), zap.Stringer("table", table))
+	if c.cyclicEnabled && mark.IsMarkTable(tblInfo.TableName.Schema, tblInfo.TableName.Table) {
 		return
 	}
 
-	if _, ok := c.schemas[sid]; !ok {
-		c.schemas[sid] = make(tableIDMap)
+	if _, ok := c.tables[tblInfo.ID]; ok {
+		log.Warn("add table already exists", zap.Int64("tableID", tblInfo.ID), zap.Stringer("table", tblInfo.TableName))
+		return
 	}
-	c.schemas[sid][tid] = struct{}{}
-	c.tables[tid] = table
+
+	if !tblInfo.IsEligible(c.info.Config.ForceReplicate) {
+		log.Warn("skip ineligible table", zap.Int64("tid", tblInfo.ID), zap.Stringer("table", tblInfo.TableName))
+		return
+	}
+
+	if _, ok := c.schemas[tblInfo.SchemaID]; !ok {
+		c.schemas[tblInfo.SchemaID] = make(tableIDMap)
+	}
+	c.schemas[tblInfo.SchemaID][tblInfo.ID] = struct{}{}
+	c.tables[tblInfo.ID] = tblInfo.TableName
 	if pi := tblInfo.GetPartitionInfo(); pi != nil {
-		delete(c.partitions, tid)
+		delete(c.partitions, tblInfo.ID)
 		for _, partition := range pi.Definitions {
-			c.partitions[tid] = append(c.partitions[tid], partition.ID)
-			c.orphanTables[partition.ID] = startTs
+			c.partitions[tblInfo.ID] = append(c.partitions[tblInfo.ID], partition.ID)
+			c.orphanTables[partition.ID] = targetTs
 		}
 	} else {
-		c.orphanTables[tid] = startTs
+		c.orphanTables[tblInfo.ID] = targetTs
 	}
 }
 
@@ -189,12 +214,60 @@ func (c *changeFeed) removeTable(sid model.SchemaID, tid model.TableID, targetTs
 	}
 }
 
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool) error {
+func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64) {
+	tid := tblInfo.ID
+	partitionsID, ok := c.partitions[tid]
+	if !ok || len(partitionsID) == 0 {
+		return
+	}
+	oldIDs := make(map[int64]struct{}, len(partitionsID))
+	for _, pid := range partitionsID {
+		oldIDs[pid] = struct{}{}
+	}
+
+	pi := tblInfo.GetPartitionInfo()
+	if pi == nil {
+		return
+	}
+	newPartitionIDs := make([]int64, 0, len(pi.Definitions))
+	for _, partition := range pi.Definitions {
+		pid := partition.ID
+		_, ok := c.orphanTables[pid]
+		if !ok {
+			// new partition.
+			c.orphanTables[pid] = startTs
+		}
+		delete(oldIDs, partition.ID)
+		newPartitionIDs = append(newPartitionIDs, partition.ID)
+	}
+	// update the table partition IDs.
+	c.partitions[tid] = newPartitionIDs
+
+	// drop partition.
+	for pid := range oldIDs {
+		if _, ok := c.orphanTables[pid]; ok {
+			delete(c.orphanTables, pid)
+		} else {
+			c.toCleanTables[pid] = startTs
+		}
+	}
+}
+
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebalanceNow bool,
+	manualMoveCommands []*model.MoveTableJob) error {
 	err := c.balanceOrphanTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.rebanlanceTables(ctx, captures, rebanlanceNow)
+	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
+	if rebalanceNow {
+		c.rebalanceNextTick = true
+	}
+	err = c.handleManualMoveTableJobs(ctx, captures)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.rebalanceTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -210,7 +283,6 @@ func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID model.TableID)
 			}
 		}
 	}
-
 	return "", nil, false
 }
 
@@ -218,76 +290,78 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	if len(captures) == 0 {
 		return nil
 	}
-	for _, status := range c.taskStatus {
-		if status.SomeOperationsUnapplied() {
-			return nil
-		}
-	}
 
-	newTaskStatus := make(map[model.CaptureID]*model.TaskStatus, len(captures))
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	cleanedTables := make(map[model.TableID]struct{})
 	addedTables := make(map[model.TableID]struct{})
+	updateFuncs := make(map[model.CaptureID][]kv.UpdateTaskStatusFunc)
 	for cid := range captures {
 		captureIDs[cid] = struct{}{}
 	}
 	c.scheduler.AlignCapture(captureIDs)
 
 	for id, targetTs := range c.toCleanTables {
-		captureID, taskStatus, ok := findTaskStatusWithTable(c.taskStatus, id)
+		captureID, _, ok := findTaskStatusWithTable(c.taskStatus, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Int64("id", id))
 			delete(c.toCleanTables, id)
 			continue
 		}
-		status, exist := newTaskStatus[captureID]
-		if !exist {
-			status = taskStatus.Clone()
-		}
-		status.RemoveTable(id, targetTs)
-		newTaskStatus[captureID] = status
+
+		id := id
+		targetTs := targetTs
+		updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
+			status.RemoveTable(id, targetTs)
+			return true, nil
+		})
 		cleanedTables[id] = struct{}{}
 	}
 
 	operations := c.scheduler.DistributeTables(c.orphanTables)
 	for captureID, operation := range operations {
-		status, exist := newTaskStatus[captureID]
-		if !exist {
-			taskStatus := c.taskStatus[captureID]
-			if taskStatus == nil {
-				status = new(model.TaskStatus)
-			} else {
-				status = taskStatus.Clone()
-			}
-			newTaskStatus[captureID] = status
-		}
+		schemaSnapshot := c.schema
 		for tableID, op := range operation {
 			var orphanMarkTableID model.TableID
+			tableName, found := schemaSnapshot.GetTableNameByID(tableID)
+			if !found {
+				log.Warn("balance orphan tables delay, table not found",
+					zap.String("changefeed", c.id),
+					zap.Int64("tableID", tableID))
+				continue
+			}
 			if c.cyclicEnabled {
-				schemaSnapshot := c.schema
-				tableName, found := schemaSnapshot.GetTableNameByID(tableID)
-				if !found {
-					continue
-				}
-				markTableSchameName, markTableTableName := cyclic.MarkTableName(tableName.Schema, tableName.Table)
+				markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
 					// Mark table is not created yet, skip and wait.
-					log.Info("balance table info delay, wait mark table",
+					log.Info("balance orphan tables delay, wait mark table",
 						zap.String("changefeed", c.id),
 						zap.Int64("tableID", tableID),
 						zap.String("markTableName", markTableTableName))
 					continue
 				}
 			}
-			status.AddTable(tableID, &model.TableReplicaInfo{StartTs: op.BoundaryTs, MarkTableID: orphanMarkTableID}, op.BoundaryTs)
+			info := &model.TableReplicaInfo{
+				StartTs:     op.BoundaryTs,
+				MarkTableID: orphanMarkTableID,
+			}
+			tableID := tableID
+			op := op
+			updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
+				status.AddTable(tableID, info, op.BoundaryTs)
+				return true, nil
+			})
 			addedTables[tableID] = struct{}{}
 		}
 	}
 
-	err := c.updateTaskStatus(ctx, newTaskStatus)
-	if err != nil {
-		return errors.Trace(err)
+	for captureID, funcs := range updateFuncs {
+		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, funcs...)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.taskStatus[captureID] = newStatus.Clone()
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", newStatus))
 	}
 
 	for tableID := range cleanedTables {
@@ -302,24 +376,66 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 
 func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.CaptureID]*model.TaskStatus) error {
 	for captureID, status := range taskStatus {
-		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(taskStatus *model.TaskStatus) error {
+		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			if taskStatus.SomeOperationsUnapplied() {
-				return errors.Errorf("waiting to processor handle the operation finished time out")
+				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
+				return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
 			}
 			taskStatus.Tables = status.Tables
 			taskStatus.Operation = status.Operation
-			return nil
+			return true, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
-		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", status))
+		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", status))
 	}
 	return nil
 }
 
-func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo, rebanlanceNow bool) error {
+func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+	if len(captures) == 0 {
+		return nil
+	}
+	if len(c.moveTableJobs) > 0 {
+		return nil
+	}
+	for len(c.manualMoveCommands) > 0 {
+		moveJob := c.manualMoveCommands[0]
+		if _, exist := c.moveTableJobs[moveJob.TableID]; exist {
+			break
+		}
+		c.manualMoveCommands = c.manualMoveCommands[1:]
+		moveJob.From = ""
+		for captureID, taskStatus := range c.taskStatus {
+			if _, exist := taskStatus.Tables[moveJob.TableID]; exist {
+				moveJob.From = captureID
+				break
+			}
+		}
+		if moveJob.From == "" {
+			log.Warn("invalid manual move job, the table is not found", zap.Reflect("job", moveJob))
+			continue
+		}
+		if moveJob.To == moveJob.From {
+			log.Warn("invalid manual move job, the table is already exists in the target capture", zap.Reflect("job", moveJob))
+			continue
+		}
+		if _, exist := captures[moveJob.To]; !exist {
+			log.Warn("invalid manual move job, the target capture is not found", zap.Reflect("job", moveJob))
+			continue
+		}
+		if c.moveTableJobs == nil {
+			c.moveTableJobs = make(map[model.TableID]*model.MoveTableJob)
+		}
+		c.moveTableJobs[moveJob.TableID] = moveJob
+		log.Info("received the manual move table job", zap.Reflect("job", moveJob))
+	}
+	return nil
+}
+
+func (c *changeFeed) rebalanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	if len(captures) == 0 {
 		return nil
 	}
@@ -331,11 +447,14 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 			return nil
 		}
 	}
+	timeToRebalance := time.Since(c.lastRebalanceTime) > time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute
+	timeToRebalance = timeToRebalance && c.info.Config.Scheduler.PollingTime > 0
 
-	if !rebanlanceNow && time.Since(c.lastRebanlanceTime) < 10*time.Minute {
+	if !c.rebalanceNextTick && !timeToRebalance {
 		return nil
 	}
-	c.lastRebanlanceTime = time.Now()
+	c.lastRebalanceTime = time.Now()
+	c.rebalanceNextTick = false
 
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	for cid := range captures {
@@ -367,38 +486,57 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 		}
 	}
 	newTaskStatus := make(map[model.CaptureID]*model.TaskStatus, len(captures))
-	cloneStatus := func(captureID model.CaptureID) *model.TaskStatus {
+	cloneStatus := func(captureID model.CaptureID) (*model.TaskStatus, bool) {
 		status, exist := newTaskStatus[captureID]
 		if !exist {
 			taskStatus := c.taskStatus[captureID]
 			if taskStatus == nil {
+				if _, exist := captures[captureID]; !exist {
+					return nil, false
+				}
 				status = new(model.TaskStatus)
 			} else {
 				status = taskStatus.Clone()
 			}
 			newTaskStatus[captureID] = status
 		}
-		return status
+		return status, true
 	}
 	for tableID, job := range c.moveTableJobs {
 		switch job.Status {
 		case model.MoveTableStatusNone:
 			// delete table from original capture
-			status := cloneStatus(job.From)
+			status, exist := cloneStatus(job.From)
+			if !exist {
+				delete(c.moveTableJobs, tableID)
+				log.Warn("ignored the move job, the source capture is not found", zap.Reflect("job", job))
+				continue
+			}
 			replicaInfo, exist := status.RemoveTable(tableID, c.status.CheckpointTs)
 			if !exist {
 				delete(c.moveTableJobs, tableID)
+				log.Warn("ignored the move job, the table is not exist in the source capture", zap.Reflect("job", job))
 				continue
 			}
 			replicaInfo.StartTs = c.status.CheckpointTs
 			job.TableReplicaInfo = replicaInfo
 			job.Status = model.MoveTableStatusDeleted
+			log.Info("handle the move job, remove table from the source capture", zap.Reflect("job", job))
 		case model.MoveTableStatusDeleted:
 			// add table to target capture
-			status := cloneStatus(job.To)
-			status.AddTable(tableID, job.TableReplicaInfo, job.TableReplicaInfo.StartTs)
+			status, exist := cloneStatus(job.To)
+			replicaInfo := job.TableReplicaInfo.Clone()
+			replicaInfo.StartTs = c.status.CheckpointTs
+			if !exist {
+				// the target capture is not exist, add table to orphanTables.
+				c.orphanTables[tableID] = replicaInfo.StartTs
+				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
+				continue
+			}
+			status.AddTable(tableID, replicaInfo, c.status.CheckpointTs)
 			job.Status = model.MoveTableStatusFinished
 			delete(c.moveTableJobs, tableID)
+			log.Info("handle the move job, add table to the target capture", zap.Reflect("job", job))
 		}
 	}
 	err := c.updateTaskStatus(ctx, newTaskStatus)
@@ -424,18 +562,18 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			c.dropSchema(schemaID, job.BinlogInfo.FinishedTS)
 		case timodel.ActionCreateTable, timodel.ActionRecoverTable:
 			addID := job.BinlogInfo.TableInfo.ID
-			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			table, exist := c.schema.TableByID(addID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", addID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
 			}
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
+			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionDropTable:
 			dropID := job.TableID
 			c.removeTable(schemaID, dropID, job.BinlogInfo.FinishedTS)
 		case timodel.ActionRenameTable:
 			tableName, exist := c.schema.GetTableNameByID(job.TableID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", job.TableID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(job.TableID)
 			}
 			// no id change just update name
 			c.tables[job.TableID] = tableName
@@ -443,12 +581,14 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			dropID := job.TableID
 			c.removeTable(schemaID, dropID, job.BinlogInfo.FinishedTS)
 
-			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
-			if !exist {
-				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
-			}
 			addID := job.BinlogInfo.TableInfo.ID
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
+			table, exist := c.schema.TableByID(addID)
+			if !exist {
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
+			}
+			c.addTable(table, job.BinlogInfo.FinishedTS)
+		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
+			c.updatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
 		}
 		return nil
 	}()
@@ -467,7 +607,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 	if len(c.ddlJobHistory) == 0 {
-		log.Fatal("ddl job history can not be empty in changefeed when should to execute DDL")
+		log.Panic("ddl job history can not be empty in changefeed when should to execute DDL")
 	}
 	todoDDLJob := c.ddlJobHistory[0]
 
@@ -489,7 +629,12 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.schema.HandleDDL(todoDDLJob)
+	ddlEvent := new(model.DDLEvent)
+	preTableInfo, err := c.schema.PreTableInfo(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.schema.HandleDDL(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -498,8 +643,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 
-	ddlEvent := new(model.DDLEvent)
-	ddlEvent.FromJob(todoDDLJob)
+	ddlEvent.FromJob(todoDDLJob, preTableInfo)
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
@@ -510,6 +654,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 	if skip {
+		log.Info("ddl job ignored", zap.String("changefeed", c.id), zap.Reflect("job", todoDDLJob))
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedSyncDML
@@ -520,44 +665,114 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if err != nil {
 		return errors.Trace(err)
 	}
+	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
+		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+		// If DDL executing failed, pause the changefeed and print log, rather
+		// than return an error and break the running of this owner.
+		if err != nil {
+			if cerror.ErrDDLEventIgnored.NotEqual(err) {
+				c.ddlState = model.ChangeFeedDDLExecuteFailed
+				log.Error("Execute DDL failed",
+					zap.String("ChangeFeedID", c.id),
+					zap.Error(err),
+					zap.Reflect("ddlJob", todoDDLJob))
+				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
+			}
+		} else {
+			executed = true
+		}
 	}
-	// If DDL executing failed, pause the changefeed and print log, rather
-	// than return an error and break the running of this owner.
-	if err != nil {
-		c.ddlState = model.ChangeFeedDDLExecuteFailed
-		log.Error("Execute DDL failed",
-			zap.String("ChangeFeedID", c.id),
-			zap.Error(err),
-			zap.Reflect("ddlJob", todoDDLJob))
-		return errors.Trace(model.ErrExecDDLFailed)
+	if executed {
+		log.Info("Execute DDL succeeded", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+	} else {
+		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
 	}
-	log.Info("Execute DDL succeeded",
-		zap.String("ChangeFeedID", c.id),
-		zap.Reflect("ddlJob", todoDDLJob))
 
-	if c.ddlState != model.ChangeFeedExecDDL {
-		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-			zap.String("ChangeFeedID", c.id),
-			zap.String("ChangeFeedDDLState", c.ddlState.String()))
-	}
 	c.ddlJobHistory = c.ddlJobHistory[1:]
 	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }
 
+// handleSyncPoint record every syncpoint to downstream if the syncpoint feature is enable
+func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
+	// sync-point on
+	if c.info.SyncPointEnabled {
+		c.syncpointMutex.Lock()
+		defer c.syncpointMutex.Unlock()
+		// ticker and ddl can trigger syncpoint record at the same time, only record once
+		syncpointRecorded := false
+		// ResolvedTs == CheckpointTs means a syncpoint reached;
+		// !c.updateResolvedTs means the syncpoint is setted by ticker;
+		// c.ddlTs == 0 means no DDL wait to exec and we can sink the syncpoint record securely ( c.ddlTs != 0 means some DDL should be sink to downstream and this syncpoint is fake ).
+		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
+			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
+			c.updateResolvedTs = true
+			err := c.syncpointStore.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
+			if err != nil {
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+				return err
+			}
+			syncpointRecorded = true
+		}
+
+		if c.status.ResolvedTs == 0 {
+			c.updateResolvedTs = true
+		}
+
+		// ResolvedTs == CheckpointTs means a syncpoint reached;
+		// ResolvedTs == ddlTs means the syncpoint is setted by DDL;
+		// ddlTs <= ddlExecutedTs means the DDL has been execed.
+		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs && c.ddlTs <= c.ddlExecutedTs {
+			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
+			if !syncpointRecorded {
+				err := c.syncpointStore.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
+				if err != nil {
+					log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+					return err
+				}
+			}
+			c.ddlTs = 0
+		}
+	}
+	return nil
+}
+
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
+		log.Debug("skip update resolved ts", zap.String("ddlState", c.ddlState.String()))
 		return nil
 	}
 
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
 
+	// prevMinResolvedTs and prevMinCheckpointTs are used for debug
+	prevMinResolvedTs := c.targetTs
+	prevMinCheckpointTs := c.targetTs
+	checkUpdateTs := func() {
+		if prevMinCheckpointTs != minCheckpointTs {
+			log.L().WithOptions(zap.AddCallerSkip(1)).Debug("min checkpoint updated",
+				zap.Uint64("prevMinCheckpointTs", prevMinCheckpointTs),
+				zap.Uint64("minCheckpointTs", minCheckpointTs))
+			prevMinCheckpointTs = minCheckpointTs
+		}
+		if prevMinResolvedTs != minResolvedTs {
+			log.L().WithOptions(zap.AddCallerSkip(1)).Debug("min resolved updated",
+				zap.Uint64("prevMinResolvedTs", prevMinResolvedTs),
+				zap.Uint64("minResolvedTs", minResolvedTs))
+			prevMinResolvedTs = minResolvedTs
+		}
+	}
+
 	if len(c.taskPositions) < len(c.taskStatus) {
+		log.Debug("skip update resolved ts",
+			zap.Int("taskPositions", len(c.taskPositions)),
+			zap.Int("taskStatus", len(c.taskStatus)))
 		return nil
 	}
 	if len(c.taskPositions) == 0 {
@@ -574,6 +789,8 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			}
 		}
 	}
+	prevMinCheckpointTs = minCheckpointTs
+	prevMinResolvedTs = minResolvedTs
 
 	for captureID, status := range c.taskStatus {
 		appliedTs := status.AppliedTs()
@@ -584,9 +801,13 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = appliedTs
 		}
 		if appliedTs != math.MaxUint64 {
-			log.Info("some operation is still unapplied", zap.String("captureID", captureID), zap.Uint64("appliedTs", appliedTs), zap.Stringer("status", status))
+			log.Debug("some operation is still unapplied",
+				zap.String("capture-id", captureID),
+				zap.Uint64("appliedTs", appliedTs),
+				zap.Stringer("status", status))
 		}
 	}
+	checkUpdateTs()
 
 	for _, startTs := range c.orphanTables {
 		if minCheckpointTs > startTs {
@@ -596,6 +817,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = startTs
 		}
 	}
+	checkUpdateTs()
 
 	for _, targetTs := range c.toCleanTables {
 		if minCheckpointTs > targetTs {
@@ -605,6 +827,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = targetTs
 		}
 	}
+	checkUpdateTs()
 
 	// if minResolvedTs is greater than ddlResolvedTs,
 	// it means that ddlJobHistory in memory is not intact,
@@ -619,25 +842,36 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = c.ddlResolvedTs
 		}
 	}
+	checkUpdateTs()
 
 	// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 	// we need to execute this ddl job
 	for len(c.ddlJobHistory) > 0 && c.ddlJobHistory[0].BinlogInfo.FinishedTS <= c.ddlExecutedTs {
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 	}
-	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].BinlogInfo.FinishedTS {
+	if len(c.ddlJobHistory) > 0 && minResolvedTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
+		c.ddlTs = minResolvedTs
 	}
 
 	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
 	if minCheckpointTs > minResolvedTs {
 		minCheckpointTs = minResolvedTs
 	}
+	checkUpdateTs()
 
 	var tsUpdated bool
 
-	if minResolvedTs > c.status.ResolvedTs {
+	// syncpoint on
+	if c.info.SyncPointEnabled {
+		c.syncpointMutex.Lock()
+		if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
+			c.status.ResolvedTs = minResolvedTs
+			tsUpdated = true
+		}
+		c.syncpointMutex.Unlock()
+	} else if minResolvedTs > c.status.ResolvedTs {
 		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
 	}
@@ -655,6 +889,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 		tsUpdated = true
 	}
+	checkUpdateTs()
 
 	if tsUpdated {
 		log.Debug("update changefeed", zap.String("id", c.id),
@@ -678,4 +913,54 @@ func (c *changeFeed) pullDDLJob() error {
 		c.ddlJobHistory = append(c.ddlJobHistory, ddl)
 	}
 	return nil
+}
+
+// startSyncPeriod start a timer for every changefeed to create sync point by time
+func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration) {
+	log.Debug("sync ticker start", zap.Duration("sync-interval", interval))
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(interval)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.syncpointMutex.Lock()
+				c.updateResolvedTs = false
+				c.syncpointMutex.Unlock()
+			}
+		}
+	}(ctx)
+}
+
+func (c *changeFeed) stopSyncPointTicker() {
+	if c.syncCancel != nil {
+		c.syncCancel()
+		c.syncCancel = nil
+	}
+}
+
+func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Duration) {
+	var syncCtx context.Context
+	syncCtx, c.syncCancel = context.WithCancel(ctx)
+	c.startSyncPeriod(syncCtx, interval)
+}
+
+func (c *changeFeed) Close() {
+	err := c.ddlHandler.Close()
+	if err != nil && errors.Cause(err) != context.Canceled {
+		log.Warn("failed to close ddl handler", zap.Error(err))
+	}
+	err = c.sink.Close()
+	if err != nil && errors.Cause(err) != context.Canceled {
+		log.Warn("failed to close owner sink", zap.Error(err))
+	}
+	if c.syncpointStore != nil {
+		err = c.syncpointStore.Close()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("failed to close owner sink", zap.Error(err))
+		}
+	}
+	c.cancel()
+	log.Info("changefeed closed", zap.String("id", c.id))
 }

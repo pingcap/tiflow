@@ -15,21 +15,22 @@ package puller
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -45,45 +46,62 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
+	IsInitialized() bool
 }
 
 type pullerImpl struct {
-	pdCli        pd.Client
-	kvStorage    tikv.Storage
-	checkpointTs uint64
-	spans        []regionspan.Span
-	buffer       *memBuffer
-	outputCh     chan *model.RawKVEntry
-	tsTracker    frontier.Frontier
-	resolvedTs   uint64
-	// needEncode represents whether we need to encode a key when checking it is in span
-	needEncode bool
+	pdCli          pd.Client
+	kvCli          kv.CDCKVClient
+	credential     *security.Credential
+	kvStorage      tikv.Storage
+	checkpointTs   uint64
+	spans          []regionspan.ComparableSpan
+	buffer         *memBuffer
+	outputCh       chan *model.RawKVEntry
+	tsTracker      frontier.Frontier
+	resolvedTs     uint64
+	initialized    int64
+	enableOldValue bool
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
 // and put into buf.
 func NewPuller(
+	ctx context.Context,
 	pdCli pd.Client,
+	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	needEncode bool,
 	limitter *BlurResourceLimitter,
-) *pullerImpl {
+	enableOldValue bool,
+) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
-		log.Fatal("can't create puller for non-tikv storage")
+		log.Panic("can't create puller for non-tikv storage")
 	}
+	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
+	for i := range spans {
+		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
+	}
+	// To make puller level resolved ts initialization distinguishable, we set
+	// the initial ts for frontier to 0. Once the puller level resolved ts
+	// initialized, the ts should advance to a non-zero value.
+	tsTracker := frontier.NewFrontier(0, comparableSpans...)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, credential)
 	p := &pullerImpl{
-		pdCli:        pdCli,
-		kvStorage:    tikvStorage,
-		checkpointTs: checkpointTs,
-		spans:        spans,
-		buffer:       makeMemBuffer(limitter),
-		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(spans...),
-		needEncode:   needEncode,
-		resolvedTs:   checkpointTs,
+		pdCli:          pdCli,
+		kvCli:          kvCli,
+		credential:     credential,
+		kvStorage:      tikvStorage,
+		checkpointTs:   checkpointTs,
+		spans:          comparableSpans,
+		buffer:         makeMemBuffer(limitter),
+		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:      tsTracker,
+		resolvedTs:     checkpointTs,
+		initialized:    0,
+		enableOldValue: enableOldValue,
 	}
 	return p
 }
@@ -94,40 +112,43 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage)
-	if err != nil {
-		return errors.Annotate(err, "create cdc client failed")
-	}
-
-	defer cli.Close()
+	defer p.kvCli.Close()
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan *model.RegionFeedEvent, defaultPullerEventChanSize)
 
+	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
 		})
 	}
 
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID := util.TableIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(tableID, 10)
-
-	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventCounterKv := kvEventCounter.WithLabelValues(captureID, changefeedID, "kv")
-	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved")
-	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
-
+	tableID, tableName := util.TableIDFromCtx(ctx)
+	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
+	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "resolved")
+	defer func() {
+		outputChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		eventChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		memBufferSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		pullerResolvedTsGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		kvEventCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
+		kvEventCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
+		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, tableName, "kv")
+		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, tableName, "resolved")
+	}()
 	g.Go(func() error {
 		for {
 			select {
@@ -149,13 +170,13 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				if e.Val != nil {
 					metricEventCounterKv.Inc()
 					val := e.Val
-
 					// if a region with kv range [a, z)
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
-						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
+					comparableKey := regionspan.ToComparableKey(val.Key)
+					if !regionspan.KeyInSpans(comparableKey, p.spans) {
+						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Stringer("span", p.spans))
 						continue
 					}
 
@@ -174,10 +195,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		}
 	})
 
+	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
-			if raw.CRTs <= p.resolvedTs {
-				log.Fatal("The CRTs must be greater than the resolvedTs",
+			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
+				log.Panic("The CRTs must be greater than the resolvedTs",
+					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
 					zap.Int64("tableID", tableID))
@@ -189,7 +212,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 			return nil
 		}
-		var lastResolvedTs uint64
+
+		start := time.Now()
+		initialized := false
 		for {
 			e, err := p.buffer.Get(ctx)
 			if err != nil {
@@ -202,14 +227,38 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
+				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
+					log.Panic("the resolved span is not in the total span",
+						zap.Reflect("resolved", e.Resolved),
+						zap.Int64("tableID", tableID),
+						zap.Reflect("spans", p.spans),
+					)
+				}
 				// Forward is called in a single thread
 				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
 				resolvedTs := p.tsTracker.Frontier()
-				if resolvedTs == lastResolvedTs {
+				if resolvedTs > 0 && !initialized {
+					// Advancing to a non-zero value means the puller level
+					// resolved ts is initialized.
+					atomic.StoreInt64(&p.initialized, 1)
+					initialized = true
+
+					spans := make([]string, 0, len(p.spans))
+					for i := range p.spans {
+						spans = append(spans, p.spans[i].String())
+					}
+					log.Info("puller is initialized",
+						zap.Duration("duration", time.Since(start)),
+						zap.String("changefeed", changefeedID),
+						zap.Int64("tableID", tableID),
+						zap.Strings("spans", spans),
+						zap.Uint64("resolvedTs", resolvedTs))
+				}
+				if !initialized || resolvedTs == lastResolvedTs {
 					continue
 				}
 				lastResolvedTs = resolvedTs
-				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved})
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -222,4 +271,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
+}
+
+func (p *pullerImpl) IsInitialized() bool {
+	return atomic.LoadInt64(&p.initialized) > 0
 }

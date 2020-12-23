@@ -25,19 +25,8 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-)
-
-const (
-	// SchemaName is the name of schema where all mark tables are created
-	SchemaName string = "tidb_cdc"
-	tableName  string = "repl_mark"
-
-	// CyclicReplicaIDCol is the name of replica ID in mark tables
-	CyclicReplicaIDCol string = "replica_id"
-
-	// OptCyclicConfig is the key that adds to changefeed options
-	// automatically is cyclic replication is on.
-	OptCyclicConfig string = "_cyclic_relax_sql_mode"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/quotes"
 )
 
 // RelaxSQLMode returns relaxed SQL mode, "STRICT_TRANS_TABLES" is removed.
@@ -71,13 +60,18 @@ type Cyclic struct {
 	config config.CyclicConfig
 }
 
-// UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
-// bucket and replicaID.
-func (*Cyclic) UdpateTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
-	schema, table := MarkTableName(sourceSchema, sourceTable)
+// UdpateSourceTableCyclicMark return a DML to update mark table regrad to
+// the source table name, bucket and replicaID.
+func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64, startTs uint64) string {
+	schema, table := mark.GetMarkTableName(sourceSchema, sourceTable)
 	return fmt.Sprintf(
-		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		schema, table, bucket, replicaID)
+		`INSERT INTO %s VALUES (%d, %d, 0, %d) ON DUPLICATE KEY UPDATE val = val + 1;`,
+		quotes.QuoteSchema(schema, table), bucket, replicaID, startTs)
+}
+
+// Enabled returns whether cyclic replication is enabled
+func (c *Cyclic) Enabled() bool {
+	return c.config.Enable
 }
 
 // FilterReplicaID return a slice of replica IDs needs to be filtered.
@@ -100,20 +94,12 @@ func NewCyclic(config *config.CyclicConfig) *Cyclic {
 	}
 }
 
-// MarkTableName returns mark table name regards to the tableID
-func MarkTableName(sourceSchema, sourceTable string) (schema, table string) {
-	// TODO(neil) better unquote or just crc32 the name.
-	table = strings.Join([]string{tableName, sourceSchema, sourceTable}, "_")
-	schema = SchemaName
-	return
-}
-
 // IsTablesPaired checks if normal tables are paired with mark tables.
 func IsTablesPaired(tables []model.TableName) bool {
 	normalTables := make([]model.TableName, 0, len(tables)/2)
 	markMap := make(map[model.TableName]struct{}, len(tables)/2)
 	for _, table := range tables {
-		if IsMarkTable(table.Schema, table.Table) {
+		if mark.IsMarkTable(table.Schema, table.Table) {
 			markMap[table] = struct{}{}
 		} else {
 			normalTables = append(normalTables, table)
@@ -121,25 +107,11 @@ func IsTablesPaired(tables []model.TableName) bool {
 	}
 	for _, table := range normalTables {
 		markTable := model.TableName{}
-		markTable.Schema, markTable.Table = MarkTableName(table.Schema, table.Table)
+		markTable.Schema, markTable.Table = mark.GetMarkTableName(table.Schema, table.Table)
 		_, ok := markMap[markTable]
 		if !ok {
 			return false
 		}
 	}
 	return true
-}
-
-// IsMarkTable tells whether the table is a mark table or not.
-func IsMarkTable(schema, table string) bool {
-	const quoteSchemaName = "`" + SchemaName + "`"
-	const quotetableName = "`" + tableName
-
-	if schema == SchemaName || schema == quoteSchemaName {
-		return true
-	}
-	if strings.HasPrefix(table, quotetableName) {
-		return true
-	}
-	return strings.HasPrefix(table, tableName)
 }

@@ -28,8 +28,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -37,24 +35,31 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/logutil"
+	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
 // Sarama configuration options
 var (
-	kafkaAddrs        []string
-	kafkaTopic        string
-	kafkaPartitionNum int32
-	kafkaGroupID      = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
-	kafkaVersion      = "2.4.0"
+	kafkaAddrs           []string
+	kafkaTopic           string
+	kafkaPartitionNum    int32
+	kafkaGroupID         = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
+	kafkaVersion         = "2.4.0"
+	kafkaMaxMessageBytes = math.MaxInt64
+	kafkaMaxBatchSize    = math.MaxInt64
 
 	downstreamURIStr string
 
-	logPath  string
-	logLevel string
-	timezone string
+	logPath       string
+	logLevel      string
+	timezone      string
+	ca, cert, key string
 )
 
 func init() {
@@ -65,9 +70,12 @@ func init() {
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
+	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
+	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
+	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
 	flag.Parse()
 
-	err := util.InitLogger(&util.Config{
+	err := logutil.InitLogger(&logutil.Config{
 		Level: logLevel,
 		File:  logPath,
 	})
@@ -115,6 +123,26 @@ func init() {
 		}
 		kafkaPartitionNum = int32(c)
 	}
+
+	s = upstreamURI.Query().Get("max-message-bytes")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal("invalid max-message-bytes of upstream-uri")
+		}
+		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", c))
+		kafkaMaxMessageBytes = c
+	}
+
+	s = upstreamURI.Query().Get("max-batch-size")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal("invalid max-batch-size of upstream-uri")
+		}
+		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
+		kafkaMaxBatchSize = c
+	}
 }
 
 func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
@@ -158,6 +186,7 @@ func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error 
 	}
 	return errors.Errorf("wait the topic(%s) created timeout", topic)
 }
+
 func newSaramaConfig() (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
@@ -173,6 +202,18 @@ func newSaramaConfig() (*sarama.Config, error) {
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	if len(ca) != 0 {
+		config.Net.TLS.Enable = true
+		config.Net.TLS.Config, err = (&security.Credential{
+			CAPath:   ca,
+			CertPath: cert,
+			KeyPath:  key,
+		}).ToTLSConfig()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 
 	return config, err
 }
@@ -263,7 +304,8 @@ type Consumer struct {
 	}
 	sinksMu sync.Mutex
 
-	ddlSink sink.Sink
+	ddlSink              sink.Sink
+	fakeTableIDGenerator *fakeTableIDGenerator
 
 	globalResolvedTs uint64
 }
@@ -271,13 +313,9 @@ type Consumer struct {
 // NewConsumer creates a new cdc kafka consumer
 func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// TODO support filter in downstream sink
-	tz := time.Local
-	if strings.ToLower(timezone) != "system" {
-		var err error
-		tz, err = time.LoadLocation(timezone)
-		if err != nil {
-			return nil, errors.Annotate(err, "can not load timezone")
-		}
+	tz, err := util.GetTimezone(timezone)
+	if err != nil {
+		return nil, errors.Annotate(err, "can not load timezone")
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
 	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
@@ -285,14 +323,18 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		return nil, errors.Trace(err)
 	}
 	c := new(Consumer)
+	c.fakeTableIDGenerator = &fakeTableIDGenerator{
+		tableIDs: make(map[string]int64),
+	}
 	c.sinks = make([]*struct {
 		sink.Sink
 		resolvedTs uint64
 	}, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
+	opts := map[string]string{}
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
+		s, err := sink.NewSink(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -302,7 +344,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
+	sink, err := sink.NewSink(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -350,6 +392,8 @@ ClaimMessages:
 		if err != nil {
 			return errors.Trace(err)
 		}
+
+		counter := 0
 		for {
 			tp, hasNext, err := batchDecoder.HasNext()
 			if err != nil {
@@ -358,6 +402,14 @@ ClaimMessages:
 			if !hasNext {
 				break
 			}
+
+			counter++
+			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
+			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
+				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
+					zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
+			}
+
 			switch tp {
 			case model.MqMessageTypeDDL:
 				ddl, err := batchDecoder.NextDDLEvent()
@@ -378,6 +430,15 @@ ClaimMessages:
 						zap.Int32("partition", partition))
 					break ClaimMessages
 				}
+				// FIXME: hack to set start-ts in row changed event, as start-ts
+				// is not contained in TiCDC open protocol
+				row.StartTs = row.CommitTs
+				var partitionID int64
+				if row.Table.IsPartition {
+					partitionID = row.Table.TableID
+				}
+				row.Table.TableID =
+					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
@@ -396,6 +457,11 @@ ClaimMessages:
 				}
 			}
 			session.MarkMessage(message, "")
+		}
+
+		if counter > kafkaMaxBatchSize {
+			log.Fatal("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", kafkaMaxBatchSize),
+				zap.Int("actual-batch-size", counter))
 		}
 	}
 
@@ -478,12 +544,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
-			//flush DMLs
+			// flush DMLs
 			err := c.forEachSink(func(sink *struct {
 				sink.Sink
 				resolvedTs uint64
 			}) error {
-				return sink.FlushRowChangedEvents(ctx, todoDDL.CommitTs)
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -512,10 +578,48 @@ func (c *Consumer) Run(ctx context.Context) error {
 			sink.Sink
 			resolvedTs uint64
 		}) error {
-			return sink.FlushRowChangedEvents(ctx, globalResolvedTs)
+			return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
 		})
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
+}
+
+func syncFlushRowChangedEvents(ctx context.Context, sink sink.Sink, resolvedTs uint64) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		checkpointTs, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
+		if err != nil {
+			return err
+		}
+		if checkpointTs >= resolvedTs {
+			return nil
+		}
+	}
+}
+
+type fakeTableIDGenerator struct {
+	tableIDs       map[string]int64
+	currentTableID int64
+	mu             sync.Mutex
+}
+
+func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partition int64) int64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	key := quotes.QuoteSchema(schema, table)
+	if partition != 0 {
+		key = fmt.Sprintf("%s.`%d`", key, partition)
+	}
+	if tableID, ok := g.tableIDs[key]; ok {
+		return tableID
+	}
+	g.currentTableID++
+	g.tableIDs[key] = g.currentTableID
+	return g.currentTableID
 }

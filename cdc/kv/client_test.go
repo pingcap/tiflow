@@ -15,8 +15,6 @@ package kv
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
 	"net"
 	"sync"
 	"testing"
@@ -25,10 +23,16 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
+	pd "github.com/tikv/pd/client"
 	"google.golang.org/grpc"
 )
 
@@ -40,47 +44,16 @@ type clientSuite struct {
 var _ = check.Suite(&clientSuite{})
 
 func (s *clientSuite) TestNewClose(c *check.C) {
-	cluster := mocktikv.NewCluster()
+	defer testleak.AfterTest(c)()
+	store := mocktikv.MustNewMVCCStore()
+	defer store.Close() //nolint:errcheck
+	cluster := mocktikv.NewCluster(store)
 	pdCli := mocktikv.NewPDClient(cluster)
+	defer pdCli.Close() //nolint:errcheck
 
-	cli, err := NewCDCClient(pdCli, nil)
+	cli := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
+	err := cli.Close()
 	c.Assert(err, check.IsNil)
-
-	err = cli.Close()
-	c.Assert(err, check.IsNil)
-}
-
-func (s *clientSuite) TestUpdateCheckpointTS(c *check.C) {
-	var checkpointTS uint64
-	var g sync.WaitGroup
-	maxValueCh := make(chan uint64, 64)
-	update := func() uint64 {
-		var maxValue uint64
-		for i := 0; i < 1024; i++ {
-			value := rand.Uint64()
-			if value > maxValue {
-				maxValue = value
-			}
-			updateCheckpointTS(&checkpointTS, value)
-		}
-		return maxValue
-	}
-	for i := 0; i < 64; i++ {
-		g.Add(1)
-		go func() {
-			maxValueCh <- update()
-			g.Done()
-		}()
-	}
-	g.Wait()
-	close(maxValueCh)
-	var maxValue uint64
-	for v := range maxValueCh {
-		if maxValue < v {
-			maxValue = v
-		}
-	}
-	c.Assert(checkpointTS, check.Equals, maxValue)
 }
 
 type mockChangeDataService struct {
@@ -120,10 +93,12 @@ func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServe
 	return nil
 }
 
-func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent, wg *sync.WaitGroup) *grpc.Server {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func newMockService(ctx context.Context, c *check.C, ch chan *cdcpb.ChangeDataEvent, wg *sync.WaitGroup) (grpcServer *grpc.Server, addr string) {
+	lc := &net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	c.Assert(err, check.IsNil)
-	grpcServer := grpc.NewServer()
+	addr = lis.Addr().String()
+	grpcServer = grpc.NewServer()
 	mockService := &mockChangeDataService{c: c, ch: ch}
 	cdcpb.RegisterChangeDataServer(grpcServer, mockService)
 	wg.Add(1)
@@ -132,38 +107,59 @@ func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent, wg *sy
 		c.Assert(err, check.IsNil)
 		wg.Done()
 	}()
-	return grpcServer
+	return
+}
+
+type mockPDClient struct {
+	pd.Client
+	version string
+}
+
+var _ pd.Client = &mockPDClient{}
+
+func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
+	s, err := m.Client.GetStore(ctx, storeID)
+	if err != nil {
+		return nil, err
+	}
+	s.Version = m.version
+	return s, nil
 }
 
 // Use etcdSuite to workaround the race. See comments of `TestConnArray`.
 func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	wg := &sync.WaitGroup{}
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
-	server2 := newMockService(c, 23376, ch2, wg)
+	server2, addr := newMockService(ctx, c, ch2, wg)
 	defer func() {
 		close(ch2)
 		server2.Stop()
 		wg.Wait()
 	}()
 
-	cluster := mocktikv.NewCluster()
-	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, nil, "")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
 
-	cluster.AddStore(1, "localhost:23375")
-	cluster.AddStore(2, "localhost:23376")
+	cluster.AddStore(1, "localhost:1")
+	cluster.AddStore(2, addr)
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
-	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage))
-	c.Assert(err, check.IsNil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	defer cdcClient.Close() //nolint:errcheck
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		wg.Done()
 	}()
@@ -197,9 +193,110 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
+	checkEvent(event, 1)
 
+	select {
+	case event = <-eventCh:
+	case <-time.After(time.Second):
+		c.Fatalf("reconnection not succeed in 1 second")
+	}
 	checkEvent(event, ts.Ver)
 	cancel()
+}
+
+func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	server2, addr := newMockService(ctx, c, ch2, wg)
+	defer func() {
+		close(ch2)
+		server2.Stop()
+		wg.Wait()
+	}()
+	// Cancel first, and then close the server.
+	defer cancel()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
+	defer pdClient.Close() //nolint:errcheck
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(2, addr)
+	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
+
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	var event *model.RegionFeedEvent
+	select {
+	case event = <-eventCh:
+	case <-time.After(time.Second):
+		c.Fatalf("recving message takes too long")
+	}
+	c.Assert(event, check.NotNil)
+
+	largeValSize := 128*1024*1024 + 1 // 128MB + 1
+	largeMsg := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId: 3,
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a"),
+						Value:    make([]byte, largeValSize),
+						CommitTs: 2, // ResolvedTs = 1
+					}},
+				},
+			},
+		},
+	}}
+	ch2 <- largeMsg
+	select {
+	case event = <-eventCh:
+	case <-time.After(30 * time.Second): // Send 128MB object may costs lots of time.
+		c.Fatalf("recving message takes too long")
+	}
+	c.Assert(len(event.Val.Value), check.Equals, largeValSize)
+	cancel()
+}
+
+// TODO enable the test
+func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: "v2.1.0" /* CDC is not compatible with 2.1.0 */}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+
+	cluster.AddStore(1, "localhost:23375")
+	cluster.Bootstrap(2, []uint64{1}, []uint64{3}, 3)
+
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
+	_ = err
+	// TODO find a way to verify the error
 }
 
 // Use etcdSuite for some special reasons, the embed etcd uses zap as the only candidate
@@ -207,8 +304,10 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 // is not a thread-safe operation and it must be called before any gRPC functions
 // ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
 func (s *etcdSuite) TestConnArray(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	addr := "127.0.0.1:2379"
-	ca, err := newConnArray(context.TODO(), 2, addr)
+	ca, err := newConnArray(context.TODO(), 2, addr, &security.Credential{})
 	c.Assert(err, check.IsNil)
 
 	conn1 := ca.Get()

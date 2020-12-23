@@ -16,10 +16,10 @@ package cdc
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -102,7 +102,7 @@ restart:
 		ev, err := w.parseTaskEvent(ctx, kv.Key, kv.Value)
 		if err != nil {
 			log.Warn("parse task event failed",
-				zap.String("captureid", w.capture.info.ID),
+				zap.String("capture-id", w.capture.info.ID),
 				zap.Error(err))
 			continue
 		}
@@ -137,7 +137,7 @@ restart:
 				ev, err := w.parseTaskEvent(ctx, ev.Kv.Key, ev.Kv.Value)
 				if err != nil {
 					log.Warn("parse task event failed",
-						zap.String("captureid", w.capture.info.ID),
+						zap.String("capture-id", w.capture.info.ID),
 						zap.Error(err))
 					continue
 				}
@@ -149,7 +149,7 @@ restart:
 				task, err := w.parseTask(ctx, ev.PrevKv.Key, ev.PrevKv.Value)
 				if err != nil {
 					log.Warn("parse task failed",
-						zap.String("captureid", w.capture.info.ID),
+						zap.String("capture-id", w.capture.info.ID),
 						zap.Error(err))
 					continue
 				}
@@ -166,7 +166,7 @@ restart:
 func (w *TaskWatcher) parseTask(ctx context.Context,
 	key, val []byte) (*Task, error) {
 	if len(key) <= len(w.cfg.Prefix) {
-		return nil, errors.New("invalid task key: " + string(key))
+		return nil, cerror.ErrInvalidTaskKey.GenWithStackByArgs(string(key))
 	}
 	changeFeedID := string(key[len(w.cfg.Prefix)+1:])
 	cf, err := w.capture.etcdClient.GetChangeFeedInfo(ctx, changeFeedID)
@@ -174,7 +174,7 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 		return nil, err
 	}
 	status, _, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
-	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
 	checkpointTs := cf.GetCheckpointTs(status)
@@ -185,7 +185,7 @@ func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*Tas
 	task, err := w.parseTask(ctx, key, val)
 	if err != nil {
 		log.Warn("parse task failed",
-			zap.String("captureid", w.capture.info.ID),
+			zap.String("capture-id", w.capture.info.ID),
 			zap.Error(err))
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*Tas
 	taskStatus := &model.TaskStatus{}
 	if err := taskStatus.Unmarshal(val); err != nil {
 		log.Warn("unmarshal task status failed",
-			zap.String("captureid", w.capture.info.ID),
+			zap.String("capture-id", w.capture.info.ID),
 			zap.Error(err))
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*Tas
 	switch taskStatus.AdminJobType {
 	case model.AdminNone, model.AdminResume:
 		op = TaskOpCreate
-	case model.AdminStop, model.AdminRemove:
+	case model.AdminStop, model.AdminRemove, model.AdminFinish:
 		op = TaskOpDelete
 	}
 	return &TaskEvent{Op: op, Task: task}, nil

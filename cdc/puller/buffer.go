@@ -15,7 +15,6 @@ package puller
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -23,10 +22,8 @@ import (
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
-
-// ErrReachLimit represents the buffer reach limit.
-var ErrReachLimit = errors.New("reach limit")
 
 const (
 	defaultBufferSize = 128000
@@ -100,7 +97,7 @@ func (b *memBuffer) AddEntry(ctx context.Context, entry model.RegionFeedEvent) e
 	b.mu.Lock()
 	if b.limitter != nil && b.limitter.OverBucget() {
 		b.mu.Unlock()
-		return ErrReachLimit
+		return cerror.ErrBufferReachLimit.GenWithStackByArgs()
 	}
 
 	b.mu.entries.PushBack(entry)
@@ -150,8 +147,10 @@ func (b *memBuffer) Size() int64 {
 	return atomic.LoadInt64(&b.limitter.used)
 }
 
-var sizeOfVal = unsafe.Sizeof(model.RawKVEntry{})
-var sizeOfResolve = unsafe.Sizeof(model.ResolvedSpan{})
+var (
+	sizeOfVal     = unsafe.Sizeof(model.RawKVEntry{})
+	sizeOfResolve = unsafe.Sizeof(model.ResolvedSpan{})
+)
 
 func entrySize(e model.RegionFeedEvent) int {
 	if e.Val != nil {
@@ -159,7 +158,7 @@ func entrySize(e model.RegionFeedEvent) int {
 	} else if e.Resolved != nil {
 		return int(sizeOfResolve)
 	} else {
-		log.Fatal("unknow event type")
+		log.Panic("unknow event type")
 	}
 
 	return 0

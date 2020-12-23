@@ -37,9 +37,11 @@ cscope.*
 cmd/cdc/cdc
 
 # Files generated when testing
-vendor/
 tiflash-config-preprocessed.toml
 
 # Files generated when running docker-compose
 docker/data
 docker/logs
+
+# Binary file when running intergration test
+integration/integration
