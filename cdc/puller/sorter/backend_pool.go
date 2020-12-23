@@ -25,14 +25,17 @@ import (
 	"time"
 	"unsafe"
 
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-
 	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
+)
+
+const (
+	backgroundJobInterval = time.Second * 5
 )
 
 var (
@@ -66,7 +69,7 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 	}
 
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(backgroundJobInterval)
 		defer ticker.Stop()
 
 		metricSorterInMemoryDataSizeGauge := sorterInMemoryDataSizeGauge.WithLabelValues(captureAddr)
@@ -97,9 +100,10 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 
 			memPressure := m.Used * 100 / m.Total
 			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
-			if memPressure > 50 {
-				log.Debug("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure),
-					zap.Int64("usedBySorter", atomic.LoadInt64(&ret.memoryUseEstimate)))
+
+			if memPressure := ret.memoryPressure(); memPressure > 50 {
+				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
+					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
 				// Increase GC frequency to avoid necessary OOM
 				debug.SetGCPercent(10)
 			} else {
@@ -135,8 +139,8 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 
 func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	sorterConfig := config.GetSorterConfig()
-	if atomic.LoadInt64(&p.memoryUseEstimate) < int64(sorterConfig.MaxMemoryConsumption) &&
-		atomic.LoadInt32(&p.memPressure) < int32(sorterConfig.MaxMemoryPressure) {
+	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
+		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
 
 		ret := newMemoryBackEnd()
 		return ret, nil
@@ -234,7 +238,7 @@ func (p *backEndPool) terminate() {
 		log.Panic("Empty filePrefix, please report a bug")
 	}
 
-	files, err := filepath.Glob(filepath.Join(p.filePrefix, "*"))
+	files, err := filepath.Glob(p.filePrefix + "*")
 	if err != nil {
 		log.Warn("Unified Sorter clean-up failed", zap.Error(err))
 	}
@@ -244,4 +248,18 @@ func (p *backEndPool) terminate() {
 			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
 		}
 	}
+}
+
+func (p *backEndPool) sorterMemoryUsage() int64 {
+	failpoint.Inject("memoryUsageInjectPoint", func(val failpoint.Value) {
+		failpoint.Return(int64(val.(int)))
+	})
+	return atomic.LoadInt64(&p.memoryUseEstimate)
+}
+
+func (p *backEndPool) memoryPressure() int32 {
+	failpoint.Inject("memoryPressureInjectPoint", func(val failpoint.Value) {
+		failpoint.Return(int32(val.(int)))
+	})
+	return atomic.LoadInt32(&p.memPressure)
 }

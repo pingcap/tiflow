@@ -119,6 +119,7 @@ func (f *fileBackEnd) free() error {
 		}
 	})
 
+	log.Debug("Removing file", zap.String("file", f.fileName))
 	err := os.Remove(f.fileName)
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
