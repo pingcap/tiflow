@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
 	dsgpb "github.com/pingcap/ticdc/proto/dsg"
 	"google.golang.org/grpc"
@@ -353,18 +354,21 @@ func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.Row
 	var updateRows []*model.RowChangedEvent
 	var deleteRows []*model.RowChangedEvent
 	var thisKeyStr string
-	tmpMap := make(map[string]string)
 
 	rows := singleTableTxn.Rows
+	tmpMap := make(map[string]string, len(rows))
 	for _, row := range rows {
 		if len(row.PreColumns) == 0 {
 			//insert
 			thisKeyStr = ""
-			columns := row.PreColumns
+			columns := row.Columns
 			for _, column := range columns {
 				if column.Flag.IsHandleKey() {
 					//获取主键value
-					thisKeyStr = fmt.Sprintf("%d:%d", thisKeyStr, column.Value)
+					val := model.ColumnValueString(column.Value, column.Flag)
+					if val != nil {
+						thisKeyStr = fmt.Sprintf("%s`%s", thisKeyStr, quotes.QuoteName(*val))
+					}
 				}
 			}
 			if _, key := tmpMap[thisKeyStr]; key {
@@ -372,8 +376,8 @@ func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.Row
 				log.Info("DSG-Sink: Filter PK", zap.Any("PK Value: ", thisKeyStr))
 			} else {
 				insertRows = append(insertRows, row)
+				tmpMap[thisKeyStr] = thisKeyStr
 			}
-			tmpMap[thisKeyStr] = thisKeyStr
 		} else if len(row.Columns) == 0 {
 			//delete
 			deleteRows = append(deleteRows, row)
