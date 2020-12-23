@@ -52,10 +52,11 @@ func main() {
 	log.SetLevel(zapcore.DebugLevel)
 
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  8,
-		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:    60,
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
+		NumWorkerPoolGoroutine: 16,
 	})
 
 	go func() {

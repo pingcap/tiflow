@@ -191,4 +191,7 @@ var (
 	ErrWorkerPoolHandleCancelled = errors.Normalize("workerpool handle is cancelled", errors.RFCCodeText("CDC:ErrWorkerPoolHandleCancelled"))
 	ErrWorkerPoolEmptyTask       = errors.Normalize("workerpool received an empty task, please report a bug", errors.RFCCodeText("CDC:ErrWorkerPoolEmptyTask"))
 	ErrAsyncPoolExited           = errors.Normalize("asyncPool has exited. Report a bug if seen externally.", errors.RFCCodeText("CDC:ErrAsyncPoolExited"))
+
+	// unified sorter errors
+	ErrUnifiedSorterBackendTerminating = errors.Normalize("unified sorter backend is terminating", errors.RFCCodeText("CDC:ErrUnifiedSorterBackendTerminating"))
 )

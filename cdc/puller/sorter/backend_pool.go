@@ -17,12 +17,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 
 	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
@@ -44,6 +47,13 @@ type backEndPool struct {
 	memPressure       int32
 	cache             [256]unsafe.Pointer
 	dir               string
+	filePrefix        string
+
+	// cancelCh needs to be unbuffered to prevent races
+	cancelCh chan struct{}
+	// cancelRWLock protects cache against races when the backEnd is exiting
+	cancelRWLock  sync.RWMutex
+	isTerminating bool
 }
 
 func newBackEndPool(dir string, captureAddr string) *backEndPool {
@@ -51,17 +61,25 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
 		dir:               dir,
+		cancelCh:          make(chan struct{}),
+		filePrefix:        fmt.Sprintf("%s/sort-%d-", dir, os.Getpid()),
 	}
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 
 		metricSorterInMemoryDataSizeGauge := sorterInMemoryDataSizeGauge.WithLabelValues(captureAddr)
 		metricSorterOnDiskDataSizeGauge := sorterOnDiskDataSizeGauge.WithLabelValues(captureAddr)
 		metricSorterOpenFileCountGauge := sorterOpenFileCountGauge.WithLabelValues(captureAddr)
 
 		for {
-			<-ticker.C
+			select {
+			case <-ret.cancelCh:
+				log.Info("Unified Sorter backEnd is being cancelled")
+				return
+			case <-ticker.C:
+			}
 
 			metricSorterInMemoryDataSizeGauge.Set(float64(atomic.LoadInt64(&ret.memoryUseEstimate)))
 			metricSorterOnDiskDataSizeGauge.Set(float64(atomic.LoadInt64(&ret.onDiskDataSize)))
@@ -124,6 +142,13 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		return ret, nil
 	}
 
+	p.cancelRWLock.RLock()
+	defer p.cancelRWLock.RUnlock()
+
+	if p.isTerminating {
+		return nil, cerrors.ErrUnifiedSorterBackendTerminating.GenWithStackByArgs()
+	}
+
 	for i := range p.cache {
 		ptr := &p.cache[i]
 		ret := atomic.SwapPointer(ptr, nil)
@@ -132,7 +157,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		}
 	}
 
-	fname := fmt.Sprintf("%s/sort-%d-%d.tmp", p.dir, os.Getpid(), atomic.AddUint64(&p.fileNameCounter, 1))
+	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
 		zap.String("table", tableNameFromCtx(ctx)))
@@ -157,6 +182,13 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 				failpoint.Return(nil)
 			}
 		})
+		p.cancelRWLock.RLock()
+		defer p.cancelRWLock.RUnlock()
+
+		if p.isTerminating {
+			return cerrors.ErrUnifiedSorterBackendTerminating.GenWithStackByArgs()
+		}
+
 		for i := range p.cache {
 			ptr := &p.cache[i]
 			if atomic.CompareAndSwapPointer(ptr, nil, unsafe.Pointer(b)) {
@@ -174,4 +206,42 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 		log.Panic("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
 	}
 	return nil
+}
+
+func (p *backEndPool) terminate() {
+	p.cancelCh <- struct{}{}
+	defer close(p.cancelCh)
+	// the background goroutine can be considered terminated here
+
+	p.cancelRWLock.Lock()
+	defer p.cancelRWLock.Unlock()
+	p.isTerminating = true
+
+	// any new allocs and deallocs will not succeed from this point
+	// accessing p.cache without atomics is safe from now
+
+	for i := range p.cache {
+		ptr := &p.cache[i]
+		backend := (*fileBackEnd)(*ptr)
+		if backend == nil {
+			continue
+		}
+		_ = backend.free()
+	}
+
+	if p.filePrefix == "" {
+		// This should not happen. But to prevent accidents in production, we add this anyway.
+		log.Panic("Empty filePrefix, please report a bug")
+	}
+
+	files, err := filepath.Glob(filepath.Join(p.filePrefix, "*"))
+	if err != nil {
+		log.Warn("Unified Sorter clean-up failed", zap.Error(err))
+	}
+	for _, file := range files {
+		err = os.RemoveAll(file)
+		if err != nil {
+			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
+		}
+	}
 }

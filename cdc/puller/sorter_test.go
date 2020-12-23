@@ -55,6 +55,8 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer sorter2.UnifiedSorterCleanUp()
+
 	config.SetSorterConfig(&config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
@@ -74,6 +76,8 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer sorter2.UnifiedSorterCleanUp()
+
 	config.SetSorterConfig(&config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
@@ -95,7 +99,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 		close(finishedCh)
 	}()
 
-	after := time.After(20 * time.Second)
+	after := time.After(30 * time.Second)
 	select {
 	case <-after:
 		c.FailNow()

@@ -671,6 +671,11 @@ error = '''
 url format is invalid
 '''
 
+["CDC:ErrUnifiedSorterBackendTerminating"]
+error = '''
+unified sorter backend is terminating
+'''
+
 ["CDC:ErrUnknownKVEventType"]
 error = '''
 unknown kv event type: %v, entry: %v

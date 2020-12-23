@@ -278,7 +278,7 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	h.internalState = state
 }
 
-func lazyInitPool() {
+func lazyInitWorkerPool() {
 	poolOnce.Do(func() {
 		sorterConfig := config.GetSorterConfig()
 		heapSorterPool = workerpool.NewDefaultWorkerPool(sorterConfig.NumWorkerPoolGoroutine)
