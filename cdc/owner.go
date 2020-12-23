@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -47,25 +48,25 @@ import (
 
 type ownership struct {
 	lastTickTime time.Time
-	tickDuration time.Duration
+	tickTime     time.Duration
 }
 
-func newOwnersip(captureID model.CaptureID, tickDuration time.Duration) ownership {
-	minTickDuration := 5 * time.Second
-	if tickDuration > minTickDuration {
+func newOwnersip(captureID model.CaptureID, tickTime time.Duration) ownership {
+	minTickTime := 5 * time.Second
+	if tickTime > minTickTime {
 		panic("ownership counter must be incearsed every 5 seconds")
 	}
 	return ownership{
-		tickDuration: minTickDuration,
+		tickTime: minTickTime,
 	}
 }
 
 func (o *ownership) inc() {
 	now := time.Now()
-	if now.Sub(o.lastTickTime) > o.tickDuration {
+	if now.Sub(o.lastTickTime) > o.tickTime {
 		// Keep the value of promtheus expression `rate(counter)` = 1
 		// Please also change alert rule in ticdc.rules.yml when change the expression value.
-		ownershipCounter.Add(float64(o.tickDuration / time.Second))
+		ownershipCounter.Add(float64(o.tickTime / time.Second))
 		o.lastTickTime = now
 	}
 }
@@ -107,6 +108,7 @@ type Owner struct {
 	// record last time that flushes all changefeeds' replication status
 	lastFlushChangefeeds    time.Time
 	flushChangefeedInterval time.Duration
+	feedChangeNotifier      *notify.Notifier
 }
 
 const (
@@ -144,6 +146,7 @@ func NewOwner(
 		etcdClient:              cli,
 		gcTTL:                   gcTTL,
 		flushChangefeedInterval: flushChangefeedInterval,
+		feedChangeNotifier:      new(notify.Notifier),
 	}
 
 	return owner, nil
@@ -1026,8 +1029,8 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 }
 
 // Run the owner
-// TODO avoid this tick style, this means we get `tickDuration` latency here.
-func (o *Owner) Run(ctx context.Context, captureID model.CaptureID, tickDuration time.Duration) error {
+// TODO avoid this tick style, this means we get `tickTime` latency here.
+func (o *Owner) Run(ctx context.Context, captureID model.CaptureID, tickTime time.Duration) error {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(errors.New("owner run with injected error"))
 	})
@@ -1047,13 +1050,14 @@ func (o *Owner) Run(ctx context.Context, captureID model.CaptureID, tickDuration
 
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
-	changedFeeds := o.watchFeedChange(ctx1)
+	feedChangeReceiver, err := o.feedChangeNotifier.NewReceiver(tickTime)
+	if err != nil {
+		return err
+	}
+	defer feedChangeReceiver.Stop()
+	o.watchFeedChange(ctx1)
 
-	ownership := newOwnersip(captureID, tickDuration)
-	ticker := time.NewTicker(tickDuration)
-	defer ticker.Stop()
-
-	var err error
+	ownership := newOwnersip(captureID, tickTime)
 loop:
 	for {
 		select {
@@ -1065,8 +1069,7 @@ loop:
 			// Anyway we just break loop here to ensure the following destruction.
 			err = ctx.Err()
 			break loop
-		case <-changedFeeds:
-		case <-ticker.C:
+		case <-feedChangeReceiver.C:
 			ownership.inc()
 		}
 
@@ -1121,8 +1124,7 @@ restart:
 	return nil
 }
 
-func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
-	output := make(chan struct{}, 1)
+func (o *Owner) watchFeedChange(ctx context.Context) {
 	go func() {
 		for {
 			select {
@@ -1130,7 +1132,8 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				return
 			default:
 			}
-			wch := o.etcdClient.Client.Watch(ctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
+			cctx, cancel := context.WithCancel(ctx)
+			wch := o.etcdClient.Client.Watch(cctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
 
 			for resp := range wch {
 				if resp.Err() != nil {
@@ -1142,14 +1145,11 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
 				// operations should be resolved in future release.
 
-				select {
-				case <-ctx.Done():
-				case output <- struct{}{}:
-				}
+				o.feedChangeNotifier.Notify()
 			}
+			cancel()
 		}
 	}()
-	return output
 }
 
 func (o *Owner) run(ctx context.Context) error {
