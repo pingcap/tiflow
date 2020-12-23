@@ -352,12 +352,28 @@ func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.Row
 	var insertRows []*model.RowChangedEvent
 	var updateRows []*model.RowChangedEvent
 	var deleteRows []*model.RowChangedEvent
+	var thisKeyStr string
+	tmpMap := make(map[string]string)
 
 	rows := singleTableTxn.Rows
 	for _, row := range rows {
 		if len(row.PreColumns) == 0 {
 			//insert
-			insertRows = append(insertRows, row)
+			thisKeyStr = ""
+			columns := row.PreColumns
+			for _, column := range columns {
+				if column.Flag.IsHandleKey() {
+					//获取主键value
+					thisKeyStr = fmt.Sprintf("%d:%d", thisKeyStr, column.Value)
+				}
+			}
+			if _, key := tmpMap[thisKeyStr]; key {
+				//此主键存在去重掉
+				log.Info("DSG-Sink: Filter PK", zap.Any("PK Value: ", thisKeyStr))
+			} else {
+				insertRows = append(insertRows, row)
+			}
+			tmpMap[thisKeyStr] = thisKeyStr
 		} else if len(row.Columns) == 0 {
 			//delete
 			deleteRows = append(deleteRows, row)
