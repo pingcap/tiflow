@@ -132,7 +132,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		}
 	}
 
-	fname := fmt.Sprintf("%s/sort-%d-%d", p.dir, os.Getpid(), atomic.AddUint64(&p.fileNameCounter, 1))
+	fname := fmt.Sprintf("%s/sort-%d-%d.tmp", p.dir, os.Getpid(), atomic.AddUint64(&p.fileNameCounter, 1))
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
 		zap.String("table", tableNameFromCtx(ctx)))
