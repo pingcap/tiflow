@@ -35,12 +35,15 @@ var _ = check.Suite(&backendPoolSuite{})
 func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	defer testleak.AfterTest(c)()
 
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+
 	config.SetSorterConfig(&config.SorterConfig{
 		MaxMemoryPressure:    90,                      // 90%
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024, // 16G
 	})
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
@@ -98,12 +101,15 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 func (s *backendPoolSuite) TestCleanUp(c *check.C) {
 	defer testleak.AfterTest(c)()
 
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+
 	config.SetSorterConfig(&config.SorterConfig{
 		MaxMemoryPressure:    90,                      // 90%
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024, // 16G
 	})
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
 
 	backEndPool := newBackEndPool("/tmp/sorter", "")
