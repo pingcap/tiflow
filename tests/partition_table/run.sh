@@ -34,6 +34,9 @@ function run() {
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
     check_table_exists partition_table.t ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists partition_table.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists partition_table.t2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists partition_table.t3 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists partition_table.t4 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
