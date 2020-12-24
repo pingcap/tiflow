@@ -159,8 +159,11 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 			startTs = feed.status.CheckpointTs
 		}
 
-		for tableID := range task.Tables {
+		for tableID, replicaInfo := range task.Tables {
 			feed.orphanTables[tableID] = startTs
+			if startTs < replicaInfo.StartTs {
+				feed.orphanTables[tableID] = replicaInfo.StartTs
+			}
 		}
 
 		ctx := context.TODO()
