@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
@@ -38,10 +40,11 @@ var (
 	logFile       string
 	logLevel      string
 	// variables for unified sorter
-	numConcurrentWorker  int
-	chunkSizeLimit       uint64
-	maxMemoryPressure    int
-	maxMemoryConsumption uint64
+	numConcurrentWorker    int
+	chunkSizeLimit         uint64
+	maxMemoryPressure      int
+	maxMemoryConsumption   uint64
+	numWorkerPoolGoroutine int
 
 	ownerFlushInterval     time.Duration
 	processorFlushInterval time.Duration
@@ -74,7 +77,8 @@ func init() {
 	serverCmd.Flags().DurationVar(&ownerFlushInterval, "owner-flush-interval", time.Millisecond*200, "owner flushes changefeed status interval")
 	serverCmd.Flags().DurationVar(&processorFlushInterval, "processor-flush-interval", time.Millisecond*100, "processor flushes task status interval")
 
-	serverCmd.Flags().IntVar(&numConcurrentWorker, "sorter-num-concurrent-worker", 8, "sorter concurrency level")
+	serverCmd.Flags().IntVar(&numWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", 16, "sorter workerpool size")
+	serverCmd.Flags().IntVar(&numConcurrentWorker, "sorter-num-concurrent-worker", 4, "sorter concurrency level")
 	serverCmd.Flags().Uint64Var(&chunkSizeLimit, "sorter-chunk-size-limit", 1024*1024*1024, "size of heaps for sorting")
 	serverCmd.Flags().IntVar(&maxMemoryPressure, "sorter-max-memory-percentage", 90, "system memory usage threshold for forcing in-disk sort")
 	serverCmd.Flags().Uint64Var(&maxMemoryConsumption, "sorter-max-memory-consumption", 16*1024*1024*1024, "maximum memory consumption of in-memory sort")
@@ -94,10 +98,11 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	}
 
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  numConcurrentWorker,
-		ChunkSizeLimit:       chunkSizeLimit,
-		MaxMemoryPressure:    maxMemoryPressure,
-		MaxMemoryConsumption: maxMemoryConsumption,
+		NumConcurrentWorker:    numConcurrentWorker,
+		ChunkSizeLimit:         chunkSizeLimit,
+		MaxMemoryPressure:      maxMemoryPressure,
+		MaxMemoryConsumption:   maxMemoryConsumption,
+		NumWorkerPoolGoroutine: numWorkerPoolGoroutine,
 	})
 
 	version.LogVersionInfo()
@@ -121,6 +126,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		return errors.Annotate(err, "run server")
 	}
 	server.Close()
+	sorter.UnifiedSorterCleanUp()
 	log.Info("cdc server exits successfully")
 
 	return nil
