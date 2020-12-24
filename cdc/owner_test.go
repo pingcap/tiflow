@@ -928,3 +928,93 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	err = capture.etcdClient.Close()
 	c.Assert(err, check.IsNil)
 }
+
+func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr := "127.0.0.1:12034"
+	ctx = util.PutCaptureAddrInCtx(ctx, addr)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, addr, &processorOpts{})
+	c.Assert(err, check.IsNil)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+
+	var (
+		wg              sync.WaitGroup
+		updateCount     = 0
+		recvChangeCount = 0
+	)
+	ctx1, cancel1 := context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		changefeedID := "test-changefeed"
+		pos := &model.TaskPosition{CheckPointTs: 100, ResolvedTs: 102}
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			default:
+			}
+			pos.ResolvedTs++
+			pos.CheckPointTs++
+			updated, err := capture.etcdClient.PutTaskPositionOnChange(ctx1, changefeedID, capture.info.ID, pos)
+			if errors.Cause(err) == context.Canceled {
+				return
+			}
+			c.Assert(err, check.IsNil)
+			c.Assert(updated, check.IsTrue)
+			updateCount++
+			// sleep to avoid other goroutine starvation
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	feedChangeReceiver, err := owner.feedChangeNotifier.NewReceiver(ownerRunInterval)
+	c.Assert(err, check.IsNil)
+	defer feedChangeReceiver.Stop()
+	owner.watchFeedChange(ctx)
+	wg.Add(1)
+	go func() {
+		defer func() {
+			// there could be one message remaining in notification receiver, try to consume it
+			select {
+			case <-feedChangeReceiver.C:
+			default:
+			}
+			wg.Done()
+		}()
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			case <-feedChangeReceiver.C:
+				recvChangeCount++
+				// sleep to simulate some owner work
+				time.Sleep(time.Millisecond * 50)
+			}
+		}
+	}()
+
+	time.Sleep(time.Second * 2)
+	// use cancel1 to avoid cancel the watchFeedChange
+	cancel1()
+	wg.Wait()
+	c.Assert(recvChangeCount, check.Greater, 0)
+	c.Assert(recvChangeCount, check.Less, updateCount)
+	select {
+	case <-feedChangeReceiver.C:
+		c.Error("should not receive message from feed change chan any more")
+	default:
+	}
+
+	err = capture.etcdClient.Close()
+	if err != nil {
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	}
+}
