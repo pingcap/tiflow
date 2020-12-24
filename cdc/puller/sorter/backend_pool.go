@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"sync"
@@ -29,7 +30,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
+)
+
+const (
+	backgroundJobInterval = time.Second * 5
 )
 
 var (
@@ -44,6 +50,13 @@ type backEndPool struct {
 	memPressure       int32
 	cache             [256]unsafe.Pointer
 	dir               string
+	filePrefix        string
+
+	// cancelCh needs to be unbuffered to prevent races
+	cancelCh chan struct{}
+	// cancelRWLock protects cache against races when the backEnd is exiting
+	cancelRWLock  sync.RWMutex
+	isTerminating bool
 }
 
 func newBackEndPool(dir string, captureAddr string) *backEndPool {
@@ -51,17 +64,25 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
 		dir:               dir,
+		cancelCh:          make(chan struct{}),
+		filePrefix:        fmt.Sprintf("%s/sort-%d-", dir, os.Getpid()),
 	}
 
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(backgroundJobInterval)
+		defer ticker.Stop()
 
 		metricSorterInMemoryDataSizeGauge := sorterInMemoryDataSizeGauge.WithLabelValues(captureAddr)
 		metricSorterOnDiskDataSizeGauge := sorterOnDiskDataSizeGauge.WithLabelValues(captureAddr)
 		metricSorterOpenFileCountGauge := sorterOpenFileCountGauge.WithLabelValues(captureAddr)
 
 		for {
-			<-ticker.C
+			select {
+			case <-ret.cancelCh:
+				log.Info("Unified Sorter backEnd is being cancelled")
+				return
+			case <-ticker.C:
+			}
 
 			metricSorterInMemoryDataSizeGauge.Set(float64(atomic.LoadInt64(&ret.memoryUseEstimate)))
 			metricSorterOnDiskDataSizeGauge.Set(float64(atomic.LoadInt64(&ret.onDiskDataSize)))
@@ -79,9 +100,10 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 
 			memPressure := m.Used * 100 / m.Total
 			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
-			if memPressure > 50 {
-				log.Debug("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure),
-					zap.Int64("usedBySorter", atomic.LoadInt64(&ret.memoryUseEstimate)))
+
+			if memPressure := ret.memoryPressure(); memPressure > 50 {
+				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
+					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
 				// Increase GC frequency to avoid necessary OOM
 				debug.SetGCPercent(10)
 			} else {
@@ -117,11 +139,18 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 
 func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	sorterConfig := config.GetSorterConfig()
-	if atomic.LoadInt64(&p.memoryUseEstimate) < int64(sorterConfig.MaxMemoryConsumption) &&
-		atomic.LoadInt32(&p.memPressure) < int32(sorterConfig.MaxMemoryPressure) {
+	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
+		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
 
 		ret := newMemoryBackEnd()
 		return ret, nil
+	}
+
+	p.cancelRWLock.RLock()
+	defer p.cancelRWLock.RUnlock()
+
+	if p.isTerminating {
+		return nil, cerrors.ErrUnifiedSorterBackendTerminating.GenWithStackByArgs()
 	}
 
 	for i := range p.cache {
@@ -132,8 +161,10 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		}
 	}
 
-	fname := fmt.Sprintf("%s/sort-%d-%d", p.dir, os.Getpid(), atomic.AddUint64(&p.fileNameCounter, 1))
-	log.Debug("Unified Sorter: trying to create file backEnd", zap.String("filename", fname))
+	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
+	log.Debug("Unified Sorter: trying to create file backEnd",
+		zap.String("filename", fname),
+		zap.String("table", tableNameFromCtx(ctx)))
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
@@ -155,6 +186,13 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 				failpoint.Return(nil)
 			}
 		})
+		p.cancelRWLock.RLock()
+		defer p.cancelRWLock.RUnlock()
+
+		if p.isTerminating {
+			return cerrors.ErrUnifiedSorterBackendTerminating.GenWithStackByArgs()
+		}
+
 		for i := range p.cache {
 			ptr := &p.cache[i]
 			if atomic.CompareAndSwapPointer(ptr, nil, unsafe.Pointer(b)) {
@@ -172,4 +210,56 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 		log.Panic("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
 	}
 	return nil
+}
+
+func (p *backEndPool) terminate() {
+	p.cancelCh <- struct{}{}
+	defer close(p.cancelCh)
+	// the background goroutine can be considered terminated here
+
+	p.cancelRWLock.Lock()
+	defer p.cancelRWLock.Unlock()
+	p.isTerminating = true
+
+	// any new allocs and deallocs will not succeed from this point
+	// accessing p.cache without atomics is safe from now
+
+	for i := range p.cache {
+		ptr := &p.cache[i]
+		backend := (*fileBackEnd)(*ptr)
+		if backend == nil {
+			continue
+		}
+		_ = backend.free()
+	}
+
+	if p.filePrefix == "" {
+		// This should not happen. But to prevent accidents in production, we add this anyway.
+		log.Panic("Empty filePrefix, please report a bug")
+	}
+
+	files, err := filepath.Glob(p.filePrefix + "*")
+	if err != nil {
+		log.Warn("Unified Sorter clean-up failed", zap.Error(err))
+	}
+	for _, file := range files {
+		err = os.RemoveAll(file)
+		if err != nil {
+			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
+		}
+	}
+}
+
+func (p *backEndPool) sorterMemoryUsage() int64 {
+	failpoint.Inject("memoryUsageInjectPoint", func(val failpoint.Value) {
+		failpoint.Return(int64(val.(int)))
+	})
+	return atomic.LoadInt64(&p.memoryUseEstimate)
+}
+
+func (p *backEndPool) memoryPressure() int32 {
+	failpoint.Inject("memoryPressureInjectPoint", func(val failpoint.Value) {
+		failpoint.Return(int32(val.(int)))
+	})
+	return atomic.LoadInt32(&p.memPressure)
 }
