@@ -55,16 +55,23 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer sorter2.UnifiedSorterCleanUp()
+
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  8,
-		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:    60,
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
+		NumWorkerPoolGoroutine: 4,
 	})
 
+<<<<<<< HEAD
 	err := os.MkdirAll("./sorter", 0755)
+=======
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+>>>>>>> a3fb52e... sorter: Stabilize Unified Sorter (#1210)
 	c.Assert(err, check.IsNil)
-	sorter := sorter2.NewUnifiedSorter("./sorter", "test", "0.0.0.0:0")
+	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -73,16 +80,23 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer sorter2.UnifiedSorterCleanUp()
+
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  8,
-		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:    60,
-		MaxMemoryConsumption: 0,
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
 	})
 
+<<<<<<< HEAD
 	err := os.MkdirAll("./sorter", 0755)
+=======
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+>>>>>>> a3fb52e... sorter: Stabilize Unified Sorter (#1210)
 	c.Assert(err, check.IsNil)
-	sorter := sorter2.NewUnifiedSorter("./sorter", "test", "0.0.0.0:0")
+	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -93,7 +107,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 		close(finishedCh)
 	}()
 
-	after := time.After(20 * time.Second)
+	after := time.After(30 * time.Second)
 	select {
 	case <-after:
 		c.FailNow()
@@ -113,6 +127,10 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		return sorter.Run(ctx)
+	})
+
+	errg.Go(func() error {
+		return sorter2.RunWorkerPool(ctx)
 	})
 
 	producerProgress := make([]uint64, numProducers)
