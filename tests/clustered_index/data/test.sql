@@ -128,7 +128,7 @@ INSERT INTO t_varcher VALUES ('sdff', 2);
 UPDATE t_varcher SET a = 'ppooii' WHERE b = 2;
 DELETE FROM t_varcher WHERE b = 1;
 
-create table t_text (a text primary key, b int);
+create table t_text (a text, b int, primary key(a(5)));
 INSERT INTO t_text VALUES ('abcc', 1);
 INSERT INTO t_text VALUES ('sdff', 2);
 UPDATE t_text SET a = 'ppooii' WHERE b = 2;
