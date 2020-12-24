@@ -51,7 +51,7 @@ type ownership struct {
 	tickTime     time.Duration
 }
 
-func newOwnersip(captureID model.CaptureID, tickTime time.Duration) ownership {
+func newOwnersip(tickTime time.Duration) ownership {
 	minTickTime := 5 * time.Second
 	if tickTime > minTickTime {
 		log.Panic("ownership counter must be incearsed every 5 seconds")
@@ -1030,7 +1030,7 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 
 // Run the owner
 // TODO avoid this tick style, this means we get `tickTime` latency here.
-func (o *Owner) Run(ctx context.Context, captureID model.CaptureID, tickTime time.Duration) error {
+func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(errors.New("owner run with injected error"))
 	})
@@ -1057,7 +1057,7 @@ func (o *Owner) Run(ctx context.Context, captureID model.CaptureID, tickTime tim
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
-	ownership := newOwnersip(captureID, tickTime)
+	ownership := newOwnersip(tickTime)
 loop:
 	for {
 		select {
