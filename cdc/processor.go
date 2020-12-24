@@ -977,7 +977,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
 
 	if replicaInfo.StartTs < globalcheckpointTs {
-		log.Warn("addTable: startTs < checkpoint",
+		log.Panic("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpoint", globalcheckpointTs),
