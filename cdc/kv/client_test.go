@@ -212,7 +212,6 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	initialized := mockInitializedEvent(3 /* regionID */, currentRequestID())
 	ch2 <- initialized
 
-	time.Sleep(time.Millisecond * 10)
 	cluster.ChangeLeader(3, 5)
 
 	ts, err := kvStorage.CurrentVersion()
