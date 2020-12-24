@@ -1108,15 +1108,7 @@ func (o *Owner) watchFeedChange(ctx context.Context) {
 				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
 				// operations should be resolved in future release.
 
-<<<<<<< HEAD
-				select {
-				case output <- struct{}{}:
-				default:
-					// in case output channel is full, just ignore this event
-				}
-=======
 				o.feedChangeNotifier.Notify()
->>>>>>> d72d143... owner: fix memory accumulated when owner consume etcd update slow (#1225)
 			}
 			cancel()
 		}
