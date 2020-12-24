@@ -90,7 +90,7 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - KV client receive events/s ： TiCDC 节点中 KV client 模块每秒收到来自 TiKV 的数据变更个数
 - Puller receive events/s ： TiCDC 节点中 Puller 模块每秒收到来自 KV client 模块的数据变更个数
 - Puller output events/s ： TiCDC 节点中 Puller 模块每秒输出到 Sorter 模块的数据变更个数
-- Sink flush rows/s ： TiCDC 节点每秒写到下游的数据变更的格式
+- Sink flush rows/s ： TiCDC 节点每秒写到下游的数据变更的个数
 - Puller buffer size ： TiCDC 节点中缓存在 Puller 模块中的数据变更个数
 - Entry sorter buffer size ： TiCDC 节点中缓存在 Sorter 模块中的数据变更个数
 - Processor/Mounter buffer size ： TiCDC 节点中缓存在 Processor 模块和 Mounter 模块中的数据变更个数

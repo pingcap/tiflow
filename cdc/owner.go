@@ -54,7 +54,7 @@ type ownership struct {
 func newOwnersip(captureID model.CaptureID, tickTime time.Duration) ownership {
 	minTickTime := 5 * time.Second
 	if tickTime > minTickTime {
-		panic("ownership counter must be incearsed every 5 seconds")
+		log.Panic("ownership counter must be incearsed every 5 seconds")
 	}
 	return ownership{
 		tickTime: minTickTime,
