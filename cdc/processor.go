@@ -169,10 +169,11 @@ func newProcessor(
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
-	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
-	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
+	log.Info("start processor with startts",
+		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	kvStorage := util.KVStorageFromCtx(ctx)
-	ddlPuller := puller.NewPuller(pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -185,6 +186,19 @@ func newProcessor(
 	sinkEmittedResolvedNotifier := new(notify.Notifier)
 	localResolvedNotifier := new(notify.Notifier)
 	localCheckpointTsNotifier := new(notify.Notifier)
+	sinkEmittedResolvedReceiver, err := sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	localResolvedReceiver, err := localResolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	localCheckpointTsReceiver, err := localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -207,14 +221,14 @@ func newProcessor(
 		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
-		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		sinkEmittedResolvedReceiver: sinkEmittedResolvedReceiver,
 
 		localResolvedNotifier: localResolvedNotifier,
-		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		localResolvedReceiver: localResolvedReceiver,
 
 		checkpointTs:              checkpointTs,
 		localCheckpointTsNotifier: localCheckpointTsNotifier,
-		localCheckpointTsReceiver: localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond),
+		localCheckpointTsReceiver: localCheckpointTsReceiver,
 
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
@@ -292,9 +306,9 @@ func (p *processor) wait() {
 	err := p.wg.Wait()
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("processor wait error",
-			zap.String("captureid", p.captureInfo.ID),
-			zap.String("captureaddr", p.captureInfo.AdvertiseAddr),
-			zap.String("changefeedID", p.changefeedID),
+			zap.String("capture-id", p.captureInfo.ID),
+			zap.String("capture", p.captureInfo.AdvertiseAddr),
+			zap.String("changefeed", p.changefeedID),
 			zap.Error(err),
 		)
 	}
@@ -331,10 +345,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 						logError = log.Warn
 						errField = zap.String("error", inErr.Error())
 					}
-					logError(
-						"update info failed",
-						zap.String("changefeed", p.changefeedID), errField,
-					)
+					logError("update info failed", util.ZapFieldChangefeed(ctx), errField)
 				}
 				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
 					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
@@ -358,11 +369,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		if !p.isStopped() {
 			err := retryFlushTaskStatusAndPosition()
 			if err != nil && errors.Cause(err) != context.Canceled {
-				log.Warn("failed to update info before exit", zap.Error(err))
+				log.Warn("failed to update info before exit", util.ZapFieldChangefeed(ctx), zap.Error(err))
 			}
 		}
 
-		log.Info("Local resolved worker exited")
+		log.Info("Local resolved worker exited", util.ZapFieldChangefeed(ctx))
 	}()
 
 	resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
@@ -401,7 +412,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		case <-p.localCheckpointTsReceiver.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
 			if checkpointTs == 0 {
-				log.Warn("0 is not a valid checkpointTs")
+				log.Warn("0 is not a valid checkpointTs", util.ZapFieldChangefeed(ctx))
 				continue
 			}
 			phyTs := oracle.ExtractPhysical(checkpointTs)
@@ -492,12 +503,12 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
-			log.Error("failed to flush task position", zap.Error(err))
+			log.Error("failed to flush task position", util.ZapFieldChangefeed(ctx), zap.Error(err))
 			return errors.Trace(err)
 		}
 	}
 	if updated {
-		log.Debug("flushed task position", zap.Stringer("position", p.position))
+		log.Debug("flushed task position", util.ZapFieldChangefeed(ctx), zap.Stringer("position", p.position))
 	}
 	return nil
 }
@@ -562,11 +573,11 @@ func (p *processor) removeTable(tableID int64) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
-	log.Debug("remove table", zap.Int64("id", tableID))
+	log.Debug("remove table", zap.String("changefeed", p.changefeedID), zap.Int64("id", tableID))
 
 	table, ok := p.tables[tableID]
 	if !ok {
-		log.Warn("table not found", zap.Int64("tableID", tableID))
+		log.Warn("table not found", zap.String("changefeed", p.changefeedID), zap.Int64("tableID", tableID))
 		return
 	}
 
@@ -592,7 +603,8 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			if opt.BoundaryTs <= p.position.CheckPointTs {
 				table, exist := p.tables[tableID]
 				if !exist {
-					log.Warn("table which will be deleted is not found", zap.Int64("tableID", tableID))
+					log.Warn("table which will be deleted is not found",
+						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 					opt.Done = true
 					opt.Status = model.OperFinished
 					status.Dirty = true
@@ -600,7 +612,8 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				}
 				stopped, checkpointTs := table.safeStop()
 				log.Debug("safeStop table", zap.Int64("tableID", tableID),
-					zap.Bool("stopped", stopped), zap.Uint64("checkpointTs", checkpointTs))
+					util.ZapFieldChangefeed(ctx), zap.Bool("stopped", stopped),
+					zap.Uint64("checkpointTs", checkpointTs))
 				if stopped {
 					opt.BoundaryTs = checkpointTs
 					if checkpointTs <= p.position.CheckPointTs {
@@ -631,10 +644,12 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			return nil, ctx.Err()
 		case tableID := <-p.opDoneCh:
 			log.Debug("Operation done signal received",
+				util.ZapFieldChangefeed(ctx),
 				zap.Int64("tableID", tableID),
 				zap.Reflect("operation", status.Operation[tableID]))
 			if status.Operation[tableID] == nil {
-				log.Debug("TableID does not exist, probably a mark table, ignore", zap.Int64("tableID", tableID))
+				log.Debug("TableID does not exist, probably a mark table, ignore",
+					util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 				continue
 			}
 			status.Operation[tableID].Done = true
@@ -656,7 +671,7 @@ done:
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
 func (p *processor) globalStatusWorker(ctx context.Context) error {
-	log.Info("Global status worker started")
+	log.Info("Global status worker started", util.ZapFieldChangefeed(ctx))
 
 	var (
 		changefeedStatus         *model.ChangeFeedStatus
@@ -665,9 +680,12 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		lastResolvedTs           uint64
 		watchKey                 = kv.GetEtcdKeyJob(p.changefeedID)
 		globalResolvedTsNotifier = new(notify.Notifier)
-		globalResolvedTsReceiver = globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	)
 	defer globalResolvedTsNotifier.Close()
+	globalResolvedTsReceiver, err := globalResolvedTsNotifier.NewReceiver(1 * time.Second)
+	if err != nil {
+		return err
+	}
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
 		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
@@ -686,7 +704,8 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
 			lastResolvedTs = changefeedStatus.ResolvedTs
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
-			log.Debug("Update globalResolvedTs", zap.Uint64("globalResolvedTs", lastResolvedTs))
+			log.Debug("Update globalResolvedTs",
+				zap.Uint64("globalResolvedTs", lastResolvedTs), util.ZapFieldChangefeed(ctx))
 			globalResolvedTsNotifier.Notify()
 		}
 	}
@@ -701,7 +720,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 				if globalResolvedTs > localResolvedTs {
 					log.Warn("globalResolvedTs too large", zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("localResolvedTs", localResolvedTs))
+						zap.Uint64("localResolvedTs", localResolvedTs), util.ZapFieldChangefeed(ctx))
 					// we do not issue resolved events if globalResolvedTs > localResolvedTs.
 					continue
 				}
@@ -723,7 +742,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Global resolved worker exited")
+			log.Info("Global resolved worker exited", util.ZapFieldChangefeed(ctx))
 			return ctx.Err()
 		default:
 		}
@@ -735,7 +754,8 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				if errors.Cause(err) == context.Canceled {
 					return backoff.Permanent(err)
 				}
-				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
+				log.Error("Global resolved worker: read global resolved ts failed",
+					util.ZapFieldChangefeed(ctx), zap.Error(err))
 			}
 			return err
 		}, retryCfg)
@@ -796,7 +816,8 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			dur := time.Since(start)
 			metricFlushDuration.Observe(dur.Seconds())
 			if dur > 3*time.Second {
-				log.Warn("flush row changed events too slow", zap.Duration("duration", dur))
+				log.Warn("flush row changed events too slow",
+					zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
 			}
 		}
 	}
@@ -806,7 +827,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer func() {
 		p.sinkEmittedResolvedReceiver.Stop()
-		log.Info("syncResolved stopped")
+		log.Info("syncResolved stopped", util.ZapFieldChangefeed(ctx))
 	}()
 
 	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
@@ -936,16 +957,16 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	})
 	if err != nil {
-		log.Warn("get table name for metric", zap.Error(err))
+		log.Warn("get table name for metric", util.ZapFieldChangefeed(ctx), zap.String("error", err.Error()))
 		tableName = strconv.Itoa(int(tableID))
 	}
 
 	if table, ok := p.tables[tableID]; ok {
 		if atomic.SwapUint32(&table.isDying, 0) == 1 {
-			log.Warn("The same table exists but is dying. Cancel it and continue.", zap.Int64("ID", tableID))
+			log.Warn("The same table exists but is dying. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.cancel()
 		} else {
-			log.Warn("Ignore existing table", zap.Int64("ID", tableID))
+			log.Warn("Ignore existing table", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			return
 		}
 	}
@@ -954,6 +975,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	if replicaInfo.StartTs < globalcheckpointTs {
 		log.Warn("addTable: startTs < checkpoint",
+			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpoint", globalcheckpointTs),
 			zap.Uint64("startTs", replicaInfo.StartTs))
@@ -961,6 +983,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 	log.Debug("Add table", zap.Int64("tableID", tableID),
+		util.ZapFieldChangefeed(ctx),
 		zap.String("name", tableName),
 		zap.Any("replicaInfo", replicaInfo),
 		zap.Uint64("globalResolvedTs", globalResolvedTs))
@@ -983,7 +1006,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
 		kvStorage := util.KVStorageFromCtx(ctx)
-		plr := puller.NewPuller(p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
+		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -1086,7 +1109,7 @@ func (p *processor) sorterConsume(
 		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 			log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
 				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
-				zap.Int64("tableID", tableID))
+				zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
 
 			opDone = true
 			checkDoneTicker.Stop()
@@ -1101,6 +1124,7 @@ func (p *processor) sorterConsume(
 		}
 		if !opDone {
 			log.Debug("addTable not done",
+				util.ZapFieldChangefeed(ctx),
 				zap.Uint64("tableResolvedTs", lastResolvedTs),
 				zap.Uint64("localResolvedTs", localResolvedTs),
 				zap.Uint64("globalResolvedTs", globalResolvedTs),
@@ -1143,6 +1167,7 @@ func (p *processor) sorterConsume(
 			sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 			if pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
 				log.Panic("The CRTs of event is not expected, please report a bug",
+					util.ZapFieldChangefeed(ctx),
 					zap.String("model", "sorter"),
 					zap.Uint64("globalResolvedTs", sinkResolvedTs),
 					zap.Uint64("resolvedTs", lastResolvedTs),
@@ -1253,7 +1278,7 @@ func runProcessor(
 		cancel()
 		return nil, err
 	}
-	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
+	log.Info("start to run processor", zap.String("changefeed", changefeedID))
 
 	processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
 	processor.Run(ctx)
@@ -1264,10 +1289,9 @@ func runProcessor(
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
-				zap.String("captureid", captureInfo.ID),
-				zap.String("captureaddr", captureInfo.AdvertiseAddr),
-				zap.String("changefeedid", changefeedID),
-				zap.String("processorid", processor.id),
+				util.ZapFieldCapture(ctx),
+				zap.String("changefeed", changefeedID),
+				zap.String("processor", processor.id),
 				zap.Error(err))
 			// record error information in etcd
 			var code string
@@ -1283,14 +1307,13 @@ func runProcessor(
 			}
 			_, err = processor.etcdCli.PutTaskPositionOnChange(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
 			if err != nil {
-				log.Warn("upload processor error failed", zap.Error(err))
+				log.Warn("upload processor error failed", util.ZapFieldChangefeed(ctx), zap.Error(err))
 			}
 		} else {
 			log.Info("processor exited",
-				zap.String("captureid", captureInfo.ID),
-				zap.String("captureaddr", captureInfo.AdvertiseAddr),
-				zap.String("changefeedid", changefeedID),
-				zap.String("processorid", processor.id))
+				util.ZapFieldCapture(ctx),
+				zap.String("changefeed", changefeedID),
+				zap.String("processor", processor.id))
 		}
 		cancel()
 	}()

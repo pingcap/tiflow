@@ -126,6 +126,10 @@ func newMqSink(
 		return ret
 	}
 
+	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
@@ -137,7 +141,7 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
+		resolvedReceiver:    resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -212,7 +216,7 @@ flushLoop:
 		return 0, errors.Trace(err)
 	}
 	k.checkpointTs = resolvedTs
-	k.statistics.PrintStatus()
+	k.statistics.PrintStatus(ctx)
 	return k.checkpointTs, nil
 }
 

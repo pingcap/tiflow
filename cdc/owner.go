@@ -180,8 +180,6 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 }
 
 func (o *Owner) addOrphanTable(cid model.CaptureID, tableID model.TableID, startTs model.Ts) {
-	o.l.Lock()
-	defer o.l.Unlock()
 	if cf, ok := o.changeFeeds[cid]; ok {
 		cf.orphanTables[tableID] = startTs
 	} else {
@@ -197,7 +195,7 @@ func (o *Owner) newChangeFeed(
 	info *model.ChangeFeedInfo,
 	checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
-		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
+		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
 		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
 		if err != nil {
@@ -546,7 +544,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 			if filter.ChangefeedFastFailError(err) {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
-					zap.Error(err), zap.String("changefeedid", changeFeedID))
+					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
 				err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
 				if err != nil {
@@ -1129,7 +1127,14 @@ func (o *Owner) run(ctx context.Context) error {
 	o.l.Lock()
 	defer o.l.Unlock()
 
-	err := o.loadChangeFeeds(ctx)
+	var err error
+
+	err = o.cleanUpStaleTasks(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = o.loadChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1211,19 +1216,15 @@ func (o *Owner) writeDebugInfo(w io.Writer) {
 }
 
 // cleanUpStaleTasks cleans up the task status which does not associated
-// with an active processor.
+// with an active processor. This function is not thread safe.
 //
 // When a new owner is elected, it does not know the events occurs before, like
 // processor deletion. In this case, the new owner should check if the task
 // status is stale because of the processor deletion.
-func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.CaptureInfo) error {
+func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 	_, changefeeds, err := o.etcdClient.GetChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	active := make(map[string]struct{})
-	for _, c := range captures {
-		active[c.ID] = struct{}{}
 	}
 	for changeFeedID := range changefeeds {
 		statuses, err := o.etcdClient.GetAllTaskStatus(ctx, changeFeedID)
@@ -1257,7 +1258,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 			zap.Reflect("workloads", workloads))
 
 		for captureID := range captureIDs {
-			if _, ok := active[captureID]; !ok {
+			if _, ok := o.captures[captureID]; !ok {
 				status, ok1 := statuses[captureID]
 				if ok1 {
 					pos, taskPosFound := positions[captureID]
@@ -1286,7 +1287,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
-				log.Info("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
+				log.Info("cleanup stale task", zap.String("capture-id", captureID), zap.String("changefeed", changeFeedID))
 			}
 		}
 	}
@@ -1312,9 +1313,13 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	}
 	o.l.Unlock()
 
-	rev, captures, err := o.etcdClient.GetCaptures(ctx)
+	rev, captureList, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	captures := make(map[model.CaptureID]*model.CaptureInfo)
+	for _, c := range captureList {
+		captures[c.ID] = c
 	}
 	// before watching, rebuild events according to
 	// the existed captures. This is necessary because
@@ -1367,14 +1372,12 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	return nil
 }
 
-func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures []*model.CaptureInfo) error {
-	current := make(map[string]*model.CaptureInfo)
+func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	for _, c := range captures {
-		current[c.ID] = c
 		o.addCapture(c)
 	}
 	for _, c := range o.captures {
-		if _, ok := current[c.ID]; !ok {
+		if _, ok := captures[c.ID]; !ok {
 			o.removeCapture(c)
 		}
 	}
@@ -1389,7 +1392,9 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures []*model.Capt
 	//    from step-1, however other capture may crash just after step-2 returns
 	//    and before step-1 starts, the longer time gap between step-2 to step-1,
 	//    missing a crashed capture is more likey to happen.
-	return errors.Trace(o.cleanUpStaleTasks(ctx, captures))
+	o.l.Lock()
+	defer o.l.Unlock()
+	return errors.Trace(o.cleanUpStaleTasks(ctx))
 }
 
 func (o *Owner) startCaptureWatcher(ctx context.Context) {
