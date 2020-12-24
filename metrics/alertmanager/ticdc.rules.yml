@@ -2,7 +2,7 @@ groups:
 - name: alert.rules
   rules:
   - alert: cdc_multiple_owners
-    expr: sum(rate(ticdc_owner_ownership_counter[30s])) > 2
+    expr: sum(rate(ticdc_owner_ownership_counter[30s])) >= 2
     for: 1m
     labels:
       env: ENV_LABELS_ENV
