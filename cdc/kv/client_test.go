@@ -482,6 +482,274 @@ consumePreResolvedTs:
 	cancel()
 }
 
+func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
+
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+
+	eventsBeforeInit := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("aaa"),
+						Value:   []byte("sss"),
+						StartTs: 110, // ResolvedTs = 100
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("aaa"),
+						StartTs:  110, // ResolvedTs = 100
+						CommitTs: 120,
+					}},
+				},
+			},
+		},
+		// commit event before initializtion without prewrite matched will be ignored
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("aa"),
+						StartTs:  105, // ResolvedTs = 100
+						CommitTs: 115,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("aaaa"),
+						Value:    []byte("ss"),
+						StartTs:  105, // ResolvedTs = 100
+						CommitTs: 115,
+					}},
+				},
+			},
+		},
+	}}
+	initialized := mockInitializedEvent(3 /*regionID */, currentRequestID())
+	eventsAfterInit := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_DELETE,
+						Key:     []byte("atsl"),
+						StartTs: 130,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_DELETE,
+						Key:      []byte("atsl"),
+						StartTs:  130,
+						CommitTs: 140,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("astonmatin"),
+						Value:   []byte("db11"),
+						StartTs: 135,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("astonmatin"),
+						StartTs:  135,
+						CommitTs: 145,
+					}},
+				},
+			},
+		},
+	}}
+	eventResolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 135},
+		},
+	}}
+	// batch resolved ts
+	eventResolvedBatch := &cdcpb.ChangeDataEvent{
+		ResolvedTs: &cdcpb.ResolvedTs{
+			Regions: []uint64{3},
+			Ts:      145,
+		},
+	}
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("aaa"),
+				Value:    []byte("sss"),
+				StartTs:  110,
+				CRTs:     120,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("aaaa"),
+				Value:    []byte("ss"),
+				StartTs:  105,
+				CRTs:     115,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypeDelete,
+				Key:      []byte("atsl"),
+				StartTs:  130,
+				CRTs:     140,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("astonmatin"),
+				Value:    []byte("db11"),
+				StartTs:  135,
+				CRTs:     145,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 135,
+			},
+			RegionID: 3,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 145,
+			},
+			RegionID: 3,
+		},
+	}
+
+	ch1 <- eventsBeforeInit
+	ch1 <- initialized
+	ch1 <- eventsAfterInit
+	ch1 <- eventResolved
+	ch1 <- eventResolvedBatch
+
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+
+	cancel()
+}
+
 // TODO enable the test
 func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
