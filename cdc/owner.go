@@ -1274,7 +1274,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 					for tableID, replicaInfo := range status.Tables {
 						startTs := replicaInfo.StartTs
 						if taskPosFound {
-							startTs = pos.CheckPointTs
+							if startTs < pos.CheckPointTs {
+								startTs = pos.CheckPointTs
+							}
 						}
 						o.addOrphanTable(changeFeedID, tableID, startTs)
 					}
