@@ -245,14 +245,9 @@ func newProcessor(
 	p.status = status
 	p.statusModRevision = modRevision
 
-	info, modRevision, err := p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
+	info, _, err := p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-	if modRevision < p.statusModRevision {
-		log.Panic("Etcd inconsistent",
-			zap.Int64("modRevision-1", p.statusModRevision),
-			zap.Int64("modRevision-2", modRevision))
 	}
 
 	p.globalcheckpointTs = info.CheckpointTs
