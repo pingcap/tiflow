@@ -250,7 +250,7 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 
-	if err != nil {
+	if err == nil {
 		p.globalcheckpointTs = info.CheckpointTs
 	}
 
