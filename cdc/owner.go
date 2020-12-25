@@ -162,6 +162,10 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 		for tableID, replicaInfo := range task.Tables {
 			feed.orphanTables[tableID] = startTs
 			if startTs < replicaInfo.StartTs {
+				log.Warn("table startTs not consistent",
+					zap.Uint64("table-start-ts", replicaInfo.StartTs),
+					zap.Uint64("checkpoint-ts", startTs),
+					zap.Reflect("status", feed.status))
 				feed.orphanTables[tableID] = replicaInfo.StartTs
 			}
 		}
