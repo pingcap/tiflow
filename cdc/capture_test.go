@@ -93,7 +93,8 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 	}()
 	// ttl is 5s, wait 1s to ensure `capture.Run` starts
 	time.Sleep(time.Second)
-	s.client.Client.Revoke(ctx, capture.session.Lease())
+	_, err = s.client.Client.Revoke(ctx, capture.session.Lease())
+	c.Assert(err, check.IsNil)
 	wg.Wait()
 
 	err = capture.etcdClient.Close()
@@ -162,7 +163,8 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	time.Sleep(time.Millisecond * 100)
 
 	// step-3
-	s.client.Client.Revoke(ctx, capture.session.Lease())
+	_, err = s.client.Client.Revoke(ctx, capture.session.Lease())
+	c.Assert(err, check.IsNil)
 	err = s.client.DeleteTaskStatus(ctx, changefeedID, capture.info.ID)
 	c.Assert(err, check.IsNil)
 
