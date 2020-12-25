@@ -246,11 +246,14 @@ func newProcessor(
 	p.statusModRevision = modRevision
 
 	info, _, err := p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
-	if err != nil {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, errors.Trace(err)
 	}
 
-	p.globalcheckpointTs = info.CheckpointTs
+	if err != nil {
+		p.globalcheckpointTs = info.CheckpointTs
+	}
+
 	for tableID, replicaInfo := range p.status.Tables {
 		p.addTable(ctx, tableID, replicaInfo)
 	}
