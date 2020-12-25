@@ -15,7 +15,9 @@ package sorter
 
 import (
 	"context"
+	"sync"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -45,12 +47,25 @@ func NewUnifiedSorter(dir string, tableName string, captureAddr string) *Unified
 		pool = newBackEndPool(dir, captureAddr)
 	}
 
+	lazyInitWorkerPool()
 	return &UnifiedSorter{
 		inputCh:   make(chan *model.PolymorphicEvent, 128000),
 		outputCh:  make(chan *model.PolymorphicEvent, 128000),
 		dir:       dir,
 		pool:      pool,
 		tableName: tableName,
+	}
+}
+
+// UnifiedSorterCleanUp cleans up the files that might have been used.
+func UnifiedSorterCleanUp() {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	if pool != nil {
+		log.Info("Unified Sorter: starting cleaning up files")
+		pool.terminate()
+		pool = nil
 	}
 }
 
@@ -73,20 +88,38 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
 	defer mergerCleanUp(heapSorterCollectCh)
 
-	heapSorterErrg, subsubctx := errgroup.WithContext(subctx)
+	heapSorterErrCh := make(chan error, 1)
+	defer close(heapSorterErrCh)
+	heapSorterErrOnce := &sync.Once{}
 	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
 	for i := range heapSorters {
 		finalI := i
 		heapSorters[finalI] = newHeapSorter(finalI, heapSorterCollectCh)
-		heapSorterErrg.Go(func() error {
-			return printError(heapSorters[finalI].run(subsubctx))
+		heapSorters[finalI].init(subctx, func(err error) {
+			heapSorterErrOnce.Do(func() {
+				heapSorterErrCh <- err
+			})
 		})
 	}
 
 	errg.Go(func() error {
-		// must wait for all writers to exit to close the channel.
-		defer close(heapSorterCollectCh)
-		return heapSorterErrg.Wait()
+		defer func() {
+			// cancelling the heapSorters from the outside
+			for _, hs := range heapSorters {
+				hs.poolHandle.Unregister()
+			}
+			// must wait for all writers to exit to close the channel.
+			close(heapSorterCollectCh)
+		}()
+
+		for {
+			select {
+			case <-subctx.Done():
+				return errors.Trace(subctx.Err())
+			case err := <-heapSorterErrCh:
+				return errors.Trace(err)
+			}
+		}
 	})
 
 	errg.Go(func() error {
@@ -106,7 +139,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 						select {
 						case <-subctx.Done():
 							return subctx.Err()
-						case sorter.inputCh <- event:
+						default:
+						}
+						err := sorter.poolHandle.AddEvent(subctx, event)
+						if err != nil {
+							return errors.Trace(err)
 						}
 					}
 					continue
@@ -118,7 +155,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				select {
 				case <-subctx.Done():
 					return subctx.Err()
-				case heapSorters[targetID].inputCh <- event:
+				default:
+					err := heapSorters[targetID].poolHandle.AddEvent(subctx, event)
+					if err != nil {
+						return errors.Trace(err)
+					}
 				}
 			}
 		}
@@ -139,6 +180,22 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 // Output implements the EventSorter interface
 func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
+}
+
+// RunWorkerPool runs the worker pool used by the heapSorters
+// It **must** be running for Unified Sorter to work.
+func RunWorkerPool(ctx context.Context) error {
+	lazyInitWorkerPool()
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return errors.Trace(heapSorterPool.Run(ctx))
+	})
+
+	errg.Go(func() error {
+		return errors.Trace(heapSorterIOPool.Run(ctx))
+	})
+
+	return errors.Trace(errg.Wait())
 }
 
 // tableNameFromCtx is used for retrieving the table's name from a context within the Unified Sorter
