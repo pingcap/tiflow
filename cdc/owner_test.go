@@ -910,7 +910,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(len(owner.captures), check.Equals, 1)
 	c.Assert(owner.captures, check.HasKey, capture.info.ID)
-	c.Assert(owner.changeFeeds[changefeed].orphanTables, check.DeepEquals, map[model.TableID]model.Ts{51: 100})
+	c.Assert(owner.changeFeeds[changefeed].orphanTables, check.DeepEquals, map[model.TableID]model.Ts{51: 110})
 	// check stale tasks are cleaned up
 	statuses, err := s.client.GetAllTaskStatus(ctx, changefeed)
 	c.Assert(err, check.IsNil)
