@@ -173,6 +173,11 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			}
 			failpoint.Inject("captureHandleTaskDelay", nil)
 			if err := c.handleTaskEvent(ctx, ev); err != nil {
+				// We check ttl of lease instead of check `session.Done`, because
+				// `session.Done` is only notified when etcd client establish a
+				// new keepalive request, there could be a time window as long as
+				// 1/3 of session ttl that `session.Done` can't be triggered even
+				// the lease is already revoked.
 				lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
 				if inErr != nil {
 					return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
