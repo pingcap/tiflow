@@ -173,11 +173,13 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			}
 			failpoint.Inject("captureHandleTaskDelay", nil)
 			if err := c.handleTaskEvent(ctx, ev); err != nil {
-				select {
-				case <-c.session.Done():
-					log.Warn("handle task event failed because session is done", zap.Error(err))
+				lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
+				if inErr != nil {
+					return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
+				}
+				if lease.TTL == int64(-1) {
+					log.Warn("handle task event failed because session is disconnected", zap.Error(err))
 					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
-				default:
 				}
 				return errors.Trace(err)
 			}
@@ -255,7 +257,7 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 		zap.String("capture-id", c.info.ID), util.ZapFieldCapture(ctx),
 		zap.String("changefeed", task.ChangeFeedID))
 
-	p, err := runProcessor(
+	p, err := runProcessorImpl(
 		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
 	if err != nil {
 		log.Error("run processor failed",
