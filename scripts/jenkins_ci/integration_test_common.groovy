@@ -191,7 +191,7 @@ def download_binaries(){
         tidb_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
         tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
         pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-        tiflash_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${tiflash_sha1}/centos7/tiflash-server.tar.gz"
+        tiflash_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${TIFLASH_BRANCH}/${tiflash_sha1}/centos7/tiflash.tar.gz"
         minio_url="${FILE_SERVER_URL}/download/minio.tar.gz"
 
         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
