@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -64,7 +65,7 @@ func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
 		KeyPath:       filepath.Join(dir, certDir, "client-key.pem"),
 		CertAllowedCN: []string{},
 	}
-	cli, err := NewClient(credential)
+	cli, err := NewClient(credential, time.Duration(time.Second*5))
 	c.Assert(err, check.IsNil)
 	url := fmt.Sprintf("https://127.0.0.1:%d/", port)
 	resp, err := cli.Get(url)

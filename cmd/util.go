@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
@@ -145,7 +146,7 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 		scheme = "https"
 	}
 	addr := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
-	cli, err := httputil.NewClient(credential)
+	cli, err := httputil.NewClient(credential, time.Duration(time.Second))
 	if err != nil {
 		return err
 	}
@@ -183,7 +184,7 @@ func applyOwnerChangefeedQuery(
 		scheme = "https"
 	}
 	addr := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
-	cli, err := httputil.NewClient(credential)
+	cli, err := httputil.NewClient(credential, time.Duration(time.Second))
 	if err != nil {
 		return "", err
 	}

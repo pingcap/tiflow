@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -27,9 +28,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -301,7 +304,12 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		if err := owner.Run(ctx, ownerRunInterval); err != nil {
 			if errors.Cause(err) == context.Canceled {
 				log.Info("owner exited", zap.String("capture-id", s.capture.info.ID))
-				return nil
+				select {
+				case <-ctx.Done():
+					// only exits the campaignOwnerLoop if parent context is done
+					return ctx.Err()
+				default:
+				}
 			}
 			err2 := s.capture.Resign(ctx)
 			if err2 != nil {
@@ -312,6 +320,48 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 		// owner is resigned by API, reset owner and continue the campaign loop
 		s.setOwner(nil)
+	}
+}
+
+func (s *Server) etcdHealthChecker(ctx context.Context) error {
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
+
+	httpCli, err := httputil.NewClient(s.opts.credential, time.Duration(time.Second*10))
+	if err != nil {
+		return err
+	}
+	metrics := make(map[string]prometheus.Observer)
+	for _, pdEndpoint := range s.pdEndpoints {
+		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(s.opts.advertiseAddr, pdEndpoint)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			for _, pdEndpoint := range s.pdEndpoints {
+				start := time.Now()
+
+				req, err := http.NewRequestWithContext(
+					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
+				if err != nil {
+					log.Warn("etcd health check failed", zap.Error(err))
+					continue
+				}
+				_, err = httpCli.Do(req)
+				if err != nil {
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						log.Warn("etcd health check timeout", zap.String("pd", pdEndpoint))
+						continue
+					}
+					log.Warn("etcd health check unexpected error", zap.Error(err))
+					continue
+				}
+				metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
+			}
+		}
 	}
 }
 
@@ -332,6 +382,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return s.campaignOwnerLoop(cctx)
+	})
+
+	wg.Go(func() error {
+		return s.etcdHealthChecker(cctx)
 	})
 
 	wg.Go(func() error {

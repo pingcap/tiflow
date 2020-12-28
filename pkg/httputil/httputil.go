@@ -15,6 +15,7 @@ package httputil
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/pingcap/ticdc/pkg/security"
 )
@@ -25,7 +26,7 @@ type Client struct {
 }
 
 // NewClient creates an HTTP client with the given Credential.
-func NewClient(credential *security.Credential) (*Client, error) {
+func NewClient(credential *security.Credential, timeout time.Duration) (*Client, error) {
 	transport := http.DefaultTransport
 	if credential != nil {
 		tlsConf, err := credential.ToTLSConfig()
@@ -39,6 +40,6 @@ func NewClient(credential *security.Credential) (*Client, error) {
 		}
 	}
 	return &Client{
-		Client: http.Client{Transport: transport},
+		Client: http.Client{Transport: transport, Timeout: timeout},
 	}, nil
 }

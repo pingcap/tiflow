@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -60,7 +61,7 @@ func CheckClusterVersion(
 		}
 		log.Warn("check TiKV version failed", zap.Error(err))
 	}
-	httpCli, err := httputil.NewClient(credential)
+	httpCli, err := httputil.NewClient(credential, time.Duration(time.Second*5))
 	if err != nil {
 		return err
 	}

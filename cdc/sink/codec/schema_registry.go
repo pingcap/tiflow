@@ -78,7 +78,7 @@ func NewAvroSchemaManager(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	httpCli, err := httputil.NewClient(credential)
+	httpCli, err := httputil.NewClient(credential, time.Duration(time.Minute))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -344,7 +344,7 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxInterval = time.Second * 30
-	httpCli, err := httputil.NewClient(credential)
+	httpCli, err := httputil.NewClient(credential, time.Duration(time.Minute))
 
 	if r.Body != nil {
 		data, err = ioutil.ReadAll(r.Body)
