@@ -1146,11 +1146,6 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	err = o.calcResolvedTs(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	err = o.handleDDL(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -1162,6 +1157,11 @@ func (o *Owner) run(ctx context.Context) error {
 	}
 
 	err = o.handleAdminJob(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = o.calcResolvedTs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
