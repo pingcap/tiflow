@@ -171,11 +171,11 @@ def download_binaries(){
     println "PD_BRANCH=${PD_BRANCH}"
 
     // parse tiflash branch
-    def m2 = ghprbCommentBody =~ /tiflash\s*=\s*([^\s\\]+)(\s|\\|$)/
-    if (m2) {
-        TIFLASH_BRANCH = "${m2[0][1]}"
+    def m4 = ghprbCommentBody =~ /tiflash\s*=\s*([^\s\\]+)(\s|\\|$)/
+    if (m4) {
+        TIFLASH_BRANCH = "${m4[0][1]}"
     }
-    m2 = null
+    m4 = null
     println "TIFLASH_BRANCH=${TIFLASH_BRANCH}"
 
     println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
