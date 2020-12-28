@@ -30,7 +30,7 @@ func (s *kvSuite) TestRegionFeedEvent(c *check.C) {
 		OpType: OpTypePut,
 	}
 	resolved := &ResolvedSpan{
-		Span:       regionspan.ComparableSpan{},
+		Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 		ResolvedTs: 111,
 	}
 
@@ -42,6 +42,8 @@ func (s *kvSuite) TestRegionFeedEvent(c *check.C) {
 
 	ev = &RegionFeedEvent{Resolved: resolved}
 	c.Assert(ev.GetValue(), check.DeepEquals, resolved)
+
+	c.Assert(resolved.String(), check.Equals, "span: [61, 62), resolved-ts: 111")
 }
 
 func (s *kvSuite) TestRawKVEntry(c *check.C) {

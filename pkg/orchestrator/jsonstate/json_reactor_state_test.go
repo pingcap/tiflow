@@ -117,7 +117,7 @@ func (s *jsonReactorStateSuite) TestSimpleJSONRecord(c *check.C) {
 			id:     i,
 		}
 
-		initState, err := NewJSONReactorState("/json", &simpleJSONRecord{})
+		initState, err := NewJSONReactorState(testEtcdKeyPrefix+"/json", &simpleJSONRecord{})
 		c.Assert(err, check.IsNil)
 
 		etcdWorker, err := orchestrator.NewEtcdWorker(newClient(), testEtcdKeyPrefix, reactor, initState)
@@ -134,4 +134,11 @@ func (s *jsonReactorStateSuite) TestSimpleJSONRecord(c *check.C) {
 
 	err = errg.Wait()
 	c.Assert(err, check.IsNil)
+}
+
+func (s *jsonReactorStateSuite) TestNotPointerError(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	_, err := NewJSONReactorState("/json", simpleJSONRecord{})
+	c.Assert(err, check.NotNil)
 }

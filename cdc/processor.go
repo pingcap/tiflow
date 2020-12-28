@@ -1257,6 +1257,8 @@ func (p *processor) isStopped() bool {
 	return atomic.LoadInt32(&p.stopped) == 1
 }
 
+var runProcessorImpl = runProcessor
+
 // runProcessor creates a new processor then starts it.
 func runProcessor(
 	ctx context.Context,
