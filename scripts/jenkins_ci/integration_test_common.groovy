@@ -200,7 +200,8 @@ def download_binaries(){
         curl \${minio_url} | tar xz -C ./tmp/bin minio
         mv tmp/bin/* third_bin
         curl \${tiflash_url} | tar xz -C third_bin
-        mv third_bin/tiflash/* third_bin
+        mv third_bin/tiflash third_bin/_tiflash
+        mv third_bin/_tiflash/* third_bin
         curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
         curl -L http://fileserver.pingcap.net/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz | tar xz -C ./tmp
         mv tmp/etcd-v3.4.7-linux-amd64/etcdctl third_bin
