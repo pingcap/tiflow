@@ -494,7 +494,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 
 	s = sinkURI.Query().Get("max-batch-size")
 	if s != "" {
-		opts["max-message-bytes"] = s
+		opts["max-batch-size"] = s
 	}
 	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
 	// and it may needs credential.
