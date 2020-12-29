@@ -425,6 +425,11 @@ func allocID() uint64 {
 	return atomic.AddUint64(&currentID, 1)
 }
 
+// used in test only
+func currentRequestID() uint64 {
+	return atomic.LoadUint64(&currentID)
+}
+
 type eventFeedSession struct {
 	client      *CDCClient
 	regionCache *tikv.RegionCache
@@ -486,7 +491,7 @@ func newEventFeedSession(
 		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
-		id:                strconv.FormatUint(allocID(), 10),
+		id:                id,
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
