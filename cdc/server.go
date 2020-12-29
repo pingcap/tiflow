@@ -327,10 +327,11 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
 
-	httpCli, err := httputil.NewClient(s.opts.credential, time.Duration(time.Second*10))
+	httpCli, err := httputil.NewClient(s.opts.credential)
 	if err != nil {
 		return err
 	}
+	defer httpCli.CloseIdleConnections()
 	metrics := make(map[string]prometheus.Observer)
 	for _, pdEndpoint := range s.pdEndpoints {
 		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(s.opts.advertiseAddr, pdEndpoint)
@@ -343,23 +344,21 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 		case <-ticker.C:
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
-
+				ctx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*10))
 				req, err := http.NewRequestWithContext(
 					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
 				if err != nil {
 					log.Warn("etcd health check failed", zap.Error(err))
+					cancel()
 					continue
 				}
 				_, err = httpCli.Do(req)
 				if err != nil {
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						log.Warn("etcd health check timeout", zap.String("pd", pdEndpoint))
-						continue
-					}
-					log.Warn("etcd health check unexpected error", zap.Error(err))
-					continue
+					log.Warn("etcd health check error", zap.Error(err))
+				} else {
+					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 				}
-				metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
+				cancel()
 			}
 		}
 	}
