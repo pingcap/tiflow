@@ -144,7 +144,8 @@ def download_binaries(){
     def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "release-5.0-rc")
     def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "release-5.0-rc")
     def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "release-5.0-rc")
-    def TIFLASH_BRANCH = params.getOrDefault("release_test__tiflash_commit", "release-5.0-rc")
+    def TIFLASH_BRANCH = params.getOrDefault("release_test__release_branch", "release-5.0-rc")
+    def TIFLASH_COMMIT = params.getOrDefault("release_test__tiflash_commit", null)
 
     // parse tidb branch
     def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
@@ -182,7 +183,12 @@ def download_binaries(){
     def tidb_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tidb/${TIDB_BRANCH}/sha1").trim()
     def tikv_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tikv/${TIKV_BRANCH}/sha1").trim()
     def pd_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/pd/${PD_BRANCH}/sha1").trim()
-    def tiflash_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tiflash/${TIFLASH_BRANCH}/sha1").trim()
+    def tiflash_sha1
+    if (TIFLASH_COMMIT) {
+        tiflash_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tiflash/${TIFLASH_COMMIT}/sha1").trim()
+    } else {
+        tiflash_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tiflash/${TIFLASH_BRANCH}/sha1").trim()
+    }
     sh """
         mkdir -p third_bin
         mkdir -p tmp
