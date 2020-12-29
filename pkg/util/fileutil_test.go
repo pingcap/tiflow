@@ -34,7 +34,7 @@ func (s *fileUtilSuite) TestIsDirWritable(c *check.C) {
 	err := IsDirWritable(dir)
 	c.Assert(err, check.IsNil)
 
-	err = os.Chmod(dir, 0400)
+	err = os.Chmod(dir, 0o400)
 	c.Assert(err, check.IsNil)
 	me, err := user.Current()
 	c.Assert(err, check.IsNil)
@@ -54,7 +54,7 @@ func (s *fileUtilSuite) TestIsDirAndWritable(c *check.C) {
 	err := IsDirAndWritable(path)
 	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
 
-	err = ioutil.WriteFile(path, nil, 0600)
+	err = ioutil.WriteFile(path, nil, 0o600)
 	c.Assert(err, check.IsNil)
 	err = IsDirAndWritable(path)
 	c.Assert(err, check.ErrorMatches, ".*is not a directory")

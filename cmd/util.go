@@ -52,9 +52,7 @@ var (
 	allowedCertCN string
 )
 
-var (
-	errOwnerNotFound = liberrors.New("owner not found")
-)
+var errOwnerNotFound = liberrors.New("owner not found")
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")

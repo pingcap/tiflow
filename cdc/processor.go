@@ -66,10 +66,6 @@ const (
 	schemaStorageGCLag = time.Minute * 20
 )
 
-var (
-	fNewPDCli = pd.NewClientWithContext
-)
-
 type processor struct {
 	id           string
 	captureInfo  model.CaptureInfo
@@ -158,6 +154,7 @@ func (t *tableInfo) safeStop() (stopped bool, checkpointTs model.Ts) {
 // newProcessor creates and returns a processor for the specified change feed
 func newProcessor(
 	ctx context.Context,
+	pdCli pd.Client,
 	credential *security.Credential,
 	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
@@ -169,12 +166,6 @@ func newProcessor(
 	flushCheckpointInterval time.Duration,
 ) (*processor, error) {
 	etcdCli := session.Client()
-	endpoints := session.Client().Endpoints()
-	pdCli, err := fNewPDCli(ctx, endpoints, credential.PDSecurityOption())
-	if err != nil {
-		return nil, errors.Annotatef(
-			cerror.WrapError(cerror.ErrNewProcessorFailed, err), "create pd client failed, addr: %v", endpoints)
-	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
@@ -198,6 +189,19 @@ func newProcessor(
 	sinkEmittedResolvedNotifier := new(notify.Notifier)
 	localResolvedNotifier := new(notify.Notifier)
 	localCheckpointTsNotifier := new(notify.Notifier)
+	sinkEmittedResolvedReceiver, err := sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	localResolvedReceiver, err := localResolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	localCheckpointTsReceiver, err := localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -214,18 +218,20 @@ func newProcessor(
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
 
+		flushCheckpointInterval: flushCheckpointInterval,
+
 		position: &model.TaskPosition{CheckPointTs: checkpointTs},
 		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
-		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		sinkEmittedResolvedReceiver: sinkEmittedResolvedReceiver,
 
 		localResolvedNotifier: localResolvedNotifier,
-		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
+		localResolvedReceiver: localResolvedReceiver,
 
 		checkpointTs:              checkpointTs,
 		localCheckpointTsNotifier: localCheckpointTsNotifier,
-		localCheckpointTsReceiver: localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond),
+		localCheckpointTsReceiver: localCheckpointTsReceiver,
 
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
@@ -496,7 +502,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	//p.position.Count = p.sink.Count()
+	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
@@ -535,11 +541,15 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			err = p.flushTaskPosition(ctx)
-			if err != nil {
-				return true, errors.Trace(err)
+			// processor reads latest task status from etcd, analyzes operation
+			// field and processes table add or delete. If operation is unapplied
+			// but stays unchanged after processor handling tables, it means no
+			// status is changed and we don't need to flush task status neigher.
+			if !taskStatus.Dirty {
+				return false, nil
 			}
-			return true, nil
+			err = p.flushTaskPosition(ctx)
+			return true, err
 		})
 	if err != nil {
 		// not need to check error
@@ -600,6 +610,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 					opt.Done = true
 					opt.Status = model.OperFinished
+					status.Dirty = true
 					continue
 				}
 				stopped, checkpointTs := table.safeStop()
@@ -613,6 +624,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 						opt.Done = true
 						opt.Status = model.OperFinished
 					}
+					status.Dirty = true
 				}
 			}
 		} else {
@@ -625,6 +637,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			}
 			p.addTable(ctx, tableID, replicaInfo)
 			opt.Status = model.OperProcessed
+			status.Dirty = true
 		}
 	}
 
@@ -644,6 +657,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			}
 			status.Operation[tableID].Done = true
 			status.Operation[tableID].Status = model.OperFinished
+			status.Dirty = true
 		default:
 			goto done
 		}
@@ -651,6 +665,9 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 done:
 	if !status.SomeOperationsUnapplied() {
 		status.Operation = nil
+		// status.Dirty must be true when status changes from `unapplied` to `applied`,
+		// setting status.Dirty = true is not **must** here.
+		status.Dirty = true
 	}
 	return tablesToRemove, nil
 }
@@ -666,9 +683,12 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		lastResolvedTs           uint64
 		watchKey                 = kv.GetEtcdKeyJob(p.changefeedID)
 		globalResolvedTsNotifier = new(notify.Notifier)
-		globalResolvedTsReceiver = globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	)
 	defer globalResolvedTsNotifier.Close()
+	globalResolvedTsReceiver, err := globalResolvedTsNotifier.NewReceiver(1 * time.Second)
+	if err != nil {
+		return err
+	}
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
 		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
@@ -984,7 +1004,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	table.workload = model.WorkloadInfo{Workload: 1}
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64) *puller.Rectifier {
-
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
@@ -1009,7 +1028,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0755)
+					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
 					if err != nil {
 						p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 						return nil
@@ -1211,6 +1230,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
 	p.stateMu.Unlock()
+	failpoint.Inject("processorStopDelay", nil)
 	atomic.StoreInt32(&p.stopped, 1)
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
@@ -1228,9 +1248,12 @@ func (p *processor) isStopped() bool {
 	return atomic.LoadInt32(&p.stopped) == 1
 }
 
+var runProcessorImpl = runProcessor
+
 // runProcessor creates a new processor then starts it.
 func runProcessor(
 	ctx context.Context,
+	pdCli pd.Client,
 	credential *security.Credential,
 	session *concurrency.Session,
 	info model.ChangeFeedInfo,
@@ -1257,7 +1280,7 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	processor, err := newProcessor(ctx, credential, session, info, sink,
+	processor, err := newProcessor(ctx, pdCli, credential, session, info, sink,
 		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
 		cancel()

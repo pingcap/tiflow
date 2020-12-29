@@ -15,6 +15,7 @@ package util
 
 import (
 	"context"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/mockstore"
@@ -113,11 +114,11 @@ func (s *ctxValueSuite) TestShouldReturnKVStorage(c *check.C) {
 
 func (s *ctxValueSuite) TestKVStorageNotSet(c *check.C) {
 	defer testleak.AfterTest(c)()
-	//Context not set value
+	// Context not set value
 	kvStorage, err := KVStorageFromCtx(context.Background())
 	c.Assert(kvStorage, check.IsNil)
 	c.Assert(err, check.NotNil)
-	//Type of value is not kv.Storage
+	// Type of value is not kv.Storage
 	ctx := context.WithValue(context.Background(), ctxKeyKVStorage, 1321)
 	kvStorage, err = KVStorageFromCtx(ctx)
 	c.Assert(kvStorage, check.IsNil)

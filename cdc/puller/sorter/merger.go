@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -35,7 +36,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	metricSorterEventCount := sorterEventCount.MustCurryWith(map[string]string{
 		"capture":    captureAddr,
 		"changefeed": changefeedID,
-		"table":      tableName})
+		"table":      tableName,
+	})
 	metricSorterResolvedTsGauge := sorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
 	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
 	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName)
@@ -184,11 +186,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return nil
 		}
 
-		if sortHeap.Len() > 0 {
-			log.Debug("Unified Sorter: start merging",
-				zap.String("table", tableNameFromCtx(ctx)),
-				zap.Uint64("minResolvedTs", minResolvedTs))
-		}
+		failpoint.Inject("sorterDebug", func() {
+			if sortHeap.Len() > 0 {
+				log.Debug("Unified Sorter: start merging",
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Uint64("minResolvedTs", minResolvedTs))
+			}
+		})
 
 		counter := 0
 		for sortHeap.Len() > 0 {
@@ -281,11 +285,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				continue
 			}
 
-			if counter%10 == 0 {
-				log.Debug("Merging progress",
-					zap.String("table", tableNameFromCtx(ctx)),
-					zap.Int("counter", counter))
-			}
+			failpoint.Inject("sorterDebug", func() {
+				if counter%10 == 0 {
+					log.Debug("Merging progress",
+						zap.String("table", tableNameFromCtx(ctx)),
+						zap.Int("counter", counter))
+				}
+			})
 
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
@@ -297,11 +303,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			log.Panic("unified sorter: merging ended prematurely, bug?", zap.Uint64("resolvedTs", minResolvedTs))
 		}
 
-		if counter > 0 {
-			log.Debug("Unified Sorter: merging ended",
-				zap.String("table", tableNameFromCtx(ctx)),
-				zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
-		}
+		failpoint.Inject("sorterDebug", func() {
+			if counter > 0 {
+				log.Debug("Unified Sorter: merging ended",
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
+			}
+		})
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)

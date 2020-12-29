@@ -373,14 +373,20 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
-			conn.Close()
+			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
+			// state. If the store recovers, the gPRC conn can be reused. But if
+			// store goes away forever, the conn will be leaked, we need a better
+			// connection pool.
 			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return errors.Trace(err)
 		}
 		client := cdcpb.NewChangeDataClient(conn)
 		stream, err = client.EventFeed(ctx)
 		if err != nil {
-			conn.Close()
+			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
+			// state. If the store recovers, the gPRC conn can be reused. But if
+			// store goes away forever, the conn will be leaked, we need a better
+			// connection pool.
 			err = cerror.WrapError(cerror.ErrTiKVEventFeed, err)
 			log.Info("establish stream to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return err
@@ -417,6 +423,11 @@ var currentID uint64 = 0
 
 func allocID() uint64 {
 	return atomic.AddUint64(&currentID, 1)
+}
+
+// used in test only
+func currentRequestID() uint64 {
+	return atomic.LoadUint64(&currentID)
 }
 
 type eventFeedSession struct {
@@ -480,7 +491,7 @@ func newEventFeedSession(
 		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
-		id:                strconv.FormatUint(allocID(), 10),
+		id:                id,
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),

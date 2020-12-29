@@ -15,13 +15,14 @@ package cdc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
@@ -503,7 +504,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	defer sink.Close() //nolint:errcheck
 	sampleCF.sink = sink
 
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
@@ -805,7 +806,7 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
@@ -854,4 +855,166 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 
 	err = capture.etcdClient.Close()
 	c.Assert(err, check.IsNil)
+}
+
+func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr := "127.0.0.1:12034"
+	ctx = util.PutCaptureAddrInCtx(ctx, addr)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, addr, &processorOpts{})
+	c.Assert(err, check.IsNil)
+	err = s.client.PutCaptureInfo(ctx, capture.info, capture.session.Lease())
+	c.Assert(err, check.IsNil)
+
+	changefeed := "changefeed-name"
+	invalidCapture := uuid.New().String()
+	for _, captureID := range []string{capture.info.ID, invalidCapture} {
+		taskStatus := &model.TaskStatus{}
+		if captureID == invalidCapture {
+			taskStatus.Tables = map[model.TableID]*model.TableReplicaInfo{
+				51: {StartTs: 110},
+			}
+		}
+		err = s.client.PutTaskStatus(ctx, changefeed, captureID, taskStatus)
+		c.Assert(err, check.IsNil)
+		_, err = s.client.PutTaskPositionOnChange(ctx, changefeed, captureID, &model.TaskPosition{CheckPointTs: 100, ResolvedTs: 120})
+		c.Assert(err, check.IsNil)
+		err = s.client.PutTaskWorkload(ctx, changefeed, captureID, &model.TaskWorkload{})
+		c.Assert(err, check.IsNil)
+	}
+	err = s.client.SaveChangeFeedInfo(ctx, &model.ChangeFeedInfo{}, changefeed)
+	c.Assert(err, check.IsNil)
+
+	_, captureList, err := s.client.GetCaptures(ctx)
+	c.Assert(err, check.IsNil)
+	captures := make(map[model.CaptureID]*model.CaptureInfo)
+	for _, c := range captureList {
+		captures[c.ID] = c
+	}
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+	// It is better to update changefeed information by `loadChangeFeeds`, however
+	// `loadChangeFeeds` is too overweight, just mock enough information here.
+	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{
+		changefeed: {
+			id:           changefeed,
+			orphanTables: make(map[model.TableID]model.Ts),
+		},
+	}
+	err = owner.rebuildCaptureEvents(ctx, captures)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(owner.captures), check.Equals, 1)
+	c.Assert(owner.captures, check.HasKey, capture.info.ID)
+	c.Assert(owner.changeFeeds[changefeed].orphanTables, check.DeepEquals, map[model.TableID]model.Ts{51: 100})
+	// check stale tasks are cleaned up
+	statuses, err := s.client.GetAllTaskStatus(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(statuses), check.Equals, 1)
+	c.Assert(statuses, check.HasKey, capture.info.ID)
+	positions, err := s.client.GetAllTaskPositions(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(positions), check.Equals, 1)
+	c.Assert(positions, check.HasKey, capture.info.ID)
+	workloads, err := s.client.GetAllTaskWorkloads(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(workloads), check.Equals, 1)
+	c.Assert(workloads, check.HasKey, capture.info.ID)
+
+	err = capture.etcdClient.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr := "127.0.0.1:12034"
+	ctx = util.PutCaptureAddrInCtx(ctx, addr)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, addr, &processorOpts{})
+	c.Assert(err, check.IsNil)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+
+	var (
+		wg              sync.WaitGroup
+		updateCount     = 0
+		recvChangeCount = 0
+	)
+	ctx1, cancel1 := context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		changefeedID := "test-changefeed"
+		pos := &model.TaskPosition{CheckPointTs: 100, ResolvedTs: 102}
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			default:
+			}
+			pos.ResolvedTs++
+			pos.CheckPointTs++
+			updated, err := capture.etcdClient.PutTaskPositionOnChange(ctx1, changefeedID, capture.info.ID, pos)
+			if errors.Cause(err) == context.Canceled {
+				return
+			}
+			c.Assert(err, check.IsNil)
+			c.Assert(updated, check.IsTrue)
+			updateCount++
+			// sleep to avoid other goroutine starvation
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	feedChangeReceiver, err := owner.feedChangeNotifier.NewReceiver(ownerRunInterval)
+	c.Assert(err, check.IsNil)
+	defer feedChangeReceiver.Stop()
+	owner.watchFeedChange(ctx)
+	wg.Add(1)
+	go func() {
+		defer func() {
+			// there could be one message remaining in notification receiver, try to consume it
+			select {
+			case <-feedChangeReceiver.C:
+			default:
+			}
+			wg.Done()
+		}()
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			case <-feedChangeReceiver.C:
+				recvChangeCount++
+				// sleep to simulate some owner work
+				time.Sleep(time.Millisecond * 50)
+			}
+		}
+	}()
+
+	time.Sleep(time.Second * 2)
+	// use cancel1 to avoid cancel the watchFeedChange
+	cancel1()
+	wg.Wait()
+	c.Assert(recvChangeCount, check.Greater, 0)
+	c.Assert(recvChangeCount, check.Less, updateCount)
+	select {
+	case <-feedChangeReceiver.C:
+		c.Error("should not receive message from feed change chan any more")
+	default:
+	}
+
+	err = capture.etcdClient.Close()
+	if err != nil {
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	}
 }

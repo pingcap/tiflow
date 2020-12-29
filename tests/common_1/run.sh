@@ -15,6 +15,19 @@ function run() {
 
     cd $WORK_DIR
 
+    tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
+        "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
+    # TODO: refine the release detection after 5.0 tag of TiDB is ready
+    if [[ $tidb_build_branch =~ ^(master)$ ]]; then
+        # https://github.com/pingcap/tidb/pull/21533 disables multi_schema change
+        # feature by default, turn it on first
+        run_sql "set global tidb_enable_change_multi_schema = on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+        # This must be set before cdc server starts
+        run_sql "set global tidb_enable_change_multi_schema = on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+        # TiDB global variables cache 2 seconds at most
+        sleep 2
+    fi
+
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
@@ -31,8 +44,7 @@ function run() {
     fi
 
     run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
-        "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
+    # TODO: refine the release detection after 5.0 tag of TiDB is ready
     if [[ ! $tidb_build_branch =~ ^(master)$ ]]; then
         echo "skip some SQLs in tidb v4.0.x"
     else

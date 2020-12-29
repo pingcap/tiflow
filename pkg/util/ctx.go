@@ -15,8 +15,9 @@ package util
 
 import (
 	"context"
-	"github.com/pingcap/errors"
 	"time"
+
+	"github.com/pingcap/errors"
 
 	"github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"

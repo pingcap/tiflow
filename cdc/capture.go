@@ -27,6 +27,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -49,6 +50,7 @@ type processorOpts struct {
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	etcdClient kv.CDCEtcdClient
+	pdCli      pd.Client
 	credential *security.Credential
 
 	processors map[string]*processor
@@ -67,6 +69,7 @@ type Capture struct {
 func NewCapture(
 	ctx context.Context,
 	pdEndpoints []string,
+	pdCli pd.Client,
 	credential *security.Credential,
 	advertiseAddr string,
 	opts *processorOpts,
@@ -126,6 +129,7 @@ func NewCapture(
 		election:   elec,
 		info:       info,
 		opts:       opts,
+		pdCli:      pdCli,
 	}
 
 	return
@@ -167,7 +171,21 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			if ev.Err != nil {
 				return errors.Trace(ev.Err)
 			}
+			failpoint.Inject("captureHandleTaskDelay", nil)
 			if err := c.handleTaskEvent(ctx, ev); err != nil {
+				// We check ttl of lease instead of check `session.Done`, because
+				// `session.Done` is only notified when etcd client establish a
+				// new keepalive request, there could be a time window as long as
+				// 1/3 of session ttl that `session.Done` can't be triggered even
+				// the lease is already revoked.
+				lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
+				if inErr != nil {
+					return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
+				}
+				if lease.TTL == int64(-1) {
+					log.Warn("handle task event failed because session is disconnected", zap.Error(err))
+					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+				}
 				return errors.Trace(err)
 			}
 		}
@@ -244,8 +262,8 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 		zap.String("capture-id", c.info.ID), util.ZapFieldCapture(ctx),
 		zap.String("changefeed", task.ChangeFeedID))
 
-	p, err := runProcessor(
-		ctx, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
+	p, err := runProcessorImpl(
+		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeed", task.ChangeFeedID),

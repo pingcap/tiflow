@@ -351,7 +351,6 @@ func (s *sqlRequest) read(ctx context.Context) (map[string]interface{}, error) {
 	rows, err := db.SelectFrom(s.tableName).Where(s.getWhereCondition()).QueryContext(ctx)
 	if err != nil {
 		return nil, errors.AddStack(err)
-
 	}
 	defer rows.Close()
 

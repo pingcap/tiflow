@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
@@ -32,10 +33,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var sorterDir = flag.String("dir", "./sorter", "temporary directory used for sorting")
-var numBatches = flag.Int("num-batches", 256, "number of batches of ordered events")
-var msgsPerBatch = flag.Int("num-messages-per-batch", 102400, "number of events in a batch")
-var bytesPerMsg = flag.Int("bytes-per-message", 1024, "number of bytes in an event")
+var (
+	sorterDir    = flag.String("dir", "./sorter", "temporary directory used for sorting")
+	numBatches   = flag.Int("num-batches", 256, "number of batches of ordered events")
+	msgsPerBatch = flag.Int("num-messages-per-batch", 1024, "number of events in a batch")
+	bytesPerMsg  = flag.Int("bytes-per-message", 1024, "number of bytes in an event")
+)
 
 func main() {
 	flag.Parse()
@@ -56,7 +59,7 @@ func main() {
 		_ = http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	err = os.MkdirAll(*sorterDir, 0755)
+	err = os.MkdirAll(*sorterDir, 0o755)
 	if err != nil {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
@@ -66,6 +69,10 @@ func main() {
 	ctx1, cancel := context.WithCancel(context.Background())
 
 	eg, ctx := errgroup.WithContext(ctx1)
+
+	eg.Go(func() error {
+		return pullerSorter.RunWorkerPool(ctx)
+	})
 
 	eg.Go(func() error {
 		return sorter.Run(ctx)

@@ -19,7 +19,7 @@ GOVENDORFLAG := -mod=vendor
 endif
 
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
-GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath 
+GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 ifeq ($(GOVERSION114), 1)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
@@ -29,11 +29,11 @@ endif
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration|testing_utils'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
-FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'kv_gen')
-TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration')
+FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto')
+TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
 CDC_PKG := github.com/pingcap/ticdc
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
 FAILPOINT := bin/failpoint-ctl
@@ -118,9 +118,9 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/run.sh kafka "$(CASE)"
 
-fmt:
+fmt: tools/bin/gofumports
 	@echo "gofmt (simplify)"
-	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
 lint: tools/bin/revive
 	@echo "linting"
@@ -134,7 +134,7 @@ check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
 
-check-leaktest-added:
+check-leaktest-added: tools/bin/gofumports
 	@echo "check leak test added in all unit tests"
 	./scripts/add-leaktest.sh $(TEST_FILES)
 
@@ -168,6 +168,10 @@ check-static: tools/bin/golangci-lint
 clean:
 	go clean -i ./...
 	rm -rf *.out
+
+tools/bin/gofumports: tools/check/go.mod
+	cd tools/check; test -e ../bin/gofumports || \
+	$(GO) build -o ../bin/gofumports mvdan.cc/gofumpt
 
 tools/bin/revive: tools/check/go.mod
 	cd tools/check; test -e ../bin/revive || \
