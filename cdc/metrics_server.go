@@ -17,16 +17,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var (
-	etcdHealthCheckDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "server",
-			Name:      "etcd_health_check_duration",
-			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
-			Buckets:   prometheus.ExponentialBuckets(0.0001 /* 0.1ms */, 2, 18),
-		}, []string{"capture", "pd"})
-)
+var etcdHealthCheckDuration = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "server",
+		Name:      "etcd_health_check_duration",
+		Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
+		Buckets:   prometheus.ExponentialBuckets(0.0001 /* 0.1ms */, 2, 18),
+	}, []string{"capture", "pd"})
 
 // initServerMetrics registers all metrics used in processor
 func initServerMetrics(registry *prometheus.Registry) {
