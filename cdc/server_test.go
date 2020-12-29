@@ -57,6 +57,7 @@ var _ = check.Suite(&serverSuite{})
 
 func (s *serverSuite) TestNewServer(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	svr, err := NewServer()
 	c.Assert(err, check.ErrorMatches, ".*empty PD address")
 	c.Assert(svr, check.IsNil)
