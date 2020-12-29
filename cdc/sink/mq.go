@@ -424,7 +424,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 
 	s = sinkURI.Query().Get("max-batch-size")
 	if s != "" {
-		opts["max-message-bytes"] = s
+		opts["max-batch-size"] = s
 	}
 
 	s = sinkURI.Query().Get("compression")
