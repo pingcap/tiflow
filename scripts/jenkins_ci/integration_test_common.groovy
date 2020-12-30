@@ -144,7 +144,8 @@ def download_binaries(){
     def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "release-5.0-rc")
     def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "release-5.0-rc")
     def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "release-5.0-rc")
-    def TIFLASH_BRANCH = params.getOrDefault("release_test__tiflash_commit", "release-5.0-rc")
+    def TIFLASH_BRANCH = params.getOrDefault("release_test__release_branch", "release-5.0-rc")
+    def TIFLASH_COMMIT = params.getOrDefault("release_test__tiflash_commit", null)
 
     // parse tidb branch
     def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
@@ -182,7 +183,10 @@ def download_binaries(){
     def tidb_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tidb/${TIDB_BRANCH}/sha1").trim()
     def tikv_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tikv/${TIKV_BRANCH}/sha1").trim()
     def pd_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/pd/${PD_BRANCH}/sha1").trim()
-    def tiflash_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tiflash/${TIFLASH_BRANCH}/sha1").trim()
+    def tiflash_sha1 = TIFLASH_COMMIT
+    if (TIFLASH_COMMIT == null) {
+        tiflash_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tiflash/${TIFLASH_BRANCH}/sha1").trim()
+    }
     sh """
         mkdir -p third_bin
         mkdir -p tmp
@@ -205,8 +209,7 @@ def download_binaries(){
         curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
         curl -L http://fileserver.pingcap.net/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz | tar xz -C ./tmp
         mv tmp/etcd-v3.4.7-linux-amd64/etcdctl third_bin
-        curl https://download.pingcap.org/tidb-tools-v2.1.6-linux-amd64.tar.gz | tar xz -C ./tmp tidb-tools-v2.1.6-linux-amd64/bin/sync_diff_inspector
-        mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
+        curl http://fileserver.pingcap.net/download/builds/pingcap/cdc/sync_diff_inspector.tar.gz | tar xz -C ./third_bin
         curl -L https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -o jq
         mv jq third_bin
         chmod a+x third_bin/*
