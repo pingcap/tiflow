@@ -1,9 +1,23 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
 	"context"
-	"github.com/pingcap/log"
 	"time"
+
+	"github.com/pingcap/log"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -21,7 +35,7 @@ import (
 type cdcMonitor struct {
 	etcdCli    *etcd.Client
 	etcdWorker *orchestrator.EtcdWorker
-	reactor    *CDCMonitReactor
+	reactor    *cdcMonitReactor
 }
 
 func newCDCMonitor(ctx context.Context, pd string) (*cdcMonitor, error) {
@@ -48,13 +62,12 @@ func newCDCMonitor(ctx context.Context, pd string) (*cdcMonitor, error) {
 			}),
 		},
 	})
-
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	wrappedCli := etcd.Wrap(etcdCli, map[string]prometheus.Counter{})
-	reactor := &CDCMonitReactor{}
+	reactor := &cdcMonitReactor{}
 	initState := newCDCReactorState()
 	etcdWorker, err := orchestrator.NewEtcdWorker(wrappedCli, kv.EtcdKeyBase, reactor, initState)
 	if err != nil {
@@ -71,7 +84,8 @@ func newCDCMonitor(ctx context.Context, pd string) (*cdcMonitor, error) {
 }
 
 func (m *cdcMonitor) run(ctx context.Context) error {
-	err := m.etcdWorker.Run(ctx, 200 * time.Millisecond)
+	log.Debug("start running cdcMonitor")
+	err := m.etcdWorker.Run(ctx, 200*time.Millisecond)
 	log.Error("etcdWorker exited", zap.Error(err))
 	log.Info("CDC state", zap.Reflect("state", m.reactor.state))
 	return err

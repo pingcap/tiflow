@@ -1,17 +1,96 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
 	"context"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 )
 
-type CDCMonitReactor struct {
-	state *CDCReactorState
+type cdcMonitReactor struct {
+	state *cdcReactorState
 }
 
-func (r *CDCMonitReactor) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	r.state = state.(*CDCReactorState)
-	return r.state, nil
+func (r *cdcMonitReactor) Tick(_ context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
+	r.state = state.(*cdcReactorState)
+
+	err := r.verifyTs()
+	if err != nil {
+		log.Error("Verifying Ts failed", zap.Error(err))
+	}
+
+	err = r.verifyStartTs()
+	if err != nil {
+		log.Error("Verifying startTs failed", zap.Error(err))
+	}
+
+	return r.state, err
 }
 
+func (r *cdcMonitReactor) verifyTs() error {
+	for changfeedID, positions := range r.state.TaskPositions {
+		status, ok := r.state.ChangefeedStatuses[changfeedID]
+		if !ok {
+			return errors.Errorf("changefeed status not found, cfid = %s", changfeedID)
+		}
+
+		actualCheckpointTs := status.CheckpointTs
+		actualResolvedTs := status.ResolvedTs
+
+		for captureID, position := range positions {
+			if position.CheckPointTs < actualCheckpointTs {
+				return errors.Errorf("checkpointTs too large, globalCkpt = %d, localCkpt = %d, capture = %s, cfid = %s",
+					actualCheckpointTs, position.CheckPointTs, captureID, changfeedID)
+			}
+
+			if position.ResolvedTs < actualResolvedTs {
+				return errors.Errorf("resolvedTs too large, globalRslvd = %d, localRslvd = %d, capture = %s, cfid = %s",
+					actualCheckpointTs, position.CheckPointTs, captureID, changfeedID)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *cdcMonitReactor) verifyStartTs() error {
+	for changfeedID, statuses := range r.state.TaskStatuses {
+		cStatus, ok := r.state.ChangefeedStatuses[changfeedID]
+		if !ok {
+			return errors.Errorf("changefeed status not found, cfid = %s", changfeedID)
+		}
+
+		actualCheckpointTs := cStatus.CheckpointTs
+
+		for captureID, status := range statuses {
+			for tableID, operation := range status.Operation {
+				if operation.Status != model.OperFinished && !operation.Delete {
+					startTs := status.Tables[tableID].StartTs
+					if startTs < actualCheckpointTs {
+						return errors.Errorf("startTs too small, globalCkpt = %d, startTs = %d, table = %d, capture = %s, cfid = %s",
+							actualCheckpointTs, startTs, tableID, captureID, changfeedID)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}

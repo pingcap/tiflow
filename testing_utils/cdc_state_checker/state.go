@@ -1,9 +1,23 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
 	"encoding/json"
-	"go.uber.org/zap"
 	"regexp"
+
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -13,11 +27,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 )
 
-type CDCReactorState struct {
+type cdcReactorState struct {
 	Owner              model.CaptureID
 	Captures           map[model.CaptureID]*model.CaptureInfo
 	ChangefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
-	Changefeeds        map[model.ChangeFeedID]*model.ChangeFeedInfo
 	TaskPositions      map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition
 	TaskStatuses       map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
 }
@@ -29,17 +42,16 @@ var (
 	statusRegex     = regexp.MustCompile(regexp.QuoteMeta(kv.TaskStatusKeyPrefix) + "/(.+?)/(.+)")
 )
 
-func newCDCReactorState() *CDCReactorState {
-	return &CDCReactorState{
+func newCDCReactorState() *cdcReactorState {
+	return &cdcReactorState{
 		Captures:           make(map[model.CaptureID]*model.CaptureInfo),
 		ChangefeedStatuses: make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
-		Changefeeds:        make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
 		TaskPositions:      make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition),
 		TaskStatuses:       make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus),
 	}
 }
 
-func (s *CDCReactorState) Update(key util.EtcdKey, value []byte) error {
+func (s *cdcReactorState) Update(key util.EtcdKey, value []byte) error {
 	if key.String() == kv.CaptureOwnerKey {
 		if value == nil {
 			log.Info("Owner lost", zap.String("old-owner", s.Owner))
@@ -52,7 +64,7 @@ func (s *CDCReactorState) Update(key util.EtcdKey, value []byte) error {
 		return nil
 	}
 
-	if matches := captureRegex.FindSubmatch(value); matches != nil {
+	if matches := captureRegex.FindSubmatch(key.Bytes()); matches != nil {
 		captureID := string(matches[1])
 
 		if value == nil {
@@ -85,7 +97,7 @@ func (s *CDCReactorState) Update(key util.EtcdKey, value []byte) error {
 		return nil
 	}
 
-	if matches := changefeedRegex.FindSubmatch(value); matches != nil {
+	if matches := changefeedRegex.FindSubmatch(key.Bytes()); matches != nil {
 		changefeedID := string(matches[1])
 
 		if value == nil {
@@ -93,33 +105,33 @@ func (s *CDCReactorState) Update(key util.EtcdKey, value []byte) error {
 				zap.String("changefeedID", changefeedID),
 				zap.Reflect("old-changefeed", s.ChangefeedStatuses))
 
-			delete(s.Changefeeds, changefeedID)
+			delete(s.ChangefeedStatuses, changefeedID)
 			return nil
 		}
 
-		var newChangefeedInfo model.ChangeFeedInfo
-		err := json.Unmarshal(value, &newChangefeedInfo)
+		var newChangefeedStatus model.ChangeFeedStatus
+		err := json.Unmarshal(value, &newChangefeedStatus)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		if oldChangefeedInfo, ok := s.Changefeeds[changefeedID]; ok {
+		if oldChangefeedInfo, ok := s.ChangefeedStatuses[changefeedID]; ok {
 			log.Info("Changefeed updated",
 				zap.String("changefeedID", changefeedID),
 				zap.Reflect("old-changefeed", oldChangefeedInfo),
-				zap.Reflect("new-changefeed", newChangefeedInfo))
+				zap.Reflect("new-changefeed", newChangefeedStatus))
 		} else {
 			log.Info("Changefeed added",
 				zap.String("changefeedID", changefeedID),
-				zap.Reflect("new-changefeed", newChangefeedInfo))
+				zap.Reflect("new-changefeed", newChangefeedStatus))
 		}
 
-		s.Changefeeds[changefeedID] = &newChangefeedInfo
+		s.ChangefeedStatuses[changefeedID] = &newChangefeedStatus
 
 		return nil
 	}
 
-	if matches := positionRegex.FindSubmatch(value); matches != nil {
+	if matches := positionRegex.FindSubmatch(key.Bytes()); matches != nil {
 		captureID := string(matches[1])
 		changefeedID := string(matches[2])
 
@@ -165,7 +177,7 @@ func (s *CDCReactorState) Update(key util.EtcdKey, value []byte) error {
 		return nil
 	}
 
-	if matches := statusRegex.FindSubmatch(value); matches != nil {
+	if matches := statusRegex.FindSubmatch(key.Bytes()); matches != nil {
 		captureID := string(matches[1])
 		changefeedID := string(matches[2])
 
@@ -194,13 +206,13 @@ func (s *CDCReactorState) Update(key util.EtcdKey, value []byte) error {
 		}
 
 		if status, ok := s.TaskStatuses[changefeedID][captureID]; ok {
-			log.Info("Position updated",
+			log.Info("Status updated",
 				zap.String("captureID", captureID),
 				zap.String("changefeedID", changefeedID),
 				zap.Reflect("old-status", status),
 				zap.Reflect("new-status", newTaskStatus))
 		} else {
-			log.Info("Position updated",
+			log.Info("Status updated",
 				zap.String("captureID", captureID),
 				zap.String("changefeedID", changefeedID),
 				zap.Reflect("new-status", newTaskStatus))
@@ -215,6 +227,6 @@ func (s *CDCReactorState) Update(key util.EtcdKey, value []byte) error {
 	return nil
 }
 
-func (s *CDCReactorState) GetPatches() []*orchestrator.DataPatch {
+func (s *cdcReactorState) GetPatches() []*orchestrator.DataPatch {
 	return nil
 }
