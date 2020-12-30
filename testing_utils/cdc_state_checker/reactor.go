@@ -49,7 +49,8 @@ func (r *cdcMonitReactor) verifyTs() error {
 	for changfeedID, positions := range r.state.TaskPositions {
 		status, ok := r.state.ChangefeedStatuses[changfeedID]
 		if !ok {
-			return errors.Errorf("changefeed status not found, cfid = %s", changfeedID)
+			log.Warn("changefeed status not found", zap.String("cfid", changfeedID))
+			return nil
 		}
 
 		actualCheckpointTs := status.CheckpointTs
