@@ -7,6 +7,7 @@ killall -q -w -s 9 cdc || true
 killall -q -w -s 9 cdc.test || true
 killall -q -w -s 9 tiflash || true
 killall -q -w -s 9 flash_cluster_manager || true
+killall -q -w -s 9 cdc_state_checker || true
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
@@ -35,4 +36,3 @@ kill -9 $(lsof -i tcp:${DOWN_TIKV_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${DOWN_TIKV_STATUS_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:9500 -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:17000 -t 2>/dev/null) &>/dev/null || true
-killall -q -w -s 9 cdc_state_checker

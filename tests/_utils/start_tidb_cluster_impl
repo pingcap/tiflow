@@ -316,7 +316,7 @@ while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; d
 done
 
 echo "Starting CDC state checker..."
-cd $CUR/../../test_utils/cdc_state_checker
+cd $CUR/../../testing_utils/cdc_state_checker
 GO111MODULE=on go build
-./cdc_state_checker -pd ${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1} 2>&1 > tee $OUT_DIR/cdc_etcd_check.log &
+./cdc_state_checker -pd ${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1} > $OUT_DIR/cdc_etcd_check.log &
 cd $OUT_DIR

@@ -1,0 +1,17 @@
+#!/bin/bash
+# parameter 1: work directory
+WORK_DIR=$1
+
+set +e
+
+if [ ! -f $WORK_DIR/cdc_etcd_check.log ]; then
+    exit 1
+fi
+
+grep -q -i panic $WORK_DIR/cdc_etcd_check.log
+
+if [ $? -eq 0 ]; then
+  exit 1
+else
+  exit 0
+fi
