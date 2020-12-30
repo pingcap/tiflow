@@ -12,7 +12,6 @@ CDC_COUNT=3
 DB_COUNT=4
 MAX_RETRIES=20
 
-export -f check_changefeed_state
 
 function run() {
     # kafka is not supported yet.
