@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -362,6 +364,11 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
 		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", newStatus))
+		failpoint.Inject("OwnerRemoveTableError", func() {
+			if len(cleanedTables) > 0 {
+				failpoint.Return(errors.New("failpoint injected error"))
+			}
+		})
 	}
 
 	for tableID := range cleanedTables {
