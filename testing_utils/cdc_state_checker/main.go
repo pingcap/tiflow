@@ -34,5 +34,5 @@ func main() {
 	}
 
 	err = cdcMonitor.run(context.TODO())
-	log.Info("cdcMonitor exited", zap.Error(err))
+	log.Panic("cdcMonitor exited", zap.Error(err))
 }

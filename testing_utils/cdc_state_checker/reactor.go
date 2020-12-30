@@ -52,16 +52,10 @@ func (r *cdcMonitReactor) verifyTs() error {
 		}
 
 		actualCheckpointTs := status.CheckpointTs
-		actualResolvedTs := status.ResolvedTs
 
 		for captureID, position := range positions {
 			if position.CheckPointTs < actualCheckpointTs {
 				return errors.Errorf("checkpointTs too large, globalCkpt = %d, localCkpt = %d, capture = %s, cfid = %s",
-					actualCheckpointTs, position.CheckPointTs, captureID, changfeedID)
-			}
-
-			if position.ResolvedTs < actualResolvedTs {
-				return errors.Errorf("resolvedTs too large, globalRslvd = %d, localRslvd = %d, capture = %s, cfid = %s",
 					actualCheckpointTs, position.CheckPointTs, captureID, changfeedID)
 			}
 		}
