@@ -19,9 +19,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"go.uber.org/zap"
 )
 
 type cdcMonitReactor struct {
@@ -68,7 +67,8 @@ func (r *cdcMonitReactor) verifyStartTs() error {
 	for changfeedID, statuses := range r.state.TaskStatuses {
 		cStatus, ok := r.state.ChangefeedStatuses[changfeedID]
 		if !ok {
-			return errors.Errorf("changefeed status not found, cfid = %s", changfeedID)
+			log.Warn("changefeed status not found", zap.String("cfid", changfeedID))
+			return nil
 		}
 
 		actualCheckpointTs := cStatus.CheckpointTs
