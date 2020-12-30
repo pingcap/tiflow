@@ -33,14 +33,16 @@ func (r *cdcMonitReactor) Tick(_ context.Context, state orchestrator.ReactorStat
 	err := r.verifyTs()
 	if err != nil {
 		log.Error("Verifying Ts failed", zap.Error(err))
+		return r.state, err
 	}
 
 	err = r.verifyStartTs()
 	if err != nil {
 		log.Error("Verifying startTs failed", zap.Error(err))
+		return r.state, err
 	}
 
-	return r.state, err
+	return r.state, nil
 }
 
 func (r *cdcMonitReactor) verifyTs() error {
