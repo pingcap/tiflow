@@ -663,10 +663,6 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	err = c.balanceOrphanTables(ctx, captures)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
@@ -691,6 +687,11 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		log.Info("Execute DDL succeeded", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
 	} else {
 		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+	}
+
+	err = c.balanceOrphanTables(ctx, captures)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	c.ddlJobHistory = c.ddlJobHistory[1:]
