@@ -966,7 +966,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	if table, ok := p.tables[tableID]; ok {
 		if atomic.SwapUint32(&table.isDying, 0) == 1 {
-			log.Panic("The same table exists but is dying. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
+			failpoint.Inject("ProcessorPanicWhenDyingTableAdded", func() {
+				log.Panic("The same table exists but is dying.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
+			})
+			log.Warn("The same table exists but is dying. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.cancel()
 		} else {
 			log.Warn("Ignore existing table", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
