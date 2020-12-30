@@ -51,7 +51,7 @@ func newCDCReactorState() *cdcReactorState {
 	}
 }
 
-func (s *cdcReactorState) Update(key util.EtcdKey, value []byte) error {
+func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	if key.String() == kv.CaptureOwnerKey {
 		if value == nil {
 			log.Info("Owner lost", zap.String("old-owner", s.Owner))
