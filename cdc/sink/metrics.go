@@ -47,7 +47,7 @@ var (
 			Subsystem: "sink",
 			Name:      "conflict_detect_duration",
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 21),
+			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 20),
 		}, []string{"capture", "changefeed"})
 	bucketSizeCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
