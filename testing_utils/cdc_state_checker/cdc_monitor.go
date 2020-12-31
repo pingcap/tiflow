@@ -86,7 +86,7 @@ func newCDCMonitor(ctx context.Context, pd string) (*cdcMonitor, error) {
 func (m *cdcMonitor) run(ctx context.Context) error {
 	log.Debug("start running cdcMonitor")
 	err := m.etcdWorker.Run(ctx, 200*time.Millisecond)
-	log.Error("etcdWorker exited", zap.Error(err))
+	log.Error("etcdWorker exited: test-case-failed", zap.Error(err))
 	log.Info("CDC state", zap.Reflect("state", m.reactor.state))
 	return err
 }

@@ -104,6 +104,10 @@ func NewOwner(
 	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
 	endpoints := sess.Client().Endpoints()
 
+	failpoint.Inject("ownerFlushIntervalInject", func(val failpoint.Value) {
+		flushChangefeedInterval = time.Millisecond * time.Duration(val.(int))
+	})
+
 	owner := &Owner{
 		done:                    make(chan struct{}),
 		session:                 sess,

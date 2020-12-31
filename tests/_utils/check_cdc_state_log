@@ -8,7 +8,7 @@ if [ ! -f $WORK_DIR/cdc_etcd_check.log ]; then
     exit 0
 fi
 
-grep -q -i panic $WORK_DIR/cdc_etcd_check.log
+grep -q -i test-case-failed $WORK_DIR/cdc_etcd_check.log
 
 if [ $? -eq 0 ]; then
   echo "cdc state checker failed"
