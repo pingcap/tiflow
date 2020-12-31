@@ -65,11 +65,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 		NumWorkerPoolGoroutine: 4,
 	})
 
-<<<<<<< HEAD
-	err := os.MkdirAll("./sorter", 0755)
-=======
 	err := os.MkdirAll("/tmp/sorter", 0o755)
->>>>>>> a3fb52e... sorter: Stabilize Unified Sorter (#1210)
 	c.Assert(err, check.IsNil)
 	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
 
@@ -90,11 +86,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 		NumWorkerPoolGoroutine: 4,
 	})
 
-<<<<<<< HEAD
-	err := os.MkdirAll("./sorter", 0755)
-=======
 	err := os.MkdirAll("/tmp/sorter", 0o755)
->>>>>>> a3fb52e... sorter: Stabilize Unified Sorter (#1210)
 	c.Assert(err, check.IsNil)
 	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
 

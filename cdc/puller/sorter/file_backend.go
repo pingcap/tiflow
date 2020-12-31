@@ -63,11 +63,7 @@ func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd
 }
 
 func (f *fileBackEnd) reader() (backEndReader, error) {
-<<<<<<< HEAD
-	fd, err := os.OpenFile(f.fileName, os.O_RDONLY, 0644)
-=======
 	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o644)
->>>>>>> a3fb52e... sorter: Stabilize Unified Sorter (#1210)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

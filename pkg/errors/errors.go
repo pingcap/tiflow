@@ -175,8 +175,6 @@ var (
 	ErrInvalidAdminJobType        = errors.Normalize("invalid admin job type: %d", errors.RFCCodeText("CDC:ErrInvalidAdminJobType"))
 	ErrOwnerEtcdWatch             = errors.Normalize("etcd watch returns error", errors.RFCCodeText("CDC:ErrOwnerEtcdWatch"))
 	ErrOwnerCampaignKeyDeleted    = errors.Normalize("owner campaign key deleted", errors.RFCCodeText("CDC:ErrOwnerCampaignKeyDeleted"))
-<<<<<<< HEAD
-=======
 
 	// EtcdWorker related errors. Internal use only.
 	// ErrEtcdTryAgain is used by a PatchFunc to force a transaction abort.
@@ -196,5 +194,4 @@ var (
 
 	// unified sorter errors
 	ErrUnifiedSorterBackendTerminating = errors.Normalize("unified sorter backend is terminating", errors.RFCCodeText("CDC:ErrUnifiedSorterBackendTerminating"))
->>>>>>> a3fb52e... sorter: Stabilize Unified Sorter (#1210)
 )
