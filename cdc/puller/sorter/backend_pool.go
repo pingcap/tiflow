@@ -104,7 +104,7 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 			if memPressure := ret.memoryPressure(); memPressure > 50 {
 				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
 					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
-				// Increase GC frequency to avoid necessary OOM
+				// Increase GC frequency to avoid unnecessary OOMs
 				debug.SetGCPercent(10)
 			} else {
 				debug.SetGCPercent(100)

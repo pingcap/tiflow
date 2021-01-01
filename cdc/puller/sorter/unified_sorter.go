@@ -127,6 +127,16 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	})
 
 	errg.Go(func() error {
+		captureAddr := util.CaptureAddrFromCtx(ctx)
+		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		_, tableName := util.TableIDFromCtx(ctx)
+
+		metricSorterConsumeCount := sorterEventCount.MustCurryWith(map[string]string{
+			"capture":    captureAddr,
+			"changefeed": changefeedID,
+			"table":      tableName,
+		})
+
 		nextSorterID := 0
 		for {
 			select {
@@ -145,6 +155,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 						if err != nil {
 							return errors.Trace(err)
 						}
+						metricSorterConsumeCount.WithLabelValues("resolved").Inc()
 					}
 					continue
 				}
@@ -160,6 +171,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					metricSorterConsumeCount.WithLabelValues("kv").Inc()
 				}
 			}
 		}
