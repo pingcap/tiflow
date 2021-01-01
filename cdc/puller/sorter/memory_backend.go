@@ -62,6 +62,8 @@ func (m *memoryBackEnd) free() error {
 		}
 	})
 
+	atomic.AddInt64(&pool.memoryUseEstimate, -m.estimatedSize)
+
 	return nil
 }
 
@@ -85,8 +87,6 @@ func (r *memoryBackEndReader) resetAndClose() error {
 	failpoint.Inject("sorterDebug", func() {
 		atomic.StoreInt32(&r.backEnd.borrowed, 0)
 	})
-
-	atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
 
 	return nil
 }
