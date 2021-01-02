@@ -131,7 +131,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		changefeedID := util.ChangefeedIDFromCtx(ctx)
 		_, tableName := util.TableIDFromCtx(ctx)
 
-		metricSorterConsumeCount := sorterEventCount.MustCurryWith(map[string]string{
+		metricSorterConsumeCount := sorterConsumeCount.MustCurryWith(map[string]string{
 			"capture":    captureAddr,
 			"changefeed": changefeedID,
 			"table":      tableName,

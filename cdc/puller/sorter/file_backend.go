@@ -120,6 +120,9 @@ func (f *fileBackEnd) free() error {
 	})
 
 	log.Debug("Removing file", zap.String("file", f.fileName))
+
+	atomic.AddInt64(&pool.onDiskDataSize, -f.size)
+
 	err := os.Remove(f.fileName)
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
@@ -209,6 +212,7 @@ func (r *fileBackEndReader) resetAndClose() error {
 		r.f = nil
 
 		atomic.AddInt64(&pool.onDiskDataSize, -r.backEnd.size)
+		r.backEnd.size = 0
 
 		failpoint.Inject("sorterDebug", func() {
 			atomic.StoreInt32(&r.backEnd.borrowed, 0)

@@ -88,6 +88,9 @@ func (r *memoryBackEndReader) resetAndClose() error {
 		atomic.StoreInt32(&r.backEnd.borrowed, 0)
 	})
 
+	atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
+	r.backEnd.estimatedSize = 0
+
 	return nil
 }
 

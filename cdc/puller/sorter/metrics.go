@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	sorterConsumerCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+	sorterConsumeCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "consume_count",
@@ -86,7 +86,7 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(sorterConsumerCount)
+	registry.MustRegister(sorterConsumeCount)
 	registry.MustRegister(sorterEventCount)
 	registry.MustRegister(sorterResolvedTsGauge)
 	registry.MustRegister(sorterMergerStartTsGauge)
