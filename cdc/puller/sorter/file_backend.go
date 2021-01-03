@@ -121,8 +121,7 @@ func (f *fileBackEnd) free() error {
 
 	log.Debug("Removing file", zap.String("file", f.fileName))
 
-	atomic.AddInt64(&pool.onDiskDataSize, -f.size)
-	f.size = 0
+	f.cleanStats()
 
 	err := os.Remove(f.fileName)
 	if err != nil {
