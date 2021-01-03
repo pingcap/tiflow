@@ -177,6 +177,10 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 func (p *backEndPool) dealloc(backEnd backEnd) error {
 	switch b := backEnd.(type) {
 	case *memoryBackEnd:
+		err := b.free()
+		if err != nil {
+			log.Warn("error freeing memory backend", zap.Error(err))
+		}
 		// Let GC do its job
 		return nil
 	case *fileBackEnd:
@@ -186,6 +190,9 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 				failpoint.Return(nil)
 			}
 		})
+
+		b.cleanStats()
+
 		p.cancelRWLock.RLock()
 		defer p.cancelRWLock.RUnlock()
 
