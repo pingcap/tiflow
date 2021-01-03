@@ -137,7 +137,9 @@ func (f *fileBackEnd) free() error {
 }
 
 func (f *fileBackEnd) cleanStats() {
-	atomic.AddInt64(&pool.onDiskDataSize, -f.size)
+	if pool != nil {
+		atomic.AddInt64(&pool.onDiskDataSize, -f.size)
+	}
 	f.size = 0
 }
 
