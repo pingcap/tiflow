@@ -36,7 +36,7 @@ function run() {
     check_table_exists clustered_index_test.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists clustered_index_test.t2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     echo "check table exists success"
-    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 60
 
     cleanup_process $CDC_BINARY
 }
