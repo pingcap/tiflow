@@ -619,13 +619,19 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	if c.appliedCheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
+	if c.appliedCheckpointTs < todoDDLJob.BinlogInfo.FinishedTS-1 {
 		log.Debug("wait checkpoint ts",
-			zap.Uint64("applied checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
 			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
 			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
 			zap.String("ddl query", todoDDLJob.Query))
 		return nil
+	}
+
+	if c.appliedCheckpointTs > todoDDLJob.BinlogInfo.FinishedTS {
+		log.Panic("applied checkpoint ts is larger than DDL finish ts",
+			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
+			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))
 	}
 
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
@@ -858,6 +864,10 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
 		c.ddlTs = minResolvedTs
+	}
+
+	if minCheckpointTs > c.ddlExecutedTs {
+		minCheckpointTs = c.ddlExecutedTs
 	}
 
 	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
