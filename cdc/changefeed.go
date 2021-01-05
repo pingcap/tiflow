@@ -78,6 +78,7 @@ type changeFeed struct {
 	id     string
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
+	appliedCheckpointTs uint64
 
 	schema           *entry.SingleSchemaSnapshot
 	ddlState         model.ChangeFeedDDLState
@@ -618,9 +619,10 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	if c.status.CheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
+	if c.appliedCheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
 		log.Debug("wait checkpoint ts",
-			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("applied checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
 			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
 			zap.String("ddl query", todoDDLJob.Query))
 		return nil

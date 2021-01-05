@@ -398,6 +398,7 @@ func (o *Owner) newChangeFeed(
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
+		appliedCheckpointTs: checkpointTs,
 		scheduler:         scheduler.NewScheduler(info.Config.Scheduler.Tp),
 		ddlState:          model.ChangeFeedSyncDML,
 		ddlExecutedTs:     checkpointTs,
@@ -657,14 +658,17 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 		for id, changefeed := range o.changeFeeds {
 			snapshot[id] = changefeed.status
-			if changefeed.status.CheckpointTs < minCheckpointTs {
-				minCheckpointTs = changefeed.status.CheckpointTs
+			if changefeed.appliedCheckpointTs < minCheckpointTs {
+				minCheckpointTs = changefeed.appliedCheckpointTs
 			}
 		}
 		if time.Since(o.lastFlushChangefeeds) > o.flushChangefeedInterval {
 			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			for id, changefeedStatus := range snapshot {
+				o.changeFeeds[id].appliedCheckpointTs = changefeedStatus.CheckpointTs
 			}
 			o.lastFlushChangefeeds = time.Now()
 		}
