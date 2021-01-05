@@ -97,20 +97,6 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 	}
 
 	errg, ctx := errgroup.WithContext(ctx)
-	errg.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case <-time.After(defaultMetricInterval):
-				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
-				es.lock.Lock()
-				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
-				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
-				es.lock.Unlock()
-			}
-		}
-	})
 	receiver, err := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
 	if err != nil {
 		return err
@@ -124,6 +110,12 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				atomic.StoreInt32(&es.closed, 1)
 				close(es.outputCh)
 				return errors.Trace(ctx.Err())
+			case <-time.After(defaultMetricInterval):
+				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
+				es.lock.Lock()
+				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
+				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
+				es.lock.Unlock()
 			case <-receiver.C:
 				es.lock.Lock()
 				if len(es.resolvedTsGroup) == 0 {

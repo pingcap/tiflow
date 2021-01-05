@@ -32,10 +32,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -43,6 +45,31 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+type ownership struct {
+	lastTickTime time.Time
+	tickTime     time.Duration
+}
+
+func newOwnersip(tickTime time.Duration) ownership {
+	minTickTime := 5 * time.Second
+	if tickTime > minTickTime {
+		log.Panic("ownership counter must be incearsed every 5 seconds")
+	}
+	return ownership{
+		tickTime: minTickTime,
+	}
+}
+
+func (o *ownership) inc() {
+	now := time.Now()
+	if now.Sub(o.lastTickTime) > o.tickTime {
+		// Keep the value of promtheus expression `rate(counter)` = 1
+		// Please also change alert rule in ticdc.rules.yml when change the expression value.
+		ownershipCounter.Add(float64(o.tickTime / time.Second))
+		o.lastTickTime = now
+	}
+}
 
 // Owner manages the cdc cluster
 type Owner struct {
@@ -81,6 +108,7 @@ type Owner struct {
 	// record last time that flushes all changefeeds' replication status
 	lastFlushChangefeeds    time.Time
 	flushChangefeedInterval time.Duration
+	feedChangeNotifier      *notify.Notifier
 }
 
 const (
@@ -118,6 +146,7 @@ func NewOwner(
 		etcdClient:              cli,
 		gcTTL:                   gcTTL,
 		flushChangefeedInterval: flushChangefeedInterval,
+		feedChangeNotifier:      new(notify.Notifier),
 	}
 
 	return owner, nil
@@ -643,6 +672,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < minCheckpointTs {
 				minCheckpointTs = changefeed.status.CheckpointTs
 			}
+
+			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
+			changefeedCheckpointTsGauge.WithLabelValues(id).Set(float64(phyTs))
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			changefeedCheckpointTsLagGauge.WithLabelValues(id).Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 		}
 		if time.Since(o.lastFlushChangefeeds) > o.flushChangefeedInterval {
 			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
@@ -1012,12 +1047,14 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
-	changedFeeds := o.watchFeedChange(ctx1)
+	feedChangeReceiver, err := o.feedChangeNotifier.NewReceiver(tickTime)
+	if err != nil {
+		return err
+	}
+	defer feedChangeReceiver.Stop()
+	o.watchFeedChange(ctx1)
 
-	ticker := time.NewTicker(tickTime)
-	defer ticker.Stop()
-
-	var err error
+	ownership := newOwnersip(tickTime)
 loop:
 	for {
 		select {
@@ -1029,8 +1066,8 @@ loop:
 			// Anyway we just break loop here to ensure the following destruction.
 			err = ctx.Err()
 			break loop
-		case <-changedFeeds:
-		case <-ticker.C:
+		case <-feedChangeReceiver.C:
+			ownership.inc()
 		}
 
 		err = o.run(ctx)
@@ -1084,8 +1121,7 @@ restart:
 	return nil
 }
 
-func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
-	output := make(chan struct{}, 1)
+func (o *Owner) watchFeedChange(ctx context.Context) {
 	go func() {
 		for {
 			select {
@@ -1106,16 +1142,11 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
 				// operations should be resolved in future release.
 
-				select {
-				case output <- struct{}{}:
-				default:
-					// in case output channel is full, just ignore this event
-				}
+				o.feedChangeNotifier.Notify()
 			}
 			cancel()
 		}
 	}()
-	return output
 }
 
 func (o *Owner) run(ctx context.Context) error {

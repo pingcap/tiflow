@@ -173,11 +173,18 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			}
 			failpoint.Inject("captureHandleTaskDelay", nil)
 			if err := c.handleTaskEvent(ctx, ev); err != nil {
-				select {
-				case <-c.session.Done():
-					log.Warn("handle task event failed because session is done", zap.Error(err))
+				// We check ttl of lease instead of check `session.Done`, because
+				// `session.Done` is only notified when etcd client establish a
+				// new keepalive request, there could be a time window as long as
+				// 1/3 of session ttl that `session.Done` can't be triggered even
+				// the lease is already revoked.
+				lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
+				if inErr != nil {
+					return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
+				}
+				if lease.TTL == int64(-1) {
+					log.Warn("handle task event failed because session is disconnected", zap.Error(err))
 					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
-				default:
 				}
 				return errors.Trace(err)
 			}
@@ -255,7 +262,7 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 		zap.String("capture-id", c.info.ID), util.ZapFieldCapture(ctx),
 		zap.String("changefeed", task.ChangeFeedID))
 
-	p, err := runProcessor(
+	p, err := runProcessorImpl(
 		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
 	if err != nil {
 		log.Error("run processor failed",
