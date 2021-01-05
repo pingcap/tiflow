@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/kv"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -290,7 +290,8 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			log.Warn("campaign owner failed", zap.Error(err))
 			continue
 		}
-		log.Info("campaign owner successfully", zap.String("capture-id", s.capture.info.ID))
+		captureID := s.capture.info.ID
+		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
 		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
@@ -300,13 +301,13 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		s.setOwner(owner)
 		if err := owner.Run(ctx, ownerRunInterval); err != nil {
 			if errors.Cause(err) == context.Canceled {
-				log.Info("owner exited", zap.String("capture-id", s.capture.info.ID))
+				log.Info("owner exited", zap.String("capture-id", captureID))
 				return nil
 			}
 			err2 := s.capture.Resign(ctx)
 			if err2 != nil {
 				// if regisn owner failed, return error to let capture exits
-				return errors.Annotatef(err2, "resign owner failed, capture: %s", s.capture.info.ID)
+				return errors.Annotatef(err2, "resign owner failed, capture: %s", captureID)
 			}
 			log.Warn("run owner failed", zap.Error(err))
 		}
@@ -332,6 +333,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return s.campaignOwnerLoop(cctx)
+	})
+
+	wg.Go(func() error {
+		return sorter.RunWorkerPool(cctx)
 	})
 
 	wg.Go(func() error {

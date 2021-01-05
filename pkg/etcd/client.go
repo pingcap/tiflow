@@ -127,6 +127,16 @@ func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv
 	return
 }
 
+// TimeToLive delegates request to clientv3.Lease.TimeToLive
+func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ...clientv3.LeaseOption) (resp *clientv3.LeaseTimeToLiveResponse, err error) {
+	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
+		var inErr error
+		resp, inErr = c.cli.TimeToLive(ctx, lease, opts...)
+		return inErr
+	})
+	return
+}
+
 // Watch delegates request to clientv3.Watcher.Watch
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	return c.cli.Watch(ctx, key, opts...)
