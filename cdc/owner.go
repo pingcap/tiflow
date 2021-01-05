@@ -1155,6 +1155,12 @@ func (o *Owner) watchFeedChange(ctx context.Context) {
 }
 
 func (o *Owner) run(ctx context.Context) error {
+	// captureLoaded == 0 means capture information is not built, owner can't
+	// run normal jobs now.
+	if atomic.LoadInt32(&o.captureLoaded) == int32(0) {
+		return nil
+	}
+
 	o.l.Lock()
 	defer o.l.Unlock()
 
@@ -1253,11 +1259,6 @@ func (o *Owner) writeDebugInfo(w io.Writer) {
 // processor deletion. In this case, the new owner should check if the task
 // status is stale because of the processor deletion.
 func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
-	// captureLoaded == 0 means capture information is not built, owner can't
-	// clean up stale tasks now.
-	if atomic.LoadInt32(&o.captureLoaded) == int32(0) {
-		return nil
-	}
 	_, changefeeds, err := o.etcdClient.GetChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
