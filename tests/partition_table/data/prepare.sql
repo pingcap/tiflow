@@ -1,6 +1,7 @@
 drop database if exists `partition_table`;
 create database `partition_table`;
 use `partition_table`;
+set @@session.tidb_enable_table_partition = nightly;
 
 create table t (a int, primary key (a)) partition by hash(a) partitions 5;
 insert into t values (1),(2),(3),(4),(5),(6);
