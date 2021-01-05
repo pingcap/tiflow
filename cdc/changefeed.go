@@ -75,9 +75,9 @@ type ChangeFeedRWriter interface {
 }
 
 type changeFeed struct {
-	id     string
-	info   *model.ChangeFeedInfo
-	status *model.ChangeFeedStatus
+	id                  string
+	info                *model.ChangeFeedInfo
+	status              *model.ChangeFeedStatus
 	appliedCheckpointTs uint64
 
 	schema           *entry.SingleSchemaSnapshot

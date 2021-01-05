@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -44,6 +45,31 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+type ownership struct {
+	lastTickTime time.Time
+	tickTime     time.Duration
+}
+
+func newOwnersip(tickTime time.Duration) ownership {
+	minTickTime := 5 * time.Second
+	if tickTime > minTickTime {
+		log.Panic("ownership counter must be incearsed every 5 seconds")
+	}
+	return ownership{
+		tickTime: minTickTime,
+	}
+}
+
+func (o *ownership) inc() {
+	now := time.Now()
+	if now.Sub(o.lastTickTime) > o.tickTime {
+		// Keep the value of promtheus expression `rate(counter)` = 1
+		// Please also change alert rule in ticdc.rules.yml when change the expression value.
+		ownershipCounter.Add(float64(o.tickTime / time.Second))
+		o.lastTickTime = now
+	}
+}
 
 // Owner manages the cdc cluster
 type Owner struct {
@@ -399,23 +425,23 @@ func (o *Owner) newChangeFeed(
 			CheckpointTs: checkpointTs,
 		},
 		appliedCheckpointTs: checkpointTs,
-		scheduler:         scheduler.NewScheduler(info.Config.Scheduler.Tp),
-		ddlState:          model.ChangeFeedSyncDML,
-		ddlExecutedTs:     checkpointTs,
-		targetTs:          info.GetTargetTs(),
-		ddlTs:             0,
-		updateResolvedTs:  true,
-		startTimer:        make(chan bool),
-		syncpointStore:    syncpointStore,
-		syncCancel:        nil,
-		taskStatus:        processorsInfos,
-		taskPositions:     taskPositions,
-		etcdCli:           o.etcdClient,
-		filter:            filter,
-		sink:              primarySink,
-		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
-		lastRebalanceTime: time.Now(),
-		cancel:            cancel,
+		scheduler:           scheduler.NewScheduler(info.Config.Scheduler.Tp),
+		ddlState:            model.ChangeFeedSyncDML,
+		ddlExecutedTs:       checkpointTs,
+		targetTs:            info.GetTargetTs(),
+		ddlTs:               0,
+		updateResolvedTs:    true,
+		startTimer:          make(chan bool),
+		syncpointStore:      syncpointStore,
+		syncCancel:          nil,
+		taskStatus:          processorsInfos,
+		taskPositions:       taskPositions,
+		etcdCli:             o.etcdClient,
+		filter:              filter,
+		sink:                primarySink,
+		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
+		lastRebalanceTime:   time.Now(),
+		cancel:              cancel,
 	}
 	return cf, nil
 }
@@ -661,6 +687,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.appliedCheckpointTs < minCheckpointTs {
 				minCheckpointTs = changefeed.appliedCheckpointTs
 			}
+
+			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
+			changefeedCheckpointTsGauge.WithLabelValues(id).Set(float64(phyTs))
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			changefeedCheckpointTsLagGauge.WithLabelValues(id).Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 		}
 		if time.Since(o.lastFlushChangefeeds) > o.flushChangefeedInterval {
 			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
@@ -1040,6 +1072,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
+	ownership := newOwnersip(tickTime)
 loop:
 	for {
 		select {
@@ -1052,6 +1085,7 @@ loop:
 			err = ctx.Err()
 			break loop
 		case <-feedChangeReceiver.C:
+			ownership.inc()
 		}
 
 		err = o.run(ctx)
