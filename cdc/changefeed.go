@@ -866,8 +866,8 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		c.ddlTs = minResolvedTs
 	}
 
-	if minCheckpointTs > c.ddlExecutedTs {
-		minCheckpointTs = c.ddlExecutedTs
+	if len(c.ddlJobHistory) > 0 && minCheckpointTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
+		minCheckpointTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS - 1
 	}
 
 	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
