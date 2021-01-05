@@ -31,14 +31,14 @@ type PatchFunc = func(old []byte) (newValue []byte, err error)
 
 // DataPatch represents an update to a given Etcd key
 type DataPatch struct {
-	Key util.EtcdRelKey
+	Key util.EtcdKey
 	Fun PatchFunc
 }
 
-// ReactorState models e Etcd state of a reactor
+// ReactorState models the Etcd state of a reactor
 type ReactorState interface {
 	// Update is called by EtcdWorker to notify the Reactor of a latest change to the Etcd state.
-	Update(key util.EtcdRelKey, value []byte)
+	Update(key util.EtcdKey, value []byte) error
 
 	// GetPatches is called by EtcdWorker, and should return a slice of data patches that represents the changes
 	// that a Reactor wants to apply to Etcd.

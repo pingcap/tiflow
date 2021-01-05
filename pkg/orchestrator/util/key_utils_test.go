@@ -36,6 +36,7 @@ func (s *keyUtilsSuite) TestEtcdKey(c *check.C) {
 	c.Assert(key.Head().String(), check.Equals, "/a")
 	c.Assert(key.Tail().String(), check.Equals, "/b/c")
 	c.Assert(key.RemovePrefix(&EtcdPrefix{"/a/b"}).String(), check.Equals, "/c")
+	c.Assert(key.AsRelKey().String(), check.Equals, "/a/b/c")
 }
 
 func (s *keyUtilsSuite) TestEtcdRelKey(c *check.C) {
@@ -47,6 +48,7 @@ func (s *keyUtilsSuite) TestEtcdRelKey(c *check.C) {
 	c.Assert(key.Head().String(), check.Equals, "/a")
 	c.Assert(key.Tail().String(), check.Equals, "/b/c")
 	c.Assert(key.RemovePrefix(&EtcdRelPrefix{EtcdPrefix{"/a/b"}}).String(), check.Equals, "/c")
+	c.Assert(key.AsPrefix().String(), check.Equals, "/a/b/c")
 }
 
 func (s *keyUtilsSuite) TestEtcdPrefix(c *check.C) {
