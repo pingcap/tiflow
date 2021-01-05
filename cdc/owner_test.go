@@ -908,8 +908,14 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 		},
 	}
 
+	// capture information is not built, owner.run does nothing
+	err = owner.run(ctx)
+	c.Assert(err, check.IsNil)
+	statuses, err := s.client.GetAllTaskStatus(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	// stale tasks are not cleaned up, since `cleanUpStaleTasks` does not run
+	c.Assert(len(statuses), check.Equals, 2)
 	c.Assert(len(owner.captures), check.Equals, 0)
-	c.Assert(atomic.LoadInt32(&owner.captureLoaded), check.Equals, int32(0))
 
 	err = owner.rebuildCaptureEvents(ctx, captures)
 	c.Assert(err, check.IsNil)
@@ -918,7 +924,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	c.Assert(atomic.LoadInt32(&owner.captureLoaded), check.Equals, int32(1))
 	c.Assert(owner.changeFeeds[changefeed].orphanTables, check.DeepEquals, map[model.TableID]model.Ts{51: 100})
 	// check stale tasks are cleaned up
-	statuses, err := s.client.GetAllTaskStatus(ctx, changefeed)
+	statuses, err = s.client.GetAllTaskStatus(ctx, changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(len(statuses), check.Equals, 1)
 	c.Assert(statuses, check.HasKey, capture.info.ID)
