@@ -80,8 +80,10 @@ func init() {
 	serverCmd.Flags().IntVar(&numWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", 16, "sorter workerpool size")
 	serverCmd.Flags().IntVar(&numConcurrentWorker, "sorter-num-concurrent-worker", 4, "sorter concurrency level")
 	serverCmd.Flags().Uint64Var(&chunkSizeLimit, "sorter-chunk-size-limit", 1024*1024*1024, "size of heaps for sorting")
-	serverCmd.Flags().IntVar(&maxMemoryPressure, "sorter-max-memory-percentage", 90, "system memory usage threshold for forcing in-disk sort")
-	serverCmd.Flags().Uint64Var(&maxMemoryConsumption, "sorter-max-memory-consumption", 16*1024*1024*1024, "maximum memory consumption of in-memory sort")
+	// 80 is safe on most systems.
+	serverCmd.Flags().IntVar(&maxMemoryPressure, "sorter-max-memory-percentage", 80, "system memory usage threshold for forcing in-disk sort")
+	// We use 8GB as a safe default before we support local configuration file.
+	serverCmd.Flags().Uint64Var(&maxMemoryConsumption, "sorter-max-memory-consumption", 8*1024*1024*1024, "maximum memory consumption of in-memory sort")
 
 	addSecurityFlags(serverCmd.Flags(), true /* isServer */)
 }

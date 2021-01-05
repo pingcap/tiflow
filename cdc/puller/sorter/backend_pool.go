@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -106,6 +107,9 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
 				// Increase GC frequency to avoid unnecessary OOMs
 				debug.SetGCPercent(10)
+				if memPressure > 95 {
+					runtime.GC()
+				}
 			} else {
 				debug.SetGCPercent(100)
 			}
