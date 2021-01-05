@@ -21,6 +21,7 @@ import java.util.List;
 
 public class TicdcEventRowChange extends TicdcEventBase {
     private String updateOrDelete; // should be "u" or "d"
+    private List<TicdcEventColumn> oldColumns;
     private List<TicdcEventColumn> columns;
 
     public TicdcEventRowChange(KafkaMessage kafkaMessage) {
@@ -41,5 +42,13 @@ public class TicdcEventRowChange extends TicdcEventBase {
 
     public void setColumns(List<TicdcEventColumn> columns) {
         this.columns = columns;
+    }
+
+    public List<TicdcEventColumn> getOldColumns() {
+        return oldColumns;
+    }
+
+    public void setOldColumns(List<TicdcEventColumn> oldColumns) {
+        this.oldColumns = oldColumns;
     }
 }
