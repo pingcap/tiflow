@@ -1041,7 +1041,8 @@ func (p *processor) sorterConsume(
 					zap.Any("row", pEvent))
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
-				failpoint.Return(errors.New("processor sync resolved injected error"))
+				p.errCh <- errors.New("processor sync resolved injected error")
+				failpoint.Return()
 			})
 			err := processRowChangedEvent(pEvent)
 			if err != nil {
