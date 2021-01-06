@@ -4799,7 +4799,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "max(ticdc_sorter_resolved_ts_gauge{changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture)",
+              "expr": "min(ticdc_sorter_resolved_ts_gauge{changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "refId": "A"
