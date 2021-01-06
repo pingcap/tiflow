@@ -427,7 +427,7 @@ func (o *Owner) newChangeFeed(
 		appliedCheckpointTs: checkpointTs,
 		scheduler:           scheduler.NewScheduler(info.Config.Scheduler.Tp),
 		ddlState:            model.ChangeFeedSyncDML,
-		ddlExecutedTs:       checkpointTs - 1,
+		ddlExecutedTs:       checkpointTs,
 		targetTs:            info.GetTargetTs(),
 		ddlTs:               0,
 		updateResolvedTs:    true,
