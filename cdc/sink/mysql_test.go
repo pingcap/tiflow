@@ -823,6 +823,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
 	})
 	c.Assert(param2, check.DeepEquals, &sinkParams{
@@ -834,6 +835,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
 	})
 }
