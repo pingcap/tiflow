@@ -1380,6 +1380,9 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	c.Assert(err, check.IsNil)
 	rc := config.GetDefaultReplicaConfig()
+	rc.Filter = &config.FilterConfig{
+		Rules: []string{"test.t1"},
+	}
 	f, err := filter.NewFilter(rc)
 	c.Assert(err, check.IsNil)
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
