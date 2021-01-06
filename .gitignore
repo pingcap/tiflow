@@ -45,3 +45,5 @@ docker/logs
 
 # Binary file when running intergration test
 integration/integration
+
+*.tmp

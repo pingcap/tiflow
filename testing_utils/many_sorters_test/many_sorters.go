@@ -30,7 +30,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	pullerSorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -41,17 +43,18 @@ var percentageResolves = flag.Int("percentage-resolve-events", 70, "percentage o
 
 func main() {
 	flag.Parse()
-	log.SetLevel(zap.DebugLevel)
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Fatal("Could not enable failpoint", zap.Error(err))
 	}
+	log.SetLevel(zapcore.DebugLevel)
 
 	config.SetSorterConfig(&config.SorterConfig{
-		NumConcurrentWorker:  4,
-		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:    60,
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
+		NumWorkerPoolGoroutine: 16,
 	})
 
 	go func() {
@@ -66,6 +69,10 @@ func main() {
 	sorters := make([]puller.EventSorter, *numSorters)
 	ctx0, cancel := context.WithCancel(context.Background())
 	errg, ctx := errgroup.WithContext(ctx0)
+
+	errg.Go(func() error {
+		return pullerSorter.RunWorkerPool(ctx)
+	})
 
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
@@ -142,7 +149,8 @@ func printError(err error) error {
 	if err != nil && errors.Cause(err) != context.Canceled &&
 		errors.Cause(err) != context.DeadlineExceeded &&
 		!strings.Contains(err.Error(), "context canceled") &&
-		!strings.Contains(err.Error(), "context deadline exceeded") {
+		!strings.Contains(err.Error(), "context deadline exceeded") &&
+		cerrors.ErrWorkerPoolHandleCancelled.NotEqual(errors.Cause(err)) {
 
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}
