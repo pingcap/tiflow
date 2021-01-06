@@ -657,6 +657,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	// no running or stopped changefeed, clear gc safepoint.
 	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 {
 		if !o.gcSafepointLastUpdate.IsZero() {
+			log.Info("clean service safe point", zap.String("service-id", CDCServiceSafePointID))
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
 			if err != nil {
 				log.Warn("failed to update service safe point", zap.Error(err))
