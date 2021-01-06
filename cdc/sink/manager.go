@@ -52,14 +52,15 @@ func (m *Manager) Close() error {
 
 func (m *Manager) getMinEmittedTs() model.Ts {
 	if len(m.tableSinks) == 0 {
-		return m.checkpointTs
+		return m.getCheckpointTs()
 	}
 	minTs := model.Ts(math.MaxUint64)
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	for _, tableSink := range m.tableSinks {
-		if minTs > tableSink.emittedTs {
-			minTs = tableSink.emittedTs
+		emittedTs := tableSink.getEmittedTs()
+		if minTs > emittedTs {
+			minTs = emittedTs
 		}
 	}
 	return minTs
@@ -71,7 +72,7 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
-		return m.checkpointTs, errors.Trace(err)
+		return m.getCheckpointTs(), errors.Trace(err)
 	}
 	atomic.StoreUint64(&m.checkpointTs, checkpointTs)
 	return checkpointTs, nil
@@ -81,6 +82,10 @@ func (m *Manager) destroyTableSink(tableID model.TableID) {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	delete(m.tableSinks, tableID)
+}
+
+func (m *Manager) getCheckpointTs() uint64 {
+	return atomic.LoadUint64(&m.checkpointTs)
 }
 
 type tableSink struct {
@@ -110,17 +115,21 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
-		t.emittedTs = resolvedTs
+		atomic.StoreUint64(&t.emittedTs, resolvedTs)
 		return t.manager.flushBackendSink(ctx)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = t.buffer[i:]
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.checkpointTs, errors.Trace(err)
+		return t.manager.getCheckpointTs(), errors.Trace(err)
 	}
-	t.emittedTs = resolvedTs
+	atomic.StoreUint64(&t.emittedTs, resolvedTs)
 	return t.manager.flushBackendSink(ctx)
+}
+
+func (t *tableSink) getEmittedTs() uint64 {
+	return atomic.LoadUint64(&t.emittedTs)
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
