@@ -4,6 +4,8 @@ import (
 	"context"
 	"math"
 	"sort"
+	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -16,6 +18,8 @@ type Manager struct {
 	backendSink  Sink
 	checkpointTs model.Ts
 	tableSinks   map[model.TableID]*tableSink
+	tableSinksMu sync.Mutex
+	flushMu      sync.Mutex
 }
 
 func NewManager(backendSink Sink, checkpointTs model.Ts) *Manager {
@@ -36,6 +40,8 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 		buffer:    make([]*model.RowChangedEvent, 0, 128),
 		emittedTs: checkpointTs,
 	}
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	m.tableSinks[tableID] = sink
 	return sink
 }
@@ -49,6 +55,8 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 		return m.checkpointTs
 	}
 	minTs := model.Ts(math.MaxUint64)
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	for _, tableSink := range m.tableSinks {
 		if minTs > tableSink.emittedTs {
 			minTs = tableSink.emittedTs
@@ -58,15 +66,20 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
-	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, m.getMinEmittedTs())
+	minEmittedTs := m.getMinEmittedTs()
+	m.flushMu.Lock()
+	defer m.flushMu.Unlock()
+	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
 		return m.checkpointTs, errors.Trace(err)
 	}
-	m.checkpointTs = checkpointTs
+	atomic.StoreUint64(&m.checkpointTs, checkpointTs)
 	return checkpointTs, nil
 }
 
 func (m *Manager) destroyTableSink(tableID model.TableID) {
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	delete(m.tableSinks, tableID)
 }
 
