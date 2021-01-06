@@ -361,6 +361,8 @@ const (
 	ChangeFeedWaitToExecDDL
 	// ChangeFeedExecDDL means a DDL is being executed
 	ChangeFeedExecDDL
+	// ChangeFeedFinishedExecDDL means that a DDL has been executed successfully
+	ChangeFeedFinishedExecDDL
 	// ChangeFeedDDLExecuteFailed means that an error occurred when executing a DDL
 	ChangeFeedDDLExecuteFailed
 )
@@ -386,6 +388,8 @@ func (s ChangeFeedDDLState) String() string {
 		return "WaitToExecDDL"
 	case ChangeFeedExecDDL:
 		return "ExecDDL"
+	case ChangeFeedFinishedExecDDL:
+		return "FinishedExecDDL"
 	case ChangeFeedDDLExecuteFailed:
 		return "DDLExecuteFailed"
 	}
