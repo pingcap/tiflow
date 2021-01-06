@@ -66,9 +66,9 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
-	minEmittedTs := m.getMinEmittedTs()
 	m.flushMu.Lock()
 	defer m.flushMu.Unlock()
+	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
 		return m.checkpointTs, errors.Trace(err)
