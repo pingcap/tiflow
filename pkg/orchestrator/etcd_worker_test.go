@@ -111,7 +111,7 @@ type simpleReactorState struct {
 	patches []*DataPatch
 }
 
-var keyParseRegexp = regexp.MustCompile(`/(.+)`)
+var keyParseRegexp = regexp.MustCompile(regexp.QuoteMeta(testEtcdKeyPrefix) + `/(.+)`)
 
 func (s *simpleReactorState) Get(i1, i2 int) int {
 	return s.values[i1][i2]
@@ -119,7 +119,7 @@ func (s *simpleReactorState) Get(i1, i2 int) int {
 
 func (s *simpleReactorState) Inc(i1, i2 int) {
 	patch := &DataPatch{
-		Key: util.NewEtcdRelKey("/" + strconv.Itoa(i1)),
+		Key: util.NewEtcdKey(testEtcdKeyPrefix + "/" + strconv.Itoa(i1)),
 		Fun: func(old []byte) ([]byte, error) {
 			var oldJSON []int
 			err := json.Unmarshal(old, &oldJSON)
@@ -137,7 +137,7 @@ func (s *simpleReactorState) Inc(i1, i2 int) {
 
 func (s *simpleReactorState) SetSum(sum int) {
 	patch := &DataPatch{
-		Key: util.NewEtcdRelKey("/sum"),
+		Key: util.NewEtcdKey(testEtcdKeyPrefix + "/sum"),
 		Fun: func(_ []byte) ([]byte, error) {
 			return []byte(strconv.Itoa(sum)), nil
 		},
@@ -146,7 +146,7 @@ func (s *simpleReactorState) SetSum(sum int) {
 	s.patches = append(s.patches, patch)
 }
 
-func (s *simpleReactorState) Update(key util.EtcdRelKey, value []byte) {
+func (s *simpleReactorState) Update(key util.EtcdKey, value []byte) error {
 	subMatches := keyParseRegexp.FindSubmatch(key.Bytes())
 	if len(subMatches) != 2 {
 		log.Panic("illegal Etcd key", zap.ByteString("key", key.Bytes()))
@@ -158,7 +158,7 @@ func (s *simpleReactorState) Update(key util.EtcdRelKey, value []byte) {
 			log.Panic("illegal sum", zap.Error(err))
 		}
 		s.sum = newSum
-		return
+		return nil
 	}
 
 	index, err := strconv.Atoi(string(subMatches[1]))
@@ -184,6 +184,7 @@ func (s *simpleReactorState) Update(key util.EtcdRelKey, value []byte) {
 	}
 
 	s.values[index] = newValues
+	return nil
 }
 
 func (s *simpleReactorState) GetPatches() []*DataPatch {
@@ -278,13 +279,14 @@ type intReactorState struct {
 	isUpdated bool
 }
 
-func (s *intReactorState) Update(_ util.EtcdRelKey, value []byte) {
+func (s *intReactorState) Update(key util.EtcdKey, value []byte) error {
 	var err error
 	s.val, err = strconv.Atoi(string(value))
 	if err != nil {
 		log.Panic("intReactorState", zap.Error(err))
 	}
 	s.isUpdated = true
+	return nil
 }
 
 func (s *intReactorState) GetPatches() []*DataPatch {
