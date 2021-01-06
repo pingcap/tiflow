@@ -18,11 +18,9 @@ import (
 	"reflect"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
-	"go.uber.org/zap"
 )
 
 // JSONReactorState models a single key whose value is a json object.
@@ -31,7 +29,7 @@ type JSONReactorState struct {
 	jsonData interface{}
 	// modifiedJSONData is the modified snapshot of jsonData that has not been uploaded to Etcd.
 	modifiedJSONData   interface{}
-	key                string
+	key                util.EtcdKey
 	isUpdatedByReactor bool
 	patches            []JSONPatchFunc
 }
@@ -55,33 +53,33 @@ func NewJSONReactorState(key string, data interface{}) (*JSONReactorState, error
 	return &JSONReactorState{
 		jsonData:           data,
 		modifiedJSONData:   copied,
-		key:                key,
+		key:                util.NewEtcdKey(key),
 		isUpdatedByReactor: false,
 	}, nil
 }
 
 // Update implements the ReactorState interface.
-func (s *JSONReactorState) Update(key util.EtcdRelKey, value []byte) {
-	if key.String() != s.key {
-		return
+func (s *JSONReactorState) Update(key util.EtcdKey, value []byte) error {
+	if key != s.key {
+		return nil
 	}
 
 	err := json.Unmarshal(value, s.jsonData)
 	if err != nil {
-		log.Panic("Cannot parse JSON state",
-			zap.ByteString("key", key.Bytes()),
-			zap.ByteString("value", value))
+		return errors.Trace(err)
 	}
-
-	log.Debug("Update", zap.ByteString("key", key.Bytes()), zap.ByteString("value", value))
 
 	deepCopy(s.jsonData, s.modifiedJSONData)
 	s.isUpdatedByReactor = true
+	return nil
 }
 
-// GetPatches implements the ReactorState interface.
-// The patches are generated and applied according to the standard RFC6902 JSON patches.
+// GetPatches implements the ReactorState interface.[]*orchestrator.DataPatch
 func (s *JSONReactorState) GetPatches() []*orchestrator.DataPatch {
+	if len(s.patches) == 0 {
+		return []*orchestrator.DataPatch{}
+	}
+
 	// We need to let the PatchFunc capture the array of JSONPatchFunc's,
 	// and let the DataPatch be the sole object referring to those JSONPatchFunc's,
 	// so that JSONReactorState does not have to worry about when to clean them up.
@@ -90,7 +88,7 @@ func (s *JSONReactorState) GetPatches() []*orchestrator.DataPatch {
 	s.patches = s.patches[:0]
 
 	dataPatch := &orchestrator.DataPatch{
-		Key: util.NewEtcdRelKey(s.key),
+		Key: s.key,
 		Fun: func(old []byte) ([]byte, error) {
 			tp := reflect.TypeOf(s.jsonData)
 			oldStruct := reflect.New(tp.Elem()).Interface()
