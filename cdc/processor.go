@@ -593,7 +593,11 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				checkpointTs := table.loadCheckpointTs()
 				log.Debug("stop table", zap.Int64("tableID", tableID),
 					util.ZapFieldChangefeed(ctx),
+					zap.Any("opt", opt),
 					zap.Uint64("checkpointTs", checkpointTs))
+				if opt.BoundaryTs != p.position.CheckPointTs {
+					log.Panic("panic")
+				}
 				opt.BoundaryTs = checkpointTs
 				tablesToRemove = append(tablesToRemove, tableID)
 				opt.Done = true
