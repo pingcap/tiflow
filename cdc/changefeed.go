@@ -293,7 +293,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	}
 
 	// Do NOT rebalance orphan tables before checkpoint ts has advanced to FinishTs of a DDL
-	if c.ddlState == model.ChangeFeedFinishedExecDDL {
+	if c.appliedCheckpointTs != c.status.CheckpointTs {
 		return nil
 	}
 
@@ -611,18 +611,10 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
-	if c.ddlState == model.ChangeFeedFinishedExecDDL && c.appliedCheckpointTs >= c.ddlExecutedTs {
-		c.ddlState = model.ChangeFeedSyncDML
-		err := c.balanceOrphanTables(ctx, captures)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return nil
-	}
-
 	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
+
 	if len(c.ddlJobHistory) == 0 {
 		log.Panic("ddl job history can not be empty in changefeed when should to execute DDL")
 	}
@@ -681,7 +673,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		log.Info("ddl job ignored", zap.String("changefeed", c.id), zap.Reflect("job", todoDDLJob))
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-		c.ddlState = model.ChangeFeedFinishedExecDDL
+		c.ddlState = model.ChangeFeedSyncDML
 		return nil
 	}
 
@@ -713,7 +705,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	c.ddlJobHistory = c.ddlJobHistory[1:]
 	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-	c.ddlState = model.ChangeFeedFinishedExecDDL
+	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }
 
@@ -763,7 +755,7 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
-	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL && c.ddlState != model.ChangeFeedFinishedExecDDL {
+	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
 		log.Debug("skip update resolved ts", zap.String("ddlState", c.ddlState.String()))
 		return nil
 	}
