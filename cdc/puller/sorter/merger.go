@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tidb/store/tikv/oracle"
+
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -51,6 +54,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		for task := range pendingSet {
 			if task.reader != nil {
 				_ = printError(task.reader.resetAndClose())
+				task.reader = nil
 			}
 			_ = printError(task.dealloc())
 		}
@@ -66,13 +70,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return ctx.Err()
 		case out <- model.NewResolvedPolymorphicEvent(0, ts):
 			metricSorterEventCount.WithLabelValues("resolved").Inc()
-			metricSorterResolvedTsGauge.Set(float64(ts))
+			metricSorterResolvedTsGauge.Set(float64(oracle.ExtractPhysical(ts)))
 			return nil
 		}
 	}
 
 	onMinResolvedTsUpdate := func() error {
-		metricSorterMergerStartTsGauge.Set(float64(minResolvedTs))
+		metricSorterMergerStartTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 
 		workingSet := make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
@@ -185,11 +189,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return nil
 		}
 
-		if sortHeap.Len() > 0 {
-			log.Debug("Unified Sorter: start merging",
-				zap.String("table", tableNameFromCtx(ctx)),
-				zap.Uint64("minResolvedTs", minResolvedTs))
-		}
+		failpoint.Inject("sorterDebug", func() {
+			if sortHeap.Len() > 0 {
+				log.Debug("Unified Sorter: start merging",
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Uint64("minResolvedTs", minResolvedTs))
+			}
+		})
 
 		counter := 0
 		for sortHeap.Len() > 0 {
@@ -282,11 +288,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				continue
 			}
 
-			if counter%10 == 0 {
-				log.Debug("Merging progress",
-					zap.String("table", tableNameFromCtx(ctx)),
-					zap.Int("counter", counter))
-			}
+			failpoint.Inject("sorterDebug", func() {
+				if counter%10 == 0 {
+					log.Debug("Merging progress",
+						zap.String("table", tableNameFromCtx(ctx)),
+						zap.Int("counter", counter))
+				}
+			})
 
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
@@ -298,17 +306,22 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			log.Panic("unified sorter: merging ended prematurely, bug?", zap.Uint64("resolvedTs", minResolvedTs))
 		}
 
-		if counter > 0 {
-			log.Debug("Unified Sorter: merging ended",
-				zap.String("table", tableNameFromCtx(ctx)),
-				zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
-		}
+		failpoint.Inject("sorterDebug", func() {
+			if counter > 0 {
+				log.Debug("Unified Sorter: merging ended",
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
+			}
+		})
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		metricSorterMergeCountHistogram.Observe(float64(counter))
+		if counter > 0 {
+			// ignore empty merges for better visualization of metrics
+			metricSorterMergeCountHistogram.Observe(float64(counter))
+		}
 
 		return nil
 	}
@@ -361,6 +374,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 func mergerCleanUp(in <-chan *flushTask) {
 	for task := range in {
+		if task.reader != nil {
+			_ = printError(task.reader.resetAndClose())
+		}
 		_ = printError(task.dealloc())
 	}
 }

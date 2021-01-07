@@ -16,6 +16,11 @@ error = '''
 Async broadcasts not supported
 '''
 
+["CDC:ErrAsyncPoolExited"]
+error = '''
+asyncPool has exited. Report a bug if seen externally.
+'''
+
 ["CDC:ErrAvroEncodeFailed"]
 error = '''
 encode to avro native data
@@ -671,6 +676,11 @@ error = '''
 url format is invalid
 '''
 
+["CDC:ErrUnifiedSorterBackendTerminating"]
+error = '''
+unified sorter backend is terminating
+'''
+
 ["CDC:ErrUnknownKVEventType"]
 error = '''
 unknown kv event type: %v, entry: %v
@@ -699,6 +709,16 @@ version is incompatible: %s
 ["CDC:ErrWaitHandleOperationTimeout"]
 error = '''
 waiting processor to handle the operation finished timeout
+'''
+
+["CDC:ErrWorkerPoolEmptyTask"]
+error = '''
+workerpool received an empty task, please report a bug
+'''
+
+["CDC:ErrWorkerPoolHandleCancelled"]
+error = '''
+workerpool handle is cancelled
 '''
 
 ["CDC:ErrWriteTsConflict"]

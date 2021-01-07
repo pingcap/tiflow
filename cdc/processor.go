@@ -1045,6 +1045,8 @@ func (p *processor) isStopped() bool {
 	return atomic.LoadInt32(&p.stopped) == 1
 }
 
+var runProcessorImpl = runProcessor
+
 // runProcessor creates a new processor then starts it.
 func runProcessor(
 	ctx context.Context,
@@ -1081,7 +1083,7 @@ func runProcessor(
 		cancel()
 		return nil, err
 	}
-	log.Info("start to run processor", zap.String("changefeed", changefeedID))
+	log.Info("start to run processor", zap.String("changefeed", changefeedID), zap.String("processor", processor.id))
 
 	processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
 	processor.Run(ctx)

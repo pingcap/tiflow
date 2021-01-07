@@ -1,5 +1,5 @@
 threadcount=10
-recordcount=45000
+recordcount=30000
 operationcount=0
 workload=core
 

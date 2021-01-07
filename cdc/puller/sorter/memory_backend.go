@@ -62,6 +62,10 @@ func (m *memoryBackEnd) free() error {
 		}
 	})
 
+	if pool != nil {
+		atomic.AddInt64(&pool.memoryUseEstimate, -m.estimatedSize)
+	}
+
 	return nil
 }
 
@@ -87,6 +91,7 @@ func (r *memoryBackEndReader) resetAndClose() error {
 	})
 
 	atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
+	r.backEnd.estimatedSize = 0
 
 	return nil
 }
