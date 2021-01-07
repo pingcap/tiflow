@@ -1005,6 +1005,9 @@ func (p *processor) sorterConsume(
 			}
 
 			if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
+				if pEvent.CRTs == 0 {
+					continue
+				}
 				err := flushRowChangedEvents()
 				if err != nil {
 					p.errCh <- errors.Trace(err)
