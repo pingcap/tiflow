@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package sink
 
 import (
@@ -14,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+// Manager manages table sinks, maintains the relationship between table sinks and backendSink
 type Manager struct {
 	backendSink  Sink
 	checkpointTs model.Ts
@@ -22,6 +36,7 @@ type Manager struct {
 	flushMu      sync.Mutex
 }
 
+// NewManager creates a new Sink manager
 func NewManager(backendSink Sink, checkpointTs model.Ts) *Manager {
 	return &Manager{
 		backendSink:  backendSink,
@@ -30,6 +45,7 @@ func NewManager(backendSink Sink, checkpointTs model.Ts) *Manager {
 	}
 }
 
+// CreateTableSink creates a table sink
 func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) Sink {
 	if _, exist := m.tableSinks[tableID]; exist {
 		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
@@ -46,6 +62,7 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 	return sink
 }
 
+// Close closes the Sink manager and backend Sink
 func (m *Manager) Close() error {
 	return m.backendSink.Close()
 }

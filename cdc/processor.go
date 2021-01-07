@@ -52,12 +52,6 @@ import (
 )
 
 const (
-	// TODO: processor output chan size, the accumulated data is determined by
-	// the count of sorted data and unmounted data. In current benchmark a single
-	// processor can reach 50k-100k QPS, and accumulated data is around
-	// 200k-400k in most cases. We need a better chan cache mechanism.
-	defaultOutputChanSize = 1280000
-
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 

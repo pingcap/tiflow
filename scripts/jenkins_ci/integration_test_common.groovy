@@ -135,6 +135,7 @@ def tests(sink_type, node_label) {
                 run_integration_test(step_name, case_names.join(" "))
             }
         }
+
         parallel test_cases
     }
 }

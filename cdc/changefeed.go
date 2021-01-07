@@ -20,9 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
