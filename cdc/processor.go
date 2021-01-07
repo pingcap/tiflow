@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"strconv"
 	"sync"
@@ -390,16 +389,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				}
 			}
 		case <-p.localCheckpointTsReceiver.C:
-			checkpointTs := uint64(math.MaxUint64)
+			checkpointTs := atomic.LoadUint64(&p.globalResolvedTs)
 			p.stateMu.Lock()
 			for _, table := range p.tables {
 				ts := table.loadCheckpointTs()
 				if ts < checkpointTs {
 					checkpointTs = ts
 				}
-			}
-			if len(p.tables) == 0 {
-				checkpointTs = 0
 			}
 			p.stateMu.Unlock()
 			if checkpointTs == 0 {
