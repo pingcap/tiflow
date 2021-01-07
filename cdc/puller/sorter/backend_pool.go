@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -104,8 +105,11 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 			if memPressure := ret.memoryPressure(); memPressure > 50 {
 				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
 					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
-				// Increase GC frequency to avoid necessary OOM
+				// Increase GC frequency to avoid unnecessary OOMs
 				debug.SetGCPercent(10)
+				if memPressure > 95 {
+					runtime.GC()
+				}
 			} else {
 				debug.SetGCPercent(100)
 			}
@@ -177,6 +181,10 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 func (p *backEndPool) dealloc(backEnd backEnd) error {
 	switch b := backEnd.(type) {
 	case *memoryBackEnd:
+		err := b.free()
+		if err != nil {
+			log.Warn("error freeing memory backend", zap.Error(err))
+		}
 		// Let GC do its job
 		return nil
 	case *fileBackEnd:
@@ -186,6 +194,9 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 				failpoint.Return(nil)
 			}
 		})
+
+		b.cleanStats()
+
 		p.cancelRWLock.RLock()
 		defer p.cancelRWLock.RUnlock()
 
