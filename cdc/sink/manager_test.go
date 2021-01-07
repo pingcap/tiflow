@@ -18,11 +18,11 @@ import (
 	"math/rand"
 	"sync"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"go.uber.org/zap"
 )
 
 type managerSuite struct{}
@@ -82,6 +82,7 @@ func (c *checkSink) Close() error {
 }
 
 func (s *managerSuite) TestManagerRandom(c *check.C) {
+	defer testleak.AfterTest(c)()
 	manager := NewManager(&checkSink{C: c}, 0)
 	goroutineNum := 10
 	rowNum := 100
