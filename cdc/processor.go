@@ -595,11 +595,9 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					util.ZapFieldChangefeed(ctx),
 					zap.Uint64("checkpointTs", checkpointTs))
 				opt.BoundaryTs = checkpointTs
-				if checkpointTs <= p.position.CheckPointTs {
-					tablesToRemove = append(tablesToRemove, tableID)
-					opt.Done = true
-					opt.Status = model.OperFinished
-				}
+				tablesToRemove = append(tablesToRemove, tableID)
+				opt.Done = true
+				opt.Status = model.OperFinished
 				status.Dirty = true
 			}
 		} else {

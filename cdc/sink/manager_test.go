@@ -37,7 +37,7 @@ type checkSink struct {
 }
 
 func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	panic("implement me")
+	panic("unreachable")
 }
 
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -51,7 +51,7 @@ func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 }
 
 func (c *checkSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	panic("implement me")
+	panic("unreachable")
 }
 
 func (c *checkSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
@@ -74,16 +74,17 @@ func (c *checkSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 }
 
 func (c *checkSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	panic("implement me")
+	panic("unreachable")
 }
 
 func (c *checkSink) Close() error {
-	panic("implement me")
+	return nil
 }
 
 func (s *managerSuite) TestManagerRandom(c *check.C) {
 	defer testleak.AfterTest(c)()
 	manager := NewManager(&checkSink{C: c}, 0)
+	defer manager.Close()
 	goroutineNum := 10
 	rowNum := 100
 	var wg sync.WaitGroup
