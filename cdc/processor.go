@@ -1069,6 +1069,7 @@ func (p *processor) sorterConsume(
 				p.errCh <- errors.Trace(err)
 				return
 			}
+			log.Info("LEOPPRO: show checkpointTs after sink", zap.Uint64("resolved", minTs), zap.Uint64("checkpointTs", checkpointTs))
 			if checkpointTs != 0 {
 				atomic.StoreUint64(pCheckpointTs, checkpointTs)
 				p.localCheckpointTsNotifier.Notify()
