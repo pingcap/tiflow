@@ -977,7 +977,9 @@ func (p *processor) sorterConsume(
 
 	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	if err != nil {
-		p.errCh <- errors.Trace(err)
+		if errors.Cause(err) != context.Canceled {
+			p.errCh <- errors.Trace(err)
+		}
 		return
 	}
 	defer globalResolvedTsReceiver.Stop()
@@ -1010,7 +1012,9 @@ func (p *processor) sorterConsume(
 				}
 				err := flushRowChangedEvents()
 				if err != nil {
-					p.errCh <- errors.Trace(err)
+					if errors.Cause(err) != context.Canceled {
+						p.errCh <- errors.Trace(err)
+					}
 					return
 				}
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
@@ -1038,7 +1042,9 @@ func (p *processor) sorterConsume(
 			})
 			err := processRowChangedEvent(pEvent)
 			if err != nil {
-				p.errCh <- errors.Trace(err)
+				if errors.Cause(err) != context.Canceled {
+					p.errCh <- errors.Trace(err)
+				}
 				return
 			}
 		case <-globalResolvedTsReceiver.C:
@@ -1057,7 +1063,9 @@ func (p *processor) sorterConsume(
 
 			checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
-				p.errCh <- errors.Trace(err)
+				if errors.Cause(err) != context.Canceled {
+					p.errCh <- errors.Trace(err)
+				}
 				return
 			}
 			log.Info("LEOPPRO: show checkpointTs after sink", zap.Uint64("resolved", minTs), zap.Uint64("checkpointTs", checkpointTs))
