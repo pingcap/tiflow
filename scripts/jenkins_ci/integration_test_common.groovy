@@ -120,22 +120,24 @@ def tests(sink_type, node_label) {
             returnStdout: true
         ).trim().split()
 
-        def step_cases = []
-        def step_length = (int)(cases_name.size() / CONCURRENT_NUMBER + 0.5)
-        for(int i in 1..CONCURRENT_NUMBER) {
-            def end = i*step_length-1
-            if (i == CONCURRENT_NUMBER){
-                end = cases_name.size()-1
+//         def step_cases = []
+//         def step_length = (int)(cases_name.size() / CONCURRENT_NUMBER + 0.5)
+//         for(int i in 1..CONCURRENT_NUMBER) {
+//             def end = i*step_length-1
+//             if (i == CONCURRENT_NUMBER){
+//                 end = cases_name.size()-1
+//             }
+//             step_cases.add(cases_name[(i-1)*step_length..end])
+//         }
+//         step_cases.eachWithIndex{ case_names, index ->
+//             def step_name = "step_${index}"
+//             test_cases["integration test ${step_name}"] = {
+//                 run_integration_test(step_name, case_names.join(" "))
+//             }
+//         }
+test_cases["integration test 1"] = {
+                run_integration_test("step 1", "move_table")
             }
-            step_cases.add(cases_name[(i-1)*step_length..end])
-        }
-        step_cases.eachWithIndex{ case_names, index ->
-            def step_name = "step_${index}"
-            test_cases["integration test ${step_name}"] = {
-                run_integration_test(step_name, case_names.join(" "))
-            }
-        }
-
         parallel test_cases
     }
 }
