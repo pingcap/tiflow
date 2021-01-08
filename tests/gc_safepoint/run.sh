@@ -84,6 +84,7 @@ export -f check_safepoint_forward
 export -f check_safepoint_cleared
 export -f check_safepoint_equal
 export -f check_changefeed_state
+export -f check_changefeed_mark_failed
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
