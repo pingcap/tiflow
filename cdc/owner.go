@@ -707,6 +707,11 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			return cerror.ErrUpdateSafepointFailed.GenWithStackByArgs(actual)
 		}
 		o.gcSafepointLastUpdate = time.Now()
+
+		failpoint.Inject("ClearGCSafepoint", func() {
+			// cause an error for integration testing
+			_, _ = o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, -1, 0)
+		})
 	}
 	return nil
 }
