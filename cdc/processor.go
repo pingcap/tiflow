@@ -580,6 +580,10 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 		}
 		if opt.Delete {
 			if opt.BoundaryTs <= p.position.CheckPointTs {
+				if opt.BoundaryTs != p.position.CheckPointTs {
+					log.Warn("the replication progresses beyond the BoundaryTs and duplicate data may be received by downstream",
+						zap.Uint64("local resolved TS", p.position.ResolvedTs), zap.Any("opt", opt))
+				}
 				table, exist := p.tables[tableID]
 				if !exist {
 					log.Warn("table which will be deleted is not found",
@@ -595,9 +599,6 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					util.ZapFieldChangefeed(ctx),
 					zap.Any("opt", opt),
 					zap.Uint64("checkpointTs", checkpointTs))
-				if opt.BoundaryTs != p.position.CheckPointTs {
-					log.Panic("panic")
-				}
 				opt.BoundaryTs = checkpointTs
 				tablesToRemove = append(tablesToRemove, tableID)
 				opt.Done = true
@@ -1056,6 +1057,8 @@ func (p *processor) sorterConsume(
 			var minTs uint64
 			if localResolvedTs < globalResolvedTs {
 				minTs = localResolvedTs
+				log.Warn("the local resolved ts is less than the global resolved ts",
+					zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 			} else {
 				minTs = globalResolvedTs
 			}
