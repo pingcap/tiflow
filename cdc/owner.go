@@ -699,19 +699,20 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
 			log.Warn("failed to update service safe point", zap.Error(err))
+			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 		}
+
+		failpoint.Inject("MockClearGCSafepoint", func() {
+			// cause an error for integration testing
+			failpoint.Return(cerror.ErrServiceSafepointLost.GenWithStackByArgs(0))
+		})
 
 		if actual > minCheckpointTs {
 			// UpdateServiceGCSafePoint has failed.
 			log.Warn("updating service safe point failed", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("min-safepoint", actual))
-			return cerror.ErrUpdateSafepointFailed.GenWithStackByArgs(actual)
+			return cerror.ErrServiceSafepointLost.GenWithStackByArgs(actual)
 		}
 		o.gcSafepointLastUpdate = time.Now()
-
-		failpoint.Inject("ClearGCSafepoint", func() {
-			// cause an error for integration testing
-			_, _ = o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, -1, 0)
-		})
 	}
 	return nil
 }

@@ -138,14 +138,13 @@ function run() {
     cdc cli changefeed remove --changefeed-id=$changefeed_id2 --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "removed"
     ensure $MAX_RETRIES check_safepoint_cleared $pd_addr $pd_cluster_id
+    cleanup_process $CDC_BINARY
 
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr \
+                   --failpoint 'github.com/pingcap/ticdc/cdc/MockClearGCSafepoint=return(true)'
     # test error handling
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
-    pd-ctl service-gc-safepoint delete ticdc --pd=$pd_addr
-    pd-ctl service-gc-safepoint delete ticdc-changefeed-creating --pd=$pd_addr || true
-    pd-ctl service-gc-safepoint delete gc_worker --pd=$pd_addr || true
-    ensure $MAX_RETRIES check_changefeed_mark_failed $pd_addr $changefeed_id "ErrUpdateSafepointFailed"
+    ensure $MAX_RETRIES check_changefeed_mark_failed $pd_addr $changefeed_id "ErrServiceSafepointLost"
 
     cleanup_process $CDC_BINARY
 }
