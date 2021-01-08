@@ -504,7 +504,7 @@
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
-            "w": 9,
+            "w": 6,
             "x": 0,
             "y": 8
           },
@@ -599,8 +599,8 @@
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
-            "w": 8,
-            "x": 9,
+            "w": 6,
+            "x": 6,
             "y": 8
           },
           "hiddenSeries": false,
@@ -700,8 +700,8 @@
           "fill": 1,
           "gridPos": {
             "h": 7,
-            "w": 7,
-            "x": 17,
+            "w": 6,
+            "x": 12,
             "y": 8
           },
           "id": 110,
@@ -759,6 +759,114 @@
           "yaxes": [
             {
               "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 6,
+            "x": 18,
+            "y": 8
+          },
+          "hiddenSeries": false,
+          "id": 114,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_server_etcd_health_check_duration_bucket{capture=~\"$capture\"}[1m])) by (le,instance))",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "p999-{{instance}}",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_server_etcd_health_check_duration_bucket{capture=~\"$capture\"}[1m])) by (le,instance))",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "p99-{{instance}}",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_server_etcd_health_check_duration_bucket{capture=~\"$capture\"}[1m])) by (le,instance))",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "p95-{{instance}}",
+              "refId": "C"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Etcd health check duration",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
               "label": null,
               "logBase": 1,
               "max": null,

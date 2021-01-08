@@ -14,11 +14,10 @@
 package cdc
 
 import (
-	"github.com/pingcap/ticdc/cdc/puller/sorter"
-
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -36,4 +35,5 @@ func init() {
 	sorter.InitMetrics(registry)
 	initProcessorMetrics(registry)
 	initOwnerMetrics(registry)
+	initServerMetrics(registry)
 }
