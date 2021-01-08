@@ -96,7 +96,9 @@ def tests(sink_type, node_label) {
                             tail /tmp/tidb_cdc_test/cov* || true
                             """
                         } catch (Exception e) {
-                            archiveArtifacts artifacts: '/tmp/tidb_cdc_test/*/*.log', fingerprint: true
+                            dir("/tmp/tidb_cdc_test/") {
+                                archiveArtifacts artifacts: '**/*.log'
+                            }
                             throw e;
                         }
                     }
