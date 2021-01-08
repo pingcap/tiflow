@@ -33,7 +33,6 @@ type Manager struct {
 	checkpointTs model.Ts
 	tableSinks   map[model.TableID]*tableSink
 	tableSinksMu sync.Mutex
-	flushMu      sync.Mutex
 }
 
 // NewManager creates a new Sink manager
@@ -72,8 +71,6 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 		return m.getCheckpointTs()
 	}
 	minTs := model.Ts(math.MaxUint64)
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
 	for _, tableSink := range m.tableSinks {
 		emittedTs := tableSink.getEmittedTs()
 		if minTs > emittedTs {
@@ -84,8 +81,6 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
-	m.flushMu.Lock()
-	defer m.flushMu.Unlock()
 	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
@@ -133,10 +128,15 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
+		t.manager.tableSinksMu.Lock()
+		defer t.manager.tableSinksMu.Unlock()
 		return t.manager.flushBackendSink(ctx)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = t.buffer[i:]
+
+	t.manager.tableSinksMu.Lock()
+	defer t.manager.tableSinksMu.Unlock()
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return t.manager.getCheckpointTs(), errors.Trace(err)
