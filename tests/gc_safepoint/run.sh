@@ -143,6 +143,8 @@ function run() {
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
     pd-ctl service-gc-safepoint delete ticdc --pd=$pd_addr
+    pd-ctl service-gc-safepoint delete ticdc-changefeed-creating --pd=$pd_addr || true
+    pd-ctl service-gc-safepoint delete gc_worker --pd=$pd_addr || true
     ensure $MAX_RETRIES check_changefeed_mark_failed $pd_addr $changefeed_id "ErrUpdateSafepointFailed"
 
     cleanup_process $CDC_BINARY
