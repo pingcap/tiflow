@@ -97,14 +97,14 @@ def tests(sink_type, node_label) {
                             tail /tmp/tidb_cdc_test/cov* || true
                             """
                         } catch (Exception e) {
+                            sh """
+                                echo "archive all log"
+                                for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
+                                    echo "\$log"
+                                    tar zcvf "\$log.tar.gz" "\$log"
+                                done
+                            """
                             dir("/tmp/tidb_cdc_test/") {
-                                sh """
-                                    echo "archive all log"
-                                    for log in `ls */*.log`; do
-                                        echo "\$log"
-                                        tar zcvf "\$log.tar.gz" "\$log"
-                                    done
-                                """
                                 archiveArtifacts artifacts: '**/*.tar.gz'
                             }
                             throw e;
