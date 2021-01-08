@@ -96,15 +96,7 @@ def tests(sink_type, node_label) {
                             tail /tmp/tidb_cdc_test/cov* || true
                             """
                         } catch (Exception e) {
-                            sh """
-                                echo "print all log"
-                                for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
-                                    echo "____________________________________"
-                                    echo "\$log"
-                                    cat "\$log"
-                                    echo "____________________________________"
-                                done
-                            """
+                            archiveArtifacts artifacts: '/tmp/tidb_cdc_test/*/*.log', fingerprint: true
                             throw e;
                         }
                     }
@@ -120,18 +112,9 @@ def tests(sink_type, node_label) {
             returnStdout: true
         ).trim().split()
 
-        test_cases["integration test step_2"] = {
-            run_integration_test("step_2", "processor_panic move_table")
+        test_cases["integration test step_1"] = {
+            run_integration_test("step_1", "processor_panic move_table")
         }
-
-        test_cases["integration test step_3"] = {
-            run_integration_test("step_3", "ddl_puller_lag move_table")
-        }
-
-        test_cases["integration test step_4"] = {
-            run_integration_test("step_4", "ddl_puller_lag processor_panic move_table")
-        }
-
         parallel test_cases
     }
 }

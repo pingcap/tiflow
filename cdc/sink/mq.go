@@ -166,6 +166,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
+		log.Debug("LEOPPRO show row in mq sink", zap.Int32("partition", partition), zap.Reflect("row", row))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
