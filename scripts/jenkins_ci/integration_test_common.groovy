@@ -122,18 +122,18 @@ def tests(sink_type, node_label) {
 
 
         test_cases["integration test step_1"] = {
-            run_integration_test("step_1", case_names.join("ddl_puller_lag processor_panic split_region changefeed_auto_stop changefeed_pause_resume kafka_messages move_table"))
+            run_integration_test("step_1", "ddl_puller_lag processor_panic split_region changefeed_auto_stop changefeed_pause_resume kafka_messages move_table")
         }
 
         test_cases["integration test step_2"] = {
-            run_integration_test("step_2", case_names.join("split_region changefeed_auto_stop changefeed_pause_resume kafka_messages move_table"))
+            run_integration_test("step_2", "split_region changefeed_auto_stop changefeed_pause_resume kafka_messages move_table")
         }
 
         test_cases["integration test step_3"] = {
-            run_integration_test("step_3", case_names.join("changefeed_pause_resume kafka_messages move_table"))
+            run_integration_test("step_3", "changefeed_pause_resume kafka_messages move_table")
         }
         test_cases["integration test step_4"] = {
-            run_integration_test("step_4", case_names.join("move_table"))
+            run_integration_test("step_4", "move_table")
         }
 
         parallel test_cases
