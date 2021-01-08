@@ -882,18 +882,16 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		tsUpdated = true
 	}
 
-	updateCheckpointTs := minCheckpointTs
 	if minCheckpointTs > c.status.CheckpointTs {
 		c.status.CheckpointTs = minCheckpointTs
 		// when the `c.ddlState` is `model.ChangeFeedWaitToExecDDL`,
 		// some DDL is waiting to executed, we can't ensure whether the DDL has been executed.
 		// so we can't emit checkpoint to sink
-		if c.ddlState == model.ChangeFeedWaitToExecDDL {
-			updateCheckpointTs--
-		}
-		err := c.sink.EmitCheckpointTs(ctx, updateCheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
+		if c.ddlState != model.ChangeFeedWaitToExecDDL {
+			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		tsUpdated = true
 	}
@@ -901,7 +899,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	if tsUpdated {
 		log.Debug("update changefeed", zap.String("id", c.id),
-			zap.Uint64("checkpoint ts", updateCheckpointTs),
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
 			zap.Uint64("resolved ts", c.status.ResolvedTs))
 	}
 	return nil

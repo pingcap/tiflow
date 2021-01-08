@@ -1023,7 +1023,6 @@ func (p *processor) sorterConsume(
 				}
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
-				log.Info("[LEOPPRO] show table resolvedts", zap.Int64("tableID", tableID), zap.Uint64("resolvedTs", lastResolvedTs))
 				p.localResolvedNotifier.Notify()
 				resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 				if !opDone {
@@ -1072,7 +1071,6 @@ func (p *processor) sorterConsume(
 				}
 				return
 			}
-			log.Info("LEOPPRO: show checkpointTs after sink", zap.Uint64("resolved", minTs), zap.Uint64("checkpointTs", checkpointTs))
 			if checkpointTs != 0 {
 				atomic.StoreUint64(pCheckpointTs, checkpointTs)
 				p.localCheckpointTsNotifier.Notify()
