@@ -102,12 +102,12 @@ def tests(sink_type, node_label) {
                                 for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
                                     dirname=`dirname \$log`
                                     basename=`basename \$log`
-                                    tar zcvf "\$log.tar.gz" -C "\$dirname" "\$basename"
+                                    tar zcvf "\${log%%.*}.tgz" -C "\$dirname" "\$basename"
                                 done
                                 ls -l /tmp/tidb_cdc_test/*/*.tar.gz
                             """
                             dir("/tmp/tidb_cdc_test/") {
-                                archiveArtifacts artifacts: '**/*.log.tar.gz'
+                                archiveArtifacts artifacts: '**/*.tgz'
                             }
                             throw e;
                         }
