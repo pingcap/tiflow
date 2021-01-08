@@ -104,7 +104,7 @@ def tests(sink_type, node_label) {
                                     basename=`basename \$log`
                                     tar zcvf "\${log%%.*}.tgz" -C "\$dirname" "\$basename"
                                 done
-                                ls -l /tmp/tidb_cdc_test/*/*.tar.gz
+                                ls -l /tmp/tidb_cdc_test/*/*.tgz
                             """
                             dir("/tmp/tidb_cdc_test/") {
                                 archiveArtifacts artifacts: '**/*.tgz'
