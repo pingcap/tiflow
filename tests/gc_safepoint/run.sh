@@ -67,6 +67,7 @@ function check_changefeed_mark_failed() {
     changefeedid=$2
     error_msg=$3
     info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
+    echo $info
     state=$(echo $info|jq -r '.state')
     if [[ ! "$state" == "failed" ]]; then
         echo "changefeed state $state does not equal to failed"
