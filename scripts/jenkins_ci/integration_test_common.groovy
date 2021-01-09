@@ -105,9 +105,10 @@ def tests(sink_type, node_label) {
                                     tar zcvf "\${log%%.*}.tgz" -C "\$dirname" "\$basename"
                                 done
                                 ls -l /tmp/tidb_cdc_test/*/*.tgz
+                                chmod 777 /tmp/tidb_cdc_test/*/*.tgz
                             """
                             dir("/tmp/tidb_cdc_test/") {
-                                archiveArtifacts artifacts: '*/*.tgz'
+                                archiveArtifacts artifacts: '*/*.*'
                             }
                             throw e;
                         }
