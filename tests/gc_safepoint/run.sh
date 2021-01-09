@@ -62,30 +62,11 @@ function check_changefeed_state() {
     fi
 }
 
-function check_changefeed_mark_failed() {
-    endpoints=$1
-    changefeedid=$2
-    error_msg=$3
-    info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-    echo $info
-    state=$(echo $info|jq -r '.state')
-    if [[ ! "$state" == "failed" ]]; then
-        echo "changefeed state $state does not equal to failed"
-        exit 1
-    fi
-    message=$(echo $info|jq -r '.error.message')
-    if [[ ! "$message" =~ "$error_msg" ]]; then
-        echo "error message '$message' is not as expected '$error_msg'"
-        exit 1
-    fi
-}
-
 export -f get_safepoint
 export -f check_safepoint_forward
 export -f check_safepoint_cleared
 export -f check_safepoint_equal
 export -f check_changefeed_state
-export -f check_changefeed_mark_failed
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -139,13 +120,6 @@ function run() {
     cdc cli changefeed remove --changefeed-id=$changefeed_id2 --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "removed"
     ensure $MAX_RETRIES check_safepoint_cleared $pd_addr $pd_cluster_id
-    cleanup_process $CDC_BINARY
-
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr \
-                   --failpoint 'github.com/pingcap/ticdc/cdc/MockClearGCSafepoint=return(true)'
-    # test error handling
-    changefeed_id3=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
-    ensure $MAX_RETRIES check_changefeed_mark_failed ${pd_addr} ${changefeed_id3} "ErrServiceSafepointLost"
 
     cleanup_process $CDC_BINARY
 }

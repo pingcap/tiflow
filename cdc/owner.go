@@ -702,14 +702,13 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 		}
 
-		failpoint.Inject("MockClearGCSafepoint", func() {
-			// cause an error for integration testing
-			failpoint.Return(cerror.ErrServiceSafepointLost.GenWithStackByArgs(0))
-		})
-
 		if actual > minCheckpointTs {
 			// UpdateServiceGCSafePoint has failed.
 			log.Warn("updating service safe point failed", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("min-safepoint", actual))
+
+			// Returning error here crashes the entire owner, but this seems necessary to prevent data corruption.
+			// This error should be rare.
+			// TODO better way to notify the user when the owner is crashed.
 			return cerror.ErrServiceSafepointLost.GenWithStackByArgs(actual)
 		}
 		o.gcSafepointLastUpdate = time.Now()
