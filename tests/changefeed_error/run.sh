@@ -21,7 +21,7 @@ function check_changefeed_mark_failed() {
         exit 1
     fi
     message=$(echo $info|jq -r '.error.message')
-    if [[ ! "$message" =~ "$error_msg" ]]; then
+    if [[ ! "$message" =~ $error_msg ]]; then
         echo "error message '$message' is not as expected '$error_msg'"
         exit 1
     fi
