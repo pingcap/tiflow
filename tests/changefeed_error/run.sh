@@ -96,6 +96,9 @@ function run() {
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLError=return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     changefeedid_1=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+
+    run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
+
     ensure $MAX_RETRIES check_changefeed_mark_failed http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "ErrExecDDLFailed"
 
     export GO_FAILPOINTS=''
