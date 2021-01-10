@@ -727,9 +727,21 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 			if cerror.ErrExecDDLFailed.NotEqual(err) {
 				return errors.Trace(err)
 			}
+
+			var code string
+			if terror, ok := err.(*errors.Error); ok {
+				code = string(terror.RFCCode())
+			} else {
+				code = string(cerror.ErrExecDDLFailed.RFCCode())
+			}
 			err = o.EnqueueJob(model.AdminJob{
 				CfID: cf.id,
 				Type: model.AdminStop,
+				Error: &model.RunningError{
+					Addr:    util.CaptureAddrFromCtx(ctx),
+					Code:    code,
+					Message: err.Error(),
+				},
 			})
 			if err != nil {
 				return errors.Trace(err)
