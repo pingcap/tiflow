@@ -1193,6 +1193,7 @@ func runProcessor(
 
 	go func() {
 		err := <-errCh
+		log.Debug("processor exited by error", zap.Error(err))
 		cause := errors.Cause(err)
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
