@@ -107,11 +107,8 @@ def tests(sink_type, node_label) {
                                 ls -l /tmp/tidb_cdc_test/*/*.tgz
                                 chmod 777 /tmp/tidb_cdc_test/*/*.tgz
                             """
-                            dir("/tmp/tidb_cdc_test/") {
-                                sh """
-                                ls -l ./*/*.tgz
-                                """
-                                archiveArtifacts artifacts: "**/*.tgz", caseSensitive: false
+                            dir("/tmp/") {
+                                archiveArtifacts artifacts: "tidb_cdc_test/**/*.tgz", caseSensitive: false
                             }
                             throw e;
                         }
