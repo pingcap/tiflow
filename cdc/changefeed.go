@@ -75,9 +75,12 @@ type ChangeFeedRWriter interface {
 }
 
 type changeFeed struct {
-	id                  string
-	info                *model.ChangeFeedInfo
-	status              *model.ChangeFeedStatus
+	id     string
+	info   *model.ChangeFeedInfo
+	status *model.ChangeFeedStatus
+	// The latest checkpointTs already applied to Etcd.
+	// We need to check this field to ensure visibility to the processors,
+	// if the operation assumes the progress of the global checkpoint.
 	appliedCheckpointTs uint64
 
 	schema           *entry.SingleSchemaSnapshot
@@ -634,7 +637,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	if c.appliedCheckpointTs > todoDDLJob.BinlogInfo.FinishedTS {
+	if c.appliedCheckpointTs >= todoDDLJob.BinlogInfo.FinishedTS {
 		log.Panic("applied checkpoint ts is larger than DDL finish ts",
 			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
 			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))

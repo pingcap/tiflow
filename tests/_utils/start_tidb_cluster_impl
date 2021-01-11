@@ -317,6 +317,8 @@ done
 
 echo "Starting CDC state checker..."
 cd $CUR/../../testing_utils/cdc_state_checker
-GO111MODULE=on go build
+if [ ! -f ./cdc_state_checker ]; then
+  GO111MODULE=on go build
+fi
 ./cdc_state_checker -pd ${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1} > $OUT_DIR/cdc_etcd_check.log &
 cd $OUT_DIR

@@ -1208,6 +1208,8 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	// It is better for flushChangeFeedInfos to follow calcResolvedTs immediately,
+	// because operations such as handleDDL and rebalancing rely on proper progress of the checkpoint in Etcd.
 	err = o.flushChangeFeedInfos(ctx)
 	if err != nil {
 		return errors.Trace(err)
