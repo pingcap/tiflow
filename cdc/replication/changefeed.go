@@ -13,6 +13,15 @@
 
 package replication
 
-type changefeed struct {
+import "github.com/pingcap/ticdc/cdc/model"
 
+// changefeed is part of the replication model that implements the control logic of a changefeed
+type changefeed struct {
+	tableTasks map[int]*tableTask
 }
+
+type tableTask struct {
+	CheckpointTs uint64
+	Capture      model.CaptureID
+}
+
