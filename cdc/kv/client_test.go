@@ -793,7 +793,6 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 		if err != nil {
 			log.Error("mock server error", zap.Error(err))
 		}
-		return
 	}
 
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
@@ -803,11 +802,11 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer kvStorage.Close() //nolint:errcheck
 
-	regionId3 := uint64(3)
-	regionId4 := uint64(4)
+	regionID3 := uint64(3)
+	regionID4 := uint64(4)
 	cluster.AddStore(1, addr1)
-	cluster.Bootstrap(regionId3, []uint64{1}, []uint64{4}, 4)
-	cluster.SplitRaw(regionId3, regionId4, []byte("b"), []uint64{5}, 5)
+	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
+	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
@@ -845,18 +844,19 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	// The expected request ids are agnostic because the kv client could retry
 	// for more than one time, so we wait until the newly started server receives
 	// requests for both two regions.
-	retry.Run(time.Millisecond*200, 10, func() error {
-		_, ok1 := requestIds.Load(regionId3)
-		_, ok2 := requestIds.Load(regionId4)
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		_, ok1 := requestIds.Load(regionID3)
+		_, ok2 := requestIds.Load(regionID4)
 		if ok1 && ok2 {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
 	})
-	reqId1, _ := requestIds.Load(regionId3)
-	reqId2, _ := requestIds.Load(regionId4)
-	initialized1 := mockInitializedEvent(3 /*regionID */, reqId1.(uint64))
-	initialized2 := mockInitializedEvent(4 /*regionID */, reqId2.(uint64))
+	c.Assert(err, check.IsNil)
+	reqID1, _ := requestIds.Load(regionID3)
+	reqID2, _ := requestIds.Load(regionID4)
+	initialized1 := mockInitializedEvent(3 /*regionID */, reqID1.(uint64))
+	initialized2 := mockInitializedEvent(4 /*regionID */, reqID2.(uint64))
 	ch2 <- initialized1
 	ch2 <- initialized2
 
@@ -871,7 +871,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 			c.Errorf("expected events are not receive, received: %v", initRegions)
 		}
 	}
-	expectedInitRegions := map[uint64]struct{}{regionId3: {}, regionId4: {}}
+	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
 	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
 	cancel()
