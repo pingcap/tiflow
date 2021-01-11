@@ -986,7 +986,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
 
 	if replicaInfo.StartTs < globalcheckpointTs {
-		log.Panic("addTable: startTs < checkpoint",
+		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+		// The cdc_state_checker will catch a real inconsistency in integration tests.
+		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpoint", globalcheckpointTs),
