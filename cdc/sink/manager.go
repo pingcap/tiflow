@@ -111,9 +111,10 @@ func (m *Manager) getCheckpointTs() uint64 {
 }
 
 type tableSink struct {
-	tableID   model.TableID
-	manager   *Manager
-	buffer    []*model.RowChangedEvent
+	tableID model.TableID
+	manager *Manager
+	buffer  []*model.RowChangedEvent
+	// emittedTs means all of events which of commitTs less than or equal to emittedTs is sent to backendSink
 	emittedTs model.Ts
 }
 
@@ -194,22 +195,28 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 		select {
 		case <-ctx.Done():
 			err := ctx.Err()
-			if errors.Cause(err) != context.Canceled {
+			if err != nil && errors.Cause(err) != context.Canceled {
 				errCh <- err
 			}
 			return
 		case e := <-b.buffer:
 			if e.resolved {
 				checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, e.resolvedTs)
-				if errors.Cause(err) != context.Canceled {
-					errCh <- err
+				if err != nil {
+					if errors.Cause(err) != context.Canceled {
+						errCh <- err
+					}
+					return
 				}
 				atomic.StoreUint64(&b.checkpointTs, checkpointTs)
 				continue
 			}
 			err := b.Sink.EmitRowChangedEvents(ctx, e.rows...)
-			if errors.Cause(err) != context.Canceled {
-				errCh <- err
+			if err != nil {
+				if errors.Cause(err) != context.Canceled {
+					errCh <- err
+				}
+				return
 			}
 		}
 	}
