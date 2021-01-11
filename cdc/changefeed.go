@@ -532,6 +532,14 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			job.Status = model.MoveTableStatusDeleted
 			log.Info("handle the move job, remove table from the source capture", zap.Reflect("job", job))
 		case model.MoveTableStatusDeleted:
+			// Do NOT dispatch tables before checkpoint ts has been flushed to Etcd.
+			if c.appliedCheckpointTs != c.status.CheckpointTs {
+				log.Debug("handle the move job, waiting for checkpoint ts to be uploaded",
+					zap.Uint64("applied-checkpoint-ts", c.appliedCheckpointTs),
+					zap.Uint64("latest-checkpoint-ts", c.status.CheckpointTs))
+				continue
+			}
+
 			// add table to target capture
 			status, exist := cloneStatus(job.To)
 			replicaInfo := job.TableReplicaInfo.Clone()
