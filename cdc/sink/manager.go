@@ -27,6 +27,14 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+const (
+	// TODO: buffer chan size, the accumulated data is determined by
+	// the count of sorted data and unmounted data. In current benchmark a single
+	// processor can reach 50k-100k QPS, and accumulated data is around
+	// 200k-400k in most cases. We need a better chan cache mechanism.
+	defaultBufferChanSize = 1280000
+)
+
 // Manager manages table sinks, maintains the relationship between table sinks and backendSink
 type Manager struct {
 	backendSink  Sink
@@ -36,9 +44,9 @@ type Manager struct {
 }
 
 // NewManager creates a new Sink manager
-func NewManager(backendSink Sink, checkpointTs model.Ts) *Manager {
+func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) *Manager {
 	return &Manager{
-		backendSink:  backendSink,
+		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs),
 		checkpointTs: checkpointTs,
 		tableSinks:   make(map[model.TableID]*tableSink),
 	}
@@ -67,6 +75,8 @@ func (m *Manager) Close() error {
 }
 
 func (m *Manager) getMinEmittedTs() model.Ts {
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	if len(m.tableSinks) == 0 {
 		return m.getCheckpointTs()
 	}
@@ -128,15 +138,11 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
-		t.manager.tableSinksMu.Lock()
-		defer t.manager.tableSinksMu.Unlock()
 		return t.manager.flushBackendSink(ctx)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = t.buffer[i:]
 
-	t.manager.tableSinksMu.Lock()
-	defer t.manager.tableSinksMu.Unlock()
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return t.manager.getCheckpointTs(), errors.Trace(err)
@@ -157,4 +163,80 @@ func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 func (t *tableSink) Close() error {
 	t.manager.destroyTableSink(t.tableID)
 	return nil
+}
+
+type bufferSink struct {
+	Sink
+	buffer chan struct {
+		rows       []*model.RowChangedEvent
+		resolved   bool
+		resolvedTs model.Ts
+	}
+	checkpointTs uint64
+}
+
+func newBufferSink(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) Sink {
+	sink := &bufferSink{
+		Sink: backendSink,
+		buffer: make(chan struct {
+			rows       []*model.RowChangedEvent
+			resolved   bool
+			resolvedTs model.Ts
+		}, defaultBufferChanSize),
+		checkpointTs: checkpointTs,
+	}
+	go sink.run(ctx, errCh)
+	return sink
+}
+
+func (b *bufferSink) run(ctx context.Context, errCh chan error) {
+	for {
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			if errors.Cause(err) != context.Canceled {
+				errCh <- err
+			}
+			return
+		case e := <-b.buffer:
+			if e.resolved {
+				checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, e.resolvedTs)
+				if errors.Cause(err) != context.Canceled {
+					errCh <- err
+				}
+				atomic.StoreUint64(&b.checkpointTs, checkpointTs)
+				continue
+			}
+			err := b.Sink.EmitRowChangedEvents(ctx, e.rows...)
+			if errors.Cause(err) != context.Canceled {
+				errCh <- err
+			}
+		}
+	}
+}
+
+func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case b.buffer <- struct {
+		rows       []*model.RowChangedEvent
+		resolved   bool
+		resolvedTs model.Ts
+	}{rows: rows}:
+	}
+	return nil
+}
+
+func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	select {
+	case <-ctx.Done():
+		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
+	case b.buffer <- struct {
+		rows       []*model.RowChangedEvent
+		resolved   bool
+		resolvedTs model.Ts
+	}{resolved: true, resolvedTs: resolvedTs}:
+	}
+	return atomic.LoadUint64(&b.checkpointTs), nil
 }

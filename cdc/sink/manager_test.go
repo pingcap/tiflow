@@ -17,6 +17,7 @@ import (
 	"context"
 	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
@@ -83,7 +84,10 @@ func (c *checkSink) Close() error {
 
 func (s *managerSuite) TestManagerRandom(c *check.C) {
 	defer testleak.AfterTest(c)()
-	manager := NewManager(&checkSink{C: c}, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 16)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
 	defer manager.Close()
 	goroutineNum := 10
 	rowNum := 100
@@ -119,4 +123,10 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 		}()
 	}
 	wg.Wait()
+	cancel()
+	time.Sleep(1 * time.Second)
+	close(errCh)
+	for err := range errCh {
+		c.Assert(err, check.IsNil)
+	}
 }

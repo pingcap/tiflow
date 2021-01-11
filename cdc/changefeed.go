@@ -518,6 +518,9 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 				log.Warn("ignored the move job, the source capture is not found", zap.Reflect("job", job))
 				continue
 			}
+			// To ensure that the replication pipeline stops exactly at the boundary TS,
+			// The boundary TS specified by Remove Table Operation MUST greater or equal to the checkpoint TS of this table.
+			// So the global resolved TS is a reasonable values.
 			replicaInfo, exist := status.RemoveTable(tableID, c.status.ResolvedTs)
 			if !exist {
 				delete(c.moveTableJobs, tableID)

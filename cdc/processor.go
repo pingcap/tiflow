@@ -1179,7 +1179,7 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	sinkManager := sink.NewManager(s, checkpointTs)
+	sinkManager := sink.NewManager(ctx, s, errCh, checkpointTs)
 	processor, err := newProcessor(ctx, pdCli, credential, session, info, sinkManager,
 		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
