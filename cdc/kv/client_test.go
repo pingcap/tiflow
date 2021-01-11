@@ -855,8 +855,8 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	reqID1, _ := requestIds.Load(regionID3)
 	reqID2, _ := requestIds.Load(regionID4)
-	initialized1 := mockInitializedEvent(3 /*regionID */, reqID1.(uint64))
-	initialized2 := mockInitializedEvent(4 /*regionID */, reqID2.(uint64))
+	initialized1 := mockInitializedEvent(regionID3, reqID1.(uint64))
+	initialized2 := mockInitializedEvent(regionID4, reqID2.(uint64))
 	ch2 <- initialized1
 	ch2 <- initialized2
 
