@@ -102,7 +102,8 @@ def tests(sink_type, node_label) {
                                 for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
                                     dirname=`dirname \$log`
                                     basename=`basename \$log`
-                                    tar zcvf "log/\${log%%.*}.tgz" -C "\$dirname" "\$basename"
+                                    mkdir -p "log\$dirname"
+                                    tar zcvf "log\${log%%.*}.tgz" -C "\$dirname" "\$basename"
                                 done
                                 ls -l /tmp/tidb_cdc_test/*/*.tgz
                                 chmod 777 /tmp/tidb_cdc_test/*/*.tgz
