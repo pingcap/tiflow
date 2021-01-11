@@ -14,9 +14,28 @@ function check_changefeed_mark_failed() {
     changefeedid=$2
     error_msg=$3
     info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
+    echo "$info"
     state=$(echo $info|jq -r '.state')
     if [[ ! "$state" == "failed" ]]; then
         echo "changefeed state $state does not equal to failed"
+        exit 1
+    fi
+    message=$(echo $info|jq -r '.error.message')
+    if [[ ! "$message" =~ "$error_msg" ]]; then
+        echo "error message '$message' is not as expected '$error_msg'"
+        exit 1
+    fi
+}
+
+function check_changefeed_mark_stopped() {
+    endpoints=$1
+    changefeedid=$2
+    error_msg=$3
+    info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
+    echo "$info"
+    state=$(echo $info|jq -r '.state')
+    if [[ ! "$state" == "stopped" ]]; then
+        echo "changefeed state $state does not equal to stopped"
         exit 1
     fi
     message=$(echo $info|jq -r '.error.message')
@@ -43,6 +62,7 @@ function check_no_capture() {
 }
 
 export -f check_changefeed_mark_failed
+export -f check_changefeed_mark_stopped
 export -f check_no_changefeed
 export -f check_no_capture
 
@@ -89,6 +109,16 @@ function run() {
 
     cdc cli changefeed remove -c $changefeedid
     ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST_1}:${UP_PD_PORT_1}
+
+    export GO_FAILPOINTS=''
+    cleanup_process $CDC_BINARY
+
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLError=return(true)'
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+    changefeedid_1=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+
+    run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
+    ensure $MAX_RETRIES check_changefeed_mark_stopped http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "[CDC:ErrExecDDLFailed]exec DDL failed"
 
     export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
