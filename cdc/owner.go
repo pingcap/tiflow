@@ -724,10 +724,6 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		err := cf.handleDDL(ctx, o.captures)
 		if err != nil {
-			if cerror.ErrExecDDLFailed.NotEqual(err) {
-				return errors.Trace(err)
-			}
-
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
 				code = string(terror.RFCCode())
