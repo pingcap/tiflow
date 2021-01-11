@@ -90,7 +90,6 @@ def tests(sink_type, node_label) {
                                 mkdir -p cov_dir
                                 ls /tmp/tidb_cdc_test
                                 cp /tmp/tidb_cdc_test/cov*out cov_dir || touch cov_dir/dummy_file_${step_name}
-                                cat aabbccdd
                             """
                             // cyclic tests do not run on kafka sink, so there is no cov* file.
                             sh """
