@@ -56,6 +56,11 @@ func (r *cdcMonitReactor) verifyTs() error {
 		actualCheckpointTs := status.CheckpointTs
 
 		for captureID, position := range positions {
+			if _, ok := r.state.Captures[captureID]; !ok {
+				// ignore positions whose capture is no longer present
+				continue
+			}
+
 			if position.CheckPointTs < actualCheckpointTs {
 				return errors.Errorf("checkpointTs too large, globalCkpt = %d, localCkpt = %d, capture = %s, cfid = %s",
 					actualCheckpointTs, position.CheckPointTs, captureID, changfeedID)
