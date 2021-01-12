@@ -120,7 +120,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointFailed(c *check.C) {
 
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed_1": {
-			info: &model.ChangeFeedInfo{},
+			info: &model.ChangeFeedInfo{State: model.StateNormal},
 			status: &model.ChangeFeedStatus{
 				CheckpointTs: 100,
 			},
@@ -136,7 +136,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointFailed(c *check.C) {
 			},
 		},
 		"test_change_feed_2": {
-			info: &model.ChangeFeedInfo{},
+			info: &model.ChangeFeedInfo{State: model.StateNormal},
 			status: &model.ChangeFeedStatus{
 				CheckpointTs: 1100,
 			},
@@ -154,9 +154,11 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointFailed(c *check.C) {
 	}
 
 	mockOwner := Owner{
-		pdClient:              mockPDCli,
-		gcSafepointLastUpdate: time.Now(),
-		changeFeeds:           changeFeeds,
+		pdClient:                mockPDCli,
+		etcdClient:              s.client,
+		lastFlushChangefeeds:    time.Now(),
+		flushChangefeedInterval: 1 * time.Hour,
+		changeFeeds:             changeFeeds,
 	}
 
 	err := mockOwner.flushChangeFeedInfos(s.ctx)
