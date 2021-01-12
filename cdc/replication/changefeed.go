@@ -22,6 +22,7 @@ type changefeed struct {
 
 type tableTask struct {
 	CheckpointTs uint64
+	ResolvedTs   uint64
 	Capture      model.CaptureID
 }
 
