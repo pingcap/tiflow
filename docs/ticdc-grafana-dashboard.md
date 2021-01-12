@@ -58,6 +58,7 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - Ownership history ： TiCDC 集群中 Owner 节点的历史记录
 - CPU usage ： TiCDC 节点使用的 CPU
 - Memory usage ： TiCDC 节点使用的内存
+- Etcd health check duration ：TiCDC 节点访问 PD 的延迟统计
 
 ![TiCDC Dashboard - Server metrics](/docs/media/ticdc-dashboard-server.png)
 ## Changefeed
