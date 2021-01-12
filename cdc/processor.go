@@ -909,7 +909,6 @@ func (p *processor) sorterConsume(
 	var lastResolvedTs uint64
 	opDone := false
 	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
-	metricFlushDuration := sinkFlushRowChangedDuration.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
 	checkDone := func() {
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
@@ -1065,7 +1064,6 @@ func (p *processor) sorterConsume(
 			if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
 				continue
 			}
-			start := time.Now()
 
 			checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
@@ -1077,13 +1075,6 @@ func (p *processor) sorterConsume(
 			if checkpointTs != 0 {
 				atomic.StoreUint64(pCheckpointTs, checkpointTs)
 				p.localCheckpointTsNotifier.Notify()
-			}
-
-			dur := time.Since(start)
-			metricFlushDuration.Observe(dur.Seconds())
-			if dur > 3*time.Second {
-				log.Warn("flush row changed events too slow",
-					zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
 			}
 		case <-checkDoneTicker.C:
 			if !opDone {

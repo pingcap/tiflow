@@ -19,6 +19,9 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -33,6 +36,7 @@ const (
 	// processor can reach 50k-100k QPS, and accumulated data is around
 	// 200k-400k in most cases. We need a better chan cache mechanism.
 	defaultBufferChanSize = 1280000
+	defaultMetricInterval = time.Second * 15
 )
 
 // Manager manages table sinks, maintains the relationship between table sinks and backendSink
@@ -191,6 +195,10 @@ func newBufferSink(ctx context.Context, backendSink Sink, errCh chan error, chec
 }
 
 func (b *bufferSink) run(ctx context.Context, errCh chan error) {
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	advertiseAddr := util.CaptureAddrFromCtx(ctx)
+	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID)
+	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
 	for {
 		select {
 		case <-ctx.Done():
@@ -201,6 +209,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			return
 		case e := <-b.buffer:
 			if e.resolved {
+				start := time.Now()
 				checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, e.resolvedTs)
 				if err != nil {
 					if errors.Cause(err) != context.Canceled {
@@ -209,6 +218,13 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 					return
 				}
 				atomic.StoreUint64(&b.checkpointTs, checkpointTs)
+
+				dur := time.Since(start)
+				metricFlushDuration.Observe(dur.Seconds())
+				if dur > 3*time.Second {
+					log.Warn("flush row changed events too slow",
+						zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
+				}
 				continue
 			}
 			err := b.Sink.EmitRowChangedEvents(ctx, e.rows...)
@@ -218,6 +234,8 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				}
 				return
 			}
+		case <-time.After(defaultMetricInterval):
+			metricBufferSize.Set(float64(len(b.buffer)))
 		}
 	}
 }
