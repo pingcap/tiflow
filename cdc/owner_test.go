@@ -83,12 +83,18 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 
 type mockPDClient struct {
 	pd.Client
-	invokeCounter int
+	invokeCounter     int
+	mockSafePointLost bool
 }
 
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 	m.invokeCounter++
-	return 0, errors.New("mock error")
+
+	if m.mockSafePointLost {
+		return 1000, nil
+	}
+
+	return safePoint, nil
 }
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
@@ -99,10 +105,65 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 		gcSafepointLastUpdate: time.Now(),
 	}
 
-	// Owner should ignore UpdateServiceGCSafePoint error.
 	err := mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+	s.TearDownTest(c)
+}
+
+func (s *ownerSuite) TestOwnerUploadGCSafePointFailed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDCli := &mockPDClient{
+		mockSafePointLost: true,
+	}
+
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
+		"test_change_feed_1": {
+			info: &model.ChangeFeedInfo{},
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 100,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+		"test_change_feed_2": {
+			info: &model.ChangeFeedInfo{},
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 1100,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+	}
+
+	mockOwner := Owner{
+		pdClient:              mockPDCli,
+		gcSafepointLastUpdate: time.Now(),
+		changeFeeds:           changeFeeds,
+	}
+
+	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+
+	c.Assert(changeFeeds["test_change_feed_1"].info.State, check.Equals, model.StateFailed)
+	c.Assert(changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 	s.TearDownTest(c)
 }
 

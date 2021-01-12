@@ -699,17 +699,34 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
 			log.Warn("failed to update service safe point", zap.Error(err))
-			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
+			// We do not throw an error unless updating GC safepoint has been failing for more than GCSafepointUpdateInterval.
+			if time.Since(o.gcSafepointLastUpdate) >= GCSafepointUpdateInterval {
+				return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
+			}
 		}
 
 		if actual > minCheckpointTs {
 			// UpdateServiceGCSafePoint has failed.
 			log.Warn("updating service safe point failed", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("min-safepoint", actual))
 
-			// Returning error here crashes the entire owner, but this seems necessary to prevent data corruption.
-			// This error should be rare.
-			// TODO better way to notify the user when the owner is crashed.
-			return cerror.ErrServiceSafepointLost.GenWithStackByArgs(actual)
+			for cfID, cf := range o.changeFeeds {
+				if cf.status.CheckpointTs < actual {
+					// Mark unrecoverable changefeeds as Failed.
+					cf.info.State = model.StateFailed
+					cf.info.Error = &model.RunningError{
+						Addr:    util.CaptureAddrFromCtx(ctx),
+						Code:    "CDC-owner-1001",
+						Message: cerror.ErrServiceSafepointLost.GenWithStackByArgs(actual).Error(),
+					}
+					cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
+
+					err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, cfID)
+					if err != nil {
+						return err
+					}
+				}
+			}
+			return nil
 		}
 		o.gcSafepointLastUpdate = time.Now()
 	}
