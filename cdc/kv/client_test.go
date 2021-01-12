@@ -769,6 +769,11 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 // upgrade a cluster and the new version is not compatible with the old version
 // (upgrade TiCDC before TiKV, since upgrade TiKV often takes much longer).
 func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
 	call := int32(0)
 	// 20 here not too much, since check version itself has 3 time retry, and
 	// region cache could also call get store API, which will trigger version
@@ -781,11 +786,6 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 		}
 		return defaultVersionGen()
 	}
-
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-	ctx, cancel := context.WithCancel(context.Background())
-	wg := &sync.WaitGroup{}
 
 	var requestIds sync.Map
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
@@ -819,7 +819,8 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
-	failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientDelayWhenIncompatible", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientDelayWhenIncompatible", "return(true)")
+	c.Assert(err, check.IsNil)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientDelayWhenIncompatible")
 	}()
