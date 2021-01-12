@@ -80,6 +80,7 @@ function check_no_capture() {
 }
 
 export -f check_changefeed_mark_failed
+export -f check_changefeed_mark_failed_regex
 export -f check_changefeed_mark_stopped
 export -f check_no_changefeed
 export -f check_no_capture
