@@ -40,4 +40,5 @@ func init() {
 	entry.InitMetrics(registry)
 	sorter.InitMetrics(registry)
 	initProcessorMetrics(registry)
+	initOwnerMetrics(registry)
 }
