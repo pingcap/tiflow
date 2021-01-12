@@ -136,8 +136,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 
 			// We are safe to update the ReactorState only if there is no pending patch.
 			for _, update := range worker.pendingUpdates {
-				rkey := update.key.RemovePrefix(&worker.prefix)
-				worker.state.Update(rkey, update.value)
+				err := worker.state.Update(update.key, update.value)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 
 			worker.pendingUpdates = worker.pendingUpdates[:0]
@@ -191,8 +193,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 	ops := make([]clientv3.Op, 0)
 
 	for _, patch := range patches {
-		fullKey := worker.prefix.FullKey(patch.Key)
-		old, ok := worker.rawState[fullKey]
+		old, ok := worker.rawState[patch.Key]
 
 		value, err := patch.Fun(old)
 		if err != nil {
@@ -204,7 +205,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 
 		// make sure someone else has not updated the key after the last snapshot
 		if ok {
-			cmp := clientv3.Compare(clientv3.ModRevision(fullKey.String()), "<", worker.revision+1)
+			cmp := clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
 			cmps = append(cmps, cmp)
 		}
 
@@ -215,9 +216,9 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 
 		var op clientv3.Op
 		if value != nil {
-			op = clientv3.OpPut(fullKey.String(), string(value))
+			op = clientv3.OpPut(patch.Key.String(), string(value))
 		} else {
-			op = clientv3.OpDelete(fullKey.String())
+			op = clientv3.OpDelete(patch.Key.String())
 		}
 		ops = append(ops, op)
 	}
