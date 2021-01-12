@@ -1286,7 +1286,7 @@ func runProcessor(
 		cancel()
 		return nil, err
 	}
-	log.Info("start to run processor", zap.String("changefeed", changefeedID))
+	log.Info("start to run processor", zap.String("changefeed", changefeedID), zap.String("processor", processor.id))
 
 	processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
 	processor.Run(ctx)
