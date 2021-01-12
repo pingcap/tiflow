@@ -708,6 +708,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			}
 		}
 
+		failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
+			actual = uint64(val.(int))
+		})
+
 		if actual > minCheckpointTs {
 			// UpdateServiceGCSafePoint has failed.
 			log.Warn("updating service safe point failed", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("min-safepoint", actual))

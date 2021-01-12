@@ -27,6 +27,24 @@ function check_changefeed_mark_failed() {
     fi
 }
 
+function check_changefeed_mark_failed_regex() {
+    endpoints=$1
+    changefeedid=$2
+    error_msg=$3
+    info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
+    echo "$info"
+    state=$(echo $info|jq -r '.state')
+    if [[ ! "$state" == "failed" ]]; then
+        echo "changefeed state $state does not equal to failed"
+        exit 1
+    fi
+    message=$(echo $info|jq -r '.error.message')
+    if [[ ! "$message" =~ $error_msg ]]; then
+        echo "error message '$message' does not match '$error_msg'"
+        exit 1
+    fi
+}
+
 function check_changefeed_mark_stopped() {
     endpoints=$1
     changefeedid=$2
@@ -113,6 +131,7 @@ function run() {
     export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
 
+    # owner DDL error case
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLError=return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     changefeedid_1=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
@@ -120,6 +139,17 @@ function run() {
     run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
     ensure $MAX_RETRIES check_changefeed_mark_stopped http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "[CDC:ErrExecDDLFailed]exec DDL failed"
 
+    cdc cli changefeed remove -c $changefeedid_1
+    cleanup_process $CDC_BINARY
+
+    # updating GC safepoint failure case
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=3*off->return(0)'
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+
+    changefeedid_2=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+    ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "service safepoint lost"
+
+    cdc cli changefeed remove -c $changefeedid_2
     export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
 }
