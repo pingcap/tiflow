@@ -104,10 +104,9 @@ digraph Dataflow {
 
             processor_sorter_consume [label = "sorterConsume"]
             processor_puller_consume [label = "pullerConsume"]
-            processor_sync_resolved [label = "syncResolved"]
 
-            processor_sorter_consume -> processor_sync_resolved [label = "P.output"]
         }
+            processor_sorter_consume -> table_sink_run [label = "P.output"]
 
         subgraph cluster_puller {
             label = "Puller";
@@ -132,18 +131,11 @@ digraph Dataflow {
                 sorter_run [label = "Run"]
             }
 
-            sorter_run -> rectifier_run [label = "E.Output"]
-
-            subgraph cluster_rectifier {
-                label = "Rectifier";
-
-                rectifier_run [label = "Run"]
-            }
         }
 
-        rectifier_run -> processor_sorter_consume [label = "R.Ouput"]
+        sorter_run -> processor_sorter_consume [label = "S.Ouput"]
         processor_sorter_consume -> mounter_run [label = "M.Input"]
-        mounter_run -> processor_sync_resolved [
+        mounter_run -> table_sink_run [
             label = "wait unmarshal",
             style = "dashed",
             dir = back,
@@ -156,13 +148,30 @@ digraph Dataflow {
             mounter_run [label = "Run"]
         }
 
-        processor_sync_resolved -> sink_run [label = "S.EmitEvents"]
-
         subgraph cluster_sink {
-            label = "Sink";
+            label = "Sink Manager";
             style = filled;
 
-            sink_run [label = "FlushEvents"]
+            subgraph table_sink {
+                label = "Table Sink";
+
+                table_sink_run [label = "Table Sink\nFlushEvents"]
+            }
+
+            subgraph buffer_sink {
+                label = "Buffer Sink";
+
+                buffer_sink_run [label = "Buffer Sink\nFlushEvents"]
+            }
+
+            subgraph backend_sink {
+                label = "Backend Sink";
+
+                backend_sink_run [label = "Backend Sink\nFlushEvents"]
+            }
+
+            table_sink_run -> buffer_sink_run [label = "S.EmitEvents"]
+            buffer_sink_run -> backend_sink_run [label = "S.EmitEvents"]
         }
     }
 
