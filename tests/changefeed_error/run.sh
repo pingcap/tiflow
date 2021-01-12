@@ -144,7 +144,7 @@ function run() {
     cleanup_process $CDC_BINARY
 
     # updating GC safepoint failure case
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=3*off->return(0)'
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=return(0)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     changefeedid_2=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
