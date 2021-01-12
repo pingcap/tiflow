@@ -701,11 +701,15 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
 		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
-			log.Warn("failed to update service safe point", zap.Error(err))
-			// We do not throw an error unless updating GC safepoint has been failing for more than GCSafepointUpdateInterval.
-			if time.Since(o.gcSafepointLastUpdate) >= GCSafepointUpdateInterval {
+			sinceLastUpdate := time.Since(o.gcSafepointLastUpdate)
+			log.Warn("failed to update service safe point", zap.Error(err),
+				zap.Duration("since-last-update", sinceLastUpdate))
+			// We do not throw an error unless updating GC safepoint has been failing for more than gcTTL.
+			if sinceLastUpdate >= time.Second*time.Duration(o.gcTTL) {
 				return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 			}
+		} else {
+			o.gcSafepointLastUpdate = time.Now()
 		}
 
 		failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
@@ -714,7 +718,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 
 		if actual > minCheckpointTs {
 			// UpdateServiceGCSafePoint has failed.
-			log.Warn("updating service safe point failed", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("min-safepoint", actual))
+			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("actual-safepoint", actual))
 
 			for cfID, cf := range o.changeFeeds {
 				if cf.status.CheckpointTs < actual {
@@ -735,7 +739,6 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			}
 			return nil
 		}
-		o.gcSafepointLastUpdate = time.Now()
 	}
 	return nil
 }

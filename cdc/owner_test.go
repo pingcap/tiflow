@@ -86,6 +86,7 @@ type mockPDClient struct {
 	pd.Client
 	invokeCounter     int
 	mockSafePointLost bool
+	mockPDFailure     bool
 }
 
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -93,6 +94,9 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 
 	if m.mockSafePointLost {
 		return 1000, nil
+	}
+	if m.mockPDFailure {
+		return 0, errors.New("injected PD failure")
 	}
 
 	return safePoint, nil
@@ -112,7 +116,55 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 	s.TearDownTest(c)
 }
 
-func (s *ownerSuite) TestOwnerUploadGCSafePointFailed(c *check.C) {
+func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDCli := &mockPDClient{
+		mockPDFailure: true,
+	}
+
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
+		"test_change_feed_1": {
+			info: &model.ChangeFeedInfo{State: model.StateNormal},
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 100,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+	}
+
+	mockOwner := Owner{
+		pdClient:                mockPDCli,
+		etcdClient:              s.client,
+		lastFlushChangefeeds:    time.Now(),
+		flushChangefeedInterval: 1 * time.Hour,
+		gcSafepointLastUpdate:   time.Now(),
+		gcTTL:                   6, // 6 seconds
+		changeFeeds:             changeFeeds,
+	}
+
+	time.Sleep(3 * time.Second)
+	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+
+	time.Sleep(6 * time.Second)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.ErrorMatches, ".*CDC:ErrUpdateServiceSafepointFailed.*")
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
+
+	s.TearDownTest(c)
+}
+
+func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDCli := &mockPDClient{
 		mockSafePointLost: true,
