@@ -179,5 +179,5 @@ digraph Dataflow {
     data_in -> Raftstore
 
     data_out [label = "Data out", shape = oval]
-    sink_run -> data_out
+    backend_sink_run -> data_out
 }
