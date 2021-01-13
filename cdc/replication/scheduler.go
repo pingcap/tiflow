@@ -13,10 +13,6 @@
 
 package replication
 
-import "github.com/pingcap/ticdc/cdc/model"
-
-type ownerContext interface {
-	SetChangefeedStatus(cfID model.ChangeFeedID, status *model.ChangeFeedStatus)
-	SetTaskPosition(cfID model.ChangeFeedID, )
+type scheduler interface {
 
 }
