@@ -7,20 +7,14 @@ import (
 )
 
 type processorState struct {
-	ID                 model.CaptureID
-	ChangefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
-	TaskPositions      map[model.ChangeFeedID]*model.TaskPosition
-	TaskStatuses       map[model.ChangeFeedID]*model.TaskStatus
-	Workloads          map[model.ChangeFeedID]*model.WorkloadInfo
+	ID          model.CaptureID
+	Changefeeds map[model.ChangeFeedID]changefeedState
 }
 
 func newProcessorState(captureID model.CaptureID) *processorState {
 	return &processorState{
-		ID:                 captureID,
-		ChangefeedStatuses: make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
-		TaskPositions:      make(map[model.ChangeFeedID]*model.TaskPosition),
-		TaskStatuses:       make(map[model.ChangeFeedID]*model.TaskStatus),
-		Workloads:          make(map[model.ChangeFeedID]*model.WorkloadInfo),
+		ID:          captureID,
+		Changefeeds: make(map[model.ChangeFeedID]changefeedState),
 	}
 }
 
@@ -29,5 +23,16 @@ func (p *processorState) Update(key util.EtcdKey, value []byte) error {
 }
 
 func (p *processorState) GetPatches() []*orchestrator.DataPatch {
+
+}
+
+type changefeedState struct {
+	changefeedStatus *model.ChangeFeedStatus
+	taskPosition     *model.TaskPosition
+	taskStatus       *model.TaskStatus
+	workload         model.TaskWorkload
+}
+
+func (s *changefeedState) Update(key util.EtcdKey, value []byte) error {
 	panic("implement me")
 }

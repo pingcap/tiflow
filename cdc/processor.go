@@ -36,7 +36,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
-	cdcprocessor "github.com/pingcap/ticdc/pkg/processor"
+	tablepipeline "github.com/pingcap/ticdc/pkg/processor/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -44,9 +44,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -99,7 +97,7 @@ type processor struct {
 	stateMu           sync.Mutex
 	status            *model.TaskStatus
 	position          *model.TaskPosition
-	tables            map[int64]*cdcprocessor.TablePipeline
+	tables            map[int64]*tablepipeline.TablePipeline
 	markTableIDs      map[int64]struct{}
 	statusModRevision int64
 
@@ -187,7 +185,7 @@ func newProcessor(
 		localCheckpointTsNotifier: localCheckpointTsNotifier,
 		localCheckpointTsReceiver: localCheckpointTsReceiver,
 
-		tables:       make(map[int64]*cdcprocessor.TablePipeline),
+		tables:       make(map[int64]*tablepipeline.TablePipeline),
 		markTableIDs: make(map[int64]struct{}),
 	}
 	modRevision, status, err := p.etcdCli.GetTaskStatus(ctx, p.changefeedID, p.captureInfo.ID)
@@ -275,114 +273,6 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 	p.stateMu.Unlock()
 
 	fmt.Fprintf(w, "\n")
-}
-
-// localResolvedWorker do the flowing works.
-// 1, update resolve ts by scanning all table's resolve ts.
-// 2, update checkpoint ts by consuming entry from p.executedTxns.
-// 3, sync TaskStatus between in memory and storage.
-// 4, check admin command in TaskStatus and apply corresponding command
-func (p *processor) positionWorker(ctx context.Context) error {
-	lastFlushTime := time.Now()
-	retryFlushTaskStatusAndPosition := func() error {
-		t0Update := time.Now()
-		err := retry.Run(500*time.Millisecond, 3, func() error {
-			inErr := p.flushTaskStatusAndPosition(ctx)
-			if inErr != nil {
-				if errors.Cause(inErr) != context.Canceled {
-					logError := log.Error
-					errField := zap.Error(inErr)
-					if cerror.ErrAdminStopProcessor.Equal(inErr) {
-						logError = log.Warn
-						errField = zap.String("error", inErr.Error())
-					}
-					logError("update info failed", util.ZapFieldChangefeed(ctx), errField)
-				}
-				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
-					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
-				}
-			}
-			return inErr
-		})
-		updateInfoDuration.
-			WithLabelValues(p.captureInfo.AdvertiseAddr).
-			Observe(time.Since(t0Update).Seconds())
-		if err != nil {
-			return errors.Annotate(err, "failed to update info")
-		}
-		return nil
-	}
-
-	defer func() {
-		p.localResolvedReceiver.Stop()
-		p.localCheckpointTsReceiver.Stop()
-
-		if !p.isStopped() {
-			err := retryFlushTaskStatusAndPosition()
-			if err != nil && errors.Cause(err) != context.Canceled {
-				log.Warn("failed to update info before exit", util.ZapFieldChangefeed(ctx), zap.Error(err))
-			}
-		}
-
-		log.Info("Local resolved worker exited", util.ZapFieldChangefeed(ctx))
-	}()
-
-	resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	metricResolvedTsLagGauge := resolvedTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-p.localResolvedReceiver.C:
-			minResolvedTs := p.ddlPuller.GetResolvedTs()
-			p.stateMu.Lock()
-			for _, table := range p.tables {
-				ts := table.ResolvedTs()
-
-				if ts < minResolvedTs {
-					minResolvedTs = ts
-				}
-			}
-			p.stateMu.Unlock()
-			atomic.StoreUint64(&p.localResolvedTs, minResolvedTs)
-
-			phyTs := oracle.ExtractPhysical(minResolvedTs)
-			// It is more accurate to get tso from PD, but in most cases we have
-			// deployed NTP service, a little bias is acceptable here.
-			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-			resolvedTsGauge.Set(float64(phyTs))
-
-			if p.position.ResolvedTs < minResolvedTs {
-				p.position.ResolvedTs = minResolvedTs
-				if err := retryFlushTaskStatusAndPosition(); err != nil {
-					return errors.Trace(err)
-				}
-			}
-		case <-p.localCheckpointTsReceiver.C:
-			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
-			if checkpointTs == 0 {
-				log.Warn("0 is not a valid checkpointTs", util.ZapFieldChangefeed(ctx))
-				continue
-			}
-			phyTs := oracle.ExtractPhysical(checkpointTs)
-			// It is more accurate to get tso from PD, but in most cases we have
-			// deployed NTP service, a little bias is acceptable here.
-			metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-
-			if time.Since(lastFlushTime) < p.flushCheckpointInterval {
-				continue
-			}
-
-			p.position.CheckPointTs = checkpointTs
-			checkpointTsGauge.Set(float64(phyTs))
-			if err := retryFlushTaskStatusAndPosition(); err != nil {
-				return errors.Trace(err)
-			}
-			lastFlushTime = time.Now()
-		}
-	}
 }
 
 func (p *processor) ddlPullWorker(ctx context.Context) error {
@@ -532,7 +422,7 @@ func (p *processor) removeTable(tableID int64) {
 		return
 	}
 
-	if table.Status() != cdcprocessor.TableStatusStopped {
+	if table.Status() != tablepipeline.TableStatusStopped {
 		return
 	}
 	table.Cancel()
@@ -570,7 +460,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					opt.Status = model.OperProcessed
 					status.Dirty = true
 				case model.OperProcessed:
-					if table.Status() == cdcprocessor.TableStatusStopped {
+					if table.Status() == tablepipeline.TableStatusStopped {
 						if opt.BoundaryTs != table.ResolvedTs() {
 							opt.BoundaryTs = table.ResolvedTs()
 							status.Dirty = true
@@ -639,127 +529,6 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 		status.Dirty = true
 	}
 	return tablesToRemove, nil
-}
-
-// globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
-func (p *processor) globalStatusWorker(ctx context.Context) error {
-	log.Info("Global status worker started", util.ZapFieldChangefeed(ctx))
-
-	var (
-		changefeedStatus         *model.ChangeFeedStatus
-		statusRev                int64
-		lastCheckPointTs         uint64
-		lastResolvedTs           uint64
-		watchKey                 = kv.GetEtcdKeyJob(p.changefeedID)
-		globalResolvedTsNotifier = new(notify.Notifier)
-	)
-	defer globalResolvedTsNotifier.Close()
-	globalResolvedTsReceiver, err := globalResolvedTsNotifier.NewReceiver(1 * time.Second)
-	if err != nil {
-		return err
-	}
-
-	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
-		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
-		if lastResolvedTs == changefeedStatus.ResolvedTs &&
-			lastCheckPointTs == changefeedStatus.CheckpointTs {
-			return
-		}
-		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			// Delay GC to accommodate pullers starting from a startTs that's too small
-			// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-			gcTime := oracle.GetTimeFromTS(changefeedStatus.CheckpointTs).Add(-schemaStorageGCLag)
-			gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
-			p.schemaStorage.DoGC(gcTs)
-			lastCheckPointTs = changefeedStatus.CheckpointTs
-		}
-		if lastResolvedTs < changefeedStatus.ResolvedTs {
-			lastResolvedTs = changefeedStatus.ResolvedTs
-			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
-			log.Debug("Update globalResolvedTs",
-				zap.Uint64("globalResolvedTs", lastResolvedTs), util.ZapFieldChangefeed(ctx))
-			globalResolvedTsNotifier.Notify()
-		}
-	}
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case event := <-p.outputFromTable:
-				select {
-				case <-ctx.Done():
-					return
-				case p.output2Sink <- event:
-				}
-			case <-globalResolvedTsReceiver.C:
-				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-				if globalResolvedTs > localResolvedTs {
-					log.Warn("globalResolvedTs too large", zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("localResolvedTs", localResolvedTs), util.ZapFieldChangefeed(ctx))
-					// we do not issue resolved events if globalResolvedTs > localResolvedTs.
-					continue
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case p.output2Sink <- model.NewResolvedPolymorphicEvent(0, globalResolvedTs):
-					// regionID = 0 means the event is produced by TiCDC
-				}
-			}
-		}
-	}()
-
-	retryCfg := backoff.WithMaxRetries(
-		backoff.WithContext(
-			backoff.NewExponentialBackOff(), ctx),
-		5,
-	)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("Global resolved worker exited", util.ZapFieldChangefeed(ctx))
-			return ctx.Err()
-		default:
-		}
-
-		err := backoff.Retry(func() error {
-			var err error
-			changefeedStatus, statusRev, err = p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
-			if err != nil {
-				if errors.Cause(err) == context.Canceled {
-					return backoff.Permanent(err)
-				}
-				log.Error("Global resolved worker: read global resolved ts failed",
-					util.ZapFieldChangefeed(ctx), zap.Error(err))
-			}
-			return err
-		}, retryCfg)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		updateStatus(changefeedStatus)
-
-		ch := p.etcdCli.Client.Watch(ctx, watchKey, clientv3.WithRev(statusRev+1), clientv3.WithFilterDelete())
-		for resp := range ch {
-			if resp.Err() == mvcc.ErrCompacted {
-				break
-			}
-			if resp.Err() != nil {
-				return cerror.WrapError(cerror.ErrProcessorEtcdWatch, err)
-			}
-			for _, ev := range resp.Events {
-				var status model.ChangeFeedStatus
-				if err := status.Unmarshal(ev.Kv.Value); err != nil {
-					return err
-				}
-				updateStatus(&status)
-			}
-		}
-	}
 }
 
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
@@ -923,10 +692,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	defer p.stateMu.Unlock()
 
 	if table, ok := p.tables[tableID]; ok {
-		if table.Status() == cdcprocessor.TableStatusStopping {
+		if table.Status() == tablepipeline.TableStatusStopping {
 			log.Warn("The same table exists but is stopping. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.Cancel()
-		} else if table.Status() == cdcprocessor.TableStatusStopped {
+		} else if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.Cancel()
 		} else {
@@ -970,12 +739,12 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	}
 	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 
-	resolvedTsListener := func(table *cdcprocessor.TablePipeline, resolvedTs model.Ts) {
+	resolvedTsListener := func(table *tablepipeline.TablePipeline, resolvedTs model.Ts) {
 		p.localResolvedNotifier.Notify()
 		resolvedTsGauge.Set(float64(oracle.ExtractPhysical(resolvedTs)))
 	}
 
-	_, table := cdcprocessor.NewTablePipeline(
+	_, table := tablepipeline.NewTablePipeline(
 		cdcCtx,
 		p.credential,
 		kvStorage,
