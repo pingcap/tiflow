@@ -19,11 +19,19 @@ import (
 	"strconv"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/pingcap/failpoint"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // NewProducer create a pulsar producer.
 func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
+	failpoint.Inject("MockPulsar", func() {
+		failpoint.Return(&Producer{
+			errCh:      errCh,
+			partitions: 4,
+		}, nil)
+	})
+
 	opt, err := parseSinkOptions(u)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)

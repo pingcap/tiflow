@@ -16,6 +16,8 @@ package sink
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"net/url"
 
 	"github.com/Shopify/sarama"
@@ -61,6 +63,11 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	errCh := make(chan error, 1)
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
+
+	encoder := sink.newEncoder()
+	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxKafkaMessageSize(), check.Equals, 4194304)
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
@@ -181,4 +188,31 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
+}
+
+func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
+	c.Assert(err, check.IsNil)
+
+	uri := "pulsar://127.0.0.1:1234/kafka-test?max-batch-size=1" +
+		"&max-message-bytes=4194304&max-batch-size=1048576"
+
+	sinkURI, err := url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	fr, err := filter.NewFilter(replicaConfig)
+	c.Assert(err, check.IsNil)
+	opts := map[string]string{}
+	errCh := make(chan error, 1)
+	sink, err := newPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
+	c.Assert(err, check.IsNil)
+
+	encoder := sink.newEncoder()
+	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxKafkaMessageSize(), check.Equals, 4194304)
 }

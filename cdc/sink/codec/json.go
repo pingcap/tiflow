@@ -311,6 +311,16 @@ type JSONEventBatchEncoder struct {
 	maxBatchSize        int
 }
 
+// GetMaxKafkaMessageSize is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
+	return d.maxKafkaMessageSize
+}
+
+// GetMaxKafkaMessageSize is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxBatchSize() int {
+	return d.maxBatchSize
+}
+
 // SetMixedBuildSupport is used by CDC Log
 func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
 	d.supportMixedBuild = enabled
