@@ -15,16 +15,13 @@ package kv
 
 import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
-
-type pendingValue struct {
-	value    []byte
-	oldValue []byte
-}
 
 type matcher struct {
 	// TODO : clear the single prewrite
-	unmatchedValue map[matchKey]*pendingValue
+	unmatchedValue map[matchKey]*cdcpb.Event_Row
 	cachedCommit   []*cdcpb.Event_Row
 }
 
@@ -39,39 +36,60 @@ func newMatchKey(row *cdcpb.Event_Row) matchKey {
 
 func newMatcher() *matcher {
 	return &matcher{
-		unmatchedValue: make(map[matchKey]*pendingValue),
+		unmatchedValue: make(map[matchKey]*cdcpb.Event_Row),
 	}
 }
 
 func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	key := newMatchKey(row)
-	value := row.GetValue()
-	oldvalue := row.GetOldValue()
-	// tikv may send a prewrite event with empty value (txn heartbeat)
-	// here we need to avoid the invalid prewrite event overwrite the value
-	if _, exist := m.unmatchedValue[key]; exist && len(value) == 0 {
+	// tikv may send a fake prewrite event with empty value caused by txn heartbeat.
+	// here we need to avoid the fake prewrite event overwrite the prewrite value.
+
+	// when the old-value is disabled, the value of the fake prewrite event is empty.
+	// when the old-value is enabled, the value of the fake prewrite event is also empty,
+	// but the old value of the fake prewrite event is not empty.
+	// We can distinguish fake prewrite events by whether the value is empty,
+	// no matter the old-value is enable or disabled
+	if _, exist := m.unmatchedValue[key]; exist && len(row.GetValue()) == 0 {
 		return
 	}
-	m.unmatchedValue[key] = &pendingValue{
-		value:    value,
-		oldValue: oldvalue,
-	}
+	m.unmatchedValue[key] = row
 }
 
-func (m *matcher) matchRow(row *cdcpb.Event_Row) (*pendingValue, bool) {
+func (m *matcher) matchRow(row *cdcpb.Event_Row) bool {
 	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
+		row.Value = value.GetValue()
+		row.OldValue = value.GetOldValue()
 		delete(m.unmatchedValue, newMatchKey(row))
-		return value, true
+		return true
 	}
-	return nil, false
+	return false
 }
 
 func (m *matcher) cacheCommitRow(row *cdcpb.Event_Row) {
 	m.cachedCommit = append(m.cachedCommit, row)
 }
 
-func (m *matcher) clearCacheCommit() {
+func (m *matcher) matchCachedRow() []*cdcpb.Event_Row {
+	cachedCommit := m.cachedCommit
 	m.cachedCommit = nil
+	top := 0
+	for i := 0; i < len(cachedCommit); i++ {
+		cacheEntry := cachedCommit[i]
+		ok := m.matchRow(cacheEntry)
+		if !ok {
+			// when cdc receives a commit log without a corresponding
+			// prewrite log before initialized, a committed log  with
+			// the same key and start-ts must have been received.
+			log.Info("ignore commit event without prewrite",
+				zap.Binary("key", cacheEntry.GetKey()),
+				zap.Uint64("ts", cacheEntry.GetStartTs()))
+			continue
+		}
+		cachedCommit[top] = cacheEntry
+		top++
+	}
+	return cachedCommit[:top]
 }
 
 func (m *matcher) rollbackRow(row *cdcpb.Event_Row) {

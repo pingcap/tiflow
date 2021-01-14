@@ -58,6 +58,122 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
+	testCases := []struct {
+		regionID       uint64
+		entry          *cdcpb.Event_Row
+		enableOldValue bool
+		expected       *model.RegionFeedEvent
+		err            string
+	}{{
+		regionID: 1,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k1"),
+			Value:    []byte("v1"),
+			OpType:   cdcpb.Event_Row_PUT,
+		},
+		enableOldValue: false,
+		expected: &model.RegionFeedEvent{
+			RegionID: 1,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k1"),
+				Value:    []byte("v1"),
+				RegionID: 1,
+			},
+		},
+	}, {
+		regionID: 2,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k2"),
+			Value:    []byte("v2"),
+			OpType:   cdcpb.Event_Row_DELETE,
+		},
+		enableOldValue: false,
+		expected: &model.RegionFeedEvent{
+			RegionID: 2,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypeDelete,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k2"),
+				Value:    []byte("v2"),
+				RegionID: 2,
+			},
+		},
+	}, {
+		regionID: 3,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k2"),
+			Value:    []byte("v2"),
+			OldValue: []byte("ov2"),
+			OpType:   cdcpb.Event_Row_PUT,
+		},
+		enableOldValue: false,
+		expected: &model.RegionFeedEvent{
+			RegionID: 3,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k2"),
+				Value:    []byte("v2"),
+				RegionID: 3,
+			},
+		},
+	}, {
+		regionID: 4,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k3"),
+			Value:    []byte("v3"),
+			OldValue: []byte("ov3"),
+			OpType:   cdcpb.Event_Row_PUT,
+		},
+		enableOldValue: true,
+		expected: &model.RegionFeedEvent{
+			RegionID: 4,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k3"),
+				Value:    []byte("v3"),
+				OldValue: []byte("ov3"),
+				RegionID: 4,
+			},
+		},
+	}, {
+		regionID: 2,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k2"),
+			Value:    []byte("v2"),
+			OpType:   cdcpb.Event_Row_UNKNOWN,
+		},
+		enableOldValue: false,
+		err:            "[CDC:ErrUnknownKVEventType]unknown kv event type: UNKNOWN, entry: start_ts:1 commit_ts:2 key:\"k2\" value:\"v2\" ",
+	}}
+
+	for _, tc := range testCases {
+		event, err := assembleRowEvent(tc.regionID, tc.entry, tc.enableOldValue)
+		c.Assert(event, check.DeepEquals, tc.expected)
+		if err != nil {
+			c.Assert(err.Error(), check.Equals, tc.err)
+		}
+	}
+}
+
 func mockInitializedEvent(regionID, requestID uint64) *cdcpb.ChangeDataEvent {
 	initialized := &cdcpb.ChangeDataEvent{
 		Events: []*cdcpb.Event{
