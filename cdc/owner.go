@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -37,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -44,6 +46,31 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+type ownership struct {
+	lastTickTime time.Time
+	tickTime     time.Duration
+}
+
+func newOwnersip(tickTime time.Duration) ownership {
+	minTickTime := 5 * time.Second
+	if tickTime > minTickTime {
+		log.Panic("ownership counter must be incearsed every 5 seconds")
+	}
+	return ownership{
+		tickTime: minTickTime,
+	}
+}
+
+func (o *ownership) inc() {
+	now := time.Now()
+	if now.Sub(o.lastTickTime) > o.tickTime {
+		// Keep the value of promtheus expression `rate(counter)` = 1
+		// Please also change alert rule in ticdc.rules.yml when change the expression value.
+		ownershipCounter.Add(float64(o.tickTime / time.Second))
+		o.lastTickTime = now
+	}
+}
 
 // Owner manages the cdc cluster
 type Owner struct {
@@ -68,7 +95,8 @@ type Owner struct {
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 
-	captures map[model.CaptureID]*model.CaptureInfo
+	captureLoaded int32
+	captures      map[model.CaptureID]*model.CaptureInfo
 
 	adminJobs     []model.AdminJob
 	adminJobsLock sync.Mutex
@@ -649,6 +677,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < minCheckpointTs {
 				minCheckpointTs = changefeed.status.CheckpointTs
 			}
+
+			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
+			changefeedCheckpointTsGauge.WithLabelValues(id).Set(float64(phyTs))
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			changefeedCheckpointTsLagGauge.WithLabelValues(id).Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 		}
 		if time.Since(o.lastFlushChangefeeds) > o.flushChangefeedInterval {
 			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
@@ -1025,6 +1059,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
+	ownership := newOwnersip(tickTime)
 loop:
 	for {
 		select {
@@ -1037,6 +1072,7 @@ loop:
 			err = ctx.Err()
 			break loop
 		case <-feedChangeReceiver.C:
+			ownership.inc()
 		}
 
 		err = o.run(ctx)
@@ -1119,6 +1155,12 @@ func (o *Owner) watchFeedChange(ctx context.Context) {
 }
 
 func (o *Owner) run(ctx context.Context) error {
+	// captureLoaded == 0 means capture information is not built, owner can't
+	// run normal jobs now.
+	if atomic.LoadInt32(&o.captureLoaded) == int32(0) {
+		return nil
+	}
+
 	o.l.Lock()
 	defer o.l.Unlock()
 
@@ -1376,6 +1418,15 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures map[model.Cap
 			o.removeCapture(c)
 		}
 	}
+	// captureLoaded is used to check whether the owner can execute cleanup stale tasks job.
+	// Because at the very beginning of a new owner, it doesn't have capture information in
+	// memory, cleanup stale tasks could have a false positive (where positive means owner
+	// should cleanup the stale task of a specific capture). After the first time of capture
+	// rebuild, even the etcd compaction and watch capture is rerun, we don't need to check
+	// captureLoaded anymore because existing tasks must belong to a capture which is still
+	// maintained in owner's memory.
+	atomic.StoreInt32(&o.captureLoaded, 1)
+
 	// clean up stale tasks each time before watch capture event starts,
 	// for two reasons:
 	// 1. when a new owner is elected, it must clean up stale task status and positions.
