@@ -1033,6 +1033,7 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 }
 
 func (s *ownerSuite) TestWriteDebugInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
 	owner := &Owner{
 		changeFeeds: map[model.ChangeFeedID]*changeFeed{
 			"test": {
