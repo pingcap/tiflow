@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -667,6 +669,10 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	}
 	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
+		failpoint.Inject("InjectChangefeedDDLError", func() {
+			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
+		})
+
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
