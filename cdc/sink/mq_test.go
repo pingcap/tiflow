@@ -52,7 +52,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 
 	uriTemplate := "kafka://%s/kafka-test?kafka-version=0.9.0.0&max-batch-size=1" +
-		"&max-message-bytes=4194304&max-batch-size=1048576&partition-num=1" +
+		"&max-message-bytes=4194304&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr())
 	sinkURI, err := url.Parse(uri)
@@ -199,8 +199,8 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
 	c.Assert(err, check.IsNil)
 
-	uri := "pulsar://127.0.0.1:1234/kafka-test?max-batch-size=1" +
-		"&max-message-bytes=4194304&max-batch-size=1048576"
+	uri := "pulsar://127.0.0.1:1234/kafka-test?" +
+		"max-message-bytes=4194304&max-batch-size=1"
 
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)

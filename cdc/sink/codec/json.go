@@ -37,6 +37,8 @@ const (
 	BatchVersion1 uint64 = 1
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes
 	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
+	// DefaultMaxBatchSize sets the default value for max-batch-size
+	DefaultMaxBatchSize int = 4096
 )
 
 type column struct {
@@ -529,21 +531,27 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
-			// TODO add error code
-			return errors.Trace(err)
+			return cerror.ErrKafkaInvalidConfig.Wrap(err)
 		}
 	} else {
 		d.maxKafkaMessageSize = DefaultMaxMessageBytes
 	}
 
+	if d.maxKafkaMessageSize <= 0 {
+		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
+	}
+
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
 		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
 		if err != nil {
-			// TODO add error code
-			return errors.Trace(err)
+			return cerror.ErrKafkaInvalidConfig.Wrap(err)
 		}
 	} else {
-		d.maxBatchSize = 4096
+		d.maxBatchSize = DefaultMaxBatchSize
+	}
+
+	if d.maxKafkaMessageSize <= 0 {
+		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxKafkaMessageSize))
 	}
 	return nil
 }
