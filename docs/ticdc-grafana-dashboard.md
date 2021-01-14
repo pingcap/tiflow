@@ -58,6 +58,7 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - Ownership history ： TiCDC 集群中 Owner 节点的历史记录
 - CPU usage ： TiCDC 节点使用的 CPU
 - Memory usage ： TiCDC 节点使用的内存
+- Etcd health check duration ：TiCDC 节点访问 PD 的延迟统计
 
 ![TiCDC Dashboard - Server metrics](/docs/media/ticdc-dashboard-server.png)
 ## Changefeed
@@ -107,6 +108,16 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 ![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-1.png)
 ![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-2.png)
 ![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-3.png)
+
+## Unified Sorter
+- Unified Sorter intake rate: Unified Sorter 从 puller 消费消息的速率 (events / s)
+- Unified Sorter event output rate: Unified Sorter 排序后的消息的输出速率 (events / s)
+- Unified Sorter on disk data size: Unified Sorter 暂存在硬盘上的数据大小 (bytes)
+- Unified Sorter in-memory data size: Unified Sorter 暂存在内存中的数据大小 (bytes)
+- Unified Sorter flush sizes: Unified Sorter 的堆排序器 (heapSorter) 的单次排序操作处理的消息数量 (events)
+- Unified Sorter merge size: Unified Sorter 的归并器 (merger) 的单批次中处理的消息数量 (events)
+- Unified Sorter resolved ts: Unified Sorter 输出过的最大的 resolved ts, 每个 capture 多个 table 取最小值, 提示排序进度。
+
 
 ## TiKV
 
