@@ -59,6 +59,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 }
 
 func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		regionID       uint64
 		entry          *cdcpb.Event_Row
