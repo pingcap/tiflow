@@ -144,7 +144,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	defer manager.Close()
 	goroutineNum := 10
 	var wg sync.WaitGroup
-	const EXIT_SIGNAL = uint64(math.MaxUint64)
+	const ExitSignal = uint64(math.MaxUint64)
 
 	var maxResolvedTs uint64
 	tableSinks := make([]Sink, 0, goroutineNum)
@@ -160,7 +160,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 			default:
 			}
 			resolvedTs := atomic.LoadUint64(&maxResolvedTs)
-			if resolvedTs == EXIT_SIGNAL {
+			if resolvedTs == ExitSignal {
 				return
 			}
 			if resolvedTs == lastResolvedTs {
@@ -195,7 +195,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				wg.Add(1)
 				go runTableSink(int64(i), table, maxResolvedTs, close)
 			} else {
-				//remove table
+				// remove table
 				table := tableSinks[0]
 				close(closeChs[0])
 				c.Assert(table.Close(), check.IsNil)
@@ -204,7 +204,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
-		atomic.StoreUint64(&maxResolvedTs, EXIT_SIGNAL)
+		atomic.StoreUint64(&maxResolvedTs, ExitSignal)
 	}()
 
 	wg.Wait()
