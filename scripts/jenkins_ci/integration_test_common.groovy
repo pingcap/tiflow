@@ -142,12 +142,12 @@ def tests(sink_type, node_label) {
 }
 
 def download_binaries(){
-    def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "master")
-    def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "master")
-    def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "master")
+    def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "release-5.0")
+    def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "release-5.0")
+    def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "release-5.0")
     // TODO master tiflash release version is 4.1.0-rc-43-gxxx, which is not compatible
     // with TiKV 5.0.0-rc.x. Change default branch to master after TiFlash fixes it.
-    def TIFLASH_BRANCH = params.getOrDefault("release_test__release_branch", "release-5.0-rc")
+    def TIFLASH_BRANCH = params.getOrDefault("release_test__release_branch", "release-5.0")
     def TIFLASH_COMMIT = params.getOrDefault("release_test__tiflash_commit", null)
 
     // parse tidb branch
