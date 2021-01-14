@@ -13,6 +13,8 @@
 
 package replication
 
-type scheduler interface {
+import "github.com/pingcap/ticdc/cdc/model"
 
+type scheduler interface {
+	SyncTasks(tables map[model.TableID]*tableTask)
 }

@@ -17,14 +17,17 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
+	"math"
 )
 
 // changeFeed is part of the replication model that implements the control logic of a changeFeed
 type changeFeed struct {
-	TableTasks    map[int]*tableTask
+	TableTasks    map[model.TableID]*tableTask
 	CheckpointTs  uint64
 	DDLResolvedTs uint64
 	Barriers      []*barrier
+
+	Scheduler scheduler
 }
 
 type tableTask struct {
@@ -99,11 +102,59 @@ func (cf *changeFeed) ShouldRunDDL() *barrier {
 }
 
 func (cf *changeFeed) MarkDDLDone(result ddlResult) {
-	if cf.CheckpointTs != result.FinishTs - 1 {
+	if cf.CheckpointTs != result.FinishTs-1 {
 		log.Panic("changeFeed: Unexpected checkpoint when DDL is done",
 			zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs),
 			zap.Reflect("ddl-result", result))
 	}
 
+	if len(cf.Barriers) == 0 ||
+		cf.Barriers[0].BarrierType != DDLBarrier ||
+		cf.Barriers[0].BarrierTs != result.FinishTs {
 
+		log.Panic("changeFeed: no DDL barrier found",
+			zap.Reflect("barriers", cf.Barriers),
+			zap.Reflect("ddl-result", result))
+	}
+
+	cf.Barriers = cf.Barriers[1:]
+
+	switch result.Action {
+	case AddTableAction:
+		cf.TableTasks[result.tableID] = &tableTask{
+			TableID:      result.tableID,
+			CheckpointTs: cf.CheckpointTs,
+			ResolvedTs:   0,
+		}
+	case DropTableAction:
+		if _, ok := cf.TableTasks[result.tableID]; !ok {
+			log.Panic("changeFeed: Dropping unknown table", zap.Int64("table-id", result.tableID))
+		}
+
+		delete(cf.TableTasks, result.tableID)
+	default:
+		log.Panic("changeFeed: unknown action")
+	}
+
+	cf.Scheduler.SyncTasks(cf.TableTasks)
+}
+
+func (cf *changeFeed) ResolvedTs() uint64 {
+	resolvedTs := uint64(math.MaxUint64)
+
+	for _, table := range cf.TableTasks {
+		if resolvedTs > table.ResolvedTs {
+			resolvedTs = table.ResolvedTs
+		}
+	}
+
+	if len(cf.Barriers) > 0 && resolvedTs > cf.Barriers[0].BarrierTs-1 {
+		resolvedTs = cf.Barriers[0].BarrierTs - 1
+	}
+
+	if resolvedTs > cf.DDLResolvedTs {
+		resolvedTs = cf.DDLResolvedTs
+	}
+
+	return resolvedTs
 }
