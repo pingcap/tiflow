@@ -174,7 +174,6 @@ type bufferSink struct {
 	Sink
 	buffer chan struct {
 		rows       []*model.RowChangedEvent
-		resolved   bool
 		resolvedTs model.Ts
 	}
 	checkpointTs uint64
@@ -185,7 +184,6 @@ func newBufferSink(ctx context.Context, backendSink Sink, errCh chan error, chec
 		Sink: backendSink,
 		buffer: make(chan struct {
 			rows       []*model.RowChangedEvent
-			resolved   bool
 			resolvedTs model.Ts
 		}, defaultBufferChanSize),
 		checkpointTs: checkpointTs,
@@ -197,7 +195,8 @@ func newBufferSink(ctx context.Context, backendSink Sink, errCh chan error, chec
 func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	advertiseAddr := util.CaptureAddrFromCtx(ctx)
-	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID)
+	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush")
+	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
 	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
 	for {
 		select {
@@ -208,7 +207,8 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			}
 			return
 		case e := <-b.buffer:
-			if e.resolved {
+			if e.rows == nil {
+				// A resolved event received
 				start := time.Now()
 				checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, e.resolvedTs)
 				if err != nil {
@@ -227,6 +227,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				}
 				continue
 			}
+			start := time.Now()
 			err := b.Sink.EmitRowChangedEvents(ctx, e.rows...)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
@@ -234,6 +235,8 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				}
 				return
 			}
+			dur := time.Since(start)
+			metricEmitRowDuration.Observe(dur.Seconds())
 		case <-time.After(defaultMetricInterval):
 			metricBufferSize.Set(float64(len(b.buffer)))
 		}
@@ -246,7 +249,6 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 		return ctx.Err()
 	case b.buffer <- struct {
 		rows       []*model.RowChangedEvent
-		resolved   bool
 		resolvedTs model.Ts
 	}{rows: rows}:
 	}
@@ -259,9 +261,8 @@ func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint6
 		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
 	case b.buffer <- struct {
 		rows       []*model.RowChangedEvent
-		resolved   bool
 		resolvedTs model.Ts
-	}{resolved: true, resolvedTs: resolvedTs}:
+	}{resolvedTs: resolvedTs, rows: nil}:
 	}
 	return atomic.LoadUint64(&b.checkpointTs), nil
 }

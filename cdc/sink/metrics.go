@@ -77,7 +77,7 @@ var (
 			Name:      "flush_event_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2ms */, 2, 20),
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "type"})
 	bufferChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
