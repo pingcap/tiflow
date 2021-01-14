@@ -16,9 +16,10 @@ package sink
 import (
 	"context"
 	"fmt"
+	"net/url"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
-	"net/url"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
