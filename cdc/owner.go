@@ -941,10 +941,12 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				continue
 			}
 
-			cf.info.AdminJobType = model.AdminStop
-			cf.info.Error = job.Error
-			if job.Error != nil {
-				cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
+			if cf.info.State != model.StateFailed {
+				cf.info.AdminJobType = model.AdminStop
+				cf.info.Error = job.Error
+				if job.Error != nil {
+					cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
+				}
 			}
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
