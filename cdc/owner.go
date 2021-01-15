@@ -172,7 +172,7 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	for _, feed := range o.changeFeeds {
 		task, ok := feed.taskStatus[info.ID]
 		if !ok {
-			log.Warn("task status not found", zap.String("capture", info.ID), zap.String("changefeed", feed.id))
+			log.Warn("task status not found", zap.String("capture-id", info.ID), zap.String("changefeed", feed.id))
 			continue
 		}
 		var startTs uint64
@@ -181,7 +181,7 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 			startTs = pos.CheckPointTs
 		} else {
 			log.Warn("task position not found, fallback to use changefeed checkpointts",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id))
 			// maybe the processor hasn't added table yet, fallback to use the
 			// global checkpoint ts as the start ts of the table.
 			startTs = feed.status.CheckpointTs
@@ -194,15 +194,15 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 		ctx := context.TODO()
 		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
 			log.Warn("failed to delete task status",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
 			log.Warn("failed to delete task position",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 		if err := o.etcdClient.DeleteTaskWorkload(ctx, feed.id, info.ID); err != nil {
 			log.Warn("failed to delete task workload",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 	}
 }
@@ -721,12 +721,20 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		err := cf.handleDDL(ctx, o.captures)
 		if err != nil {
-			if cerror.ErrExecDDLFailed.NotEqual(err) {
-				return errors.Trace(err)
+			var code string
+			if terror, ok := err.(*errors.Error); ok {
+				code = string(terror.RFCCode())
+			} else {
+				code = string(cerror.ErrExecDDLFailed.RFCCode())
 			}
 			err = o.EnqueueJob(model.AdminJob{
 				CfID: cf.id,
 				Type: model.AdminStop,
+				Error: &model.RunningError{
+					Addr:    util.CaptureAddrFromCtx(ctx),
+					Code:    code,
+					Message: err.Error(),
+				},
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -1386,9 +1394,9 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				if err := c.Unmarshal(ev.PrevKv.Value); err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("capture deleted",
+				log.Info("delete capture",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-addr", c.AdvertiseAddr))
+					zap.String("capture", c.AdvertiseAddr))
 				o.removeCapture(c)
 			case clientv3.EventTypePut:
 				if !ev.IsCreate() {
@@ -1397,9 +1405,9 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				if err := c.Unmarshal(ev.Kv.Value); err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("capture added",
+				log.Info("add capture",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-addr", c.AdvertiseAddr))
+					zap.String("capture", c.AdvertiseAddr))
 				o.addCapture(c)
 			}
 		}
