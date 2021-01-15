@@ -735,6 +735,14 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
+
+					err = o.EnqueueJob(model.AdminJob{
+						CfID: cf.id,
+						Type: model.AdminStop,
+					})
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
