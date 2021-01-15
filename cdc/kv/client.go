@@ -1432,7 +1432,6 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
 						}
-						// emit a value
 						ok := matcher.matchRow(entry)
 						if !ok {
 							if !initialized {

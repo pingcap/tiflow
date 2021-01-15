@@ -56,6 +56,8 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	m.unmatchedValue[key] = row
 }
 
+// matchRow matches the commit event with the cached prewrite event
+// the Value and OldValue will be assigned if a matched prewrite event exists.
 func (m *matcher) matchRow(row *cdcpb.Event_Row) bool {
 	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
 		row.Value = value.GetValue()
