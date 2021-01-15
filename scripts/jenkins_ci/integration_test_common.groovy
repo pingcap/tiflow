@@ -97,14 +97,15 @@ def tests(sink_type, node_label) {
                             """
                         } catch (Exception e) {
                             sh """
-                                echo "print all log"
+                                echo "archive all log"
                                 for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
-                                    echo "____________________________________"
-                                    echo "\$log"
-                                    cat "\$log"
-                                    echo "____________________________________"
+                                    dirname=`dirname \$log`
+                                    basename=`basename \$log`
+                                    mkdir -p "log\$dirname"
+                                    tar zcvf "log\${log%%.*}.tgz" -C "\$dirname" "\$basename"
                                 done
                             """
+                            archiveArtifacts artifacts: "log/tmp/tidb_cdc_test/**/*.tgz", caseSensitive: false
                             throw e;
                         }
                     }

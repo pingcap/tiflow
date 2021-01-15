@@ -34,6 +34,7 @@ Related changes
 
  - Need to cherry-pick to the release branch
  - Need to update the documentation
+ - Need to update key monitor metrics in both TiCDC document and official document
 
 ### Release note
 

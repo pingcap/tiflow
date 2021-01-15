@@ -73,6 +73,11 @@ func (key EtcdKey) RemovePrefix(prefix *EtcdPrefix) EtcdRelKey {
 	return EtcdRelKey{EtcdKey{strings.TrimPrefix(key.keyStr, prefix.prefixStr)}}
 }
 
+// AsRelKey casts the EtcdKey to an EtcdRelKey.
+func (key EtcdKey) AsRelKey() EtcdRelKey {
+	return NewEtcdRelKey(key.keyStr)
+}
+
 // EtcdRelKey represents a string that might be used as a suffix of a valid Etcd key.
 type EtcdRelKey struct {
 	inner EtcdKey
@@ -86,6 +91,11 @@ func NewEtcdRelKey(key string) EtcdRelKey {
 // NewEtcdRelKeyFromBytes creates an EtcdRelKey for the given bytes.
 func NewEtcdRelKeyFromBytes(key []byte) EtcdRelKey {
 	return EtcdRelKey{NewEtcdKeyFromBytes(key)}
+}
+
+// AsPrefix casts EtcdRelKey into EtcdRelPrefix.
+func (rkey *EtcdRelKey) AsPrefix() EtcdRelPrefix {
+	return EtcdRelPrefix{EtcdPrefix{rkey.String()}}
 }
 
 // String returns the string representation of the key.
@@ -170,7 +180,7 @@ func NormalizePrefix(prefix string) EtcdPrefix {
 	if !strings.HasPrefix(prefix, "/") {
 		ret = "/" + prefix
 	}
-	return EtcdPrefix{strings.TrimSuffix(ret, "/")}
+	return NewEtcdPrefix(strings.TrimSuffix(ret, "/"))
 }
 
 // NewEtcdPrefix creates an EtcdPrefix from the given string.
@@ -179,15 +189,15 @@ func NewEtcdPrefix(prefix string) EtcdPrefix {
 	return EtcdPrefix{prefix}
 }
 
+// NewEtcdRelPrefix creates an EtcdRelPrefix from the given string.
+func NewEtcdRelPrefix(prefix string) EtcdRelPrefix {
+	return EtcdRelPrefix{NewEtcdPrefix(prefix)}
+}
+
 // NewEtcdPrefixFromBytes creates an EtcdPrefix from the given bytes.
 // For a safer version, use NormalizePrefix.
 func NewEtcdPrefixFromBytes(prefix []byte) EtcdPrefix {
 	return NewEtcdPrefix(string(prefix))
-}
-
-// NewEtcdRelPrefix creates an EtcdRelPrefix from the given string.
-func NewEtcdRelPrefix(prefix string) EtcdRelPrefix {
-	return EtcdRelPrefix{NewEtcdPrefix(prefix)}
 }
 
 // NewEtcdRelPrefixFromBytes creates an EtcdRelPrefix from the given bytes.
