@@ -20,7 +20,9 @@ import (
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // NewProducer create a pulsar producer.
@@ -83,6 +85,7 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 		select {
 		case p.errCh <- cerror.WrapError(cerror.ErrPulsarSendMessage, err):
 		default:
+			log.Error("error channel is full", zap.Error(err))
 		}
 	}
 }

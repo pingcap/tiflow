@@ -296,10 +296,7 @@ func (p *processor) Run(ctx context.Context) {
 
 	go func() {
 		if err := wg.Wait(); err != nil {
-			select {
-			case p.errCh <- err:
-			default:
-			}
+			p.sendError(err)
 		}
 	}()
 }
@@ -1009,14 +1006,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
-			p.errCh <- err
+			p.sendError(err)
 			return nil
 		}
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
+				p.sendError(err)
 			}
 		}()
 
@@ -1030,11 +1027,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				if os.IsNotExist(errors.Cause(err)) {
 					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
 					if err != nil {
-						p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
+						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
 						return nil
 					}
 				} else {
-					p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
+					p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check"))
 					return nil
 				}
 			}
@@ -1046,7 +1043,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				sorterImpl = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
 			}
 		default:
-			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
+			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
 			return nil
 		}
 		sorter := puller.NewRectifier(sorterImpl, p.changefeed.GetTargetTs())
@@ -1054,7 +1051,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		go func() {
 			err := sorter.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
+				p.sendError(err)
 			}
 		}()
 
@@ -1122,7 +1119,7 @@ func (p *processor) sorterConsume(
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+					p.sendError(ctx.Err())
 				}
 				return
 			case p.opDoneCh <- tableID:
@@ -1142,7 +1139,7 @@ func (p *processor) sorterConsume(
 		select {
 		case <-ctx.Done():
 			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
+				p.sendError(ctx.Err())
 			}
 			return
 		case pEvent := <-sorter.Output():
@@ -1154,7 +1151,7 @@ func (p *processor) sorterConsume(
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+					p.sendError(ctx.Err())
 				}
 				return
 			case p.mounter.Input() <- pEvent:
@@ -1184,7 +1181,7 @@ func (p *processor) sorterConsume(
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+					p.sendError(ctx.Err())
 				}
 				return
 			case p.output <- pEvent:
@@ -1208,7 +1205,7 @@ func (p *processor) pullerConsume(
 		select {
 		case <-ctx.Done():
 			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
+				p.sendError(ctx.Err())
 			}
 			return
 		case rawKV := <-plr.Output():
@@ -1327,4 +1324,12 @@ func runProcessor(
 	}()
 
 	return processor, nil
+}
+
+func (p *processor) sendError(err error) {
+	select {
+	case p.errCh <- err:
+	default:
+		log.Error("processor receives redundant error", zap.Error(err))
+	}
 }
