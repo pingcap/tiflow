@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,17 +31,14 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
-	cdccontext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	tablepipeline "github.com/pingcap/ticdc/pkg/processor/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -435,102 +431,6 @@ func (p *processor) removeTable(tableID int64) {
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
-// handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
-	for tableID, opt := range status.Operation {
-		if opt.TableApplied() {
-			continue
-		}
-		if opt.Delete {
-			if opt.BoundaryTs <= p.position.CheckPointTs {
-				p.stateMu.Lock()
-				table, exist := p.tables[tableID]
-				p.stateMu.Unlock()
-				if !exist {
-					log.Warn("table which will be deleted is not found",
-						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-					opt.Done = true
-					opt.Status = model.OperFinished
-					status.Dirty = true
-					continue
-				}
-				switch opt.Status {
-				case model.OperDispatched:
-					table.AsyncStop()
-					opt.Status = model.OperProcessed
-					status.Dirty = true
-				case model.OperProcessed:
-					if table.Status() == tablepipeline.TableStatusStopped {
-						if opt.BoundaryTs != table.ResolvedTs() {
-							opt.BoundaryTs = table.ResolvedTs()
-							status.Dirty = true
-							log.Debug("table stopped safety", zap.Int64("tableID", tableID),
-								util.ZapFieldChangefeed(ctx),
-								zap.Uint64("checkpointTs", table.ResolvedTs()))
-						}
-						if table.ResolvedTs() <= p.position.CheckPointTs {
-							tablesToRemove = append(tablesToRemove, tableID)
-							opt.Done = true
-							opt.Status = model.OperFinished
-							status.Dirty = true
-							log.Debug("Operation done signal received",
-								util.ZapFieldChangefeed(ctx),
-								zap.Int64("tableID", tableID),
-								zap.Reflect("operation", opt))
-						}
-					}
-				default:
-					log.Panic("unreachable")
-				}
-
-			}
-		} else {
-			switch opt.Status {
-			case model.OperDispatched:
-				replicaInfo, exist := status.Tables[tableID]
-				if !exist {
-					return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
-				}
-				if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
-					return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
-				}
-				p.addTable(ctx, tableID, replicaInfo)
-				opt.Status = model.OperProcessed
-				status.Dirty = true
-			case model.OperProcessed:
-				p.stateMu.Lock()
-				table, exist := p.tables[tableID]
-				p.stateMu.Unlock()
-				if !exist {
-					log.Panic("table which was added is not found",
-						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-				}
-				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
-					opt.Done = true
-					opt.Status = model.OperFinished
-					status.Dirty = true
-					log.Debug("Operation done signal received",
-						util.ZapFieldChangefeed(ctx),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("operation", opt))
-				}
-			default:
-				log.Panic("unreachable")
-			}
-		}
-	}
-
-	if !status.SomeOperationsUnapplied() {
-		status.Operation = nil
-		// status.Dirty must be true when status changes from `unapplied` to `applied`,
-		// setting status.Dirty = true is not **must** here.
-		status.Dirty = true
-	}
-	return tablesToRemove, nil
-}
-
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer func() {
@@ -685,106 +585,6 @@ func createSchemaStorage(
 		return nil, errors.Trace(err)
 	}
 	return entry.NewSchemaStorage(meta, checkpointTs, filter, forceReplicate)
-}
-
-func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
-	p.stateMu.Lock()
-	defer p.stateMu.Unlock()
-
-	if table, ok := p.tables[tableID]; ok {
-		if table.Status() == tablepipeline.TableStatusStopping {
-			log.Warn("The same table exists but is stopping. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			table.Cancel()
-		} else if table.Status() == tablepipeline.TableStatusStopped {
-			log.Warn("The same table exists but is stopped. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			table.Cancel()
-		} else {
-			log.Warn("Ignore existing table", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			return
-		}
-	}
-
-	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
-
-	if replicaInfo.StartTs < globalcheckpointTs {
-		log.Warn("addTable: startTs < checkpoint",
-			util.ZapFieldChangefeed(ctx),
-			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpoint", globalcheckpointTs),
-			zap.Uint64("startTs", replicaInfo.StartTs))
-	}
-
-	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-	cdcCtx := cdccontext.NewContext(ctx, &cdccontext.Vars{
-		CaptureAddr:   p.captureInfo.AdvertiseAddr,
-		PDClient:      p.pdCli,
-		SchemaStorage: p.schemaStorage,
-		Config:        p.changefeed.Config,
-	})
-	kvStorage, err := util.KVStorageFromCtx(ctx)
-	if err != nil {
-		p.errCh <- err
-	}
-	var tableName string
-	err = retry.Run(time.Millisecond*5, 3, func() error {
-		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = name.QuoteString()
-			return nil
-		}
-		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
-	if err != nil {
-		log.Warn("get table name for metric", zap.Error(err))
-		tableName = strconv.Itoa(int(tableID))
-	}
-	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
-
-	resolvedTsListener := func(table *tablepipeline.TablePipeline, resolvedTs model.Ts) {
-		p.localResolvedNotifier.Notify()
-		resolvedTsGauge.Set(float64(oracle.ExtractPhysical(resolvedTs)))
-	}
-
-	_, table := tablepipeline.NewTablePipeline(
-		cdcCtx,
-		p.credential,
-		kvStorage,
-		p.limitter,
-		p.mounter,
-		p.changefeed.Engine,
-		p.changefeed.SortDir,
-		tableID,
-		tableName,
-		replicaInfo,
-		p.changefeed.GetTargetTs(),
-		p.outputFromTable,
-		resolvedTsListener,
-	)
-
-	go func() {
-		for _, err := range table.Wait() {
-			if cerror.ErrTableProcessorStoppedSafely.Equal(err) || errors.Cause(err) == context.Canceled {
-				continue
-			}
-			p.errCh <- err
-		}
-	}()
-
-	log.Debug("Add table", zap.Int64("tableID", tableID),
-		util.ZapFieldChangefeed(ctx),
-		zap.String("name", table.Name()),
-		zap.Any("replicaInfo", replicaInfo),
-		zap.Uint64("globalResolvedTs", globalResolvedTs))
-
-	p.tables[tableID] = table
-	if p.position.CheckPointTs > replicaInfo.StartTs {
-		p.position.CheckPointTs = replicaInfo.StartTs
-	}
-	if p.position.ResolvedTs > replicaInfo.StartTs {
-		p.position.ResolvedTs = replicaInfo.StartTs
-	}
-
-	atomic.StoreUint64(&p.localResolvedTs, p.position.ResolvedTs)
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
 func (p *processor) stop(ctx context.Context) error {
