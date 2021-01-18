@@ -734,14 +734,6 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
-
-					err = o.EnqueueJob(model.AdminJob{
-						CfID: cf.id,
-						Type: model.AdminStop,
-					})
-					if err != nil {
-						return err
-					}
 				}
 			}
 		}
@@ -940,13 +932,12 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				continue
 			}
 
-			if cf.info.State != model.StateFailed {
-				cf.info.AdminJobType = model.AdminStop
-				cf.info.Error = job.Error
-				if job.Error != nil {
-					cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
-				}
+			cf.info.AdminJobType = model.AdminStop
+			cf.info.Error = job.Error
+			if job.Error != nil {
+				cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
 			}
+
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
