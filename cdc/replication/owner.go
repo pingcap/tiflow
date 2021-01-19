@@ -21,3 +21,8 @@ import (
 type Owner interface {
 	Run(ctx context.Context, tickTime time.Duration) error
 }
+
+
+type ownerImpl struct {
+	state *ownerReactorState
+}

@@ -229,7 +229,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 }
 
 func (s *ownerReactorState) GetPatches() []*orchestrator.DataPatch {
-	ret := s.patches
+	ret := orchestrator.MergeCommutativePatches(s.patches)
 	s.patches = nil
 	return ret
 }
@@ -252,16 +252,6 @@ func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID mod
 	if _, ok := taskStatus.Operation[tableID]; ok {
 		log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
 	}
-
-	taskStatus.Tables[tableID] = &replicaInfo
-	operation := &model.TableOperation{
-		Delete:     false,
-		BoundaryTs: replicaInfo.StartTs,
-		Done:       false,
-		Status:     model.OperDispatched,
-	}
-
-	taskStatus.Operation[tableID] = operation
 
 	patch := &orchestrator.DataPatch{
 		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
@@ -290,6 +280,104 @@ func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID mod
 
 			newValue, err = json.Marshal(&taskStatus)
 			return
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) RemoveTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID) {
+	captureTaskStatuses, ok := s.TaskStatuses[cfID]
+	if !ok {
+		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+	}
+
+	taskStatus, ok := captureTaskStatuses[captureID]
+	if !ok {
+		log.Panic("owner bug: capture not found", zap.String("captureID", captureID))
+	}
+
+	if _, ok := taskStatus.Tables[tableID]; !ok {
+		log.Panic("owner bug: removing table that does not exist", zap.Int64("tableID", tableID))
+	}
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
+		Fun: func(old []byte) ([]byte, error) {
+			var taskStatus model.TaskStatus
+			err := json.Unmarshal(old, &taskStatus)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			if _, ok := taskStatus.Tables[tableID]; !ok {
+				log.Panic("owner bug: removing table that does not exist", zap.Int64("tableID", tableID))
+			}
+
+			delete(taskStatus.Tables, tableID)
+			return json.Marshal(&taskStatus)
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID) {
+	captureTaskStatuses, ok := s.TaskStatuses[cfID]
+	if !ok {
+		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+	}
+
+	_, ok = captureTaskStatuses[captureID]
+	if !ok {
+		log.Panic("owner bug: capture not found", zap.String("captureID", captureID))
+	}
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
+		Fun: func(old []byte) ([]byte, error) {
+			var taskStatus model.TaskStatus
+			err := json.Unmarshal(old, &taskStatus)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			taskStatus.Operation[tableID] = &model.TableOperation{
+				Delete:     true,
+				// temporary, for testing with old processor
+				BoundaryTs: s.ChangefeedStatuses[cfID].CheckpointTs,
+				Done:       false,
+				Status:     model.OperDispatched,
+			}
+			return json.Marshal(&taskStatus)
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID) {
+	captureTaskStatuses, ok := s.TaskStatuses[cfID]
+	if !ok {
+		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+	}
+
+	_, ok = captureTaskStatuses[captureID]
+	if !ok {
+		log.Panic("owner bug: capture not found", zap.String("captureID", captureID))
+	}
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
+		Fun: func(old []byte) ([]byte, error) {
+			var taskStatus model.TaskStatus
+			err := json.Unmarshal(old, &taskStatus)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			delete(taskStatus.Operation, tableID)
+			return json.Marshal(&taskStatus)
 		},
 	}
 
