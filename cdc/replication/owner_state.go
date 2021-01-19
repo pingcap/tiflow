@@ -32,6 +32,8 @@ type ownerReactorState struct {
 	ChangefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
 	TaskPositions      map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition
 	TaskStatuses       map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
+
+	patches            []*orchestrator.DataPatch
 }
 
 var (
@@ -227,5 +229,69 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 }
 
 func (s *ownerReactorState) GetPatches() []*orchestrator.DataPatch {
-	return nil
+	ret := s.patches
+	s.patches = nil
+	return ret
+}
+
+func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID, replicaInfo model.TableReplicaInfo) {
+	captureTaskStatuses, ok := s.TaskStatuses[cfID]
+	if !ok {
+		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+	}
+
+	taskStatus, ok := captureTaskStatuses[captureID]
+	if !ok {
+		log.Panic("owner bug: capture not found", zap.String("captureID", captureID))
+	}
+
+	if _, ok := taskStatus.Tables[tableID]; ok {
+		log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
+	}
+
+	if _, ok := taskStatus.Operation[tableID]; ok {
+		log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
+	}
+
+	taskStatus.Tables[tableID] = &replicaInfo
+	operation := &model.TableOperation{
+		Delete:     false,
+		BoundaryTs: replicaInfo.StartTs,
+		Done:       false,
+		Status:     model.OperDispatched,
+	}
+
+	taskStatus.Operation[tableID] = operation
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
+		Fun: func(old []byte) (newValue []byte, err error) {
+			var taskStatus model.TaskStatus
+			if len(old) > 0 {
+				err := json.Unmarshal(old, &taskStatus)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+			}
+
+			if _, ok := taskStatus.Operation[tableID]; ok {
+				log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
+			}
+
+			taskStatus.Tables[tableID] = &replicaInfo
+			operation := &model.TableOperation{
+				Delete:     false,
+				BoundaryTs: replicaInfo.StartTs,
+				Done:       false,
+				Status:     model.OperDispatched,
+			}
+
+			taskStatus.Operation[tableID] = operation
+
+			newValue, err = json.Marshal(&taskStatus)
+			return
+		},
+	}
+
+	s.patches = append(s.patches, patch)
 }
