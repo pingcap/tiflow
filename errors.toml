@@ -156,6 +156,16 @@ error = '''
 encode failed: %s
 '''
 
+["CDC:ErrEtcdIgnore"]
+error = '''
+this patch should be excluded from the current etcd txn
+'''
+
+["CDC:ErrEtcdTryAgain"]
+error = '''
+the etcd txn should be aborted and retried immediately
+'''
+
 ["CDC:ErrEventFeedAborted"]
 error = '''
 single event feed aborted
@@ -536,6 +546,11 @@ error = '''
 pulsar send message failed
 '''
 
+["CDC:ErrReactorFinished"]
+error = '''
+the reactor has done its job and should no longer be executed
+'''
+
 ["CDC:ErrRegionsNotCoverSpan"]
 error = '''
 regions not completely left cover span, span %v regions: %v
@@ -584,6 +599,11 @@ table %d not found
 ["CDC:ErrSchemaStorageUnresolved"]
 error = '''
 can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)
+'''
+
+["CDC:ErrSendToClosedPipeline"]
+error = '''
+pipeline is closed, cannot send message
 '''
 
 ["CDC:ErrServeHTTP"]
