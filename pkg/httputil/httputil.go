@@ -38,6 +38,7 @@ func NewClient(credential *security.Credential) (*Client, error) {
 			transport = httpTrans
 		}
 	}
+	// TODO: specific timeout in http client
 	return &Client{
 		Client: http.Client{Transport: transport},
 	}, nil
