@@ -774,6 +774,9 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
+	// the minimum valid TiKV version is "4.0.0-rc.1"
+	incompatibilityVers := []string{"v2.1.10", "v3.0.10", "v3.1.0", "v4.0.0-rc"}
+	nextVer := -1
 	call := int32(0)
 	// 20 here not too much, since check version itself has 3 time retry, and
 	// region cache could also call get store API, which will trigger version
@@ -782,7 +785,8 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	gen := func() string {
 		atomic.AddInt32(&call, 1)
 		if atomic.LoadInt32(&call) < versionGenCallBoundary {
-			return "v2.1.0" /* CDC is not compatible with 2.1.0 */
+			nextVer = (nextVer + 1) % len(incompatibilityVers)
+			return incompatibilityVers[nextVer]
 		}
 		return defaultVersionGen()
 	}
