@@ -71,6 +71,8 @@ jobs:
     steps:
       - name: Free disk space
         run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
          docker volume prune -f
          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -125,6 +127,8 @@ jobs:
     steps:
       - name: Free disk space
         run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
          docker volume prune -f
          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -180,6 +184,8 @@ jobs:
     steps:
       - name: Free disk space
         run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
          docker volume prune -f
          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -234,6 +240,8 @@ jobs:
     steps:
       - name: Free disk space
         run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
          docker volume prune -f
          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
