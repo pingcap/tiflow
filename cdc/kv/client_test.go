@@ -599,7 +599,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:     cdcpb.Event_COMMIT,
 						OpType:   cdcpb.Event_Row_PUT,
 						Key:      []byte("aa"),
-						StartTs:  105, // ResolvedTs = 100
+						StartTs:  105,
 						CommitTs: 115,
 					}},
 				},
@@ -614,9 +614,25 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:     cdcpb.Event_COMMITTED,
 						OpType:   cdcpb.Event_Row_PUT,
 						Key:      []byte("aaaa"),
-						Value:    []byte("committed event before init"),
-						StartTs:  105, // ResolvedTs = 100
+						Value:    []byte("committed put event before init"),
+						StartTs:  105,
 						CommitTs: 115,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_DELETE,
+						Key:      []byte("aaaa"),
+						Value:    []byte("committed delete event before init"),
+						StartTs:  108,
+						CommitTs: 118,
 					}},
 				},
 			},
@@ -722,9 +738,20 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypePut,
 				Key:      []byte("aaaa"),
-				Value:    []byte("committed event before init"),
+				Value:    []byte("committed put event before init"),
 				StartTs:  105,
 				CRTs:     115,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypeDelete,
+				Key:      []byte("aaaa"),
+				Value:    []byte("committed delete event before init"),
+				StartTs:  108,
+				CRTs:     118,
 				RegionID: 3,
 			},
 			RegionID: 3,
