@@ -16,13 +16,19 @@ package replication
 import (
 	"context"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 )
 
 type Owner interface {
 	Run(ctx context.Context, tickTime time.Duration) error
 }
 
-
-type ownerImpl struct {
+type ownerReactor struct {
 	state *ownerReactorState
 }
+
+func (o *ownerReactor) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	panic("implement me")
+}
+
