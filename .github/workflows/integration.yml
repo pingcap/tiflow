@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Free disk space
         run: |
-         du -ahx / | sort -rh
+         du -ahx / | sort -rh | head
          docker volume prune -f
          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
