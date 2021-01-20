@@ -14,6 +14,13 @@
 package codec
 
 import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io/ioutil"
+	"math"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -342,4 +349,122 @@ func (s *columnSuite) TestVarBinaryCol(c *check.C) {
 	jsonCol2 := row2.Update["test"]
 	col2 := jsonCol2.ToSinkColumn("test")
 	c.Assert(col2, check.DeepEquals, col)
+}
+
+func (s *columnSuite) TestBuildTestCaseSet(c *check.C) {
+	generateTestCase(c, "simple", func(encoder EventBatchEncoder) {
+		rows := []*model.RowChangedEvent{{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		}, {
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+		}, {
+			CommitTs: 3,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+		}, {
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+		}}
+		for _, row := range rows {
+			_, err := encoder.AppendRowChangedEvent(row)
+			c.Assert(err, check.IsNil)
+		}
+	})
+	generateString := func(n int) string {
+		var sb strings.Builder
+		for i := 0; i < n; i++ {
+			sb.WriteRune('8')
+		}
+		return sb.String()
+	}
+	generateTestCase(c, "lang_event", func(encoder EventBatchEncoder) {
+		for i := 0; i < 1024; i++ {
+			_, err := encoder.AppendRowChangedEvent(&model.RowChangedEvent{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: generateString(i)},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: generateString(i)}},
+			})
+			c.Assert(err, check.IsNil)
+		}
+	})
+	generateTestCase(c, "expand_char", func(encoder EventBatchEncoder) {
+		rows := []*model.RowChangedEvent{{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "你好《》？：「」|+——￥"}},
+		}, {
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "💋💼🕶💼👛💄💋💇"}},
+		}, {
+			CommitTs: 3,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "にほんご"}},
+		}, {
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "~!@#$%^&*()_+\"'[]\\;',./|:>?`"}},
+		}, {
+			CommitTs: 5,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "Ω≈ç√∫µ≤≥µæ…¬˚∆˙©ƒ∂ßåœ∑®†¥øπ“‘«≠–ºª•¶§∞¢£™¡"}},
+		}}
+		for _, row := range rows {
+			_, err := encoder.AppendRowChangedEvent(row)
+			c.Assert(err, check.IsNil)
+		}
+	})
+
+}
+
+func generateTestCase(c *check.C, name string, fn func(encoder EventBatchEncoder)) {
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{
+		"max-message-bytes": fmt.Sprintf("%d", math.MaxInt64),
+		"max-batch-size":    fmt.Sprintf("%d", math.MaxInt64),
+	})
+	c.Assert(err, check.IsNil)
+	fn(encoder)
+	mqs := encoder.Build()
+	c.Assert(len(mqs), check.Equals, 1)
+	mq := mqs[0]
+	os.RemoveAll("./case_set/" + name)
+	err = os.MkdirAll("./case_set/"+name, 0755)
+	c.Assert(err, check.IsNil)
+	err = ioutil.WriteFile("./case_set/"+name+"/key.bin", mq.Key, 0644)
+	c.Assert(err, check.IsNil)
+	err = ioutil.WriteFile("./case_set/"+name+"/value.bin", mq.Value, 0644)
+	c.Assert(err, check.IsNil)
+	generateExpected(c, name, mq.Key, mq.Value)
+}
+
+func generateExpected(c *check.C, name string, key, value []byte) {
+	version := binary.BigEndian.Uint64(key[:8])
+	c.Assert(version, check.Equals, uint64(1))
+	key = key[8:]
+	var bb bytes.Buffer
+	for {
+		if len(key) == 0 {
+			c.Assert(len(value), check.Equals, 0)
+			break
+		}
+		keyLength := binary.BigEndian.Uint64(key[:8])
+		valueLength := binary.BigEndian.Uint64(value[:8])
+		key = key[8:]
+		value = value[8:]
+		bb.Write(key[:keyLength])
+		bb.WriteRune('\n')
+		bb.Write(value[:valueLength])
+		bb.WriteRune('\n')
+		bb.WriteRune('\n')
+		key = key[keyLength:]
+		value = value[valueLength:]
+	}
+	err := ioutil.WriteFile("./case_set/"+name+"/expected.txt", bb.Bytes(), 0644)
+	c.Assert(err, check.IsNil)
 }
