@@ -765,6 +765,10 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	}
 }
 
+func (s *SchemaStorage) ResolvedTs() uint64 {
+	return atomic.LoadUint64(&s.resolvedTs)
+}
+
 // DoGC removes snaps which of ts less than this specified ts
 func (s *SchemaStorage) DoGC(ts uint64) {
 	s.snapsMu.Lock()

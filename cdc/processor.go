@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -164,7 +163,6 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
-		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum, changefeed.Config.EnableOldValue),
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
 
@@ -269,64 +267,6 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 	p.stateMu.Unlock()
 
 	fmt.Fprintf(w, "\n")
-}
-
-func (p *processor) ddlPullWorker(ctx context.Context) error {
-	ddlRawKVCh := puller.SortOutput(ctx, p.ddlPuller.Output())
-	var ddlRawKV *model.RawKVEntry
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case ddlRawKV = <-ddlRawKVCh:
-		}
-		if ddlRawKV == nil {
-			continue
-		}
-		failpoint.Inject("processorDDLResolved", func() {})
-		if ddlRawKV.OpType == model.OpTypeResolved {
-			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
-			p.localResolvedNotifier.Notify()
-		}
-		job, err := entry.UnmarshalDDL(ddlRawKV)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if job == nil {
-			continue
-		}
-		if err := p.schemaStorage.HandleDDLJob(job); err != nil {
-			return errors.Trace(err)
-		}
-	}
-}
-
-func (p *processor) workloadWorker(ctx context.Context) error {
-	t := time.NewTicker(10 * time.Second)
-	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID, nil)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-t.C:
-		}
-		if p.isStopped() {
-			continue
-		}
-		p.stateMu.Lock()
-		workload := make(model.TaskWorkload, len(p.tables))
-		for tableID, table := range p.tables {
-			workload[tableID] = table.Workload()
-		}
-		p.stateMu.Unlock()
-		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID, &workload)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
 }
 
 func (p *processor) flushTaskPosition(ctx context.Context) error {
@@ -572,19 +512,6 @@ func (p *processor) collectMetrics(ctx context.Context) error {
 			tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(float64(len(p.output2Sink)))
 		}
 	}
-}
-
-func createSchemaStorage(
-	kvStorage tidbkv.Storage,
-	checkpointTs uint64,
-	filter *filter.Filter,
-	forceReplicate bool,
-) (*entry.SchemaStorage, error) {
-	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return entry.NewSchemaStorage(meta, checkpointTs, filter, forceReplicate)
 }
 
 func (p *processor) stop(ctx context.Context) error {
