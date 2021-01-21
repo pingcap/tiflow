@@ -60,7 +60,7 @@ const (
 //metricResolvedTsLagGauge := resolvedTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 //checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 //metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-type Processor struct {
+type processor struct {
 	changefeed changefeedState
 
 	tables map[model.TableID]*tablepipeline.TablePipeline
@@ -83,10 +83,10 @@ func NewProcessor(
 	pdCli pd.Client,
 	credential *security.Credential,
 	captureInfo model.CaptureInfo,
-) *Processor {
+) *processor {
 	//log.Info("start processor with startts",
 	//	zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
-	return &Processor{
+	return &processor{
 		pdCli:       pdCli,
 		credential:  credential,
 		captureInfo: captureInfo,
@@ -94,7 +94,7 @@ func NewProcessor(
 	}
 }
 
-func (p *Processor) Tick(ctx context.Context, state changefeedState) (orchestrator.ReactorState, error) {
+func (p *processor) Tick(ctx context.Context, state changefeedState) (orchestrator.ReactorState, error) {
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
 		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
@@ -119,7 +119,7 @@ func (p *Processor) Tick(ctx context.Context, state changefeedState) (orchestrat
 	return state, nil
 }
 
-func (p *Processor) tick(ctx context.Context, state changefeedState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx context.Context, state changefeedState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
@@ -148,7 +148,7 @@ func (p *Processor) tick(ctx context.Context, state changefeedState) (nextState 
 	return p.changefeed, nil
 }
 
-func (p *Processor) lazyInit(ctx context.Context) error {
+func (p *processor) lazyInit(ctx context.Context) error {
 	if p.lazyInited {
 		return nil
 	}
@@ -187,7 +187,7 @@ func (p *Processor) lazyInit(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) handleErrorCh(ctx context.Context) error {
+func (p *processor) handleErrorCh(ctx context.Context) error {
 	var err error
 	select {
 	case err = <-p.errCh:
@@ -232,7 +232,7 @@ ReceiveErr:
 	}
 }
 
-func (p *Processor) handleTableOperation(ctx context.Context) error {
+func (p *processor) handleTableOperation(ctx context.Context) error {
 	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
 			if status.Operation == nil {
@@ -336,7 +336,7 @@ func (p *Processor) handleTableOperation(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.SchemaStorage, error) {
+func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.SchemaStorage, error) {
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -385,7 +385,7 @@ func (p *Processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 	return schemaStorage, nil
 }
 
-func (p *Processor) sendError(err error) {
+func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
@@ -393,7 +393,7 @@ func (p *Processor) sendError(err error) {
 	}
 }
 
-func (p *Processor) initTables(ctx context.Context) error {
+func (p *processor) initTables(ctx context.Context) error {
 	for tableID, replicaInfo := range p.changefeed.taskStatus.Tables {
 		if _, exist := p.tables[tableID]; !exist {
 			err := p.addTable(ctx, tableID, replicaInfo)
@@ -405,7 +405,7 @@ func (p *Processor) initTables(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) handlePosition() error {
+func (p *processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
 	for _, table := range p.tables {
 		ts := table.ResolvedTs()
@@ -441,7 +441,7 @@ func (p *Processor) handlePosition() error {
 	return nil
 }
 
-func (p *Processor) handleWorkload() error {
+func (p *processor) handleWorkload() error {
 	p.changefeed.PatchTaskWorkload(func(workload model.TaskWorkload) (model.TaskWorkload, error) {
 		workload = make(model.TaskWorkload, len(p.tables))
 		for tableID, table := range p.tables {
@@ -452,7 +452,7 @@ func (p *Processor) handleWorkload() error {
 	return nil
 }
 
-func (p *Processor) pushResolvedTs2Table() error {
+func (p *processor) pushResolvedTs2Table() error {
 	resolvedTs := p.changefeed.status.ResolvedTs
 	for _, table := range p.tables {
 		table.UpdateBarrierTs(resolvedTs)
@@ -460,7 +460,7 @@ func (p *Processor) pushResolvedTs2Table() error {
 	return nil
 }
 
-func (p *Processor) addTable(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
+func (p *processor) addTable(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if table, ok := p.tables[tableID]; ok {
 		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
@@ -543,7 +543,7 @@ func (p *Processor) addTable(ctx context.Context, tableID model.TableID, replica
 	return nil
 }
 
-func (p *Processor) Close() error {
+func (p *processor) Close() error {
 	log.Info("stop processor", zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeed.id))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
@@ -563,7 +563,7 @@ func (p *Processor) Close() error {
 	return p.sinkManager.Close()
 }
 
-func (p *Processor) doGCSchemaStorage() error {
+func (p *processor) doGCSchemaStorage() error {
 	// Delay GC to accommodate pullers starting from a startTs that's too small
 	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
 	gcTime := oracle.GetTimeFromTS(p.changefeed.status.CheckpointTs).Add(-schemaStorageGCLag)

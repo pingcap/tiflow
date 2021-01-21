@@ -15,7 +15,7 @@ import (
 )
 
 type Manager struct {
-	processors map[model.ChangeFeedID]*Processor
+	processors map[model.ChangeFeedID]*processor
 
 	pdCli       pd.Client
 	credential  *security.Credential
