@@ -30,6 +30,9 @@ if [ "${1-}" = '--debug' ]; then
 fi
 
 run_case() {
+    # cleanup test binaries and data, preserve logs, if we debug one case,
+    # these files will be preserved since no more case will be run.
+    find /tmp/tidb_cdc_test/*/* -type d|xargs rm -rf
     local case=$1
     local script=$2
     local sink_type=$3
