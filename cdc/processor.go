@@ -1085,6 +1085,11 @@ func (p *processor) sorterConsume(
 				}
 				return
 			}
+
+			if checkpointTs < replicaInfo.StartTs {
+				checkpointTs = replicaInfo.StartTs
+			}
+
 			if checkpointTs != 0 {
 				atomic.StoreUint64(pCheckpointTs, checkpointTs)
 				p.localCheckpointTsNotifier.Notify()
