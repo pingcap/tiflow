@@ -109,7 +109,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1608013159669,
+  "iteration": 1610607213210,
   "links": [],
   "panels": [
     {
@@ -2055,7 +2055,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "max(rate(ticdc_processor_flush_event_duration_seconds_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_sink_flush_event_duration_seconds_bucket{capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -2134,24 +2134,24 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p95",
+              "legendFormat": "{{instance}}-{{type}}-p95",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p99",
+              "legendFormat": "{{instance}}-{{type}}-p99",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p999",
+              "legendFormat": "{{instance}}-{{type}}-p999",
               "refId": "C"
             }
           ],
@@ -3523,10 +3523,10 @@
               "refId": "A"
             },
             {
-              "expr": "-sum(ticdc_processor_txn_output_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "-sum(ticdc_sink_buffer_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-processor output chan",
+              "legendFormat": "{{capture}}-sink buffer chan",
               "refId": "B"
             }
           ],
@@ -3534,7 +3534,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Processor/Mounter buffer size",
+          "title": "Sink/Mounter buffer size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4416,7 +4416,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 1
+            "y": 4
           },
           "id": 131,
           "legend": {
@@ -4500,7 +4500,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 1
+            "y": 4
           },
           "id": 132,
           "legend": {
@@ -4584,7 +4584,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 9
+            "y": 12
           },
           "id": 133,
           "legend": {
@@ -4668,7 +4668,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 9
+            "y": 12
           },
           "id": 134,
           "legend": {
@@ -4761,7 +4761,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 20
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -4825,7 +4825,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 20
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -4882,7 +4882,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 25
+            "y": 28
           },
           "id": 137,
           "legend": {
@@ -6053,5 +6053,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 12
+  "version": 13
 }
