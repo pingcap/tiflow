@@ -94,7 +94,7 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - Sink flush rows/s ： TiCDC 节点每秒写到下游的数据变更的个数
 - Puller buffer size ： TiCDC 节点中缓存在 Puller 模块中的数据变更个数
 - Entry sorter buffer size ： TiCDC 节点中缓存在 Sorter 模块中的数据变更个数
-- Processor/Mounter buffer size ： TiCDC 节点中缓存在 Processor 模块和 Mounter 模块中的数据变更个数
+- Sink/Mounter buffer size ： TiCDC 节点中缓存在 Buffer Sink 模块和 Mounter 模块中的数据变更个数
 - Sink row buffer size ： TiCDC 节点中缓存在 Sink 模块中的数据变更个数
 - Entry sorter sort duration ： TiCDC 节点排序数据变更的耗时直方图
 - Entry sorter sort duration percentile ： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 排序数据变更所花费的时间
