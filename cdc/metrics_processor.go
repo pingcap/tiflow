@@ -75,27 +75,12 @@ var (
 			Help:      "The time it took to update sub changefeed info.",
 			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 18),
 		}, []string{"capture"})
-	tableOutputChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "txn_output_chan_size",
-			Help:      "size of row changed event output channel from table to processor",
-		}, []string{"changefeed", "capture"})
 	processorErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "exit_with_error_count",
 			Help:      "counter for processor exits with error",
-		}, []string{"changefeed", "capture"})
-	sinkFlushRowChangedDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "flush_event_duration_seconds",
-			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
-			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2ms */, 2, 20),
 		}, []string{"changefeed", "capture"})
 )
 
@@ -109,7 +94,5 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(txnCounter)
 	registry.MustRegister(updateInfoDuration)
-	registry.MustRegister(tableOutputChanSizeGauge)
 	registry.MustRegister(processorErrorCounter)
-	registry.MustRegister(sinkFlushRowChangedDuration)
 }
