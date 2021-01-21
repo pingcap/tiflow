@@ -647,6 +647,35 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 				Entries: &cdcpb.Event_Entries{
 					Entries: []*cdcpb.Event_Row{{
 						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("a-rollback-event"),
+						StartTs: 128,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_ROLLBACK,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a-rollback-event"),
+						StartTs:  128,
+						CommitTs: 129,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
 						OpType:  cdcpb.Event_Row_DELETE,
 						Key:     []byte("a-delete-event"),
 						StartTs: 130,
@@ -679,6 +708,21 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						OpType:  cdcpb.Event_Row_PUT,
 						Key:     []byte("a-normal-put"),
 						Value:   []byte("normal put event"),
+						StartTs: 135,
+					}},
+				},
+			},
+		},
+		// simulate TiKV sends txn heartbeat, which is a prewrite event with empty value
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("a-normal-put"),
 						StartTs: 135,
 					}},
 				},
