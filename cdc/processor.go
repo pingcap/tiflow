@@ -393,11 +393,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 		case <-p.localCheckpointTsReceiver.C:
 			checkpointTs := atomic.LoadUint64(&p.globalResolvedTs)
-			log.Debug("Start calculating checkpoint", zap.Uint64("globalResolvedTs", checkpointTs))
 			p.stateMu.Lock()
 			for _, table := range p.tables {
 				ts := table.loadCheckpointTs()
-				log.Debug("Calculating checkpoint", zap.Int64("tableID", table.id), zap.Uint64("checkpoint", ts))
 				if ts < checkpointTs {
 					checkpointTs = ts
 				}
