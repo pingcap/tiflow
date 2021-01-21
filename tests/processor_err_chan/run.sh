@@ -53,7 +53,7 @@ function run() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" --sort-engine=abc-engine 2>&1|tail -n2|head -n1|awk '{print $2}')
 
-    retry_time=5
+    retry_time=10
     ensure $retry_time check_changefeed_mark_stopped $pd_addr $changefeed_id "[CDC:ErrUnknownSortEngine]unknown sort engine abc-engine"
 
     cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI"

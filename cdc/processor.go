@@ -883,7 +883,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	tableSink = startPuller(tableID, &table.resolvedTs, &table.checkpointTs)
 	table.cancel = func() {
 		cancel()
-		tableSink.Close()
+		if tableSink != nil {
+			tableSink.Close()
+		}
 		if mTableSink != nil {
 			mTableSink.Close()
 		}
@@ -1161,7 +1163,9 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	errCh := make(chan error, 16)
+	// processor only receives one error from the channel, all producers to this
+	// channel must use the non-blocking way to send error.
+	errCh := make(chan error, 1)
 	s, err := sink.NewSink(ctx, changefeedID, info.SinkURI, filter, info.Config, opts, errCh)
 	if err != nil {
 		cancel()
