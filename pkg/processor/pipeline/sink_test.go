@@ -32,7 +32,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	outputCh := make(chan *model.PolymorphicEvent, 128)
 	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
 	var status TableStatus
-	node := newOutputNode(outputCh, &status, func(model.Ts) {})
+	node := newSinkNode(outputCh, &status, func(model.Ts) {})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 
 	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
@@ -84,7 +84,7 @@ func (s *outputSuite) TestResolvedListener(c *check.C) {
 	var status TableStatus
 	exportResolvedEvent := []model.Ts{2, 4, 5}
 	j := 0
-	node := newOutputNode(outputCh, &status, func(ts model.Ts) {
+	node := newSinkNode(outputCh, &status, func(ts model.Ts) {
 		c.Assert(ts, check.Equals, exportResolvedEvent[j])
 		j++
 	})

@@ -15,7 +15,8 @@ package pipeline
 
 import (
 	stdContext "context"
-	"sync/atomic"
+
+	"github.com/pingcap/ticdc/cdc/sink"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -31,30 +32,40 @@ import (
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
 type TablePipeline struct {
-	p           *pipeline.Pipeline
-	resolvedTs  uint64
-	status      TableStatus
+	p *pipeline.Pipeline
+
 	tableID     int64
 	markTableID int64
 	tableName   string // quoted schema and table, used in metircs only
-	cancel      stdContext.CancelFunc
+
+	sinkNode *sinkNode
+	cancel   stdContext.CancelFunc
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *TablePipeline) ResolvedTs() model.Ts {
-	return atomic.LoadUint64(&t.resolvedTs)
+	return t.sinkNode.ResolvedTs()
+}
+
+func (t *TablePipeline) CheckpointTs() model.Ts {
+	return t.sinkNode.CheckpointTs()
+}
+
+func (t *TablePipeline) UpdateBarrierTs(ts model.Ts) {
+	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
+	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
+		log.Panic("unexpect error from send to first node", zap.Error(err))
+	}
 }
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-func (t *TablePipeline) AsyncStop() {
-	if atomic.CompareAndSwapInt32(&t.status, TableStatusRunning, TableStatusStopping) ||
-		atomic.CompareAndSwapInt32(&t.status, TableStatusInitializing, TableStatusStopping) {
-		err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
-			Tp: pipeline.CommandTypeShouldStop,
-		}))
-		if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
-			log.Panic("unexpect error from send to first node", zap.Error(err))
-		}
+func (t *TablePipeline) AsyncStop(targetTs model.Ts) {
+	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
+		Tp:        pipeline.CommandTypeStopAtTs,
+		StoppedTs: targetTs,
+	}))
+	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
+		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
 }
 
@@ -69,7 +80,7 @@ func (t *TablePipeline) Workload() model.WorkloadInfo {
 
 // Status returns the status of this table pipeline
 func (t *TablePipeline) Status() TableStatus {
-	return atomic.LoadInt32(&t.status)
+	return t.sinkNode.Status()
 }
 
 // ID returns the ID of source table and mark table
@@ -104,28 +115,22 @@ func NewTablePipeline(ctx context.Context,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
-	targetTs model.Ts,
-	outputCh chan *model.PolymorphicEvent,
-	resolvedTsListener func(*TablePipeline, model.Ts)) (context.Context, *TablePipeline) {
+	sink sink.Sink,
+	targetTs model.Ts) (context.Context, *TablePipeline) {
 	ctx, cancel := context.WithCancel(ctx)
 	tablePipeline := &TablePipeline{
-		resolvedTs:  replicaInfo.StartTs,
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
 		cancel:      cancel,
-	}
-	listener := func(resolvedTs model.Ts) {
-		atomic.StoreUint64(&tablePipeline.resolvedTs, resolvedTs)
-		resolvedTsListener(tablePipeline, resolvedTs)
 	}
 
 	ctx, p := pipeline.NewPipeline(ctx)
 	p.AppendNode(ctx, "puller", newPullerNode(credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
-	p.AppendNode(ctx, "safe_stopper", newSafeStopperNode(targetTs))
-	p.AppendNode(ctx, "output", newOutputNode(outputCh, &tablePipeline.status, listener))
+	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs).(*sinkNode)
+	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
 	tablePipeline.p = p
 	return ctx, tablePipeline
 }

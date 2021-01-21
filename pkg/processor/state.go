@@ -2,6 +2,7 @@ package processor
 
 import (
 	"encoding/json"
+	"reflect"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -9,41 +10,55 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 )
 
-type processorState struct {
-	CaptureID   model.CaptureID
-	Changefeeds map[model.ChangeFeedID]changefeedState
+type globalState struct {
+	CaptureID            model.CaptureID
+	Changefeeds          map[model.ChangeFeedID]changefeedState
+	removedChangefeedIDs []model.ChangeFeedID
 }
 
-func newProcessorState(captureID model.CaptureID) *processorState {
-	return &processorState{
+func newProcessorState(captureID model.CaptureID) *globalState {
+	return &globalState{
 		CaptureID:   captureID,
 		Changefeeds: make(map[model.ChangeFeedID]changefeedState),
 	}
 }
 
-func (p *processorState) Update(key util.EtcdKey, value []byte) error {
+func (s *globalState) Update(key util.EtcdKey, value []byte) error {
 	k := new(CDCEtcdKey)
 	err := k.Parse(key.String())
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if len(k.CaptureID) != 0 && k.CaptureID != p.CaptureID {
+	if len(k.CaptureID) != 0 && k.CaptureID != s.CaptureID {
 		return nil
 	}
-	changefeedState, exist := p.Changefeeds[k.ChangefeedID]
+	changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 	if !exist {
-		changefeedState = newChangeFeedState(k.ChangefeedID, p.CaptureID)
-		p.Changefeeds[k.ChangefeedID] = changefeedState
+		changefeedState = newChangeFeedState(k.ChangefeedID, s.CaptureID)
+		s.Changefeeds[k.ChangefeedID] = changefeedState
 	}
-	return changefeedState.UpdateCDCKey(k, value)
+	if err := changefeedState.UpdateCDCKey(k, value); err != nil {
+		return errors.Trace(err)
+	}
+	if value == nil && !changefeedState.Exist() {
+		delete(s.Changefeeds, k.ChangefeedID)
+		s.removedChangefeedIDs = append(s.removedChangefeedIDs, k.ChangefeedID)
+	}
+	return nil
 }
 
-func (p *processorState) GetPatches() []*orchestrator.DataPatch {
+func (s *globalState) GetPatches() []*orchestrator.DataPatch {
 	var pendingPatches []*orchestrator.DataPatch
-	for _, changefeedState := range p.Changefeeds {
+	for _, changefeedState := range s.Changefeeds {
 		pendingPatches = append(pendingPatches, changefeedState.GetPatches()...)
 	}
 	return pendingPatches
+}
+
+func (s *globalState) GetRemovedChangefeeds() (removedChangefeedIDs []model.ChangeFeedID) {
+	removedChangefeedIDs = s.removedChangefeedIDs
+	s.removedChangefeedIDs = nil
+	return
 }
 
 type changefeedState struct {
@@ -60,13 +75,8 @@ type changefeedState struct {
 
 func newChangeFeedState(id model.ChangeFeedID, captureID model.CaptureID) changefeedState {
 	return changefeedState{
-		id:           id,
-		captureID:    captureID,
-		info:         new(model.ChangeFeedInfo),
-		status:       new(model.ChangeFeedStatus),
-		taskPosition: new(model.TaskPosition),
-		taskStatus:   new(model.TaskStatus),
-		workload:     make(model.TaskWorkload),
+		id:        id,
+		captureID: captureID,
 	}
 }
 
@@ -86,25 +96,60 @@ func (s changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 		if key.ChangefeedID != s.id {
 			return nil
 		}
+		if value == nil {
+			s.info = nil
+			return nil
+		}
+		if s.info == nil {
+			s.info = new(model.ChangeFeedInfo)
+		}
 		e = s.info
 	case CDCEtcdKeyTypeChangeFeedStatus:
 		if key.ChangefeedID != s.id {
 			return nil
+		}
+		if value == nil {
+			s.status = nil
+			return nil
+		}
+		if s.status == nil {
+			s.status = new(model.ChangeFeedStatus)
 		}
 		e = s.status
 	case CDCEtcdKeyTypeTaskPosition:
 		if key.ChangefeedID != s.id || key.CaptureID != s.captureID {
 			return nil
 		}
+		if value == nil {
+			s.taskPosition = nil
+			return nil
+		}
+		if s.taskPosition == nil {
+			s.taskPosition = new(model.TaskPosition)
+		}
 		e = s.taskPosition
 	case CDCEtcdKeyTypeTaskStatus:
 		if key.ChangefeedID != s.id || key.CaptureID != s.captureID {
 			return nil
 		}
+		if value == nil {
+			s.taskStatus = nil
+			return nil
+		}
+		if s.taskPosition == nil {
+			s.taskStatus = new(model.TaskStatus)
+		}
 		e = s.taskStatus
 	case CDCEtcdKeyTypeTaskWorkload:
 		if key.ChangefeedID != s.id || key.CaptureID != s.captureID {
 			return nil
+		}
+		if value == nil {
+			s.workload = nil
+			return nil
+		}
+		if s.workload == nil {
+			s.workload = make(model.TaskWorkload)
 		}
 		e = s.workload
 	default:
@@ -113,96 +158,83 @@ func (s changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 	return json.Unmarshal(value, e)
 }
 
+func (s changefeedState) Exist() bool {
+	return s.info != nil || s.status != nil || s.taskPosition != nil || s.taskStatus != nil || s.workload != nil
+}
+
+func (s changefeedState) Active() bool {
+	return s.info != nil && s.status == nil && s.taskStatus != nil
+}
+
 func (s changefeedState) GetPatches() []*orchestrator.DataPatch {
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
 	return pendingPatches
 }
 
-func (s changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) error) {
+var taskPositionTPI *model.TaskPosition
+var taskStatusTPI *model.TaskStatus
+var taskWorkloadTPI model.TaskWorkload
+
+func (s changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) (*model.TaskPosition, error)) {
 	key := &CDCEtcdKey{
 		Tp:           CDCEtcdKeyTypeTaskPosition,
 		CaptureID:    s.captureID,
 		ChangefeedID: s.id,
 	}
-	patch := &orchestrator.DataPatch{
-		Key: util.NewEtcdKey(key.String()),
-		Fun: func(v []byte) ([]byte, error) {
-			e := new(model.TaskPosition)
-			err := json.Unmarshal(v, e)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			err = fn(e)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return json.Marshal(e)
-		},
-	}
-	s.pendingPatches = append(s.pendingPatches, patch)
+	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, error) {
+		return fn(e.(*model.TaskPosition))
+	})
 }
 
-func (s changefeedState) PatchTaskStatus(fn func(*model.TaskStatus) error) {
+func (s changefeedState) PatchTaskStatus(fn func(*model.TaskStatus) (*model.TaskStatus, error)) {
 	key := &CDCEtcdKey{
 		Tp:           CDCEtcdKeyTypeTaskStatus,
 		CaptureID:    s.captureID,
 		ChangefeedID: s.id,
 	}
-	patch := &orchestrator.DataPatch{
-		Key: util.NewEtcdKey(key.String()),
-		Fun: func(v []byte) ([]byte, error) {
-			e := new(model.TaskStatus)
-			err := json.Unmarshal(v, e)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			err = fn(e)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return json.Marshal(e)
-		},
-	}
-	s.pendingPatches = append(s.pendingPatches, patch)
+	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, error) {
+		return fn(e.(*model.TaskStatus))
+	})
 }
 
-func (s changefeedState) PatchTaskWorkload(fn func(model.TaskWorkload) error) {
+func (s changefeedState) PatchTaskWorkload(fn func(model.TaskWorkload) (model.TaskWorkload, error)) {
 	key := &CDCEtcdKey{
 		Tp:           CDCEtcdKeyTypeTaskWorkload,
 		CaptureID:    s.captureID,
 		ChangefeedID: s.id,
 	}
+	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, error) {
+		return fn(e.(model.TaskWorkload))
+	})
+}
+
+func (s changefeedState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, error)) {
 	patch := &orchestrator.DataPatch{
-		Key: util.NewEtcdKey(key.String()),
+		Key: util.NewEtcdKey(key),
 		Fun: func(v []byte) ([]byte, error) {
-			e := make(model.TaskWorkload)
-			err := json.Unmarshal(v, e)
+			var e interface{}
+			if v != nil {
+				tp := reflect.TypeOf(tpi)
+				if tp.Kind() != reflect.Ptr {
+					return nil, errors.Errorf("expected pointer type, got %T", tpi)
+				}
+				e := reflect.New(tp.Elem()).Interface()
+				err := json.Unmarshal(v, e)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+			}
+			ne, err := fn(e)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			err = fn(e)
-			if err != nil {
-				return nil, errors.Trace(err)
+			if ne == nil {
+				return nil, nil
+			} else {
+				return json.Marshal(ne)
 			}
-			return json.Marshal(e)
 		},
 	}
 	s.pendingPatches = append(s.pendingPatches, patch)
 }
-
-//func (s *changefeedState) ReportError(err error) {
-//	// TODO add a log here
-//	// record error information in etcd
-//	var code string
-//	if terror, ok := err.(*errors.Error); ok {
-//		code = string(terror.RFCCode())
-//	} else {
-//		code = string(cerror.ErrProcessorUnknown.RFCCode())
-//	}
-//	processor.position.Error = &model.RunningError{
-//		Addr:    captureInfo.AdvertiseAddr,
-//		Code:    code,
-//		Message: err.Error(),
-//	}
-//}

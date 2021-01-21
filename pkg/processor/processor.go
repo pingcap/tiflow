@@ -15,26 +15,28 @@ package processor
 
 import (
 	"context"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/regionspan"
 	"strconv"
 	"time"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sink"
 	cdccontext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	tablepipeline "github.com/pingcap/ticdc/pkg/processor/pipeline"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/tikv/client-go/txnkv/oracle"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -68,43 +70,65 @@ type Processor struct {
 	credential    *security.Credential
 	captureInfo   model.CaptureInfo
 	schemaStorage *entry.SchemaStorage
+	filter        *filter.Filter
 	mounter       entry.Mounter
+	sinkManager   *sink.Manager
 
-	errCh chan error
+	lazyInited bool
+	errCh      chan error
+	cancel     context.CancelFunc
 }
 
 func NewProcessor(
-	ctx context.Context,
 	pdCli pd.Client,
 	credential *security.Credential,
 	captureInfo model.CaptureInfo,
-	checkpointTs uint64,
-) (*Processor, error) {
-
-	log.Info("start processor with startts",
-		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
+) *Processor {
+	//log.Info("start processor with startts",
+	//	zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	return &Processor{
 		pdCli:       pdCli,
 		credential:  credential,
 		captureInfo: captureInfo,
 		limitter:    puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
-	}, nil
+	}
 }
 
-func (p *Processor) Tick(ctx context.Context, state changefeedState) (nextState orchestrator.ReactorState, err error) {
+func (p *Processor) Tick(ctx context.Context, state changefeedState) (orchestrator.ReactorState, error) {
+	if _, err := p.tick(ctx, state); err != nil {
+		cause := errors.Cause(err)
+		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+			// record error information in etcd
+			var code string
+			if terror, ok := err.(*errors.Error); ok {
+				code = string(terror.RFCCode())
+			} else {
+				code = string(cerror.ErrProcessorUnknown.RFCCode())
+			}
+			state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+				position.Error = &model.RunningError{
+					Addr:    p.captureInfo.AdvertiseAddr,
+					Code:    code,
+					Message: err.Error(),
+				}
+				return position, nil
+			})
+		}
+		return state, cerrors.ErrReactorFinished
+	}
+	return state, nil
+}
+
+func (p *Processor) tick(ctx context.Context, state changefeedState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
+	if err := p.handleErrorCh(ctx); err != nil {
+		return nil, errors.Trace(err)
+	}
 	if p.changefeed.taskStatus.AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	if p.schemaStorage == nil {
-		var err error
-		p.schemaStorage, err = p.createAndDriveSchemaStorage(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	if p.mounter == nil {
-		p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.info.Config.Mounter.WorkerNum, p.changefeed.info.Config.EnableOldValue)
+	if err := p.lazyInit(ctx); err != nil {
+		return nil, errors.Trace(err)
 	}
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
@@ -112,14 +136,105 @@ func (p *Processor) Tick(ctx context.Context, state changefeedState) (nextState 
 	if err := p.initTables(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	// TODO calculate position
+	if err := p.handlePosition(); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := p.pushResolvedTs2Table(); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := p.doGCSchemaStorage(); err != nil {
+		return nil, errors.Trace(err)
+	}
 	return p.changefeed, nil
+}
+
+func (p *Processor) lazyInit(ctx context.Context) error {
+	if p.lazyInited {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	p.cancel = cancel
+
+	var err error
+	p.filter, err = filter.NewFilter(p.changefeed.info.Config)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	p.schemaStorage, err = p.createAndDriveSchemaStorage(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.info.Config.Mounter.WorkerNum, p.changefeed.info.Config.EnableOldValue)
+
+	opts := make(map[string]string, len(p.changefeed.info.Opts)+2)
+	for k, v := range p.changefeed.info.Opts {
+		opts[k] = v
+	}
+	opts[sink.OptChangefeedID] = p.changefeed.id
+	opts[sink.OptCaptureAddr] = p.captureInfo.AdvertiseAddr
+	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.id)
+	errCh := make(chan error, 16)
+	s, err := sink.NewSink(ctx, p.changefeed.id, p.changefeed.info.SinkURI, p.filter, p.changefeed.info.Config, opts, errCh)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	checkpointTs := p.changefeed.info.GetCheckpointTs(p.changefeed.status)
+	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
+
+	p.lazyInited = true
+	return nil
+}
+
+func (p *Processor) handleErrorCh(ctx context.Context) error {
+	var err error
+	select {
+	case err = <-p.errCh:
+	default:
+		return nil
+	}
+	var errs []error
+	appendError := func(err error) {
+		log.Debug("processor received error", zap.Error(err))
+		cause := errors.Cause(err)
+		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+			errs = append(errs, err)
+		}
+	}
+	appendError(err)
+	// sleep 500ms to wait all the errors are sent to errCh
+	time.Sleep(500 * time.Millisecond)
+ReceiveErr:
+	for {
+		select {
+		case err := <-p.errCh:
+			appendError(err)
+		default:
+			break ReceiveErr
+		}
+	}
+	if len(errs) > 0 {
+		log.Error("error on running processor",
+			util.ZapFieldCapture(ctx),
+			zap.String("changefeed", p.changefeed.id),
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("captureAddr", p.captureInfo.AdvertiseAddr),
+			zap.Errors("errors", errs))
+		return errs[0]
+	} else {
+		log.Info("processor exited",
+			util.ZapFieldCapture(ctx),
+			zap.String("changefeed", p.changefeed.id),
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("captureAddr", p.captureInfo.AdvertiseAddr))
+		return context.Canceled
+	}
 }
 
 func (p *Processor) handleTableOperation(ctx context.Context) error {
 	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
-		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) error {
+		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
 			if status.Operation == nil {
 				log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
 			}
@@ -128,9 +243,9 @@ func (p *Processor) handleTableOperation(ctx context.Context) error {
 				log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
 			}
 			if err := fn(opt); err != nil {
-				return errors.Trace(err)
+				return nil, errors.Trace(err)
 			}
-			return nil
+			return status, nil
 		})
 	}
 	for tableID, opt := range p.changefeed.taskStatus.Operation {
@@ -153,7 +268,7 @@ func (p *Processor) handleTableOperation(ctx context.Context) error {
 				}
 				switch opt.Status {
 				case model.OperDispatched:
-					table.AsyncStop()
+					table.AsyncStop(opt.BoundaryTs)
 					patchOperation(tableID, func(operation *model.TableOperation) error {
 						operation.Status = model.OperProcessed
 						return nil
@@ -184,7 +299,7 @@ func (p *Processor) handleTableOperation(ctx context.Context) error {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
 				}
 				if p.changefeed.info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", modification.TableID))
+					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
 				}
 				err := p.addTable(ctx, tableID, replicaInfo)
 				if err != nil {
@@ -229,15 +344,11 @@ func (p *Processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.info.GetCheckpointTs(p.changefeed.status)
 	ddlPuller := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, checkpointTs, ddlspans, p.limitter, false)
-	filter, err := filter.NewFilter(p.changefeed.info.Config)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, filter, p.changefeed.info.Config.ForceReplicate)
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.info.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -294,7 +405,7 @@ func (p *Processor) initTables(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) handlePosition(ctx context.Context, state changefeedState) error {
+func (p *Processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
 	for _, table := range p.tables {
 		ts := table.ResolvedTs()
@@ -304,43 +415,54 @@ func (p *Processor) handlePosition(ctx context.Context, state changefeedState) e
 		}
 	}
 
-	phyTs := oracle.ExtractPhysical(minResolvedTs)
+	//phyTs := oracle.ExtractPhysical(minResolvedTs)
 	// It is more accurate to get tso from PD, but in most cases we have
 	// deployed NTP service, a little bias is acceptable here.
-	metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-	resolvedTsGauge.Set(float64(phyTs))
+	//metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	//resolvedTsGauge.Set(float64(phyTs))
 
-	// TODO calc checkpointTs
-	minCheckpointTs := uint64(0)
+	minCheckpointTs := minResolvedTs
+	for _, table := range p.tables {
+		ts := table.CheckpointTs()
+
+		if ts < minCheckpointTs {
+			minCheckpointTs = ts
+		}
+	}
+
 	if minResolvedTs > p.changefeed.taskPosition.ResolvedTs ||
 		minCheckpointTs > p.changefeed.taskPosition.CheckPointTs {
-		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) error {
+		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 			position.CheckPointTs = minCheckpointTs
 			position.ResolvedTs = minResolvedTs
-			return nil
+			return position, nil
 		})
 	}
 	return nil
 }
 
-func (p *Processor) handleWorkload(ctx context.Context, state changefeedState) error{
-
-	state.PatchTaskWorkload(func(workload model.TaskWorkload) error {
+func (p *Processor) handleWorkload() error {
+	p.changefeed.PatchTaskWorkload(func(workload model.TaskWorkload) (model.TaskWorkload, error) {
 		workload = make(model.TaskWorkload, len(p.tables))
 		for tableID, table := range p.tables {
 			workload[tableID] = table.Workload()
 		}
-		return nil
+		return workload, nil
 	})
+	return nil
+}
+
+func (p *Processor) pushResolvedTs2Table() error {
+	resolvedTs := p.changefeed.status.ResolvedTs
+	for _, table := range p.tables {
+		table.UpdateBarrierTs(resolvedTs)
+	}
 	return nil
 }
 
 func (p *Processor) addTable(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if table, ok := p.tables[tableID]; ok {
-		if table.Status() == tablepipeline.TableStatusStopping {
-			log.Warn("The same table exists but is stopping. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			table.Cancel()
-		} else if table.Status() == tablepipeline.TableStatusStopped {
+		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.Cancel()
 		} else {
@@ -382,12 +504,8 @@ func (p *Processor) addTable(ctx context.Context, tableID model.TableID, replica
 		log.Warn("get table name for metric", zap.Error(err))
 		tableName = strconv.Itoa(int(tableID))
 	}
-	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
-
-	resolvedTsListener := func(table *tablepipeline.TablePipeline, resolvedTs model.Ts) {
-		p.localResolvedNotifier.Notify()
-		resolvedTsGauge.Set(float64(oracle.ExtractPhysical(resolvedTs)))
-	}
+	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
+	//resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 
 	_, table := tablepipeline.NewTablePipeline(
 		cdcCtx,
@@ -400,9 +518,8 @@ func (p *Processor) addTable(ctx context.Context, tableID model.TableID, replica
 		tableID,
 		tableName,
 		replicaInfo,
+		sink,
 		p.changefeed.info.GetTargetTs(),
-		p.outputFromTable,
-		resolvedTsListener,
 	)
 
 	go func() {
@@ -422,9 +539,56 @@ func (p *Processor) addTable(ctx context.Context, tableID model.TableID, replica
 
 	p.tables[tableID] = table
 
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
+	//syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 	return nil
 }
+
+func (p *Processor) Close() error {
+	log.Info("stop processor", zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeed.id))
+	for _, tbl := range p.tables {
+		tbl.Cancel()
+	}
+	p.cancel()
+	// mark tables share the same context with its original table, don't need to cancel
+	failpoint.Inject("processorStopDelay", nil)
+	p.changefeed.PatchTaskPosition(func(_ *model.TaskPosition) (*model.TaskPosition, error) {
+		return nil, nil
+	})
+	p.changefeed.PatchTaskStatus(func(_ *model.TaskStatus) (*model.TaskStatus, error) {
+		return nil, nil
+	})
+	p.changefeed.PatchTaskWorkload(func(_ model.TaskWorkload) (model.TaskWorkload, error) {
+		return nil, nil
+	})
+	return p.sinkManager.Close()
+}
+
+func (p *Processor) doGCSchemaStorage() error {
+	// Delay GC to accommodate pullers starting from a startTs that's too small
+	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
+	gcTime := oracle.GetTimeFromTS(p.changefeed.status.CheckpointTs).Add(-schemaStorageGCLag)
+	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
+	p.schemaStorage.DoGC(gcTs)
+	return nil
+}
+
+//// runProcessor creates a new processor then starts it.
+//func runProcessor(
+//	ctx context.Context,
+//	pdCli pd.Client,
+//	credential *security.Credential,
+//	session *concurrency.Session,
+//	info model.ChangeFeedInfo,
+//	changefeedID string,
+//	captureInfo model.CaptureInfo,
+//	checkpointTs uint64,
+//	flushCheckpointInterval time.Duration,
+//) (*processor, error) {
+
+//log.Info("start to run processor", zap.String("changefeed", changefeedID), zap.String("processor", processor.id))
+//processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
+
+//}
 
 /*
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
