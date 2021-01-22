@@ -59,6 +59,7 @@ function run() {
     run_sql "DELETE FROM multi_changefeed.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     echo "a"
+    ls -l $WORK_DIR
     grep "BlockHoleSink: FlushRowChangedEvents" $WORK_DIR/cdc.log > $WORK_DIR/output.log
     echo "b"
     cat aabbccdd
