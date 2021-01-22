@@ -33,10 +33,10 @@ function run() {
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
     check_table_exists autorandom_test.table_a ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-
     cleanup_process $CDC_BINARY
 }
 
 trap stop_tidb_cluster EXIT
 run $*
+check_cdc_state_log $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
