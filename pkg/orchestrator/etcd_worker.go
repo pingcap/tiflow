@@ -136,7 +136,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 
 			// We are safe to update the ReactorState only if there is no pending patch.
 			for _, update := range worker.pendingUpdates {
-				err := worker.state.Update(update.key, update.value)
+				err := worker.state.Update(update.key, update.value, false)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -181,7 +181,12 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 
 	worker.rawState = make(map[util.EtcdKey][]byte)
 	for _, kv := range resp.Kvs {
-		worker.rawState[util.NewEtcdKeyFromBytes(kv.Key)] = kv.Value
+		key := util.NewEtcdKeyFromBytes(kv.Key)
+		worker.rawState[key] = kv.Value
+		err := worker.state.Update(key, kv.Value, true)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	worker.revision = resp.Header.Revision

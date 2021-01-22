@@ -137,6 +137,7 @@ run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${TL
     --ssl-ca=$TLS_DIR/ca.pem \
     --ssl-cert=$TLS_DIR/server.pem \
     --ssl-key=$TLS_DIR/server-key.pem
+<<<<<<< HEAD
 # TiDB global variables cache 2 seconds
 sleep 2
 
@@ -144,3 +145,16 @@ run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc
     --ssl-ca=$TLS_DIR/ca.pem \
     --ssl-cert=$TLS_DIR/server.pem \
     --ssl-key=$TLS_DIR/server-key.pem || echo "tidb_enable_clustered_index not supports"
+=======
+
+echo "Starting CDC state checker..."
+cd $CUR/../../testing_utils/cdc_state_checker
+if [ ! -f ./cdc_state_checker ]; then
+  GO111MODULE=on go build
+fi
+./cdc_state_checker -pd ${TLS_PD_HOST}:${TLS_PD_PORT} \
+    -ca $TLS_DIR/ca.pem \
+    -cert $TLS_DIR/server.pem \
+    -key $TLS_DIR/server-key.pem > $OUT_DIR/cdc_etcd_check.log &
+cd $OUT_DIR
+>>>>>>> 78de95e... owner: prevent table start-ts regressions (#1236)
