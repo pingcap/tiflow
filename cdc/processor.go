@@ -224,6 +224,15 @@ func newProcessor(
 	p.status = status
 	p.statusModRevision = modRevision
 
+	info, _, err := p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+		return nil, errors.Trace(err)
+	}
+
+	if err == nil {
+		p.globalcheckpointTs = info.CheckpointTs
+	}
+
 	for tableID, replicaInfo := range p.status.Tables {
 		p.addTable(ctx, tableID, replicaInfo)
 	}
@@ -768,6 +777,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
 
 	if replicaInfo.StartTs < globalcheckpointTs {
+		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+		// The cdc_state_checker will catch a real inconsistency in integration tests.
 		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
@@ -1065,6 +1076,11 @@ func (p *processor) sorterConsume(
 				}
 				return
 			}
+
+			if checkpointTs < replicaInfo.StartTs {
+				checkpointTs = replicaInfo.StartTs
+			}
+
 			if checkpointTs != 0 {
 				atomic.StoreUint64(pCheckpointTs, checkpointTs)
 				p.localCheckpointTsNotifier.Notify()

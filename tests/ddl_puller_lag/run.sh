@@ -104,4 +104,5 @@ trap stop_tidb_cluster EXIT
 prepare $*
 sleep 180
 sql_test $*
+check_cdc_state_log $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
