@@ -15,8 +15,10 @@ package replication
 
 import (
 	"context"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/filter"
 )
 
 type changeFeedManager interface {
@@ -46,10 +48,34 @@ type changeFeedManagerImpl struct {
 }
 
 func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]*changeFeedOperation, error) {
+	newChangeFeedInfos := m.ownerState.ChangeFeedInfos
+	var changeFeedOperations []*changeFeedOperation
 
+	for cfID, info := range newChangeFeedInfos {
+		oldInfo, ok := m.changeFeedInfos[cfID]
+		if !ok {
+			m.changeFeedInfos[cfID] = oldInfo
+			primarySink, ddlHdlr, err := m.bootstrapChangeFeed(ctx, cfID)
+			if err != nil {
+				newErr := m.handleOwnerChangeFeedFailure(cfID, err)
+				if newErr != nil {
+					return nil, errors.Trace(newErr)
+				}
+				// goto the next change-feed
+				continue
+			}
+
+			changeFeedOperations = append(changeFeedOperations, &changeFeedOperation{
+				op:           startChangeFeedOperation,
+				changeFeedID: cfID,
+				sink:         primarySink,
+				ddlHandler:   ddlHdlr,
+			})
+		}
+	}
 }
 
-func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID model.ChangeFeedID, cfInfo *model.ChangeFeedInfo) (sink.Sink, ddlHandler, error) {
+func (m *changeFeedManagerImpl) AddAdminJob(job model.AdminJob) {
 	panic("implement me")
 }
 
@@ -57,6 +83,14 @@ func (m *changeFeedManagerImpl) GetGCSafePointLowerBound() int64 {
 	panic("implement me")
 }
 
-func (m *changeFeedManagerImpl) AddAdminJob(job model.AdminJob) {
+func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (sink.Sink, ddlHandler, error) {
 	panic("implement me")
+}
+
+func (m *changeFeedManagerImpl) handleOwnerChangeFeedFailure(cfID model.ChangeFeedID, err error) error {
+	panic("implement me")
+}
+
+func checkNeedStartChangeFeed(oldInfo *model.ChangeFeedInfo, newInfo *model.ChangeFeedID) bool {
+	
 }

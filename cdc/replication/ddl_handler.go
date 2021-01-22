@@ -30,7 +30,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type ddlHandler struct {
+type ddlHandler interface {
+	Run(ctx context.Context) error
+	PullDDL() (uint64, []*timodel.Job, error)
+}
+
+type ddlHandlerImpl struct {
 	puller     puller.Puller
 
 	mu sync.Mutex
@@ -38,7 +43,7 @@ type ddlHandler struct {
 	ddlJobs    []*timodel.Job
 }
 
-func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
+func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandlerImpl {
 	plr := puller.NewPuller(
 		ctx,
 		pdCli,
@@ -49,12 +54,12 @@ func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Cr
 		nil,
 		false)
 
-	return &ddlHandler{
+	return &ddlHandlerImpl{
 		puller: plr,
 	}
 }
 
-func (h *ddlHandler) Run(ctx context.Context) error {
+func (h *ddlHandlerImpl) Run(ctx context.Context) error {
 	ctx = util.PutTableInfoInCtx(ctx, -1, "")
 	errg, ctx := errgroup.WithContext(ctx)
 
@@ -84,7 +89,7 @@ func (h *ddlHandler) Run(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
+func (h *ddlHandlerImpl) receiveDDL(rawDDL *model.RawKVEntry) error {
 	if rawDDL.OpType == model.OpTypeResolved {
 		h.mu.Lock()
 		h.resolvedTS = rawDDL.CRTs
@@ -106,7 +111,7 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 }
 
 
-func (h *ddlHandler) PullDDL() (uint64, []*timodel.Job, error) {
+func (h *ddlHandlerImpl) PullDDL() (uint64, []*timodel.Job, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	result := h.ddlJobs
