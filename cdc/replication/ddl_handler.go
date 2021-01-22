@@ -32,10 +32,10 @@ import (
 
 type ddlHandler struct {
 	puller     puller.Puller
-	resolvedTS uint64
-	ddlJobs    []*timodel.Job
 
 	mu sync.Mutex
+	resolvedTS uint64
+	ddlJobs    []*timodel.Job
 }
 
 func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
@@ -105,9 +105,7 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 	return nil
 }
 
-var _ OwnerDDLHandler = &ddlHandler{}
 
-// PullDDL implements `roles.OwnerDDLHandler` interface.
 func (h *ddlHandler) PullDDL() (uint64, []*timodel.Job, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -116,8 +114,3 @@ func (h *ddlHandler) PullDDL() (uint64, []*timodel.Job, error) {
 	return h.resolvedTS, result, nil
 }
 
-func (h *ddlHandler) Close() error {
-	h.cancel()
-	err := h.wg.Wait()
-	return errors.Trace(err)
-}

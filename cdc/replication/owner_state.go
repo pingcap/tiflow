@@ -28,25 +28,28 @@ import (
 
 type ownerReactorState struct {
 	Owner              model.CaptureID
+	ChangeFeedInfos    map[model.ChangeFeedID]*model.ChangeFeedInfo
 	Captures           map[model.CaptureID]*model.CaptureInfo
-	ChangefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
+	ChangeFeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
 	TaskPositions      map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition
 	TaskStatuses       map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
 
-	patches            []*orchestrator.DataPatch
+	patches []*orchestrator.DataPatch
 }
 
+// The regex based parsing logic is only temporary.
 var (
-	captureRegex    = regexp.MustCompile(regexp.QuoteMeta(kv.CaptureInfoKeyPrefix) + "/(.+)")
-	changefeedRegex = regexp.MustCompile(regexp.QuoteMeta(kv.JobKeyPrefix) + "/(.+)")
-	positionRegex   = regexp.MustCompile(regexp.QuoteMeta(kv.TaskPositionKeyPrefix) + "/(.+?)/(.+)")
-	statusRegex     = regexp.MustCompile(regexp.QuoteMeta(kv.TaskStatusKeyPrefix) + "/(.+?)/(.+)")
+	captureRegex        = regexp.MustCompile(regexp.QuoteMeta(kv.CaptureInfoKeyPrefix) + "/(.+)")
+	changeFeedRegex     = regexp.MustCompile(regexp.QuoteMeta(kv.JobKeyPrefix) + "/(.+)")
+	positionRegex       = regexp.MustCompile(regexp.QuoteMeta(kv.TaskPositionKeyPrefix) + "/(.+?)/(.+)")
+	statusRegex         = regexp.MustCompile(regexp.QuoteMeta(kv.TaskStatusKeyPrefix) + "/(.+?)/(.+)")
+	changeFeedInfoRegex = regexp.MustCompile("/tidb/cdc/changefeed/info/(.+)")
 )
 
 func newCDCReactorState() *ownerReactorState {
 	return &ownerReactorState{
 		Captures:           make(map[model.CaptureID]*model.CaptureInfo),
-		ChangefeedStatuses: make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		ChangeFeedStatuses: make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
 		TaskPositions:      make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition),
 		TaskStatuses:       make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus),
 	}
@@ -98,15 +101,15 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		return nil
 	}
 
-	if matches := changefeedRegex.FindSubmatch(key.Bytes()); matches != nil {
+	if matches := changeFeedRegex.FindSubmatch(key.Bytes()); matches != nil {
 		changefeedID := string(matches[1])
 
 		if value == nil {
 			log.Info("Changefeed deleted",
 				zap.String("changefeedID", changefeedID),
-				zap.Reflect("old-changefeed", s.ChangefeedStatuses))
+				zap.Reflect("old-changefeed", s.ChangeFeedStatuses))
 
-			delete(s.ChangefeedStatuses, changefeedID)
+			delete(s.ChangeFeedStatuses, changefeedID)
 			return nil
 		}
 
@@ -116,7 +119,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 			return errors.Trace(err)
 		}
 
-		if oldChangefeedInfo, ok := s.ChangefeedStatuses[changefeedID]; ok {
+		if oldChangefeedInfo, ok := s.ChangeFeedStatuses[changefeedID]; ok {
 			log.Info("Changefeed updated",
 				zap.String("changefeedID", changefeedID),
 				zap.Reflect("old-changefeed", oldChangefeedInfo),
@@ -127,7 +130,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 				zap.Reflect("new-changefeed", newChangefeedStatus))
 		}
 
-		s.ChangefeedStatuses[changefeedID] = &newChangefeedStatus
+		s.ChangeFeedStatuses[changefeedID] = &newChangefeedStatus
 
 		return nil
 	}
@@ -222,6 +225,18 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		s.TaskStatuses[changefeedID][captureID] = &newTaskStatus
 
 		return nil
+	}
+
+	if matches := changeFeedInfoRegex.FindSubmatch(key.Bytes()); matches != nil {
+		changeFeedID := string(matches[1])
+
+		var changeFeedInfo model.ChangeFeedInfo
+		err := json.Unmarshal(value, &changeFeedInfo)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		s.ChangeFeedInfos[changeFeedID] = &changeFeedInfo
 	}
 
 	log.Debug("Etcd operation ignored", zap.String("key", key.String()), zap.ByteString("value", value))
@@ -343,9 +358,9 @@ func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureI
 			}
 
 			taskStatus.Operation[tableID] = &model.TableOperation{
-				Delete:     true,
+				Delete: true,
 				// temporary, for testing with old processor
-				BoundaryTs: s.ChangefeedStatuses[cfID].CheckpointTs,
+				BoundaryTs: s.ChangeFeedStatuses[cfID].CheckpointTs,
 				Done:       false,
 				Status:     model.OperDispatched,
 			}
