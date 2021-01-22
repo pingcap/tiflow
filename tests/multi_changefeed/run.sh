@@ -60,7 +60,7 @@ function run() {
 
     echo "a"
     ls -l $WORK_DIR
-    grep "BlockHoleSink: FlushRowChangedEvents" $WORK_DIR/cdc.log > $WORK_DIR/output.log
+    grep "EmitRowChangedEvents" $WORK_DIR/cdc.log
     echo "b"
     cat aabbccdd
 
