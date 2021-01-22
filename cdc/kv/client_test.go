@@ -803,7 +803,9 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 		}
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
