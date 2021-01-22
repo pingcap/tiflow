@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/security"
+
 	"github.com/pingcap/log"
 
 	"github.com/pingcap/errors"
@@ -38,9 +40,14 @@ type cdcMonitor struct {
 	reactor    *cdcMonitReactor
 }
 
-func newCDCMonitor(ctx context.Context, pd string) (*cdcMonitor, error) {
+func newCDCMonitor(ctx context.Context, pd string, credential *security.Credential) (*cdcMonitor, error) {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+
+	grpcCredential, err := credential.ToGRPCDialOption()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{pd},
@@ -49,7 +56,7 @@ func newCDCMonitor(ctx context.Context, pd string) (*cdcMonitor, error) {
 		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
-			grpc.WithInsecure(),
+			grpcCredential,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
