@@ -66,6 +66,12 @@ func BarrierMessage(barrierTs model.Ts) *Message {
 	}
 }
 
+func TickMessage() *Message {
+	return &Message{
+		Tp: MessageTypeTick,
+	}
+}
+
 // CommandType is the type of Command
 type CommandType int
 

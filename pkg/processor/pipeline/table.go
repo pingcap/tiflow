@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	stdContext "context"
+	"time"
 
 	"github.com/pingcap/ticdc/cdc/sink"
 
@@ -104,7 +105,7 @@ func (t *TablePipeline) Wait() []error {
 }
 
 // NewTablePipeline creates a table pipeline
-// TODO: the parameters in this function are too much, try to move some parameters into ctx.Vars().
+// TODO(leoppro): the parameters in this function are too much, try to move some parameters into ctx.Vars().
 func NewTablePipeline(ctx context.Context,
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
@@ -125,7 +126,7 @@ func NewTablePipeline(ctx context.Context,
 		cancel:      cancel,
 	}
 
-	ctx, p := pipeline.NewPipeline(ctx)
+	ctx, p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
 	p.AppendNode(ctx, "puller", newPullerNode(credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))

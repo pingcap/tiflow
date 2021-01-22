@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/processor"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -53,8 +55,8 @@ type Capture struct {
 	pdCli      pd.Client
 	credential *security.Credential
 
-	processors map[string]*processor
-	procLock   sync.Mutex
+	processorManager *processor.Manager
+	procLock         sync.Mutex
 
 	info *model.CaptureInfo
 
@@ -122,7 +124,6 @@ func NewCapture(
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(ctx))
 
 	c = &Capture{
-		processors: make(map[string]*processor),
 		etcdClient: cli,
 		credential: credential,
 		session:    sess,

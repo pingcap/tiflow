@@ -105,7 +105,14 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 				return errors.Trace(err)
 			}
 		default:
-			err := n.sink.EmitRowChangedEvents(ctx.StdContext(), msg.PolymorphicEvent.Row)
+			stdCtx := ctx.StdContext()
+			// TODO add buffer here
+			event := msg.PolymorphicEvent
+			err := event.WaitPrepare(stdCtx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = n.sink.EmitRowChangedEvents(stdCtx, event.Row)
 			if err != nil {
 				return errors.Trace(err)
 			}
