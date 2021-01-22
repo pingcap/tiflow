@@ -15,7 +15,6 @@ package replication
 
 import (
 	"context"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 )
@@ -27,23 +26,30 @@ type changeFeedManager interface {
 }
 
 type changeFeedOperationType = int
+
 const (
 	startChangeFeedOperation = changeFeedOperationType(iota)
 	stopChangeFeedOperation
 )
 
 type changeFeedOperation struct {
-	op changeFeedOperationType
+	op           changeFeedOperationType
 	changeFeedID model.ChangeFeedID
-	err error
-	sink sink.Sink
+	err          error
+	sink         sink.Sink
+	ddlHandler   ddlHandler
 }
 
 type changeFeedManagerImpl struct {
-
+	changeFeedInfos map[model.ChangeFeedID]*model.ChangeFeedInfo
+	ownerState      *ownerReactorState
 }
 
 func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]*changeFeedOperation, error) {
+
+}
+
+func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID model.ChangeFeedID, cfInfo *model.ChangeFeedInfo) (sink.Sink, ddlHandler, error) {
 	panic("implement me")
 }
 

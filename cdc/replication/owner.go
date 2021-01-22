@@ -30,6 +30,6 @@ type ownerReactor struct {
 }
 
 func (o *ownerReactor) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	panic("implement me")
+	return o.state, nil
 }
 
