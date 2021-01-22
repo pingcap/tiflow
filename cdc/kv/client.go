@@ -533,7 +533,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return ctx.Err()
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
-				err := s.handleError(ctx, errInfo, true)
+				err := s.handleError(ctx, errInfo)
 				if err != nil {
 					return err
 				}
@@ -549,33 +549,18 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 // scheduleDivideRegionAndRequest schedules a range to be divided by regions, and these regions will be then scheduled
 // to send ChangeData requests.
-func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span regionspan.ComparableSpan, ts uint64, blocking bool) {
+func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span regionspan.ComparableSpan, ts uint64) {
 	task := rangeRequestTask{span: span, ts: ts}
-	if blocking {
-		select {
-		case s.requestRangeCh <- task:
-			s.rangeChSizeGauge.Inc()
-		case <-ctx.Done():
-		}
-	} else {
-		// Try to send without blocking. If channel is full, spawn a goroutine to do the blocking sending.
-		select {
-		case s.requestRangeCh <- task:
-			s.rangeChSizeGauge.Inc()
-		default:
-			go func() {
-				select {
-				case s.requestRangeCh <- task:
-					s.rangeChSizeGauge.Inc()
-				case <-ctx.Done():
-				}
-			}()
-		}
+	select {
+	case s.requestRangeCh <- task:
+		s.rangeChSizeGauge.Inc()
+	case <-ctx.Done():
 	}
 }
 
 // scheduleRegionRequest locks the region's range and schedules sending ChangeData request to the region.
-func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo, blocking bool) {
+// This function is blocking until the region range is locked successfully
+func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo) {
 	handleResult := func(res regionspan.LockRangeResult) {
 		switch res.Status {
 		case regionspan.LockRangeStatusSuccess:
@@ -592,9 +577,9 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				zap.Stringer("span", sri.span),
 				zap.Reflect("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
-				// This call can be always blocking because if `blocking` is set to false, this will in a new goroutine,
-				// so it won't block the caller of `schedulerRegionRequest`.
-				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts, true)
+				// This call is always blocking, otherwise if scheduling in a new
+				// goroutine, it won't block the caller of `schedulerRegionRequest`.
+				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts)
 			}
 		default:
 			panic("unreachable")
@@ -604,46 +589,29 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
 	if res.Status == regionspan.LockRangeStatusWait {
-		if blocking {
-			res = res.WaitFn()
-		} else {
-			go func() {
-				res := res.WaitFn()
-				handleResult(res)
-			}()
-			return
-		}
+		res = res.WaitFn()
 	}
 
 	handleResult(res)
 }
 
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
-// error handling.
+// error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, blocking bool) error {
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
-	if blocking {
-		select {
-		case s.errCh <- errorInfo:
-			s.errChSizeGauge.Inc()
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	} else {
-		select {
-		case s.errCh <- errorInfo:
-			s.errChSizeGauge.Inc()
-		default:
-			go func() {
-				select {
-				case s.errCh <- errorInfo:
-					s.errChSizeGauge.Inc()
-				case <-ctx.Done():
-				}
-			}()
-		}
+	select {
+	case s.errCh <- errorInfo:
+		s.errChSizeGauge.Inc()
+	default:
+		go func() {
+			select {
+			case s.errCh <- errorInfo:
+				s.errChSizeGauge.Inc()
+			case <-ctx.Done():
+			}
+		}()
 	}
 	return nil
 }
@@ -695,7 +663,7 @@ MainLoop:
 					err: &rpcCtxUnavailableErr{
 						verID: sri.verID,
 					},
-				}, false)
+				})
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -915,7 +883,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, false)
+	})
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -981,7 +949,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			nextSpan.Start = region.EndKey
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
-			s.scheduleRegionRequest(ctx, sri, true)
+			s.scheduleRegionRequest(ctx, sri)
 			log.Debug("partialSpan scheduled", zap.Stringer("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			// return if no more regions
@@ -993,10 +961,10 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 }
 
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
-// info will be sent to `regionCh`.
+// info will be sent to `regionCh`. Note if region channel is full, this function will be blocked.
 // CAUTION: Note that this should only be invoked in a context that the region is not locked, otherwise use onRegionFail
 // instead.
-func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo, blocking bool) error {
+func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo) error {
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
@@ -1008,11 +976,11 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
 			return nil
 		} else if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
@@ -1030,7 +998,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
-		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
 		return nil
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -1039,7 +1007,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	}
 
-	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo, blocking)
+	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 	return nil
 }
 
@@ -1072,7 +1040,7 @@ func (s *eventFeedSession) receiveFromStream(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			}, false)
+			})
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return

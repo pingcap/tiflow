@@ -152,6 +152,8 @@ func newMqSink(
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
