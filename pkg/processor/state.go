@@ -16,7 +16,7 @@ type globalState struct {
 	removedChangefeedIDs []model.ChangeFeedID
 }
 
-func newProcessorState(captureID model.CaptureID) *globalState {
+func NewGlobalState(captureID model.CaptureID) orchestrator.ReactorState {
 	return &globalState{
 		CaptureID:   captureID,
 		Changefeeds: make(map[model.ChangeFeedID]changefeedState),
@@ -155,7 +155,17 @@ func (s changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 	default:
 		return nil
 	}
-	return json.Unmarshal(value, e)
+	err := json.Unmarshal(value, e)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if key.Tp == CDCEtcdKeyTypeChangefeedInfo {
+		err = s.info.VerifyAndFix()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s changefeedState) Exist() bool {

@@ -15,8 +15,9 @@ package cdc
 
 import (
 	"context"
-	"sync"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 
 	"github.com/pingcap/ticdc/pkg/processor"
 
@@ -56,7 +57,6 @@ type Capture struct {
 	credential *security.Credential
 
 	processorManager *processor.Manager
-	procLock         sync.Mutex
 
 	info *model.CaptureInfo
 
@@ -121,16 +121,18 @@ func NewCapture(
 		ID:            id,
 		AdvertiseAddr: advertiseAddr,
 	}
+	processorManager := processor.NewManager(pdCli, credential, info)
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(ctx))
 
 	c = &Capture{
-		etcdClient: cli,
-		credential: credential,
-		session:    sess,
-		election:   elec,
-		info:       info,
-		opts:       opts,
-		pdCli:      pdCli,
+		etcdClient:       cli,
+		credential:       credential,
+		session:          sess,
+		election:         elec,
+		info:             info,
+		opts:             opts,
+		pdCli:            pdCli,
+		processorManager: processorManager,
 	}
 
 	return
@@ -145,52 +147,28 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
-		Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
-		ChannelSize: 128,
-	})
-	log.Info("waiting for tasks", zap.String("capture-id", c.info.ID))
-	var ev *TaskEvent
-	wch := taskWatcher.Watch(ctx)
-	for {
-		// Return error when the session is done unexpectedly, it means the
-		// server does not send heartbeats in time, or network interrupted
-		// In this case, the state of the capture is undermined, the task may
-		// have or have not been rebalanced, the owner may be or not be held,
-		// so we must cancel context to let all sub routines exit.
-		select {
-		case <-c.session.Done():
-			if ctx.Err() != context.Canceled {
-				log.Info("capture session done, capture suicide itself", zap.String("capture-id", c.info.ID))
-				return cerror.ErrCaptureSuicide.GenWithStackByArgs()
-			}
-		case ev = <-wch:
-			if ev == nil {
-				return nil
-			}
-			if ev.Err != nil {
-				return errors.Trace(ev.Err)
-			}
-			failpoint.Inject("captureHandleTaskDelay", nil)
-			if err := c.handleTaskEvent(ctx, ev); err != nil {
-				// We check ttl of lease instead of check `session.Done`, because
-				// `session.Done` is only notified when etcd client establish a
-				// new keepalive request, there could be a time window as long as
-				// 1/3 of session ttl that `session.Done` can't be triggered even
-				// the lease is already revoked.
-				lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
-				if inErr != nil {
-					return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
-				}
-				if lease.TTL == int64(-1) {
-					log.Warn("handle task event failed because session is disconnected", zap.Error(err))
-					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
-				}
-				return errors.Trace(err)
-			}
-		}
+	sessionCli := c.session.Client()
+	etcdWorker, err := orchestrator.NewEtcdWorker(kv.NewCDCEtcdClient(ctx, sessionCli).Client, kv.EtcdKeyBase, c.processorManager, processor.NewGlobalState(c.info.ID))
+	if err != nil {
+		return errors.Trace(err)
 	}
+	if err := etcdWorker.Run(ctx, 200*time.Millisecond); err != nil {
+		// We check ttl of lease instead of check `session.Done`, because
+		// `session.Done` is only notified when etcd client establish a
+		// new keepalive request, there could be a time window as long as
+		// 1/3 of session ttl that `session.Done` can't be triggered even
+		// the lease is already revoked.
+		lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
+		if inErr != nil {
+			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
+		}
+		if lease.TTL == int64(-1) {
+			log.Warn("handle task event failed because session is disconnected", zap.Error(err))
+			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+		}
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // Campaign to be an owner
@@ -209,71 +187,9 @@ func (c *Capture) Resign(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 
-// Cleanup cleans all dynamic resources
-func (c *Capture) Cleanup() {
-	c.procLock.Lock()
-	defer c.procLock.Unlock()
-
-	for _, processor := range c.processors {
-		processor.wait()
-	}
-}
-
 // Close closes the capture by unregistering it from etcd
-func (c *Capture) Close(ctx context.Context) error {
-	return errors.Trace(c.etcdClient.DeleteCaptureInfo(ctx, c.info.ID))
-}
-
-func (c *Capture) handleTaskEvent(ctx context.Context, ev *TaskEvent) error {
-	task := ev.Task
-	if ev.Op == TaskOpCreate {
-		if _, ok := c.processors[task.ChangeFeedID]; !ok {
-			p, err := c.assignTask(ctx, task)
-			if err != nil {
-				return err
-			}
-			c.processors[task.ChangeFeedID] = p
-		}
-	} else if ev.Op == TaskOpDelete {
-		if p, ok := c.processors[task.ChangeFeedID]; ok {
-			if err := p.stop(ctx); err != nil {
-				return errors.Trace(err)
-			}
-			delete(c.processors, task.ChangeFeedID)
-		}
-	}
-	return nil
-}
-
-func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error) {
-	cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
-	if err != nil {
-		log.Error("get change feed info failed",
-			zap.String("changefeed", task.ChangeFeedID),
-			zap.String("capture-id", c.info.ID),
-			util.ZapFieldCapture(ctx),
-			zap.Error(err))
-		return nil, err
-	}
-	err = cf.VerifyAndFix()
-	if err != nil {
-		return nil, err
-	}
-	log.Info("run processor",
-		zap.String("capture-id", c.info.ID), util.ZapFieldCapture(ctx),
-		zap.String("changefeed", task.ChangeFeedID))
-
-	p, err := runProcessorImpl(
-		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
-	if err != nil {
-		log.Error("run processor failed",
-			zap.String("changefeed", task.ChangeFeedID),
-			zap.String("capture-id", c.info.ID),
-			util.ZapFieldCapture(ctx),
-			zap.Error(err))
-		return nil, err
-	}
-	return p, nil
+func (c *Capture) Close() error {
+	return c.session.Close()
 }
 
 // register registers the capture information in etcd

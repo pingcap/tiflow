@@ -68,7 +68,7 @@ type processor struct {
 	pdCli         pd.Client
 	limitter      *puller.BlurResourceLimitter
 	credential    *security.Credential
-	captureInfo   model.CaptureInfo
+	captureInfo   *model.CaptureInfo
 	schemaStorage *entry.SchemaStorage
 	filter        *filter.Filter
 	mounter       entry.Mounter
@@ -82,7 +82,7 @@ type processor struct {
 func NewProcessor(
 	pdCli pd.Client,
 	credential *security.Credential,
-	captureInfo model.CaptureInfo,
+	captureInfo *model.CaptureInfo,
 ) *processor {
 	//log.Info("start processor with startts",
 	//	zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
@@ -113,6 +113,11 @@ func (p *processor) Tick(ctx context.Context, state changefeedState) (orchestrat
 				}
 				return position, nil
 			})
+			log.Error("run processor failed",
+				zap.String("changefeed", p.changefeed.id),
+				zap.String("capture-id", p.captureInfo.ID),
+				util.ZapFieldCapture(ctx),
+				zap.Error(err))
 		}
 		return state, cerrors.ErrReactorFinished
 	}
@@ -184,6 +189,9 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
 
 	p.lazyInited = true
+	log.Info("run processor",
+		zap.String("capture-id", p.captureInfo.ID), util.ZapFieldCapture(ctx),
+		zap.String("changefeed-id", p.changefeed.id))
 	return nil
 }
 

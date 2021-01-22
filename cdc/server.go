@@ -403,14 +403,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 // Close closes the server.
 func (s *Server) Close() {
 	if s.capture != nil {
-		s.capture.Cleanup()
-
-		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
-		err := s.capture.Close(closeCtx)
+		err := s.capture.Close()
 		if err != nil {
 			log.Error("close capture", zap.Error(err))
 		}
-		closeCancel()
 	}
 	if s.statusServer != nil {
 		err := s.statusServer.Close()

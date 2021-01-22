@@ -19,7 +19,16 @@ type Manager struct {
 
 	pdCli       pd.Client
 	credential  *security.Credential
-	captureInfo model.CaptureInfo
+	captureInfo *model.CaptureInfo
+}
+
+func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *model.CaptureInfo) *Manager {
+	return &Manager{
+		processors:  make(map[model.ChangeFeedID]*processor),
+		pdCli:       pdCli,
+		credential:  credential,
+		captureInfo: captureInfo,
+	}
 }
 
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
@@ -55,3 +64,5 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 	}
 	return state, nil
 }
+
+func (m *Manager) writeDebugInfo() {}
