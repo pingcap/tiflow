@@ -550,6 +550,23 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 	waitRequestID(c, baseAllocatedID+1)
 
 	eventsBeforeInit := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		// before initialized, prewrite and commit could be in any sequence,
+		// simulate commit comes before prewrite
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("aaa"),
+						StartTs:  112,
+						CommitTs: 122,
+					}},
+				},
+			},
+		},
 		{
 			RegionId:  3,
 			RequestId: currentRequestID(),
@@ -559,7 +576,24 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:    cdcpb.Event_PREWRITE,
 						OpType:  cdcpb.Event_Row_PUT,
 						Key:     []byte("aaa"),
-						Value:   []byte("sss"),
+						Value:   []byte("commit-prewrite-sequence-before-init"),
+						StartTs: 112,
+					}},
+				},
+			},
+		},
+
+		// prewrite and commit in the normal sequence
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("aaa"),
+						Value:   []byte("prewrite-commit-sequence-before-init"),
 						StartTs: 110, // ResolvedTs = 100
 					}},
 				},
@@ -580,6 +614,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 				},
 			},
 		},
+
 		// commit event before initializtion without prewrite matched will be ignored
 		{
 			RegionId:  3,
@@ -590,7 +625,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:     cdcpb.Event_COMMIT,
 						OpType:   cdcpb.Event_Row_PUT,
 						Key:      []byte("aa"),
-						StartTs:  105, // ResolvedTs = 100
+						StartTs:  105,
 						CommitTs: 115,
 					}},
 				},
@@ -605,9 +640,25 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:     cdcpb.Event_COMMITTED,
 						OpType:   cdcpb.Event_Row_PUT,
 						Key:      []byte("aaaa"),
-						Value:    []byte("ss"),
-						StartTs:  105, // ResolvedTs = 100
+						Value:    []byte("committed put event before init"),
+						StartTs:  105,
 						CommitTs: 115,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_DELETE,
+						Key:      []byte("aaaa"),
+						Value:    []byte("committed delete event before init"),
+						StartTs:  108,
+						CommitTs: 118,
 					}},
 				},
 			},
@@ -622,8 +673,37 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 				Entries: &cdcpb.Event_Entries{
 					Entries: []*cdcpb.Event_Row{{
 						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("a-rollback-event"),
+						StartTs: 128,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_ROLLBACK,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a-rollback-event"),
+						StartTs:  128,
+						CommitTs: 129,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
 						OpType:  cdcpb.Event_Row_DELETE,
-						Key:     []byte("atsl"),
+						Key:     []byte("a-delete-event"),
 						StartTs: 130,
 					}},
 				},
@@ -637,7 +717,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 					Entries: []*cdcpb.Event_Row{{
 						Type:     cdcpb.Event_COMMIT,
 						OpType:   cdcpb.Event_Row_DELETE,
-						Key:      []byte("atsl"),
+						Key:      []byte("a-delete-event"),
 						StartTs:  130,
 						CommitTs: 140,
 					}},
@@ -652,8 +732,23 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 					Entries: []*cdcpb.Event_Row{{
 						Type:    cdcpb.Event_PREWRITE,
 						OpType:  cdcpb.Event_Row_PUT,
-						Key:     []byte("astonmatin"),
-						Value:   []byte("db11"),
+						Key:     []byte("a-normal-put"),
+						Value:   []byte("normal put event"),
+						StartTs: 135,
+					}},
+				},
+			},
+		},
+		// simulate TiKV sends txn heartbeat, which is a prewrite event with empty value
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("a-normal-put"),
 						StartTs: 135,
 					}},
 				},
@@ -667,7 +762,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 					Entries: []*cdcpb.Event_Row{{
 						Type:     cdcpb.Event_COMMIT,
 						OpType:   cdcpb.Event_Row_PUT,
-						Key:      []byte("astonmatin"),
+						Key:      []byte("a-normal-put"),
 						StartTs:  135,
 						CommitTs: 145,
 					}},
@@ -702,7 +797,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypePut,
 				Key:      []byte("aaa"),
-				Value:    []byte("sss"),
+				Value:    []byte("prewrite-commit-sequence-before-init"),
 				StartTs:  110,
 				CRTs:     120,
 				RegionID: 3,
@@ -713,7 +808,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypePut,
 				Key:      []byte("aaaa"),
-				Value:    []byte("ss"),
+				Value:    []byte("committed put event before init"),
 				StartTs:  105,
 				CRTs:     115,
 				RegionID: 3,
@@ -723,7 +818,29 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 		{
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypeDelete,
-				Key:      []byte("atsl"),
+				Key:      []byte("aaaa"),
+				Value:    []byte("committed delete event before init"),
+				StartTs:  108,
+				CRTs:     118,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("aaa"),
+				Value:    []byte("commit-prewrite-sequence-before-init"),
+				StartTs:  112,
+				CRTs:     122,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypeDelete,
+				Key:      []byte("a-delete-event"),
 				StartTs:  130,
 				CRTs:     140,
 				RegionID: 3,
@@ -733,8 +850,8 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 		{
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypePut,
-				Key:      []byte("astonmatin"),
-				Value:    []byte("db11"),
+				Key:      []byte("a-normal-put"),
+				Value:    []byte("normal put event"),
 				StartTs:  135,
 				CRTs:     145,
 				RegionID: 3,
