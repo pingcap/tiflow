@@ -913,7 +913,12 @@ func (p *processor) sorterConsume(
 	checkDone := func() {
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs {
+		tableCheckPointTs := atomic.LoadUint64(pCheckpointTs)
+		globalCheckpoint := atomic.LoadUint64(&p.globalcheckpointTs)
+
+		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs &&
+			tableCheckPointTs >= globalCheckpoint {
+
 			log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
 				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
 				zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
