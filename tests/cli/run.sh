@@ -163,7 +163,7 @@ EOF
     # Test Kafka SSL connection.
     if [ "$SINK_TYPE" == "kafka" ]; then
         SSL_TOPIC_NAME="ticdc-cli-test-ssl-$RANDOM"
-        SINK_URI="kafka://127.0.0.1:9093/$SSL_TOPIC_NAME?ca=${TLS_DIR}/ca.pem&cert=${TLS_DIR}/client.pem&key=${TLS_DIR}/client-key.pem"
+        SINK_URI="kafka://127.0.0.1:9093/$SSL_TOPIC_NAME?ca=${TLS_DIR}/ca.pem&cert=${TLS_DIR}/client.pem&key=${TLS_DIR}/client-key.pem&kafka-version=${KAFKA_VERSION}"
         run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
     fi
 
