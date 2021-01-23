@@ -393,7 +393,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			p.stateMu.Unlock()
 			if checkpointTs == 0 {
-				log.Warn("0 is not a valid checkpointTs", util.ZapFieldChangefeed(ctx))
+				log.Debug("0 is not a valid checkpointTs", util.ZapFieldChangefeed(ctx))
 				continue
 			}
 			atomic.StoreUint64(&p.checkpointTs, checkpointTs)
@@ -940,6 +940,7 @@ func (p *processor) sorterConsume(
 				zap.Uint64("tableResolvedTs", lastResolvedTs),
 				zap.Uint64("localResolvedTs", localResolvedTs),
 				zap.Uint64("globalResolvedTs", globalResolvedTs),
+				zap.Uint64("tableCheckpointTs", tableCheckPointTs),
 				zap.Int64("tableID", tableID))
 		}
 	}
