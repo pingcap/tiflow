@@ -75,11 +75,12 @@ type processor struct {
 
 	sinkManager *sink.Manager
 
-	globalResolvedTs        uint64
-	localResolvedTs         uint64
-	checkpointTs            uint64
-	globalcheckpointTs      uint64
-	flushCheckpointInterval time.Duration
+	globalResolvedTs         uint64
+	localResolvedTs          uint64
+	checkpointTs             uint64
+	globalcheckpointTs       uint64
+	appliedLocalCheckpointTs uint64
+	flushCheckpointInterval  time.Duration
 
 	ddlPuller       puller.Puller
 	ddlPullerCancel context.CancelFunc
@@ -411,6 +412,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if err := retryFlushTaskStatusAndPosition(); err != nil {
 				return errors.Trace(err)
 			}
+			atomic.StoreUint64(&p.appliedLocalCheckpointTs, checkpointTs)
 			lastFlushTime = time.Now()
 		}
 	}
@@ -914,10 +916,10 @@ func (p *processor) sorterConsume(
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
 		tableCheckPointTs := atomic.LoadUint64(pCheckpointTs)
-		globalCheckpoint := atomic.LoadUint64(&p.globalcheckpointTs)
+		localCheckpoint := atomic.LoadUint64(&p.appliedLocalCheckpointTs)
 
 		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs &&
-			tableCheckPointTs >= globalCheckpoint {
+			tableCheckPointTs >= localCheckpoint {
 
 			log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
 				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
@@ -941,7 +943,7 @@ func (p *processor) sorterConsume(
 				zap.Uint64("localResolvedTs", localResolvedTs),
 				zap.Uint64("globalResolvedTs", globalResolvedTs),
 				zap.Uint64("tableCheckpointTs", tableCheckPointTs),
-				zap.Uint64("globalCheckpointTs", globalCheckpoint),
+				zap.Uint64("localCheckpointTs", localCheckpoint),
 				zap.Int64("tableID", tableID))
 		}
 	}
