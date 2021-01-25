@@ -259,9 +259,6 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	cancel()
 }
 
-// TestRecvLargeMessageSize tests kv client returns an error when TiKV returns
-// the Compatibility error. This error only happens when the same connection to
-// TiKV have different versions.
 func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
@@ -509,6 +506,9 @@ consumePreResolvedTs:
 	cancel()
 }
 
+// TestCompatibilityWithSameConn tests kv client returns an error when TiKV returns
+// the Compatibility error. This error only happens when the same connection to
+// TiKV have different versions.
 func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
@@ -526,7 +526,7 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
-	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
 	defer kvStorage.Close() //nolint:errcheck
