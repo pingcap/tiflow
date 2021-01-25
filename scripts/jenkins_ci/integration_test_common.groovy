@@ -85,6 +85,7 @@ def tests(sink_type, node_label) {
                                 sudo pip install s3cmd
                                 rm -rf /tmp/tidb_cdc_test
                                 mkdir -p /tmp/tidb_cdc_test
+                                echo "${env.KAFKA_VERSION}" > /tmp/tidb_cdc_test/KAFKA_VERSION
                                 GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_${sink_type} CASE="${case_names}"
                                 rm -rf cov_dir
                                 mkdir -p cov_dir

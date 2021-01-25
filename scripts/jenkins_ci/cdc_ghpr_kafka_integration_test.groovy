@@ -6,7 +6,28 @@ def common = load script_path
 // https://git.io/JJZXM -> https://github.com/pingcap/ticdc/raw/6e62afcfecc4e3965d8818784327d4bf2600d9fa/tests/_certificates/kafka.server.truststore.jks
 def download_jks = 'curl -sfL https://git.io/JJZXX -o /tmp/kafka.server.keystore.jks && curl -sfL https://git.io/JJZXM -o /tmp/kafka.server.truststore.jks'
 
+
 catchError {
+    def KAFKA_TAG = "2.12-2.4.1"
+    def KAFKA_VERSION = "2.4.1"
+    // parse kafka tag
+    def m1 = ghprbCommentBody =~ /kafka-tag\s*=\s*([^\s\\]+)(\s|\\|$)/
+    if (m1) {
+        KAFKA_TAG = "${m1[0][1]}"
+    }
+    m1 = null
+    println "KAFKA_TAG=${KAFKA_TAG}"
+
+    // parse kafka version
+    def m2 = ghprbCommentBody =~ /kafka-version\s*=\s*([^\s\\]+)(\s|\\|$)/
+    if (m2) {
+        KAFKA_VERSION = "${m2[0][1]}"
+    }
+    m2 = null
+    println "KAFKA_VERSION=${KAFKA_VERSION}"
+
+    env.KAFKA_VERSION = "${KAFKA_VERSION}"
+
     common.prepare_binaries()
 
     def label = "cdc-kafka-integration-${UUID.randomUUID().toString()}"
@@ -20,7 +41,7 @@ catchError {
             ttyEnabled: true),
             containerTemplate(
                 name: 'kafka',
-                image: 'wurstmeister/kafka',
+                image: "wurstmeister/kafka:${KAFKA_TAG}",
                 resourceRequestCpu: '2000m', resourceRequestMemory: '4Gi',
                 ttyEnabled: true,
                 alwaysPullImage: false,
