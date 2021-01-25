@@ -1085,11 +1085,15 @@ func (s *eventFeedSession) receiveFromStream(
 				)
 			}
 
-			// close stream and ensure stream is recycled before failover
-			err1 := stream.CloseSend()
-			if err1 != nil {
-				log.Error("failed to close stream", zap.Error(err))
-			}
+			// Use the same delay mechanism as `stream.Send` error handling, since
+			// these two errors often mean upstream store suffers an accident, which
+			// needs time to recover, kv client doesn't need to retry frequently.
+			// TODO: add a better retry backoff or rate limitter
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+
+			// TODO: better to closes the send direction of the stream to notify
+			// the other side, but it is not safe to call CloseSend concurrently
+			// with SendMsg, in future refactor we should refine the recv loop
 			s.deleteStream(addr)
 
 			for _, state := range regionStates {

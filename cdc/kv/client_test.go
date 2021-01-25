@@ -87,7 +87,7 @@ type mockChangeDataService struct {
 	c           *check.C
 	ch          chan *cdcpb.ChangeDataEvent
 	recvLoop    func(server cdcpb.ChangeData_EventFeedServer)
-	exitCh      sync.Map
+	exitNotify  sync.Map
 	eventFeedID uint64
 }
 
@@ -99,14 +99,22 @@ func newMockChangeDataService(c *check.C, ch chan *cdcpb.ChangeDataEvent) *mockC
 	return s
 }
 
-func (s *mockChangeDataService) registerExitchan(id uint64, ch chan struct{}) {
-	s.exitCh.Store(id, ch)
+type notifyCh struct {
+	notify   chan struct{}
+	callback chan struct{}
 }
 
-func (s *mockChangeDataService) notifyExit(id uint64) {
-	if val, ok := s.exitCh.Load(id); ok {
-		val.(chan struct{}) <- struct{}{}
+func (s *mockChangeDataService) registerExitNotify(id uint64, ch *notifyCh) {
+	s.exitNotify.Store(id, ch)
+}
+
+func (s *mockChangeDataService) notifyExit(id uint64) chan struct{} {
+	if ch, ok := s.exitNotify.Load(id); ok {
+		nch := ch.(*notifyCh)
+		nch.notify <- struct{}{}
+		return nch.callback
 	}
+	return nil
 }
 
 func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServer) error {
@@ -115,21 +123,27 @@ func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServe
 			s.recvLoop(server)
 		}()
 	}
-	exitCh := make(chan struct{})
-	s.registerExitchan(atomic.LoadUint64(&s.eventFeedID), exitCh)
+	notify := &notifyCh{
+		notify:   make(chan struct{}),
+		callback: make(chan struct{}, 1), // callback is not always retrieved
+	}
+	s.registerExitNotify(atomic.LoadUint64(&s.eventFeedID), notify)
 	atomic.AddUint64(&s.eventFeedID, 1)
+loop:
 	for {
 		select {
 		case e := <-s.ch:
 			if e == nil {
-				return nil
+				break loop
 			}
 			err := server.Send(e)
 			s.c.Assert(err, check.IsNil)
-		case <-exitCh:
-			return nil
+		case <-notify.notify:
+			break loop
 		}
 	}
+	notify.callback <- struct{}{}
+	return nil
 }
 
 func newMockService(
@@ -1074,8 +1088,22 @@ func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
 	waitRequestID(c, baseAllocatedID+1)
 	initialized1 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized1
-	// another stream will be established, so we notify to exit the first EventFeed loop in mock service
-	srv1.notifyExit(0)
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		if len(ch1) == 0 {
+			return nil
+		}
+		return errors.New("message is not sent")
+	})
+	c.Assert(err, check.IsNil)
+
+	// another stream will be established, so we notify and wait the first
+	// EventFeed loop exits.
+	callback := srv1.notifyExit(0)
+	select {
+	case <-callback:
+	case <-time.After(time.Second * 3):
+		c.Error("event feed loop can't exit")
+	}
 
 	// wait request id allocated with: new session, new request*2
 	waitRequestID(c, baseAllocatedID+2)
