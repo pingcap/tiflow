@@ -172,7 +172,8 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed_1": {
-			info: &model.ChangeFeedInfo{State: model.StateNormal},
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
 			status: &model.ChangeFeedStatus{
 				CheckpointTs: 100,
 			},
@@ -188,7 +189,8 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 			},
 		},
 		"test_change_feed_2": {
-			info: &model.ChangeFeedInfo{State: model.StateNormal},
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
 			status: &model.ChangeFeedStatus{
 				CheckpointTs: 1100,
 			},
@@ -211,13 +213,18 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 		lastFlushChangefeeds:    time.Now(),
 		flushChangefeedInterval: 1 * time.Hour,
 		changeFeeds:             changeFeeds,
+		cfRWriter:               s.client,
+		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
 	}
 
 	err := mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
 
-	c.Assert(changeFeeds["test_change_feed_1"].info.State, check.Equals, model.StateFailed)
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
 	c.Assert(changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 	s.TearDownTest(c)
 }
