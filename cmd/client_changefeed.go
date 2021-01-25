@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/version"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -235,8 +237,24 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			return nil, err
 		}
 	}
-
+	_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	cfg := config.GetDefaultReplicaConfig()
+
+	sortEngineFlag := cmd.Flag("sort-engine")
+	if cdcClusterVer == version.TiCDCClusterVersion4_0 {
+		cfg.EnableOldValue = false
+		if !sortEngineFlag.Changed {
+			sortEngine = model.SortInMemory
+		}
+		log.Warn("The TiCDC cluster is built from 4.0-release branch, the old-value and unified-sorter are disabled by default.")
+	}
 	if len(configFile) > 0 {
 		if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 			return nil, err
@@ -294,6 +312,11 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			}
 		}
 	}
+	switch sortEngine {
+	case model.SortUnified, model.SortInMemory, model.SortInFile:
+	default:
+		return nil, errors.Errorf("Creating chengfeed without a invaild sort engine(%s), `%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
+	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
 		Opts:              make(map[string]string),
@@ -301,11 +324,12 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		StartTs:           startTs,
 		TargetTs:          targetTs,
 		Config:            cfg,
-		Engine:            model.SortEngine(sortEngine),
+		Engine:            sortEngine,
 		SortDir:           sortDir,
 		State:             model.StateNormal,
 		SyncPointEnabled:  syncPointEnabled,
 		SyncPointInterval: syncPointInterval,
+		CreatorVersion:    version.ReleaseVersion,
 	}
 
 	tz, err := util.GetTimezone(timezone)
@@ -374,7 +398,7 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "", "sink uri")
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
-	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "unified", "sort engine used for data sort")
+	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
 	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
