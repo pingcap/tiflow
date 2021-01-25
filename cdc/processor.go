@@ -272,12 +272,6 @@ func (p *processor) Run(ctx context.Context) {
 	wg.Go(func() error {
 		return p.workloadWorker(cctx)
 	})
-
-	go func() {
-		if err := wg.Wait(); err != nil {
-			p.sendError(err)
-		}
-	}()
 }
 
 // wait blocks until all routines in processor are returned
@@ -487,7 +481,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	// p.position.Count = p.sink.Count()
+	//p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
@@ -1201,6 +1195,7 @@ func runProcessor(
 
 	go func() {
 		err := <-errCh
+		cancel()
 		cause := errors.Cause(err)
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
@@ -1221,17 +1216,18 @@ func runProcessor(
 				Code:    code,
 				Message: err.Error(),
 			}
-			_, err = processor.etcdCli.PutTaskPositionOnChange(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
+			timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_, err = processor.etcdCli.PutTaskPositionOnChange(timeoutCtx, processor.changefeedID, processor.captureInfo.ID, processor.position)
 			if err != nil {
 				log.Warn("upload processor error failed", util.ZapFieldChangefeed(ctx), zap.Error(err))
 			}
+			timeoutCancel()
 		} else {
 			log.Info("processor exited",
 				util.ZapFieldCapture(ctx),
 				zap.String("changefeed", changefeedID),
 				zap.String("processor", processor.id))
 		}
-		cancel()
 	}()
 
 	return processor, nil
