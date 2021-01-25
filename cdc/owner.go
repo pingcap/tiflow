@@ -736,18 +736,19 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 
 			for cfID, cf := range o.changeFeeds {
 				if cf.status.CheckpointTs < actual {
-					// Mark unrecoverable changefeeds as Failed.
-					cf.info.State = model.StateFailed
-					cf.info.Error = &model.RunningError{
+					runningError := &model.RunningError{
 						Addr:    util.CaptureAddrFromCtx(ctx),
 						Code:    "CDC-owner-1001",
 						Message: cerror.ErrServiceSafepointLost.GenWithStackByArgs(actual).Error(),
 					}
-					cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
 
-					err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, cfID)
+					err := o.EnqueueJob(model.AdminJob{
+						CfID:  cfID,
+						Type:  model.AdminStop,
+						Error: runningError,
+					})
 					if err != nil {
-						return err
+						return errors.Trace(err)
 					}
 				}
 			}
