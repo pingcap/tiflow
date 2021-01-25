@@ -10,30 +10,15 @@ SINK_TYPE=$1
 
 MAX_RETRIES=10
 
-function check_capture_count() {
-    pd=$1
-    expected=$2
-    count=$(cdc cli capture list --pd=$pd 2>&1|jq '.|length')
-    if [[ ! "$count" -eq "$expected" ]]; then
-        echo "count: $count expected: $expected"
-        exit 1
-    fi
+function check_old_value_enabled() {
+    echo "check_old_value_enabled"
+    row_logs=$(grep "EmitRowChangedEvents" $WORK_DIR/cdc.log || true)
+    echo $row_logs
+#    if [[ ! "$count" -eq "$expected" ]]; then
+#        echo "count: $count expected: $expected"
+#        exit 1
+#    fi
 }
-
-function kill_cdc_and_restart() {
-    pd_addr=$1
-    work_dir=$2
-    cdc_binary=$3
-    MAX_RETRIES=10
-    cdc_pid=$(curl -s http://127.0.0.1:8300/status|jq '.pid')
-    kill $cdc_pid
-    ensure $MAX_RETRIES check_capture_count $pd_addr 0
-    run_cdc_server --workdir $work_dir --binary $cdc_binary --addr "127.0.0.1:8300" --pd $pd_addr
-    ensure $MAX_RETRIES check_capture_count $pd_addr 1
-}
-
-export -f check_capture_count
-export -f kill_cdc_and_restart
 
 function run() {
     # kafka is not supported yet.
@@ -58,9 +43,8 @@ function run() {
     run_sql "UPDATE multi_changefeed.t1 SET val = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "DELETE FROM multi_changefeed.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-    echo "a"
+    ensure $MAX_RETRIES check_old_value_enabled
     ls -l $WORK_DIR
-    grep "EmitRowChangedEvents" $WORK_DIR/cdc.log
     echo "b"
     cat aabbccdd
 
