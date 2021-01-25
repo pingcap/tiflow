@@ -20,6 +20,9 @@ function check_old_value_enabled() {
 #    fi
 }
 
+
+export -f check_old_value_enabled
+
 function run() {
     # kafka is not supported yet.
     if [ "$SINK_TYPE" == "kafka" ]; then
