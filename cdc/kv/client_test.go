@@ -1010,13 +1010,6 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cancel()
 }
 
-<<<<<<< HEAD
-// TODO enable the test
-func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
-	cluster := mocktikv.NewCluster()
-	mvccStore := mocktikv.MustNewMVCCStore()
-	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
-=======
 // TestIncompatibleTiKV tests TiCDC new request to TiKV meets `ErrVersionIncompatible`
 // error (in fact this error is raised before EventFeed API is really called),
 // TiCDC will wait 20s and then retry. This is a common scenario when rolling
@@ -1066,8 +1059,9 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
->>>>>>> 2aba06d... tests: test TiKV is not compatible with TiCDC to simulate rolling update (#1298)
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: gen}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
