@@ -15,6 +15,7 @@ package replication
 
 import (
 	"encoding/json"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"regexp"
 
 	"github.com/pingcap/errors"
@@ -393,6 +394,49 @@ func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID mo
 
 			delete(taskStatus.Operation, tableID)
 			return json.Marshal(&taskStatus)
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) AlterChangeFeedRuntimeState(
+	cfID model.ChangeFeedID,
+	adminJobType model.AdminJobType,
+	state model.FeedState,
+	cfErr *model.RunningError,
+	errTs int64) {
+
+	_, ok := s.ChangeFeedInfos[cfID]
+	if !ok {
+		log.Panic("owner bug: changeFeedInfo not found", zap.String("cfID", cfID))
+	}
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyChangeFeedInfo(cfID)),
+		Fun: func(old []byte) ([]byte, error) {
+			if old == nil {
+				log.Warn("AlterChangeFeedRuntimeState: changeFeedInfo forcibly removed", zap.String("cfID", cfID))
+				return nil, cerrors.ErrEtcdIgnore
+			}
+
+			var info model.ChangeFeedInfo
+			err := json.Unmarshal(old, &info)
+			if err != nil {
+				return nil, cerrors.ErrUnmarshalFailed.Wrap(err)
+			}
+
+			info.State = state
+			info.AdminJobType = adminJobType
+			info.Error = cfErr
+			info.ErrorHis = append(info.ErrorHis, errTs)
+
+			newBytes, err := json.Marshal(&info)
+			if err != nil {
+				return nil, cerrors.ErrMarshalFailed.Wrap(err)
+			}
+
+			return newBytes, nil
 		},
 	}
 

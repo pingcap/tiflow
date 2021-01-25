@@ -16,9 +16,12 @@ package replication
 import (
 	"context"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/filter"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	_ "github.com/pingcap/ticdc/pkg/filter"
+	"go.uber.org/zap"
 )
 
 type changeFeedManager interface {
@@ -45,34 +48,53 @@ type changeFeedOperation struct {
 type changeFeedManagerImpl struct {
 	changeFeedInfos map[model.ChangeFeedID]*model.ChangeFeedInfo
 	ownerState      *ownerReactorState
+	adminJobsQueue  chan *model.AdminJob
 }
 
 func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]*changeFeedOperation, error) {
 	newChangeFeedInfos := m.ownerState.ChangeFeedInfos
 	var changeFeedOperations []*changeFeedOperation
 
+	// handle newly found change-feeds
 	for cfID, info := range newChangeFeedInfos {
-		oldInfo, ok := m.changeFeedInfos[cfID]
+		_, ok := m.changeFeedInfos[cfID]
+		m.changeFeedInfos[cfID] = info
 		if !ok {
-			m.changeFeedInfos[cfID] = oldInfo
-			primarySink, ddlHdlr, err := m.bootstrapChangeFeed(ctx, cfID)
-			if err != nil {
-				newErr := m.handleOwnerChangeFeedFailure(cfID, err)
-				if newErr != nil {
-					return nil, errors.Trace(newErr)
-				}
-				// goto the next change-feed
+			if !checkNeedStartChangeFeed(cfID, info) {
 				continue
 			}
 
-			changeFeedOperations = append(changeFeedOperations, &changeFeedOperation{
-				op:           startChangeFeedOperation,
-				changeFeedID: cfID,
-				sink:         primarySink,
-				ddlHandler:   ddlHdlr,
-			})
+			operation, err := m.startChangeFeed(ctx, cfID)
+			if err != nil {
+				return nil, err
+			}
+
+			if operation == nil {
+				// We encountered a retryable error
+				continue
+			}
+
+			changeFeedOperations = append(changeFeedOperations, operation)
 		}
 	}
+
+	// handle admin jobs
+	loop:
+	for {
+		select {
+		case adminJob := <-m.adminJobsQueue:
+			operation, err := m.handleAdminJob(adminJob)
+			if err != nil {
+				return nil, err
+			}
+
+			changeFeedOperations = append(changeFeedOperations, operation)
+		default:
+			break loop
+		}
+	}
+
+	return changeFeedOperations, nil
 }
 
 func (m *changeFeedManagerImpl) AddAdminJob(job model.AdminJob) {
@@ -83,6 +105,25 @@ func (m *changeFeedManagerImpl) GetGCSafePointLowerBound() int64 {
 	panic("implement me")
 }
 
+func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (*changeFeedOperation, error) {
+	primarySink, ddlHdlr, err := m.bootstrapChangeFeed(ctx, cfID)
+	if err != nil {
+		newErr := m.handleOwnerChangeFeedFailure(cfID, err)
+		if newErr != nil {
+			return nil, errors.Trace(newErr)
+		}
+		return nil, nil
+	}
+
+
+	return &changeFeedOperation{
+		op:           startChangeFeedOperation,
+		changeFeedID: cfID,
+		sink:         primarySink,
+		ddlHandler:   ddlHdlr,
+	}, nil
+}
+
 func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (sink.Sink, ddlHandler, error) {
 	panic("implement me")
 }
@@ -91,6 +132,43 @@ func (m *changeFeedManagerImpl) handleOwnerChangeFeedFailure(cfID model.ChangeFe
 	panic("implement me")
 }
 
-func checkNeedStartChangeFeed(oldInfo *model.ChangeFeedInfo, newInfo *model.ChangeFeedID) bool {
-	
+func (m *changeFeedManagerImpl) handleAdminJob(adminJob *model.AdminJob) (*changeFeedOperation, error) {
+	log.Info("handle admin job", zap.Reflect("admin-job", adminJob))
+
+	cfInfo, ok := m.changeFeedInfos[adminJob.CfID]
+	if !ok {
+		return nil, cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(adminJob.CfID)
+	}
+
+	switch adminJob.Type {
+	case model.AdminNone:
+		return nil, nil
+	case model.AdminStop:
+		if cfInfo.State != model.StateNormal {
+			log.Info("AdminStop ignored because change-feed is not running",
+				zap.Reflect("admin-job", adminJob))
+			return nil, nil
+		}
+
+
+	}
+}
+
+func checkNeedStartChangeFeed(cfID model.ChangeFeedID, info *model.ChangeFeedInfo) bool {
+	if info.Error == nil {
+		return true
+	}
+
+	if info.State != model.StateNormal && info.State != model.StateStopped {
+		return false
+	}
+
+	// TODO better error history checking and GC
+	_, canInit := info.CheckErrorHistory()
+	if canInit {
+		return true
+	}
+
+	log.Debug("changeFeed should not be started", zap.String("changefeed-id", cfID))
+	return false
 }
