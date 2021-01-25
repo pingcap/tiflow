@@ -14,6 +14,7 @@ function check_old_value_enabled() {
     echo "check_old_value_enabled"
     row_logs=$(grep "EmitRowChangedEvents" $WORK_DIR/cdc.log || true)
     echo $row_logs
+    cat aabbccdd
 #    if [[ ! "$count" -eq "$expected" ]]; then
 #        echo "count: $count expected: $expected"
 #        exit 1
@@ -47,10 +48,6 @@ function run() {
     run_sql "DELETE FROM multi_changefeed.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     ensure $MAX_RETRIES check_old_value_enabled
-    ls -l $WORK_DIR
-    echo "b"
-    cat aabbccdd
-
     cleanup_process $CDC_BINARY
 }
 
