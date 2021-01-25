@@ -61,7 +61,7 @@ const (
 //checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 //metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 type processor struct {
-	changefeed changefeedState
+	changefeed *changefeedState
 
 	tables map[model.TableID]*tablepipeline.TablePipeline
 
@@ -91,10 +91,12 @@ func NewProcessor(
 		credential:  credential,
 		captureInfo: captureInfo,
 		limitter:    puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
+		tables:      make(map[model.TableID]*tablepipeline.TablePipeline),
 	}
 }
 
-func (p *processor) Tick(ctx context.Context, state changefeedState) (orchestrator.ReactorState, error) {
+func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
+	log.Debug("LEOPPRO tick in processor", zap.Any("state", state))
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
 		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
@@ -114,7 +116,7 @@ func (p *processor) Tick(ctx context.Context, state changefeedState) (orchestrat
 				return position, nil
 			})
 			log.Error("run processor failed",
-				zap.String("changefeed", p.changefeed.id),
+				zap.String("changefeed", p.changefeed.ID),
 				zap.String("capture-id", p.captureInfo.ID),
 				util.ZapFieldCapture(ctx),
 				zap.Error(err))
@@ -124,16 +126,19 @@ func (p *processor) Tick(ctx context.Context, state changefeedState) (orchestrat
 	return state, nil
 }
 
-func (p *processor) tick(ctx context.Context, state changefeedState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if p.changefeed.taskStatus.AdminJobType.IsStopState() {
+	if p.changefeed.TaskStatus.AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	if err := p.lazyInit(ctx); err != nil {
 		return nil, errors.Trace(err)
+	}
+	if skip := p.initPosition(); skip {
+		return p.changefeed, nil
 	}
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
@@ -147,10 +152,30 @@ func (p *processor) tick(ctx context.Context, state changefeedState) (nextState 
 	if err := p.pushResolvedTs2Table(); err != nil {
 		return nil, errors.Trace(err)
 	}
+	if err := p.handleWorkload(); err != nil {
+		return nil, errors.Trace(err)
+	}
 	if err := p.doGCSchemaStorage(); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return p.changefeed, nil
+}
+
+func (p *processor) initPosition() bool {
+	if p.changefeed.TaskPosition == nil {
+		checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+			if position == nil {
+				return &model.TaskPosition{
+					CheckPointTs: checkpointTs,
+					ResolvedTs:   checkpointTs,
+				}, nil
+			}
+			return position, nil
+		})
+		return true
+	}
+	return false
 }
 
 func (p *processor) lazyInit(ctx context.Context) error {
@@ -161,7 +186,7 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	p.cancel = cancel
 
 	var err error
-	p.filter, err = filter.NewFilter(p.changefeed.info.Config)
+	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -171,27 +196,27 @@ func (p *processor) lazyInit(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.info.Config.Mounter.WorkerNum, p.changefeed.info.Config.EnableOldValue)
+	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
 
-	opts := make(map[string]string, len(p.changefeed.info.Opts)+2)
-	for k, v := range p.changefeed.info.Opts {
+	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
+	for k, v := range p.changefeed.Info.Opts {
 		opts[k] = v
 	}
-	opts[sink.OptChangefeedID] = p.changefeed.id
+	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = p.captureInfo.AdvertiseAddr
-	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.id)
+	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	errCh := make(chan error, 16)
-	s, err := sink.NewSink(ctx, p.changefeed.id, p.changefeed.info.SinkURI, p.filter, p.changefeed.info.Config, opts, errCh)
+	s, err := sink.NewSink(ctx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	checkpointTs := p.changefeed.info.GetCheckpointTs(p.changefeed.status)
+	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
 
 	p.lazyInited = true
 	log.Info("run processor",
 		zap.String("capture-id", p.captureInfo.ID), util.ZapFieldCapture(ctx),
-		zap.String("changefeed-id", p.changefeed.id))
+		zap.String("changefeed-id", p.changefeed.ID))
 	return nil
 }
 
@@ -225,7 +250,7 @@ ReceiveErr:
 	if len(errs) > 0 {
 		log.Error("error on running processor",
 			util.ZapFieldCapture(ctx),
-			zap.String("changefeed", p.changefeed.id),
+			zap.String("changefeed", p.changefeed.ID),
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("captureAddr", p.captureInfo.AdvertiseAddr),
 			zap.Errors("errors", errs))
@@ -233,7 +258,7 @@ ReceiveErr:
 	} else {
 		log.Info("processor exited",
 			util.ZapFieldCapture(ctx),
-			zap.String("changefeed", p.changefeed.id),
+			zap.String("changefeed", p.changefeed.ID),
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("captureAddr", p.captureInfo.AdvertiseAddr))
 		return context.Canceled
@@ -256,11 +281,11 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
-	for tableID, opt := range p.changefeed.taskStatus.Operation {
+	for tableID, opt := range p.changefeed.TaskStatus.Operation {
 		if opt.TableApplied() {
 			continue
 		}
-		localCheckpointTs := p.changefeed.taskPosition.CheckPointTs
+		localCheckpointTs := p.changefeed.TaskPosition.CheckPointTs
 		if opt.Delete {
 			if opt.BoundaryTs <= localCheckpointTs {
 				table, exist := p.tables[tableID]
@@ -302,11 +327,11 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 		} else {
 			switch opt.Status {
 			case model.OperDispatched:
-				replicaInfo, exist := p.changefeed.taskStatus.Tables[tableID]
+				replicaInfo, exist := p.changefeed.TaskStatus.Tables[tableID]
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
 				}
-				if p.changefeed.info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
+				if p.changefeed.Info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
 				}
 				err := p.addTable(ctx, tableID, replicaInfo)
@@ -323,8 +348,8 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 					log.Panic("table which was added is not found",
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 				}
-				localResolvedTs := p.changefeed.taskPosition.ResolvedTs
-				globalResolvedTs := p.changefeed.status.ResolvedTs
+				localResolvedTs := p.changefeed.TaskPosition.ResolvedTs
+				globalResolvedTs := p.changefeed.Status.ResolvedTs
 				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 					patchOperation(tableID, func(operation *model.TableOperation) error {
 						operation.Status = model.OperFinished
@@ -350,16 +375,19 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 		return nil, errors.Trace(err)
 	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	checkpointTs := p.changefeed.info.GetCheckpointTs(p.changefeed.status)
+	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	ddlPuller := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, checkpointTs, ddlspans, p.limitter, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.info.Config.ForceReplicate)
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.Info.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		p.sendError(ddlPuller.Run(ctx))
+	}()
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
 	go func() {
 		var ddlRawKV *model.RawKVEntry
@@ -367,6 +395,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 			select {
 			case <-ctx.Done():
 				p.sendError(ctx.Err())
+				return
 			case ddlRawKV = <-ddlRawKVCh:
 			}
 			if ddlRawKV == nil {
@@ -397,12 +426,12 @@ func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
-		log.Error("processor receives redundant error", zap.Error(err))
+		log.Error("processor receives redundant error", zap.Error(err), zap.Stack("stack"))
 	}
 }
 
 func (p *processor) initTables(ctx context.Context) error {
-	for tableID, replicaInfo := range p.changefeed.taskStatus.Tables {
+	for tableID, replicaInfo := range p.changefeed.TaskStatus.Tables {
 		if _, exist := p.tables[tableID]; !exist {
 			err := p.addTable(ctx, tableID, replicaInfo)
 			if err != nil {
@@ -417,7 +446,6 @@ func (p *processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
 	for _, table := range p.tables {
 		ts := table.ResolvedTs()
-
 		if ts < minResolvedTs {
 			minResolvedTs = ts
 		}
@@ -438,8 +466,8 @@ func (p *processor) handlePosition() error {
 		}
 	}
 
-	if minResolvedTs > p.changefeed.taskPosition.ResolvedTs ||
-		minCheckpointTs > p.changefeed.taskPosition.CheckPointTs {
+	if minResolvedTs > p.changefeed.TaskPosition.ResolvedTs ||
+		minCheckpointTs > p.changefeed.TaskPosition.CheckPointTs {
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 			position.CheckPointTs = minCheckpointTs
 			position.ResolvedTs = minResolvedTs
@@ -461,7 +489,7 @@ func (p *processor) handleWorkload() error {
 }
 
 func (p *processor) pushResolvedTs2Table() error {
-	resolvedTs := p.changefeed.status.ResolvedTs
+	resolvedTs := p.changefeed.Status.ResolvedTs
 	for _, table := range p.tables {
 		table.UpdateBarrierTs(resolvedTs)
 	}
@@ -479,8 +507,8 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		}
 	}
 
-	globalCheckpointTs := p.changefeed.status.CheckpointTs
-	globalResolvedTs := p.changefeed.status.ResolvedTs
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+	globalResolvedTs := p.changefeed.Status.ResolvedTs
 
 	if replicaInfo.StartTs < globalCheckpointTs {
 		log.Warn("addTable: startTs < checkpoint",
@@ -494,7 +522,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		CaptureAddr:   "TODO: CaptureAddr",
 		PDClient:      p.pdCli,
 		SchemaStorage: p.schemaStorage,
-		Config:        p.changefeed.info.Config,
+		Config:        p.changefeed.Info.Config,
 	})
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
@@ -521,13 +549,13 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		kvStorage,
 		p.limitter,
 		p.mounter,
-		p.changefeed.info.Engine,
-		p.changefeed.info.SortDir,
+		p.changefeed.Info.Engine,
+		p.changefeed.Info.SortDir,
 		tableID,
 		tableName,
 		replicaInfo,
 		sink,
-		p.changefeed.info.GetTargetTs(),
+		p.changefeed.Info.GetTargetTs(),
 	)
 
 	go func() {
@@ -552,7 +580,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 }
 
 func (p *processor) Close() error {
-	log.Info("stop processor", zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeed.id))
+	log.Info("stop processor", zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeed.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -574,7 +602,7 @@ func (p *processor) Close() error {
 func (p *processor) doGCSchemaStorage() error {
 	// Delay GC to accommodate pullers starting from a startTs that's too small
 	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-	gcTime := oracle.GetTimeFromTS(p.changefeed.status.CheckpointTs).Add(-schemaStorageGCLag)
+	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
 	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
 	p.schemaStorage.DoGC(gcTs)
 	return nil

@@ -15,6 +15,9 @@ package pipeline
 
 import (
 	"sync/atomic"
+	"time"
+
+	"github.com/pingcap/failpoint"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -23,6 +26,10 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
+)
+
+const (
+	defaultSyncResolvedBatch = 1024
 )
 
 // TableStatus is status of the table pipeline
@@ -43,6 +50,9 @@ type sinkNode struct {
 	checkpointTs model.Ts
 	targetTs     model.Ts
 	barrierTs    model.Ts
+
+	eventBuffer []*model.PolymorphicEvent
+	rowBuffer   []*model.RowChangedEvent
 }
 
 func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts) pipeline.Node {
@@ -76,6 +86,9 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext) error {
 	if resolvedTs <= n.checkpointTs {
 		return nil
 	}
+	if err := n.flushRow2Sink(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx.StdContext(), resolvedTs)
 	if err != nil {
 		return errors.Trace(err)
@@ -91,31 +104,60 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext) error {
 	return nil
 }
 
+func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
+	n.eventBuffer = append(n.eventBuffer, event)
+	if len(n.eventBuffer) >= defaultSyncResolvedBatch {
+		if err := n.flushRow2Sink(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
+	stdCtx := ctx.StdContext()
+	for _, ev := range n.eventBuffer {
+		err := ev.WaitPrepare(stdCtx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if ev.Row == nil {
+			continue
+		}
+		n.rowBuffer = append(n.rowBuffer, ev.Row)
+	}
+	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
+		log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
+		time.Sleep(10 * time.Second)
+		panic("ProcessorSyncResolvedPreEmit")
+	})
+	err := n.sink.EmitRowChangedEvents(stdCtx, n.rowBuffer...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	n.rowBuffer = n.rowBuffer[:0]
+	n.eventBuffer = n.eventBuffer[:0]
+	return nil
+}
+
 // Receive receives the message from the previous node
 func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
-		switch event.RawKV.OpType {
-		case model.OpTypeResolved:
-			atomic.StoreInt32(&n.status, TableStatusRunning)
+		if event.RawKV.OpType == model.OpTypeResolved {
+			if n.status == TableStatusInitializing {
+				atomic.StoreInt32(&n.status, TableStatusRunning)
+			}
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.RawKV.CRTs)
 			if err := n.flushSink(ctx); err != nil {
 				return errors.Trace(err)
 			}
-		default:
-			stdCtx := ctx.StdContext()
-			// TODO add buffer here
-			event := msg.PolymorphicEvent
-			err := event.WaitPrepare(stdCtx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = n.sink.EmitRowChangedEvents(stdCtx, event.Row)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			return nil
+		}
+		if err := n.emitEvent(ctx, event); err != nil {
+			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeTick:
 		if err := n.flushSink(ctx); err != nil {

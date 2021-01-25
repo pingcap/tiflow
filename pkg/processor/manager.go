@@ -15,7 +15,7 @@ import (
 )
 
 type Manager struct {
-	processors map[model.ChangeFeedID]*processor
+	Processors map[model.ChangeFeedID]*processor
 
 	pdCli       pd.Client
 	credential  *security.Credential
@@ -24,7 +24,7 @@ type Manager struct {
 
 func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *model.CaptureInfo) *Manager {
 	return &Manager{
-		processors:  make(map[model.ChangeFeedID]*processor),
+		Processors:  make(map[model.ChangeFeedID]*processor),
 		pdCli:       pdCli,
 		credential:  credential,
 		captureInfo: captureInfo,
@@ -32,24 +32,26 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 }
 
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	log.Debug("LEOPPRO tick in processor manager", zap.Any("state", state))
 	globalState := state.(*globalState)
 	closeProcessor := func(changefeedID model.ChangeFeedID) {
-		if processor, exist := m.processors[changefeedID]; exist {
+		if processor, exist := m.Processors[changefeedID]; exist {
 			err := processor.Close()
 			if err != nil {
 				log.Warn("failed to close processor", zap.Error(err))
 			}
-			delete(m.processors, changefeedID)
+			delete(m.Processors, changefeedID)
 		}
 	}
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active() {
 			closeProcessor(changefeedID)
+			continue
 		}
-		processor, exist := m.processors[changefeedID]
+		processor, exist := m.Processors[changefeedID]
 		if !exist {
 			processor = NewProcessor(m.pdCli, m.credential, m.captureInfo)
-			m.processors[changefeedID] = processor
+			m.Processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
 			if cerrors.ErrReactorFinished.Equal(err) {

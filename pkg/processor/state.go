@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -12,14 +15,14 @@ import (
 
 type globalState struct {
 	CaptureID            model.CaptureID
-	Changefeeds          map[model.ChangeFeedID]changefeedState
+	Changefeeds          map[model.ChangeFeedID]*changefeedState
 	removedChangefeedIDs []model.ChangeFeedID
 }
 
 func NewGlobalState(captureID model.CaptureID) orchestrator.ReactorState {
 	return &globalState{
 		CaptureID:   captureID,
-		Changefeeds: make(map[model.ChangeFeedID]changefeedState),
+		Changefeeds: make(map[model.ChangeFeedID]*changefeedState),
 	}
 }
 
@@ -28,6 +31,9 @@ func (s *globalState) Update(key util.EtcdKey, value []byte) error {
 	err := k.Parse(key.String())
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if k.Tp == CDCEtcdKeyTypeCapture || k.Tp == CDCEtcdKeyTypeOnwer {
+		return nil
 	}
 	if len(k.CaptureID) != 0 && k.CaptureID != s.CaptureID {
 		return nil
@@ -62,96 +68,100 @@ func (s *globalState) GetRemovedChangefeeds() (removedChangefeedIDs []model.Chan
 }
 
 type changefeedState struct {
-	id           model.ChangeFeedID
-	captureID    model.CaptureID
-	info         *model.ChangeFeedInfo
-	status       *model.ChangeFeedStatus
-	taskPosition *model.TaskPosition
-	taskStatus   *model.TaskStatus
-	workload     model.TaskWorkload
+	ID           model.ChangeFeedID
+	CaptureID    model.CaptureID
+	Info         *model.ChangeFeedInfo
+	Status       *model.ChangeFeedStatus
+	TaskPosition *model.TaskPosition
+	TaskStatus   *model.TaskStatus
+	Workload     model.TaskWorkload
 
 	pendingPatches []*orchestrator.DataPatch
 }
 
-func newChangeFeedState(id model.ChangeFeedID, captureID model.CaptureID) changefeedState {
-	return changefeedState{
-		id:        id,
-		captureID: captureID,
+func newChangeFeedState(id model.ChangeFeedID, captureID model.CaptureID) *changefeedState {
+	return &changefeedState{
+		ID:        id,
+		CaptureID: captureID,
 	}
 }
 
-func (s changefeedState) Update(key util.EtcdKey, value []byte) error {
+func (s *changefeedState) Update(key util.EtcdKey, value []byte) error {
 	k := new(CDCEtcdKey)
 	err := k.Parse(key.String())
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return s.UpdateCDCKey(k, value)
+	if err := s.UpdateCDCKey(k, value); err != nil {
+		log.Error("failed to update status", zap.String("key", key.String()), zap.ByteString("value", value))
+		return errors.Trace(err)
+	}
+	return nil
 }
 
-func (s changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
+func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 	var e interface{}
 	switch key.Tp {
 	case CDCEtcdKeyTypeChangefeedInfo:
-		if key.ChangefeedID != s.id {
+		if key.ChangefeedID != s.ID {
 			return nil
 		}
 		if value == nil {
-			s.info = nil
+			s.Info = nil
 			return nil
 		}
-		if s.info == nil {
-			s.info = new(model.ChangeFeedInfo)
+		if s.Info == nil {
+			s.Info = new(model.ChangeFeedInfo)
 		}
-		e = s.info
+		e = s.Info
 	case CDCEtcdKeyTypeChangeFeedStatus:
-		if key.ChangefeedID != s.id {
+		if key.ChangefeedID != s.ID {
 			return nil
 		}
 		if value == nil {
-			s.status = nil
+			s.Status = nil
 			return nil
 		}
-		if s.status == nil {
-			s.status = new(model.ChangeFeedStatus)
+		if s.Status == nil {
+			s.Status = new(model.ChangeFeedStatus)
 		}
-		e = s.status
+		e = s.Status
 	case CDCEtcdKeyTypeTaskPosition:
-		if key.ChangefeedID != s.id || key.CaptureID != s.captureID {
+		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
 			return nil
 		}
 		if value == nil {
-			s.taskPosition = nil
+			s.TaskPosition = nil
 			return nil
 		}
-		if s.taskPosition == nil {
-			s.taskPosition = new(model.TaskPosition)
+		if s.TaskPosition == nil {
+			s.TaskPosition = new(model.TaskPosition)
 		}
-		e = s.taskPosition
+		e = s.TaskPosition
 	case CDCEtcdKeyTypeTaskStatus:
-		if key.ChangefeedID != s.id || key.CaptureID != s.captureID {
+		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
 			return nil
 		}
 		if value == nil {
-			s.taskStatus = nil
+			s.TaskStatus = nil
 			return nil
 		}
-		if s.taskPosition == nil {
-			s.taskStatus = new(model.TaskStatus)
+		if s.TaskPosition == nil {
+			s.TaskStatus = new(model.TaskStatus)
 		}
-		e = s.taskStatus
+		e = s.TaskStatus
 	case CDCEtcdKeyTypeTaskWorkload:
-		if key.ChangefeedID != s.id || key.CaptureID != s.captureID {
+		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
 			return nil
 		}
 		if value == nil {
-			s.workload = nil
+			s.Workload = nil
 			return nil
 		}
-		if s.workload == nil {
-			s.workload = make(model.TaskWorkload)
+		if s.Workload == nil {
+			s.Workload = make(model.TaskWorkload)
 		}
-		e = s.workload
+		e = &s.Workload
 	default:
 		return nil
 	}
@@ -160,7 +170,7 @@ func (s changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 		return errors.Trace(err)
 	}
 	if key.Tp == CDCEtcdKeyTypeChangefeedInfo {
-		err = s.info.VerifyAndFix()
+		err = s.Info.VerifyAndFix()
 		if err != nil {
 			return err
 		}
@@ -168,15 +178,15 @@ func (s changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 	return nil
 }
 
-func (s changefeedState) Exist() bool {
-	return s.info != nil || s.status != nil || s.taskPosition != nil || s.taskStatus != nil || s.workload != nil
+func (s *changefeedState) Exist() bool {
+	return s.Info != nil || s.Status != nil || s.TaskPosition != nil || s.TaskStatus != nil || s.Workload != nil
 }
 
-func (s changefeedState) Active() bool {
-	return s.info != nil && s.status == nil && s.taskStatus != nil
+func (s *changefeedState) Active() bool {
+	return s.Info != nil && s.Status != nil && s.TaskStatus != nil
 }
 
-func (s changefeedState) GetPatches() []*orchestrator.DataPatch {
+func (s *changefeedState) GetPatches() []*orchestrator.DataPatch {
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
 	return pendingPatches
@@ -184,52 +194,61 @@ func (s changefeedState) GetPatches() []*orchestrator.DataPatch {
 
 var taskPositionTPI *model.TaskPosition
 var taskStatusTPI *model.TaskStatus
-var taskWorkloadTPI model.TaskWorkload
+var taskWorkloadTPI *model.TaskWorkload
 
-func (s changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) (*model.TaskPosition, error)) {
+func (s *changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) (*model.TaskPosition, error)) {
 	key := &CDCEtcdKey{
 		Tp:           CDCEtcdKeyTypeTaskPosition,
-		CaptureID:    s.captureID,
-		ChangefeedID: s.id,
+		CaptureID:    s.CaptureID,
+		ChangefeedID: s.ID,
 	}
 	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, error) {
-		return fn(e.(*model.TaskPosition))
+		if e == nil {
+			return fn(nil)
+		} else {
+			return fn(e.(*model.TaskPosition))
+		}
 	})
 }
 
-func (s changefeedState) PatchTaskStatus(fn func(*model.TaskStatus) (*model.TaskStatus, error)) {
+func (s *changefeedState) PatchTaskStatus(fn func(*model.TaskStatus) (*model.TaskStatus, error)) {
 	key := &CDCEtcdKey{
 		Tp:           CDCEtcdKeyTypeTaskStatus,
-		CaptureID:    s.captureID,
-		ChangefeedID: s.id,
+		CaptureID:    s.CaptureID,
+		ChangefeedID: s.ID,
 	}
 	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, error) {
-		return fn(e.(*model.TaskStatus))
+		if e == nil {
+			return fn(nil)
+		} else {
+			return fn(e.(*model.TaskStatus))
+		}
 	})
 }
 
-func (s changefeedState) PatchTaskWorkload(fn func(model.TaskWorkload) (model.TaskWorkload, error)) {
+func (s *changefeedState) PatchTaskWorkload(fn func(model.TaskWorkload) (model.TaskWorkload, error)) {
 	key := &CDCEtcdKey{
 		Tp:           CDCEtcdKeyTypeTaskWorkload,
-		CaptureID:    s.captureID,
-		ChangefeedID: s.id,
+		CaptureID:    s.CaptureID,
+		ChangefeedID: s.ID,
 	}
 	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, error) {
-		return fn(e.(model.TaskWorkload))
+		if e == nil {
+			return fn(nil)
+		} else {
+			return fn(*e.(*model.TaskWorkload))
+		}
 	})
 }
 
-func (s changefeedState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, error)) {
+func (s *changefeedState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, error)) {
 	patch := &orchestrator.DataPatch{
 		Key: util.NewEtcdKey(key),
 		Fun: func(v []byte) ([]byte, error) {
 			var e interface{}
 			if v != nil {
 				tp := reflect.TypeOf(tpi)
-				if tp.Kind() != reflect.Ptr {
-					return nil, errors.Errorf("expected pointer type, got %T", tpi)
-				}
-				e := reflect.New(tp.Elem()).Interface()
+				e = reflect.New(tp.Elem()).Interface()
 				err := json.Unmarshal(v, e)
 				if err != nil {
 					return nil, errors.Trace(err)

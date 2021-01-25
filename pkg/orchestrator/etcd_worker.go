@@ -181,7 +181,12 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 
 	worker.rawState = make(map[util.EtcdKey][]byte)
 	for _, kv := range resp.Kvs {
-		worker.rawState[util.NewEtcdKeyFromBytes(kv.Key)] = kv.Value
+		key := util.NewEtcdKeyFromBytes(kv.Key)
+		worker.rawState[key] = kv.Value
+		err := worker.state.Update(key, kv.Value)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	worker.revision = resp.Header.Revision
