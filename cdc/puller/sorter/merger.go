@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -51,6 +53,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		for task := range pendingSet {
 			if task.reader != nil {
 				_ = printError(task.reader.resetAndClose())
+				task.reader = nil
 			}
 			_ = printError(task.dealloc())
 		}
@@ -66,13 +69,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return ctx.Err()
 		case out <- model.NewResolvedPolymorphicEvent(0, ts):
 			metricSorterEventCount.WithLabelValues("resolved").Inc()
-			metricSorterResolvedTsGauge.Set(float64(ts))
+			metricSorterResolvedTsGauge.Set(float64(oracle.ExtractPhysical(ts)))
 			return nil
 		}
 	}
 
 	onMinResolvedTsUpdate := func() error {
-		metricSorterMergerStartTsGauge.Set(float64(minResolvedTs))
+		metricSorterMergerStartTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 
 		workingSet := make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
@@ -314,7 +317,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return errors.Trace(err)
 		}
 
-		metricSorterMergeCountHistogram.Observe(float64(counter))
+		if counter > 0 {
+			// ignore empty merges for better visualization of metrics
+			metricSorterMergeCountHistogram.Observe(float64(counter))
+		}
 
 		return nil
 	}
@@ -367,6 +373,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 func mergerCleanUp(in <-chan *flushTask) {
 	for task := range in {
+		if task.reader != nil {
+			_ = printError(task.reader.resetAndClose())
+		}
 		_ = printError(task.dealloc())
 	}
 }
