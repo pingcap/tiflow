@@ -4402,8 +4402,6 @@
         "x": 0,
         "y": 3
       },
-<<<<<<< HEAD
-=======
       "id": 130,
       "panels": [
         {
@@ -4968,7 +4966,6 @@
         "x": 0,
         "y": 4
       },
->>>>>>> 5c62e67... *: fix the output in changefeed out of order (#1247)
       "id": 58,
       "panels": [
         {
@@ -6055,10 +6052,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 12
-}
-=======
   "version": 13
 }
->>>>>>> 5c62e67... *: fix the output in changefeed out of order (#1247)
