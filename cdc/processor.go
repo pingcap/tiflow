@@ -1202,8 +1202,8 @@ func runProcessor(
 	go func() {
 		err := <-errCh
 		cancel()
-		cause := errors.Cause(err)
 		processor.wait()
+		cause := errors.Cause(err)
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
