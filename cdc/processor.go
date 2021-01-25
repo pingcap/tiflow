@@ -941,6 +941,7 @@ func (p *processor) sorterConsume(
 				zap.Uint64("localResolvedTs", localResolvedTs),
 				zap.Uint64("globalResolvedTs", globalResolvedTs),
 				zap.Uint64("tableCheckpointTs", tableCheckPointTs),
+				zap.Uint64("globalCheckpointTs", globalCheckpoint),
 				zap.Int64("tableID", tableID))
 		}
 	}
