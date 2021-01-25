@@ -70,6 +70,21 @@ var (
 			Name:      "total_flushed_rows_count",
 			Help:      "totla count of flushed rows",
 		}, []string{"capture", "changefeed"})
+	flushRowChangedDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "flush_event_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
+			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2ms */, 2, 20),
+		}, []string{"capture", "changefeed", "type"})
+	bufferChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "buffer_chan_size",
+			Help:      "size of row changed event buffer channel in sink manager",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -81,4 +96,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(bucketSizeCounter)
 	registry.MustRegister(totalRowsCountGauge)
 	registry.MustRegister(totalFlushedRowsCountGauge)
+	registry.MustRegister(flushRowChangedDuration)
+	registry.MustRegister(bufferChanSizeGauge)
 }

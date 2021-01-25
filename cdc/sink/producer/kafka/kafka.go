@@ -366,6 +366,8 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
