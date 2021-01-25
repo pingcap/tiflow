@@ -1148,7 +1148,7 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
-	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
 	defer kvStorage.Close() //nolint:errcheck
@@ -1203,7 +1203,7 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
-	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
 	defer kvStorage.Close() //nolint:errcheck
