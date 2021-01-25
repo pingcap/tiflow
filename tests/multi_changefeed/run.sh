@@ -12,7 +12,7 @@ MAX_RETRIES=10
 
 function check_old_value_enabled() {
     echo "check_old_value_enabled"
-    row_logs=$(grep "EmitRowChangedEvents" $WORK_DIR/cdc.log || true)
+    row_logs=$(grep "EmitRowChangedEvents" "$WORK_DIR/cdc.log" || true)
     echo $row_logs
     exit 1
 #    if [[ ! "$count" -eq "$expected" ]]; then
