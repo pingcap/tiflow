@@ -481,7 +481,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	//p.position.Count = p.sink.Count()
+	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
@@ -1197,6 +1197,9 @@ func runProcessor(
 		err := <-errCh
 		cancel()
 		cause := errors.Cause(err)
+		if err := processor.wg.Wait(); err != nil {
+			processor.sendError(err)
+		}
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
