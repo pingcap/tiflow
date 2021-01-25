@@ -27,6 +27,24 @@ function check_changefeed_mark_failed() {
     fi
 }
 
+function check_changefeed_mark_failed_regex() {
+    endpoints=$1
+    changefeedid=$2
+    error_msg=$3
+    info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
+    echo "$info"
+    state=$(echo $info|jq -r '.state')
+    if [[ ! "$state" == "failed" ]]; then
+        echo "changefeed state $state does not equal to failed"
+        exit 1
+    fi
+    message=$(echo $info|jq -r '.error.message')
+    if [[ ! "$message" =~ $error_msg ]]; then
+        echo "error message '$message' does not match '$error_msg'"
+        exit 1
+    fi
+}
+
 function check_changefeed_mark_stopped_regex() {
     endpoints=$1
     changefeedid=$2
@@ -35,7 +53,7 @@ function check_changefeed_mark_stopped_regex() {
     echo "$info"
     state=$(echo $info|jq -r '.state')
     if [[ ! "$state" == "stopped" ]]; then
-        echo "changefeed state $state does not equal to failed"
+        echo "changefeed state $state does not equal to stopped"
         exit 1
     fi
     message=$(echo $info|jq -r '.error.message')
@@ -80,6 +98,7 @@ function check_no_capture() {
 }
 
 export -f check_changefeed_mark_failed
+export -f check_changefeed_mark_failed_regex
 export -f check_changefeed_mark_stopped_regex
 export -f check_changefeed_mark_stopped
 export -f check_no_changefeed
