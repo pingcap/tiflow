@@ -272,6 +272,12 @@ func (p *processor) Run(ctx context.Context) {
 	wg.Go(func() error {
 		return p.workloadWorker(cctx)
 	})
+
+	go func() {
+		if err := wg.Wait(); err != nil {
+			p.sendError(err)
+		}
+	}()
 }
 
 // wait blocks until all routines in processor are returned
@@ -1197,9 +1203,7 @@ func runProcessor(
 		err := <-errCh
 		cancel()
 		cause := errors.Cause(err)
-		if err := processor.wg.Wait(); err != nil {
-			processor.sendError(err)
-		}
+		processor.wait()
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
