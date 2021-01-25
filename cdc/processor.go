@@ -227,6 +227,15 @@ func newProcessor(
 	p.status = status
 	p.statusModRevision = modRevision
 
+	info, _, err := p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+		return nil, errors.Trace(err)
+	}
+
+	if err == nil {
+		p.globalcheckpointTs = info.CheckpointTs
+	}
+
 	for tableID, replicaInfo := range p.status.Tables {
 		p.addTable(ctx, tableID, replicaInfo)
 	}
@@ -266,10 +275,7 @@ func (p *processor) Run(ctx context.Context) {
 
 	go func() {
 		if err := wg.Wait(); err != nil {
-			select {
-			case p.errCh <- err:
-			default:
-			}
+			p.sendError(err)
 		}
 	}()
 }
@@ -773,6 +779,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
 
 	if replicaInfo.StartTs < globalcheckpointTs {
+		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+		// The cdc_state_checker will catch a real inconsistency in integration tests.
 		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
@@ -804,14 +812,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
-			p.errCh <- err
+			p.sendError(err)
 			return nil
 		}
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
+				p.sendError(err)
 			}
 		}()
 
@@ -825,11 +833,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				if os.IsNotExist(errors.Cause(err)) {
 					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
 					if err != nil {
-						p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
+						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
 						return nil
 					}
 				} else {
-					p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
+					p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check"))
 					return nil
 				}
 			}
@@ -841,13 +849,13 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
 			}
 		default:
-			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
+			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
 			return nil
 		}
 		go func() {
 			err := sorter.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
+				p.sendError(err)
 			}
 		}()
 
@@ -886,7 +894,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	tableSink = startPuller(tableID, &table.resolvedTs, &table.checkpointTs)
 	table.cancel = func() {
 		cancel()
-		tableSink.Close()
+		if tableSink != nil {
+			tableSink.Close()
+		}
 		if mTableSink != nil {
 			mTableSink.Close()
 		}
@@ -923,7 +933,7 @@ func (p *processor) sorterConsume(
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+					p.sendError(ctx.Err())
 				}
 				return
 			case p.opDoneCh <- tableID:
@@ -992,7 +1002,7 @@ func (p *processor) sorterConsume(
 		select {
 		case <-ctx.Done():
 			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
+				p.sendError(ctx.Err())
 			}
 			return
 		case pEvent := <-sorter.Output():
@@ -1004,7 +1014,7 @@ func (p *processor) sorterConsume(
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+					p.sendError(ctx.Err())
 				}
 				return
 			case p.mounter.Input() <- pEvent:
@@ -1046,7 +1056,7 @@ func (p *processor) sorterConsume(
 			err := processRowChangedEvent(pEvent)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
-					p.errCh <- errors.Trace(err)
+					p.sendError(ctx.Err())
 				}
 				return
 			}
@@ -1072,6 +1082,11 @@ func (p *processor) sorterConsume(
 				}
 				return
 			}
+
+			if checkpointTs < replicaInfo.StartTs {
+				checkpointTs = replicaInfo.StartTs
+			}
+
 			if checkpointTs != 0 {
 				atomic.StoreUint64(pCheckpointTs, checkpointTs)
 				p.localCheckpointTsNotifier.Notify()
@@ -1095,7 +1110,7 @@ func (p *processor) pullerConsume(
 		select {
 		case <-ctx.Done():
 			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
+				p.sendError(ctx.Err())
 			}
 			return
 		case rawKV := <-plr.Output():
@@ -1164,7 +1179,9 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	errCh := make(chan error, 16)
+	// processor only receives one error from the channel, all producers to this
+	// channel must use the non-blocking way to send error.
+	errCh := make(chan error, 1)
 	s, err := sink.NewSink(ctx, changefeedID, info.SinkURI, filter, info.Config, opts, errCh)
 	if err != nil {
 		cancel()
@@ -1183,33 +1200,15 @@ func runProcessor(
 	processor.Run(ctx)
 
 	go func() {
-		var errs []error
-		appendError := func(err error) {
-			log.Debug("processor received error", zap.Error(err))
-			cause := errors.Cause(err)
-			if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
-				errs = append(errs, err)
-			}
-		}
 		err := <-errCh
-		appendError(err)
-		// sleep 500ms to wait all the errors are sent to errCh
-		time.Sleep(500 * time.Millisecond)
-	ReceiveErr:
-		for {
-			select {
-			case err := <-errCh:
-				appendError(err)
-			default:
-				break ReceiveErr
-			}
-		}
-		if len(errs) > 0 {
+		cause := errors.Cause(err)
+		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
 				util.ZapFieldCapture(ctx),
 				zap.String("changefeed", changefeedID),
 				zap.String("processor", processor.id),
-				zap.Errors("errors", errs))
+				zap.Error(err))
 			// record error information in etcd
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
@@ -1236,4 +1235,12 @@ func runProcessor(
 	}()
 
 	return processor, nil
+}
+
+func (p *processor) sendError(err error) {
+	select {
+	case p.errCh <- err:
+	default:
+		log.Error("processor receives redundant error", zap.Error(err))
+	}
 }

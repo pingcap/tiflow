@@ -31,10 +31,10 @@ function run_length_limit() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "info"
 
     TOPIC_NAME="ticdc-kafka-message-test-$RANDOM"
-    SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-message-bytes=4096"
+    SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-message-bytes=4096&kafka-version=${KAFKA_VERSION}"
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
-      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-message-bytes=4096"
+      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-message-bytes=4096&version=${KAFKA_VERSION}"
     fi
 
     # Add a check table to reduce check time, or if we check data with sync diff
@@ -87,10 +87,10 @@ function run_batch_size_limit() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "info"
 
     TOPIC_NAME="ticdc-kafka-message-test-$RANDOM"
-    SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-batch-size=3"
+    SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-batch-size=3&kafka-version=${KAFKA_VERSION}"
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
-      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-batch-size=3"
+      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-batch-size=3&version=${KAFKA_VERSION}"
     fi
 
     # Add a check table to reduce check time, or if we check data with sync diff
@@ -126,4 +126,5 @@ function run_batch_size_limit() {
 trap stop_tidb_cluster EXIT
 run_length_limit $*
 run_batch_size_limit $*
+check_cdc_state_log $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
