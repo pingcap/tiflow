@@ -14,7 +14,7 @@ function check_old_value_enabled() {
     echo "check_old_value_enabled"
     row_logs=$(grep "EmitRowChangedEvents" $WORK_DIR/cdc.log || true)
     echo $row_logs
-    cat aabbccdd
+    exit 1
 #    if [[ ! "$count" -eq "$expected" ]]; then
 #        echo "count: $count expected: $expected"
 #        exit 1
