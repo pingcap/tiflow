@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/kvproto/pkg/errorpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -35,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -80,8 +82,9 @@ func mockInitializedEvent(regionID, requestID uint64) *cdcpb.ChangeDataEvent {
 }
 
 type mockChangeDataService struct {
-	c  *check.C
-	ch chan *cdcpb.ChangeDataEvent
+	c        *check.C
+	ch       chan *cdcpb.ChangeDataEvent
+	recvLoop func(server cdcpb.ChangeData_EventFeedServer)
 }
 
 func newMockChangeDataService(c *check.C, ch chan *cdcpb.ChangeDataEvent) *mockChangeDataService {
@@ -93,6 +96,11 @@ func newMockChangeDataService(c *check.C, ch chan *cdcpb.ChangeDataEvent) *mockC
 }
 
 func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServer) error {
+	if s.recvLoop != nil {
+		go func() {
+			s.recvLoop(server)
+		}()
+	}
 	for e := range s.ch {
 		err := server.Send(e)
 		s.c.Assert(err, check.IsNil)
@@ -106,8 +114,18 @@ func newMockService(
 	srv cdcpb.ChangeDataServer,
 	wg *sync.WaitGroup,
 ) (grpcServer *grpc.Server, addr string) {
+	return newMockServiceSpecificAddr(ctx, c, srv, "127.0.0.1:0", wg)
+}
+
+func newMockServiceSpecificAddr(
+	ctx context.Context,
+	c *check.C,
+	srv cdcpb.ChangeDataServer,
+	listenAddr string,
+	wg *sync.WaitGroup,
+) (grpcServer *grpc.Server, addr string) {
 	lc := &net.ListenConfig{}
-	lis, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
+	lis, err := lc.Listen(ctx, "tcp", listenAddr)
 	c.Assert(err, check.IsNil)
 	addr = lis.Addr().String()
 	grpcServer = grpc.NewServer()
@@ -532,6 +550,23 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 	waitRequestID(c, baseAllocatedID+1)
 
 	eventsBeforeInit := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		// before initialized, prewrite and commit could be in any sequence,
+		// simulate commit comes before prewrite
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("aaa"),
+						StartTs:  112,
+						CommitTs: 122,
+					}},
+				},
+			},
+		},
 		{
 			RegionId:  3,
 			RequestId: currentRequestID(),
@@ -541,7 +576,24 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:    cdcpb.Event_PREWRITE,
 						OpType:  cdcpb.Event_Row_PUT,
 						Key:     []byte("aaa"),
-						Value:   []byte("sss"),
+						Value:   []byte("commit-prewrite-sequence-before-init"),
+						StartTs: 112,
+					}},
+				},
+			},
+		},
+
+		// prewrite and commit in the normal sequence
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("aaa"),
+						Value:   []byte("prewrite-commit-sequence-before-init"),
 						StartTs: 110, // ResolvedTs = 100
 					}},
 				},
@@ -562,6 +614,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 				},
 			},
 		},
+
 		// commit event before initializtion without prewrite matched will be ignored
 		{
 			RegionId:  3,
@@ -572,7 +625,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:     cdcpb.Event_COMMIT,
 						OpType:   cdcpb.Event_Row_PUT,
 						Key:      []byte("aa"),
-						StartTs:  105, // ResolvedTs = 100
+						StartTs:  105,
 						CommitTs: 115,
 					}},
 				},
@@ -587,9 +640,25 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 						Type:     cdcpb.Event_COMMITTED,
 						OpType:   cdcpb.Event_Row_PUT,
 						Key:      []byte("aaaa"),
-						Value:    []byte("ss"),
-						StartTs:  105, // ResolvedTs = 100
+						Value:    []byte("committed put event before init"),
+						StartTs:  105,
 						CommitTs: 115,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_DELETE,
+						Key:      []byte("aaaa"),
+						Value:    []byte("committed delete event before init"),
+						StartTs:  108,
+						CommitTs: 118,
 					}},
 				},
 			},
@@ -604,8 +673,37 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 				Entries: &cdcpb.Event_Entries{
 					Entries: []*cdcpb.Event_Row{{
 						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("a-rollback-event"),
+						StartTs: 128,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_ROLLBACK,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a-rollback-event"),
+						StartTs:  128,
+						CommitTs: 129,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
 						OpType:  cdcpb.Event_Row_DELETE,
-						Key:     []byte("atsl"),
+						Key:     []byte("a-delete-event"),
 						StartTs: 130,
 					}},
 				},
@@ -619,7 +717,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 					Entries: []*cdcpb.Event_Row{{
 						Type:     cdcpb.Event_COMMIT,
 						OpType:   cdcpb.Event_Row_DELETE,
-						Key:      []byte("atsl"),
+						Key:      []byte("a-delete-event"),
 						StartTs:  130,
 						CommitTs: 140,
 					}},
@@ -634,8 +732,23 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 					Entries: []*cdcpb.Event_Row{{
 						Type:    cdcpb.Event_PREWRITE,
 						OpType:  cdcpb.Event_Row_PUT,
-						Key:     []byte("astonmatin"),
-						Value:   []byte("db11"),
+						Key:     []byte("a-normal-put"),
+						Value:   []byte("normal put event"),
+						StartTs: 135,
+					}},
+				},
+			},
+		},
+		// simulate TiKV sends txn heartbeat, which is a prewrite event with empty value
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("a-normal-put"),
 						StartTs: 135,
 					}},
 				},
@@ -649,7 +762,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 					Entries: []*cdcpb.Event_Row{{
 						Type:     cdcpb.Event_COMMIT,
 						OpType:   cdcpb.Event_Row_PUT,
-						Key:      []byte("astonmatin"),
+						Key:      []byte("a-normal-put"),
 						StartTs:  135,
 						CommitTs: 145,
 					}},
@@ -684,7 +797,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypePut,
 				Key:      []byte("aaa"),
-				Value:    []byte("sss"),
+				Value:    []byte("prewrite-commit-sequence-before-init"),
 				StartTs:  110,
 				CRTs:     120,
 				RegionID: 3,
@@ -695,7 +808,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypePut,
 				Key:      []byte("aaaa"),
-				Value:    []byte("ss"),
+				Value:    []byte("committed put event before init"),
 				StartTs:  105,
 				CRTs:     115,
 				RegionID: 3,
@@ -705,7 +818,29 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 		{
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypeDelete,
-				Key:      []byte("atsl"),
+				Key:      []byte("aaaa"),
+				Value:    []byte("committed delete event before init"),
+				StartTs:  108,
+				CRTs:     118,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("aaa"),
+				Value:    []byte("commit-prewrite-sequence-before-init"),
+				StartTs:  112,
+				CRTs:     122,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypeDelete,
+				Key:      []byte("a-delete-event"),
 				StartTs:  130,
 				CRTs:     140,
 				RegionID: 3,
@@ -715,8 +850,8 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 		{
 			Val: &model.RawKVEntry{
 				OpType:   model.OpTypePut,
-				Key:      []byte("astonmatin"),
-				Value:    []byte("db11"),
+				Key:      []byte("a-normal-put"),
+				Value:    []byte("normal put event"),
 				StartTs:  135,
 				CRTs:     145,
 				RegionID: 3,
@@ -753,6 +888,118 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			c.Errorf("expected event %v not received", expectedEv)
 		}
 	}
+
+	cancel()
+}
+
+// TestStreamSendWithError mainly tests the scenario that the `Send` call of a gPRC
+// stream of kv client meets error, and kv client can clean up the broken stream,
+// establish a new one and recover the normal evend feed processing.
+func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+	defer wg.Wait()
+
+	server1Stopped := make(chan struct{})
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		defer func() {
+			close(ch1)
+			server1.Stop()
+			server1Stopped <- struct{}{}
+		}()
+		// Only receives the first request to simulate a following kv client
+		// stream.Send error.
+		_, err := server.Recv()
+		if err != nil {
+			log.Error("mock server error", zap.Error(err))
+		}
+	}
+
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID3 := uint64(3)
+	regionID4 := uint64(4)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
+	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
+
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	var requestIds sync.Map
+	<-server1Stopped
+	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv2 := newMockChangeDataService(c, ch2)
+	srv2.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				return
+			}
+			requestIds.Store(req.RegionId, req.RequestId)
+		}
+	}
+	// Reuse the same listen addresss as server 1
+	server2, _ := newMockServiceSpecificAddr(ctx, c, srv2, addr1, wg)
+	defer func() {
+		close(ch2)
+		server2.Stop()
+	}()
+
+	// The expected request ids are agnostic because the kv client could retry
+	// for more than one time, so we wait until the newly started server receives
+	// requests for both two regions.
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		_, ok1 := requestIds.Load(regionID3)
+		_, ok2 := requestIds.Load(regionID4)
+		if ok1 && ok2 {
+			return nil
+		}
+		return errors.New("waiting for kv client requests received by server")
+	})
+	c.Assert(err, check.IsNil)
+	reqID1, _ := requestIds.Load(regionID3)
+	reqID2, _ := requestIds.Load(regionID4)
+	initialized1 := mockInitializedEvent(regionID3, reqID1.(uint64))
+	initialized2 := mockInitializedEvent(regionID4, reqID2.(uint64))
+	ch2 <- initialized1
+	ch2 <- initialized2
+
+	// the event sequence is undeterministic
+	initRegions := make(map[uint64]struct{})
+	for i := 0; i < 2; i++ {
+		select {
+		case event := <-eventCh:
+			c.Assert(event.Resolved, check.NotNil)
+			initRegions[event.RegionID] = struct{}{}
+		case <-time.After(time.Second):
+			c.Errorf("expected events are not receive, received: %v", initRegions)
+		}
+	}
+	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
+	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
 	cancel()
 }
