@@ -10,8 +10,9 @@
 
 ## Architecture
 
-[The TiCDC architecture](https://docs.pingcap.com/tidb/stable/ticdc-overview#ticdc-architecture)
 <img src="docs/media/cdc_architecture.svg?sanitize=true" alt="architecture" width="600"/>
+
+See a detailed introduction to [the TiCDC architecture](https://docs.pingcap.com/tidb/stable/ticdc-overview#ticdc-architecture).
 
 ## Documentation
 
