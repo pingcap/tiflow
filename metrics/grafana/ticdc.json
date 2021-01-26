@@ -1108,6 +1108,7 @@
             {
               "expr": "max(ticdc_processor_table_resolved_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,table)",
               "format": "time_series",
+              "instant": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-{{table}}",
