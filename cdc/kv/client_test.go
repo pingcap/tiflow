@@ -1348,7 +1348,6 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 }
 
 func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.ChangeDataEvent) {
-	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -1410,11 +1409,11 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 	clientWg.Wait()
 
 	cancel()
-
 }
 
 // TestCommittedFallback tests kv client should panic when receiving a fallback committed event
 func (s *etcdSuite) TestCommittedFallback(c *check.C) {
+	defer testleak.AfterTest(c)()
 	events := []*cdcpb.ChangeDataEvent{
 		{Events: []*cdcpb.Event{
 			{
@@ -1433,12 +1432,14 @@ func (s *etcdSuite) TestCommittedFallback(c *check.C) {
 					},
 				},
 			},
-		}}}
+		}},
+	}
 	s.testEventCommitTsFallback(c, events)
 }
 
 // TestCommitFallback tests kv client should panic when receiving a fallback commit event
 func (s *etcdSuite) TestCommitFallback(c *check.C) {
+	defer testleak.AfterTest(c)()
 	events := []*cdcpb.ChangeDataEvent{
 		mockInitializedEvent(3, currentRequestID()),
 		{Events: []*cdcpb.Event{
@@ -1464,6 +1465,7 @@ func (s *etcdSuite) TestCommitFallback(c *check.C) {
 
 // TestDeuplicateRequest tests kv client should panic when meeting a duplicate error
 func (s *etcdSuite) TestDuplicateRequest(c *check.C) {
+	defer testleak.AfterTest(c)()
 	events := []*cdcpb.ChangeDataEvent{
 		{Events: []*cdcpb.Event{
 			{
