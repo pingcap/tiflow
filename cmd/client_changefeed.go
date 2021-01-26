@@ -239,6 +239,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			return nil, err
 		}
 	}
+
 	cfg := config.GetDefaultReplicaConfig()
 	if len(configFile) > 0 {
 		if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
