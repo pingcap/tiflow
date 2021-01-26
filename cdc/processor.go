@@ -282,15 +282,15 @@ func (p *processor) wait() {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "changefeedID: %s, info: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
+	fmt.Fprintf(w, "changefeedID:\n\t%s\ninfo:\n\t%s\nstatus:\n\t%+v\nposition:\n\t%s\n",
+		p.changefeedID, p.changefeed.String(), p.status, p.position.String())
 
+	fmt.Fprintf(w, "tables:\n")
 	p.stateMu.Lock()
 	for _, table := range p.tables {
 		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTs())
 	}
 	p.stateMu.Unlock()
-
-	fmt.Fprintf(w, "\n")
 }
 
 // localResolvedWorker do the flowing works.
