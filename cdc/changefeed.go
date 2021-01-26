@@ -79,6 +79,10 @@ type changeFeed struct {
 	id     string
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
+	// The latest checkpointTs already applied to Etcd.
+	// We need to check this field to ensure visibility to the processors,
+	// if the operation assumes the progress of the global checkpoint.
+	appliedCheckpointTs uint64
 
 	schema           *entry.SingleSchemaSnapshot
 	ddlState         model.ChangeFeedDDLState
@@ -289,6 +293,11 @@ func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID model.TableID)
 
 func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	if len(captures) == 0 {
+		return nil
+	}
+
+	// Do NOT rebalance orphan tables before checkpoint ts has advanced to FinishTs of a DDL
+	if c.appliedCheckpointTs != c.status.CheckpointTs {
 		return nil
 	}
 
@@ -532,9 +541,20 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			job.Status = model.MoveTableStatusDeleted
 			log.Info("handle the move job, remove table from the source capture", zap.Reflect("job", job))
 		case model.MoveTableStatusDeleted:
+			// Do NOT dispatch tables before checkpoint ts has been flushed to Etcd.
+			if c.appliedCheckpointTs != c.status.CheckpointTs {
+				log.Debug("handle the move job, waiting for checkpoint ts to be uploaded",
+					zap.Uint64("applied-checkpoint-ts", c.appliedCheckpointTs),
+					zap.Uint64("latest-checkpoint-ts", c.status.CheckpointTs))
+				continue
+			}
+
 			// add table to target capture
 			status, exist := cloneStatus(job.To)
 			replicaInfo := job.TableReplicaInfo.Clone()
+			if replicaInfo.StartTs < c.status.CheckpointTs {
+				replicaInfo.StartTs = c.status.CheckpointTs
+			}
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
 				c.orphanTables[tableID] = replicaInfo.StartTs
@@ -614,6 +634,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
+
 	if len(c.ddlJobHistory) == 0 {
 		log.Panic("ddl job history can not be empty in changefeed when should to execute DDL")
 	}
@@ -624,12 +645,19 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	if c.status.CheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
+	if c.appliedCheckpointTs < todoDDLJob.BinlogInfo.FinishedTS-1 {
 		log.Debug("wait checkpoint ts",
 			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
 			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
 			zap.String("ddl query", todoDDLJob.Query))
 		return nil
+	}
+
+	if c.appliedCheckpointTs >= todoDDLJob.BinlogInfo.FinishedTS {
+		log.Panic("applied checkpoint ts is larger than DDL finish ts",
+			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
+			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))
 	}
 
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
@@ -669,10 +697,6 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	err = c.balanceOrphanTables(ctx, captures)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
 		failpoint.Inject("InjectChangefeedDDLError", func() {
@@ -865,6 +889,10 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
 		c.ddlTs = minResolvedTs
+	}
+
+	if len(c.ddlJobHistory) > 0 && minCheckpointTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
+		minCheckpointTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS - 1
 	}
 
 	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs

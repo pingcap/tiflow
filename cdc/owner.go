@@ -132,6 +132,10 @@ func NewOwner(
 	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
 	endpoints := sess.Client().Endpoints()
 
+	failpoint.Inject("ownerFlushIntervalInject", func(val failpoint.Value) {
+		flushChangefeedInterval = time.Millisecond * time.Duration(val.(int))
+	})
+
 	owner := &Owner{
 		done:                    make(chan struct{}),
 		session:                 sess,
@@ -187,8 +191,15 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 			startTs = feed.status.CheckpointTs
 		}
 
-		for tableID := range task.Tables {
+		for tableID, replicaInfo := range task.Tables {
 			feed.orphanTables[tableID] = startTs
+			if startTs < replicaInfo.StartTs {
+				log.Warn("table startTs not consistent",
+					zap.Uint64("table-start-ts", replicaInfo.StartTs),
+					zap.Uint64("checkpoint-ts", startTs),
+					zap.Reflect("status", feed.status))
+				feed.orphanTables[tableID] = replicaInfo.StartTs
+			}
 		}
 
 		ctx := context.TODO()
@@ -415,23 +426,24 @@ func (o *Owner) newChangeFeed(
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
-		scheduler:         scheduler.NewScheduler(info.Config.Scheduler.Tp),
-		ddlState:          model.ChangeFeedSyncDML,
-		ddlExecutedTs:     checkpointTs,
-		targetTs:          info.GetTargetTs(),
-		ddlTs:             0,
-		updateResolvedTs:  true,
-		startTimer:        make(chan bool),
-		syncpointStore:    syncpointStore,
-		syncCancel:        nil,
-		taskStatus:        processorsInfos,
-		taskPositions:     taskPositions,
-		etcdCli:           o.etcdClient,
-		filter:            filter,
-		sink:              primarySink,
-		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
-		lastRebalanceTime: time.Now(),
-		cancel:            cancel,
+		appliedCheckpointTs: checkpointTs,
+		scheduler:           scheduler.NewScheduler(info.Config.Scheduler.Tp),
+		ddlState:            model.ChangeFeedSyncDML,
+		ddlExecutedTs:       checkpointTs,
+		targetTs:            info.GetTargetTs(),
+		ddlTs:               0,
+		updateResolvedTs:    true,
+		startTimer:          make(chan bool),
+		syncpointStore:      syncpointStore,
+		syncCancel:          nil,
+		taskStatus:          processorsInfos,
+		taskPositions:       taskPositions,
+		etcdCli:             o.etcdClient,
+		filter:              filter,
+		sink:                primarySink,
+		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
+		lastRebalanceTime:   time.Now(),
+		cancel:              cancel,
 	}
 	return cf, nil
 }
@@ -675,8 +687,8 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 		for id, changefeed := range o.changeFeeds {
 			snapshot[id] = changefeed.status
-			if changefeed.status.CheckpointTs < minCheckpointTs {
-				minCheckpointTs = changefeed.status.CheckpointTs
+			if changefeed.appliedCheckpointTs < minCheckpointTs {
+				minCheckpointTs = changefeed.appliedCheckpointTs
 			}
 
 			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
@@ -689,6 +701,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			for id, changefeedStatus := range snapshot {
+				o.changeFeeds[id].appliedCheckpointTs = changefeedStatus.CheckpointTs
 			}
 			o.lastFlushChangefeeds = time.Now()
 		}
@@ -1190,11 +1205,6 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	err = o.calcResolvedTs(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	err = o.handleDDL(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -1210,6 +1220,13 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	err = o.calcResolvedTs(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// It is better for flushChangeFeedInfos to follow calcResolvedTs immediately,
+	// because operations such as handleDDL and rebalancing rely on proper progress of the checkpoint in Etcd.
 	err = o.flushChangeFeedInfos(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -1318,7 +1335,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 					for tableID, replicaInfo := range status.Tables {
 						startTs := replicaInfo.StartTs
 						if taskPosFound {
-							startTs = pos.CheckPointTs
+							if startTs < pos.CheckPointTs {
+								startTs = pos.CheckPointTs
+							}
 						}
 						o.addOrphanTable(changeFeedID, tableID, startTs)
 					}
