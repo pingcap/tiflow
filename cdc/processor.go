@@ -1081,7 +1081,7 @@ func (p *processor) sorterConsume(
 			} else {
 				minTs = globalResolvedTs
 			}
-			if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
+			if minTs == 0 {
 				continue
 			}
 
