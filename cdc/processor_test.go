@@ -13,6 +13,40 @@
 
 package cdc
 
+import (
+	"bytes"
+
+	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+)
+
+type processorSuite struct{}
+
+var _ = check.Suite(&processorSuite{})
+
+func (s *processorSuite) TestWriteDebugInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	p := &processor{
+		changefeedID: "test",
+		changefeed: model.ChangeFeedInfo{
+			SinkURI: "blackhole://",
+			Config:  config.GetDefaultReplicaConfig(),
+		},
+		tables: map[int64]*tableInfo{
+			1: {
+				id:         47,
+				name:       "test.t1",
+				resolvedTs: 100,
+			},
+		},
+	}
+	var buf bytes.Buffer
+	p.writeDebugInfo(&buf)
+	c.Assert(buf.String(), check.Matches, `changefeedID[\s\S]*info[\s\S]*tables[\s\S]*`)
+}
+
 /*
 import (
 	"context"
