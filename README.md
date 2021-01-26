@@ -20,7 +20,7 @@
 
 ## Blog
 
-- [English](https://www.pingcap.com/blog/)
+- [English](https://pingcap.com/blog/)
 - [Chinese](https://pingcap.com/blog-cn/)
 
 ## TiDB Monthly
