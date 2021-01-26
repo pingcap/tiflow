@@ -19,11 +19,11 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type MatcherSuite struct{}
+type matcherSuite struct{}
 
-var _ = check.Suite(&MatcherSuite{})
+var _ = check.Suite(&matcherSuite{})
 
-func (s *MatcherSuite) TestMatcher(c *check.C) {
+func (s *matcherSuite) TestMatchRow(c *check.C) {
 	defer testleak.AfterTest(c)()
 	matcher := newMatcher()
 	matcher.putPrewriteRow(&cdcpb.Event_Row{
@@ -32,10 +32,13 @@ func (s *MatcherSuite) TestMatcher(c *check.C) {
 		Value:   []byte("v1"),
 	})
 	matcher.putPrewriteRow(&cdcpb.Event_Row{
-		StartTs: 2,
-		Key:     []byte("k1"),
-		Value:   []byte("v2"),
+		StartTs:  2,
+		Key:      []byte("k1"),
+		Value:    []byte("v2"),
+		OldValue: []byte("v3"),
 	})
+
+	// test rollback
 	matcher.rollbackRow(&cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
@@ -44,13 +47,129 @@ func (s *MatcherSuite) TestMatcher(c *check.C) {
 		StartTs: 1,
 		Key:     []byte("k1"),
 	}
-	_, ok := matcher.matchRow(commitRow1)
+	ok := matcher.matchRow(commitRow1)
 	c.Assert(ok, check.IsFalse)
-	commitRow2 := &cdcpb.Event_Row{
-		StartTs: 2,
+	c.Assert(commitRow1, check.DeepEquals, &cdcpb.Event_Row{
+		StartTs: 1,
 		Key:     []byte("k1"),
+	})
+
+	// test match commit
+	commitRow2 := &cdcpb.Event_Row{
+		StartTs:  2,
+		CommitTs: 3,
+		Key:      []byte("k1"),
 	}
-	value2, ok := matcher.matchRow(commitRow2)
+	ok = matcher.matchRow(commitRow2)
 	c.Assert(ok, check.IsTrue)
-	c.Assert(value2.value, check.BytesEquals, []byte("v2"))
+	c.Assert(commitRow2, check.DeepEquals, &cdcpb.Event_Row{
+		StartTs:  2,
+		CommitTs: 3,
+		Key:      []byte("k1"),
+		Value:    []byte("v2"),
+		OldValue: []byte("v3"),
+	})
+}
+
+func (s *matcherSuite) TestMatchFakePrewrite(c *check.C) {
+	defer testleak.AfterTest(c)()
+	matcher := newMatcher()
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		Key:      []byte("k1"),
+		Value:    []byte("v1"),
+		OldValue: []byte("v3"),
+	})
+	// fake prewrite
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		Key:      []byte("k1"),
+		OldValue: []byte("v4"),
+	})
+
+	commitRow1 := &cdcpb.Event_Row{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+	}
+	ok := matcher.matchRow(commitRow1)
+	c.Assert(commitRow1, check.DeepEquals, &cdcpb.Event_Row{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+		Value:    []byte("v1"),
+		OldValue: []byte("v3"),
+	})
+	c.Assert(ok, check.IsTrue)
+}
+
+func (s *matcherSuite) TestMatchMatchCachedRow(c *check.C) {
+	defer testleak.AfterTest(c)()
+	matcher := newMatcher()
+	c.Assert(len(matcher.matchCachedRow()), check.Equals, 0)
+	matcher.cacheCommitRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+	})
+	matcher.cacheCommitRow(&cdcpb.Event_Row{
+		StartTs:  3,
+		CommitTs: 4,
+		Key:      []byte("k2"),
+	})
+	matcher.cacheCommitRow(&cdcpb.Event_Row{
+		StartTs:  4,
+		CommitTs: 5,
+		Key:      []byte("k3"),
+	})
+	c.Assert(len(matcher.matchCachedRow()), check.Equals, 0)
+
+	matcher.cacheCommitRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+	})
+	matcher.cacheCommitRow(&cdcpb.Event_Row{
+		StartTs:  3,
+		CommitTs: 4,
+		Key:      []byte("k2"),
+	})
+	matcher.cacheCommitRow(&cdcpb.Event_Row{
+		StartTs:  4,
+		CommitTs: 5,
+		Key:      []byte("k3"),
+	})
+
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		Key:      []byte("k1"),
+		Value:    []byte("v1"),
+		OldValue: []byte("ov1"),
+	})
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  3,
+		Key:      []byte("k2"),
+		Value:    []byte("v2"),
+		OldValue: []byte("ov2"),
+	})
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  4,
+		Key:      []byte("k2"),
+		Value:    []byte("v3"),
+		OldValue: []byte("ov3"),
+	})
+
+	c.Assert(matcher.matchCachedRow(), check.DeepEquals, []*cdcpb.Event_Row{{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+		Value:    []byte("v1"),
+		OldValue: []byte("ov1"),
+	}, {
+		StartTs:  3,
+		CommitTs: 4,
+		Key:      []byte("k2"),
+		Value:    []byte("v2"),
+		OldValue: []byte("ov2"),
+	}})
 }
