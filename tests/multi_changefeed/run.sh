@@ -11,14 +11,15 @@ SINK_TYPE=$1
 MAX_RETRIES=10
 
 function check_old_value_enabled() {
-    echo "check_old_value_enabled $1"
+    old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep  'pre\-columns\\\":null' | wc -l || true)
     row_logs=$(grep "EmitRowChangedEvents" "$1/cdc.log" || true)
     echo $row_logs
-    exit 1
-#    if [[ ! "$count" -eq "$expected" ]]; then
-#        echo "count: $count expected: $expected"
-#        exit 1
-#    fi
+    # 3 rows include `pre-column` is expected, one for a delete event in the disable-old-value changefeed
+    # two for a delete event and a update event in the enable-old-value changefeed
+    if [[ ! "$old_value_count" -eq 3 ]]; then
+       echo "count: $old_value_count expected: 3"
+       exit 1
+    fi
 }
 
 
