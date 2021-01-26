@@ -46,7 +46,7 @@ You can setup a CDC cluster for replication test manually as following:
 
 1. Setup a TiDB cluster.
 2. Start a CDC cluster, which contains one or more CDC servers. The command to start on CDC server is `cdc server --pd http://10.0.10.25:2379`, where `http://10.0.10.25:2379` is the client-url of pd-server.
-3. Start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The tso is TiDB `timestamp oracle`, if it is not provided or set to zero, the tso of start time will be used. Currently we support MySQL protocol compatible database as downstream sink only, we will add more sink type in the future.
+3. Start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The TSO is TiDB `timestamp oracle`. If it is not provided or set to zero, the TSO of start time will be used. Currently, we support MySQL protocol-compatible databases as downstream sink only, and will add more sink type in the future.
 
 For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticdc).
 
