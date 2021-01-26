@@ -1201,6 +1201,8 @@ func runProcessor(
 
 	go func() {
 		err := <-errCh
+		cancel()
+		processor.wait()
 		cause := errors.Cause(err)
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
@@ -1221,17 +1223,18 @@ func runProcessor(
 				Code:    code,
 				Message: err.Error(),
 			}
-			_, err = processor.etcdCli.PutTaskPositionOnChange(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
+			timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_, err = processor.etcdCli.PutTaskPositionOnChange(timeoutCtx, processor.changefeedID, processor.captureInfo.ID, processor.position)
 			if err != nil {
 				log.Warn("upload processor error failed", util.ZapFieldChangefeed(ctx), zap.Error(err))
 			}
+			timeoutCancel()
 		} else {
 			log.Info("processor exited",
 				util.ZapFieldCapture(ctx),
 				zap.String("changefeed", changefeedID),
 				zap.String("processor", processor.id))
 		}
-		cancel()
 	}()
 
 	return processor, nil
