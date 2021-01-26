@@ -63,6 +63,123 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		regionID       uint64
+		entry          *cdcpb.Event_Row
+		enableOldValue bool
+		expected       *model.RegionFeedEvent
+		err            string
+	}{{
+		regionID: 1,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k1"),
+			Value:    []byte("v1"),
+			OpType:   cdcpb.Event_Row_PUT,
+		},
+		enableOldValue: false,
+		expected: &model.RegionFeedEvent{
+			RegionID: 1,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k1"),
+				Value:    []byte("v1"),
+				RegionID: 1,
+			},
+		},
+	}, {
+		regionID: 2,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k2"),
+			Value:    []byte("v2"),
+			OpType:   cdcpb.Event_Row_DELETE,
+		},
+		enableOldValue: false,
+		expected: &model.RegionFeedEvent{
+			RegionID: 2,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypeDelete,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k2"),
+				Value:    []byte("v2"),
+				RegionID: 2,
+			},
+		},
+	}, {
+		regionID: 3,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k2"),
+			Value:    []byte("v2"),
+			OldValue: []byte("ov2"),
+			OpType:   cdcpb.Event_Row_PUT,
+		},
+		enableOldValue: false,
+		expected: &model.RegionFeedEvent{
+			RegionID: 3,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k2"),
+				Value:    []byte("v2"),
+				RegionID: 3,
+			},
+		},
+	}, {
+		regionID: 4,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k3"),
+			Value:    []byte("v3"),
+			OldValue: []byte("ov3"),
+			OpType:   cdcpb.Event_Row_PUT,
+		},
+		enableOldValue: true,
+		expected: &model.RegionFeedEvent{
+			RegionID: 4,
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				StartTs:  1,
+				CRTs:     2,
+				Key:      []byte("k3"),
+				Value:    []byte("v3"),
+				OldValue: []byte("ov3"),
+				RegionID: 4,
+			},
+		},
+	}, {
+		regionID: 2,
+		entry: &cdcpb.Event_Row{
+			StartTs:  1,
+			CommitTs: 2,
+			Key:      []byte("k2"),
+			Value:    []byte("v2"),
+			OpType:   cdcpb.Event_Row_UNKNOWN,
+		},
+		enableOldValue: false,
+		err:            "[CDC:ErrUnknownKVEventType]unknown kv event type: UNKNOWN, entry: start_ts:1 commit_ts:2 key:\"k2\" value:\"v2\" ",
+	}}
+
+	for _, tc := range testCases {
+		event, err := assembleRowEvent(tc.regionID, tc.entry, tc.enableOldValue)
+		c.Assert(event, check.DeepEquals, tc.expected)
+		if err != nil {
+			c.Assert(err.Error(), check.Equals, tc.err)
+		}
+	}
+}
+
 func mockInitializedEvent(regionID, requestID uint64) *cdcpb.ChangeDataEvent {
 	initialized := &cdcpb.ChangeDataEvent{
 		Events: []*cdcpb.Event{
@@ -503,6 +620,68 @@ consumePreResolvedTs:
 	c.Assert(event.Resolved, check.NotNil)
 	c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(120))
 
+	cancel()
+}
+
+// TestCompatibilityWithSameConn tests kv client returns an error when TiKV returns
+// the Compatibility error. This error only happens when the same connection to
+// TiKV have different versions.
+func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
+
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	var wg2 sync.WaitGroup
+	wg2.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
+		cdcClient.Close() //nolint:errcheck
+		wg2.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	incompatibility := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Error{
+				Error: &cdcpb.Error{
+					Compatibility: &cdcpb.Compatibility{
+						RequiredVersion: "v4.0.7",
+					},
+				},
+			},
+		},
+	}}
+	ch1 <- incompatibility
+	wg2.Wait()
 	cancel()
 }
 
