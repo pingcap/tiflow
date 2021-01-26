@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -532,7 +533,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return ctx.Err()
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
-				err := s.handleError(ctx, errInfo, true)
+				err := s.handleError(ctx, errInfo)
 				if err != nil {
 					return err
 				}
@@ -548,33 +549,18 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 // scheduleDivideRegionAndRequest schedules a range to be divided by regions, and these regions will be then scheduled
 // to send ChangeData requests.
-func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span regionspan.ComparableSpan, ts uint64, blocking bool) {
+func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span regionspan.ComparableSpan, ts uint64) {
 	task := rangeRequestTask{span: span, ts: ts}
-	if blocking {
-		select {
-		case s.requestRangeCh <- task:
-			s.rangeChSizeGauge.Inc()
-		case <-ctx.Done():
-		}
-	} else {
-		// Try to send without blocking. If channel is full, spawn a goroutine to do the blocking sending.
-		select {
-		case s.requestRangeCh <- task:
-			s.rangeChSizeGauge.Inc()
-		default:
-			go func() {
-				select {
-				case s.requestRangeCh <- task:
-					s.rangeChSizeGauge.Inc()
-				case <-ctx.Done():
-				}
-			}()
-		}
+	select {
+	case s.requestRangeCh <- task:
+		s.rangeChSizeGauge.Inc()
+	case <-ctx.Done():
 	}
 }
 
 // scheduleRegionRequest locks the region's range and schedules sending ChangeData request to the region.
-func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo, blocking bool) {
+// This function is blocking until the region range is locked successfully
+func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo) {
 	handleResult := func(res regionspan.LockRangeResult) {
 		switch res.Status {
 		case regionspan.LockRangeStatusSuccess:
@@ -591,9 +577,9 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				zap.Stringer("span", sri.span),
 				zap.Reflect("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
-				// This call can be always blocking because if `blocking` is set to false, this will in a new goroutine,
-				// so it won't block the caller of `schedulerRegionRequest`.
-				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts, true)
+				// This call is always blocking, otherwise if scheduling in a new
+				// goroutine, it won't block the caller of `schedulerRegionRequest`.
+				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts)
 			}
 		default:
 			panic("unreachable")
@@ -603,46 +589,29 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
 	if res.Status == regionspan.LockRangeStatusWait {
-		if blocking {
-			res = res.WaitFn()
-		} else {
-			go func() {
-				res := res.WaitFn()
-				handleResult(res)
-			}()
-			return
-		}
+		res = res.WaitFn()
 	}
 
 	handleResult(res)
 }
 
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
-// error handling.
+// error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, blocking bool) error {
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
-	if blocking {
-		select {
-		case s.errCh <- errorInfo:
-			s.errChSizeGauge.Inc()
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	} else {
-		select {
-		case s.errCh <- errorInfo:
-			s.errChSizeGauge.Inc()
-		default:
-			go func() {
-				select {
-				case s.errCh <- errorInfo:
-					s.errChSizeGauge.Inc()
-				case <-ctx.Done():
-				}
-			}()
-		}
+	select {
+	case s.errCh <- errorInfo:
+		s.errChSizeGauge.Inc()
+	default:
+		go func() {
+			select {
+			case s.errCh <- errorInfo:
+				s.errChSizeGauge.Inc()
+			case <-ctx.Done():
+			}
+		}()
 	}
 	return nil
 }
@@ -694,7 +663,7 @@ MainLoop:
 					err: &rpcCtxUnavailableErr{
 						verID: sri.verID,
 					},
-				}, false)
+				})
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -760,7 +729,11 @@ MainLoop:
 						zap.String("error", err.Error()))
 					if cerror.ErrVersionIncompatible.Equal(err) {
 						// It often occurs on rolling update. Sleep 20s to reduce logs.
-						time.Sleep(20 * time.Second)
+						delay := 20 * time.Second
+						failpoint.Inject("kvClientDelayWhenIncompatible", func() {
+							delay = 100 * time.Millisecond
+						})
+						time.Sleep(delay)
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
@@ -910,7 +883,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, false)
+	})
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -976,7 +949,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			nextSpan.Start = region.EndKey
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
-			s.scheduleRegionRequest(ctx, sri, true)
+			s.scheduleRegionRequest(ctx, sri)
 			log.Debug("partialSpan scheduled", zap.Stringer("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			// return if no more regions
@@ -988,10 +961,10 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 }
 
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
-// info will be sent to `regionCh`.
+// info will be sent to `regionCh`. Note if region channel is full, this function will be blocked.
 // CAUTION: Note that this should only be invoked in a context that the region is not locked, otherwise use onRegionFail
 // instead.
-func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo, blocking bool) error {
+func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo) error {
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
@@ -1003,11 +976,11 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
 			return nil
 		} else if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
@@ -1025,7 +998,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
-		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
 		return nil
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -1034,7 +1007,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	}
 
-	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo, blocking)
+	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 	return nil
 }
 
@@ -1067,7 +1040,7 @@ func (s *eventFeedSession) receiveFromStream(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			}, false)
+			})
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
@@ -1387,19 +1360,9 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 						metricPullEventInitializedCounter.Inc()
 						initialized = true
-						for _, cacheEntry := range matcher.cachedCommit {
-							value, ok := matcher.matchRow(cacheEntry)
-							if !ok {
-								// when cdc receives a commit log without a corresponding
-								// prewrite log before initialized, a committed log  with
-								// the same key and start-ts must have been received.
-								log.Info("ignore commit event without prewrite",
-									zap.Binary("key", cacheEntry.GetKey()),
-									zap.Uint64("ts", cacheEntry.GetStartTs()))
-								continue
-							}
-
-							revent, err := assembleCommitEvent(regionID, cacheEntry, value)
+						cachedEvents := matcher.matchCachedRow()
+						for _, cachedEvent := range cachedEvents {
+							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
 								return lastResolvedTs, errors.Trace(err)
 							}
@@ -1410,30 +1373,11 @@ func (s *eventFeedSession) singleEventFeed(
 								return lastResolvedTs, errors.Trace(ctx.Err())
 							}
 						}
-						matcher.clearCacheCommit()
 					case cdcpb.Event_COMMITTED:
 						metricPullEventCommittedCounter.Inc()
-						var opType model.OpType
-						switch entry.GetOpType() {
-						case cdcpb.Event_Row_DELETE:
-							opType = model.OpTypeDelete
-						case cdcpb.Event_Row_PUT:
-							opType = model.OpTypePut
-						default:
-							return lastResolvedTs, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
-						}
-
-						revent := &model.RegionFeedEvent{
-							RegionID: regionID,
-							Val: &model.RawKVEntry{
-								OpType:   opType,
-								Key:      entry.Key,
-								Value:    entry.GetValue(),
-								OldValue: entry.GetOldValue(),
-								StartTs:  entry.StartTs,
-								CRTs:     entry.CommitTs,
-								RegionID: regionID,
-							},
+						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						if err != nil {
+							return lastResolvedTs, errors.Trace(err)
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
@@ -1461,8 +1405,7 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
 						}
-						// emit a value
-						value, ok := matcher.matchRow(entry)
+						ok := matcher.matchRow(entry)
 						if !ok {
 							if !initialized {
 								matcher.cacheCommitRow(entry)
@@ -1471,7 +1414,7 @@ func (s *eventFeedSession) singleEventFeed(
 							return lastResolvedTs, cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
 						}
 
-						revent, err := assembleCommitEvent(regionID, entry, value)
+						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
 							return lastResolvedTs, errors.Trace(err)
 						}
@@ -1506,7 +1449,7 @@ func (s *eventFeedSession) singleEventFeed(
 	}
 }
 
-func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
+func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (*model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1522,12 +1465,17 @@ func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pending
 		Val: &model.RawKVEntry{
 			OpType:   opType,
 			Key:      entry.Key,
-			Value:    value.value,
-			OldValue: value.oldValue,
+			Value:    entry.GetValue(),
 			StartTs:  entry.StartTs,
 			CRTs:     entry.CommitTs,
 			RegionID: regionID,
 		},
+	}
+
+	// when old-value is disabled, it is still possible for the tikv to send a event containing the old value
+	// we need avoid a old-value sent to downstream when old-value is disabled
+	if enableOldValue {
+		revent.Val.OldValue = entry.GetOldValue()
 	}
 	return revent, nil
 }

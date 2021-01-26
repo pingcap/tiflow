@@ -59,7 +59,7 @@ func NewJSONReactorState(key string, data interface{}) (*JSONReactorState, error
 }
 
 // Update implements the ReactorState interface.
-func (s *JSONReactorState) Update(key util.EtcdKey, value []byte) error {
+func (s *JSONReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	if key != s.key {
 		return nil
 	}

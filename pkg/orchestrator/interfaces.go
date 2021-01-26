@@ -38,7 +38,7 @@ type DataPatch struct {
 // ReactorState models the Etcd state of a reactor
 type ReactorState interface {
 	// Update is called by EtcdWorker to notify the Reactor of a latest change to the Etcd state.
-	Update(key util.EtcdKey, value []byte) error
+	Update(key util.EtcdKey, value []byte, isInit bool) error
 
 	// GetPatches is called by EtcdWorker, and should return a slice of data patches that represents the changes
 	// that a Reactor wants to apply to Etcd.
