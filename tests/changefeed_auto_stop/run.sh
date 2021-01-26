@@ -20,7 +20,7 @@ function check_changefeed_is_stopped() {
         exit 1
     fi
     changefeed_info=$(ETCDCTL_API=3 etcdctl --endpoints=$endpoints get /tidb/cdc/changefeed/info/${changefeedid}|tail -n 1)
-    if [[ ! $changefeed_info == *"message\":\"processor sync resolvd injected error"* ]]; then
+    if [[ ! $changefeed_info == *"message\":\"processor sync resolved injected error"* ]]; then
         echo "changefeed is not marked as failed: $changefeed_info"
         exit 1
     fi
