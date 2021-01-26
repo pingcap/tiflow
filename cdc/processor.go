@@ -1176,41 +1176,17 @@ func runProcessor(
 	processor.Run(ctx)
 
 	go func() {
-		var errs []error
-		appendError := func(err error) {
-			log.Debug("processor received error", zap.Error(err))
-			cause := errors.Cause(err)
-			if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
-				errs = append(errs, err)
-			}
-		}
 		err := <-errCh
-<<<<<<< HEAD
-		appendError(err)
-		// sleep 500ms to wait all the errors are sent to errCh
-		time.Sleep(500 * time.Millisecond)
-	ReceiveErr:
-		for {
-			select {
-			case err := <-errCh:
-				appendError(err)
-			default:
-				break ReceiveErr
-			}
-		}
-		if len(errs) > 0 {
-=======
 		cancel()
 		processor.wait()
 		cause := errors.Cause(err)
 		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
->>>>>>> 0f5ff20... processor: fix race when exit the processor (#1335)
 			log.Error("error on running processor",
 				util.ZapFieldCapture(ctx),
 				zap.String("changefeed", changefeedID),
 				zap.String("processor", processor.id),
-				zap.Errors("errors", errs))
+				zap.Error(err))
 			// record error information in etcd
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
