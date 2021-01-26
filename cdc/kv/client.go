@@ -1295,6 +1295,11 @@ func (s *eventFeedSession) singleEventFeed(
 	case <-ctx.Done():
 		return lastResolvedTs, errors.Trace(ctx.Err())
 	}
+	resolveLockInterval := 20 * time.Second
+	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
+		resolveLockInterval = time.Duration(val.(int)) * time.Second
+	})
+
 	for {
 		var event *regionEvent
 		var ok bool
@@ -1302,7 +1307,7 @@ func (s *eventFeedSession) singleEventFeed(
 		case <-ctx.Done():
 			return lastResolvedTs, ctx.Err()
 		case <-advanceCheckTicker.C:
-			if time.Since(startFeedTime) < 20*time.Second {
+			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
 			}
 			if !s.isPullerInit.IsInitialized() {
@@ -1310,7 +1315,7 @@ func (s *eventFeedSession) singleEventFeed(
 				continue
 			}
 			sinceLastEvent := time.Since(lastReceivedEventTime)
-			if sinceLastEvent > time.Second*20 {
+			if sinceLastEvent > resolveLockInterval {
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
@@ -1321,7 +1326,7 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
-			if sinceLastResolvedTs > time.Second*20 && initialized {
+			if sinceLastResolvedTs > resolveLockInterval && initialized {
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),
