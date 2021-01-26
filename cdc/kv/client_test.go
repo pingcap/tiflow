@@ -512,6 +512,70 @@ consumePreResolvedTs:
 	cancel()
 }
 
+// TestCompatibilityWithSameConn tests kv client returns an error when TiKV returns
+// the Compatibility error. This error only happens when the same connection to
+// TiKV have different versions.
+func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
+
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	var wg2 sync.WaitGroup
+	wg2.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
+		cdcClient.Close() //nolint:errcheck
+		wg2.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	incompatibility := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Error{
+				Error: &cdcpb.Error{
+					Compatibility: &cdcpb.Compatibility{
+						RequiredVersion: "v4.0.7",
+					},
+				},
+			},
+		},
+	}}
+	ch1 <- incompatibility
+	wg2.Wait()
+	cancel()
+}
+
 func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
