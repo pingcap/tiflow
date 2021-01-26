@@ -1062,6 +1062,7 @@ func (p *processor) sorterConsume(
 		case <-globalResolvedTsReceiver.C:
 			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+			log.Debug("global resolved ts received", zap.Uint64("globalResolvedTs", globalResolvedTs))
 			var minTs uint64
 			if localResolvedTs < globalResolvedTs {
 				minTs = localResolvedTs
