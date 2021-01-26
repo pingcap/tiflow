@@ -376,6 +376,8 @@ func NewLocalFileSink(ctx context.Context, sinkURI *url.URL, errCh chan error) (
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
