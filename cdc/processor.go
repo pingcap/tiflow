@@ -1042,6 +1042,7 @@ func (p *processor) sorterConsume(
 				}
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
+				log.Debug("Set table resolved ts", zap.Int64("table-id", tableID), zap.Uint64("tableResolvedTs", lastResolvedTs))
 				p.localResolvedNotifier.Notify()
 				resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 				if !opDone {
