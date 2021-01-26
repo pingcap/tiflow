@@ -11,8 +11,8 @@ SINK_TYPE=$1
 MAX_RETRIES=10
 
 function check_old_value_enabled() {
-    echo "check_old_value_enabled $WORK_DIR"
-    row_logs=$(grep "EmitRowChangedEvents" "$WORK_DIR/cdc.log" || true)
+    echo "check_old_value_enabled $1"
+    row_logs=$(grep "EmitRowChangedEvents" "$1/cdc.log" || true)
     echo $row_logs
     exit 1
 #    if [[ ! "$count" -eq "$expected" ]]; then
@@ -47,7 +47,7 @@ function run() {
     run_sql "UPDATE multi_changefeed.t1 SET val = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "DELETE FROM multi_changefeed.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-    ensure $MAX_RETRIES check_old_value_enabled
+    ensure $MAX_RETRIES check_old_value_enabled $WORK_DIR
     cleanup_process $CDC_BINARY
 }
 
