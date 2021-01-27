@@ -1061,7 +1061,9 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientStreamRecvError", func() { err = errors.New("injected stream recv error") })
+		failpoint.Inject("kvClientStreamRecvError", func() {
+			err = errors.New("injected stream recv error")
+		})
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
 			for _, state := range regionStates {
