@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -1557,25 +1558,21 @@ func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
 			Ts:      120,
 		},
 	}
+	// clone to avoid data race, these are exactly the same events
+	committedClone := proto.Clone(committed).(*cdcpb.ChangeDataEvent)
+	initializedClone := proto.Clone(initialized).(*cdcpb.ChangeDataEvent)
+	resolvedClone := proto.Clone(resolved).(*cdcpb.ChangeDataEvent)
 	ch1 <- committed
 	ch1 <- initialized
 	ch1 <- resolved
-
-	err = retry.Run(time.Millisecond*200, 10, func() error {
-		if len(ch1) == 0 {
-			return nil
-		}
-		return errors.New("some events are not sent by mock server")
-	})
-	c.Assert(err, check.IsNil)
 
 	// wait request id allocated with: new session, 2 * new request
 	waitRequestID(c, baseAllocatedID+2)
-	committed.Events[0].RequestId = currentRequestID()
-	initialized.Events[0].RequestId = currentRequestID()
-	ch1 <- committed
-	ch1 <- initialized
-	ch1 <- resolved
+	committedClone.Events[0].RequestId = currentRequestID()
+	initializedClone.Events[0].RequestId = currentRequestID()
+	ch1 <- committedClone
+	ch1 <- initializedClone
+	ch1 <- resolvedClone
 
 	expected := []*model.RegionFeedEvent{
 		{
