@@ -254,6 +254,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						zap.Strings("spans", spans),
 						zap.Uint64("resolvedTs", resolvedTs))
 				}
+				if !initialized && time.Since(start) > 10*time.Second {
+					log.Warn("puller is taking too long to initialize",
+						zap.Duration("duration", time.Since(start)),
+						zap.Int64("tableID", tableID))
+				}
 				if !initialized || resolvedTs == lastResolvedTs {
 					continue
 				}
