@@ -1561,6 +1561,14 @@ func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
 	ch1 <- initialized
 	ch1 <- resolved
 
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		if len(ch1) == 0 {
+			return nil
+		}
+		return errors.New("some events are not sent by mock server")
+	})
+	c.Assert(err, check.IsNil)
+
 	// wait request id allocated with: new session, 2 * new request
 	waitRequestID(c, baseAllocatedID+2)
 	committed.Events[0].RequestId = currentRequestID()
