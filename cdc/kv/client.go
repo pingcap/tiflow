@@ -1360,19 +1360,9 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 						metricPullEventInitializedCounter.Inc()
 						initialized = true
-						for _, cacheEntry := range matcher.cachedCommit {
-							value, ok := matcher.matchRow(cacheEntry)
-							if !ok {
-								// when cdc receives a commit log without a corresponding
-								// prewrite log before initialized, a committed log  with
-								// the same key and start-ts must have been received.
-								log.Info("ignore commit event without prewrite",
-									zap.Binary("key", cacheEntry.GetKey()),
-									zap.Uint64("ts", cacheEntry.GetStartTs()))
-								continue
-							}
-
-							revent, err := assembleCommitEvent(regionID, cacheEntry, value)
+						cachedEvents := matcher.matchCachedRow()
+						for _, cachedEvent := range cachedEvents {
+							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
 								return lastResolvedTs, errors.Trace(err)
 							}
@@ -1383,30 +1373,11 @@ func (s *eventFeedSession) singleEventFeed(
 								return lastResolvedTs, errors.Trace(ctx.Err())
 							}
 						}
-						matcher.clearCacheCommit()
 					case cdcpb.Event_COMMITTED:
 						metricPullEventCommittedCounter.Inc()
-						var opType model.OpType
-						switch entry.GetOpType() {
-						case cdcpb.Event_Row_DELETE:
-							opType = model.OpTypeDelete
-						case cdcpb.Event_Row_PUT:
-							opType = model.OpTypePut
-						default:
-							return lastResolvedTs, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
-						}
-
-						revent := &model.RegionFeedEvent{
-							RegionID: regionID,
-							Val: &model.RawKVEntry{
-								OpType:   opType,
-								Key:      entry.Key,
-								Value:    entry.GetValue(),
-								OldValue: entry.GetOldValue(),
-								StartTs:  entry.StartTs,
-								CRTs:     entry.CommitTs,
-								RegionID: regionID,
-							},
+						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						if err != nil {
+							return lastResolvedTs, errors.Trace(err)
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
@@ -1434,8 +1405,7 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
 						}
-						// emit a value
-						value, ok := matcher.matchRow(entry)
+						ok := matcher.matchRow(entry)
 						if !ok {
 							if !initialized {
 								matcher.cacheCommitRow(entry)
@@ -1444,7 +1414,7 @@ func (s *eventFeedSession) singleEventFeed(
 							return lastResolvedTs, cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
 						}
 
-						revent, err := assembleCommitEvent(regionID, entry, value)
+						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
 							return lastResolvedTs, errors.Trace(err)
 						}
@@ -1479,7 +1449,7 @@ func (s *eventFeedSession) singleEventFeed(
 	}
 }
 
-func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
+func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (*model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1495,12 +1465,17 @@ func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pending
 		Val: &model.RawKVEntry{
 			OpType:   opType,
 			Key:      entry.Key,
-			Value:    value.value,
-			OldValue: value.oldValue,
+			Value:    entry.GetValue(),
 			StartTs:  entry.StartTs,
 			CRTs:     entry.CommitTs,
 			RegionID: regionID,
 		},
+	}
+
+	// when old-value is disabled, it is still possible for the tikv to send a event containing the old value
+	// we need avoid a old-value sent to downstream when old-value is disabled
+	if enableOldValue {
+		revent.Val.OldValue = entry.GetOldValue()
 	}
 	return revent, nil
 }
