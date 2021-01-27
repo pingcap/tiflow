@@ -295,15 +295,15 @@ func (p *processor) wait() {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "changefeedID: %s, info: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
+	fmt.Fprintf(w, "changefeedID:\n\t%s\ninfo:\n\t%s\nstatus:\n\t%+v\nposition:\n\t%s\n",
+		p.changefeedID, p.changefeed.String(), p.status, p.position.String())
 
+	fmt.Fprintf(w, "tables:\n")
 	p.stateMu.Lock()
 	for _, table := range p.tables {
 		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTs())
 	}
 	p.stateMu.Unlock()
-
-	fmt.Fprintf(w, "\n")
 }
 
 // localResolvedWorker do the flowing works.
@@ -612,6 +612,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				opt.Done = true
 				opt.Status = model.OperFinished
 				status.Dirty = true
+				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 			}
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
@@ -1137,6 +1138,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
+		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tbl.name)
 	}
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
@@ -1146,6 +1148,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.localResolvedNotifier.Close()
 	failpoint.Inject("processorStopDelay", nil)
 	atomic.StoreInt32(&p.stopped, 1)
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(0)
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
