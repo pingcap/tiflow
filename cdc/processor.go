@@ -1042,7 +1042,6 @@ func (p *processor) sorterConsume(
 				}
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
-				log.Debug("Set table resolved ts", zap.Int64("table-id", tableID), zap.Uint64("tableResolvedTs", lastResolvedTs))
 				p.localResolvedNotifier.Notify()
 				resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 				if !opDone {
@@ -1073,7 +1072,6 @@ func (p *processor) sorterConsume(
 		case <-globalResolvedTsReceiver.C:
 			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-			log.Debug("global resolved ts received", zap.Uint64("globalResolvedTs", globalResolvedTs))
 			var minTs uint64
 			if localResolvedTs < globalResolvedTs {
 				minTs = localResolvedTs
