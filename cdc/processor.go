@@ -610,6 +610,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				opt.Done = true
 				opt.Status = model.OperFinished
 				status.Dirty = true
+				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 			}
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
@@ -1128,6 +1129,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
+		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tbl.name)
 	}
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
@@ -1137,6 +1139,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.localResolvedNotifier.Close()
 	failpoint.Inject("processorStopDelay", nil)
 	atomic.StoreInt32(&p.stopped, 1)
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(0)
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
