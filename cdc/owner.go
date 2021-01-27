@@ -1272,9 +1272,17 @@ func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, to model.Capture
 }
 
 func (o *Owner) writeDebugInfo(w io.Writer) {
+	fmt.Fprintf(w, "** active changefeeds **:\n")
 	for _, info := range o.changeFeeds {
-		// fmt.Fprintf(w, "%+v\n", *info)
 		fmt.Fprintf(w, "%s\n", info)
+	}
+	fmt.Fprintf(w, "** stopped changefeeds **:\n")
+	for _, feedStatus := range o.stoppedFeeds {
+		fmt.Fprintf(w, "%+v\n", *feedStatus)
+	}
+	fmt.Fprintf(w, "\n** captures **:\n")
+	for _, capture := range o.captures {
+		fmt.Fprintf(w, "%+v\n", *capture)
 	}
 }
 
