@@ -263,10 +263,7 @@ func (p *processor) Run(ctx context.Context) {
 
 	go func() {
 		if err := wg.Wait(); err != nil {
-			select {
-			case p.errCh <- err:
-			default:
-			}
+			p.sendError(err)
 		}
 	}()
 }
@@ -285,15 +282,15 @@ func (p *processor) wait() {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "changefeedID: %s, info: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
+	fmt.Fprintf(w, "changefeedID:\n\t%s\ninfo:\n\t%s\nstatus:\n\t%+v\nposition:\n\t%s\n",
+		p.changefeedID, p.changefeed.String(), p.status, p.position.String())
 
+	fmt.Fprintf(w, "tables:\n")
 	p.stateMu.Lock()
 	for _, table := range p.tables {
 		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTs())
 	}
 	p.stateMu.Unlock()
-
-	fmt.Fprintf(w, "\n")
 }
 
 // localResolvedWorker do the flowing works.
@@ -601,6 +598,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				opt.Done = true
 				opt.Status = model.OperFinished
 				status.Dirty = true
+				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 			}
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
@@ -804,7 +802,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
+				p.sendError(err)
 			}
 		}()
 
@@ -818,11 +816,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				if os.IsNotExist(errors.Cause(err)) {
 					err = os.MkdirAll(p.changefeed.SortDir, 0755)
 					if err != nil {
-						p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
+						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
 						return nil
 					}
 				} else {
-					p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
+					p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check"))
 					return nil
 				}
 			}
@@ -834,13 +832,13 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
 			}
 		default:
-			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
+			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
 			return nil
 		}
 		go func() {
 			err := sorter.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
-				p.errCh <- err
+				p.sendError(err)
 			}
 		}()
 
@@ -879,7 +877,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	tableSink = startPuller(tableID, &table.resolvedTs, &table.checkpointTs)
 	table.cancel = func() {
 		cancel()
-		tableSink.Close()
+		if tableSink != nil {
+			tableSink.Close()
+		}
 		if mTableSink != nil {
 			mTableSink.Close()
 		}
@@ -916,7 +916,7 @@ func (p *processor) sorterConsume(
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+					p.sendError(ctx.Err())
 				}
 				return
 			case p.opDoneCh <- tableID:
@@ -985,7 +985,7 @@ func (p *processor) sorterConsume(
 		select {
 		case <-ctx.Done():
 			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
+				p.sendError(ctx.Err())
 			}
 			return
 		case pEvent := <-sorter.Output():
@@ -997,7 +997,7 @@ func (p *processor) sorterConsume(
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+					p.sendError(ctx.Err())
 				}
 				return
 			case p.mounter.Input() <- pEvent:
@@ -1039,7 +1039,7 @@ func (p *processor) sorterConsume(
 			err := processRowChangedEvent(pEvent)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
-					p.errCh <- errors.Trace(err)
+					p.sendError(ctx.Err())
 				}
 				return
 			}
@@ -1088,7 +1088,7 @@ func (p *processor) pullerConsume(
 		select {
 		case <-ctx.Done():
 			if errors.Cause(ctx.Err()) != context.Canceled {
-				p.errCh <- ctx.Err()
+				p.sendError(ctx.Err())
 			}
 			return
 		case rawKV := <-plr.Output():
@@ -1106,6 +1106,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
+		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tbl.name)
 	}
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
@@ -1115,6 +1116,7 @@ func (p *processor) stop(ctx context.Context) error {
 	p.localResolvedNotifier.Close()
 	failpoint.Inject("processorStopDelay", nil)
 	atomic.StoreInt32(&p.stopped, 1)
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(0)
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
@@ -1157,7 +1159,9 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	errCh := make(chan error, 16)
+	// processor only receives one error from the channel, all producers to this
+	// channel must use the non-blocking way to send error.
+	errCh := make(chan error, 1)
 	s, err := sink.NewSink(ctx, changefeedID, info.SinkURI, filter, info.Config, opts, errCh)
 	if err != nil {
 		cancel()
@@ -1176,33 +1180,15 @@ func runProcessor(
 	processor.Run(ctx)
 
 	go func() {
-		var errs []error
-		appendError := func(err error) {
-			log.Debug("processor received error", zap.Error(err))
-			cause := errors.Cause(err)
-			if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
-				errs = append(errs, err)
-			}
-		}
 		err := <-errCh
-		appendError(err)
-		// sleep 500ms to wait all the errors are sent to errCh
-		time.Sleep(500 * time.Millisecond)
-	ReceiveErr:
-		for {
-			select {
-			case err := <-errCh:
-				appendError(err)
-			default:
-				break ReceiveErr
-			}
-		}
-		if len(errs) > 0 {
+		cause := errors.Cause(err)
+		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
 				util.ZapFieldCapture(ctx),
 				zap.String("changefeed", changefeedID),
 				zap.String("processor", processor.id),
-				zap.Errors("errors", errs))
+				zap.Error(err))
 			// record error information in etcd
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
@@ -1229,4 +1215,12 @@ func runProcessor(
 	}()
 
 	return processor, nil
+}
+
+func (p *processor) sendError(err error) {
+	select {
+	case p.errCh <- err:
+	default:
+		log.Error("processor receives redundant error", zap.Error(err))
+	}
 }
