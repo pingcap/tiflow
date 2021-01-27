@@ -55,7 +55,7 @@ type sinkNode struct {
 	rowBuffer   []*model.RowChangedEvent
 }
 
-func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts) pipeline.Node {
+func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts) *sinkNode {
 	return &sinkNode{
 		sink:         sink,
 		status:       TableStatusInitializing,
@@ -75,8 +75,7 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	return nil
 }
 
-func (n *sinkNode) flushSink(ctx pipeline.NodeContext) error {
-	resolvedTs := n.resolvedTs
+func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) error {
 	if resolvedTs > n.barrierTs {
 		resolvedTs = n.barrierTs
 	}
@@ -94,7 +93,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext) error {
 		return errors.Trace(err)
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
-	if checkpointTs >= n.barrierTs {
+	if checkpointTs >= n.targetTs {
 		atomic.StoreInt32(&n.status, TableStatusStopped)
 		if err := n.sink.Close(); err != nil {
 			return errors.Trace(err)
@@ -150,17 +149,17 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			if n.status == TableStatusInitializing {
 				atomic.StoreInt32(&n.status, TableStatusRunning)
 			}
-			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.RawKV.CRTs)
-			if err := n.flushSink(ctx); err != nil {
+			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return errors.Trace(err)
 			}
+			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
 			return nil
 		}
 		if err := n.emitEvent(ctx, event); err != nil {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeTick:
-		if err := n.flushSink(ctx); err != nil {
+		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
@@ -174,6 +173,9 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
+		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }

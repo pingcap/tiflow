@@ -106,6 +106,7 @@ func (t *TablePipeline) Wait() []error {
 
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): the parameters in this function are too much, try to move some parameters into ctx.Vars().
+// TODO(leoppro): implement a mock kvclient to test the table pipeline
 func NewTablePipeline(ctx context.Context,
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
@@ -130,7 +131,7 @@ func NewTablePipeline(ctx context.Context,
 	p.AppendNode(ctx, "puller", newPullerNode(credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
-	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs).(*sinkNode)
+	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs)
 	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
 	tablePipeline.p = p
 	return ctx, tablePipeline
