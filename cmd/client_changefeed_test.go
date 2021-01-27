@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/spf13/cobra"
 )
@@ -42,11 +43,17 @@ enable-old-value = false
 	c.Assert(err, check.IsNil)
 
 	sinkURI = "blackhole:///?protocol=maxwell"
-	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
+	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 
 	sinkURI = ""
-	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil)
+	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil, nil)
 	c.Assert(err, check.NotNil)
+
+	sinkURI = "blackhole:///?protocol=maxwell"
+	info, err = verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil, []*model.CaptureInfo{{Version: "4.0.0"}})
+	c.Assert(err, check.IsNil)
+	c.Assert(info.Config.EnableOldValue, check.IsFalse)
+	c.Assert(info.Engine, check.Equals, model.SortInMemory)
 }
