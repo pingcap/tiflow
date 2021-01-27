@@ -146,7 +146,7 @@ func (s *simpleReactorState) SetSum(sum int) {
 	s.patches = append(s.patches, patch)
 }
 
-func (s *simpleReactorState) Update(key util.EtcdKey, value []byte) error {
+func (s *simpleReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	subMatches := keyParseRegexp.FindSubmatch(key.Bytes())
 	if len(subMatches) != 2 {
 		log.Panic("illegal Etcd key", zap.ByteString("key", key.Bytes()))
@@ -279,13 +279,13 @@ type intReactorState struct {
 	isUpdated bool
 }
 
-func (s *intReactorState) Update(key util.EtcdKey, value []byte) error {
+func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	var err error
 	s.val, err = strconv.Atoi(string(value))
 	if err != nil {
 		log.Panic("intReactorState", zap.Error(err))
 	}
-	s.isUpdated = true
+	s.isUpdated = !isInit
 	return nil
 }
 
