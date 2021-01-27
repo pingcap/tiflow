@@ -109,7 +109,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1608013159669,
+  "iteration": 1610607213210,
   "links": [],
   "panels": [
     {
@@ -1108,6 +1108,7 @@
             {
               "expr": "max(ticdc_processor_table_resolved_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,table)",
               "format": "time_series",
+              "instant": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-{{table}}",
@@ -2054,7 +2055,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "max(rate(ticdc_processor_flush_event_duration_seconds_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_sink_flush_event_duration_seconds_bucket{capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -2133,24 +2134,24 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p95",
+              "legendFormat": "{{instance}}-{{type}}-p95",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p99",
+              "legendFormat": "{{instance}}-{{type}}-p99",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-p999",
+              "legendFormat": "{{instance}}-{{type}}-p999",
               "refId": "C"
             }
           ],
@@ -3522,10 +3523,10 @@
               "refId": "A"
             },
             {
-              "expr": "-sum(ticdc_processor_txn_output_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "-sum(ticdc_sink_buffer_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-processor output chan",
+              "legendFormat": "{{capture}}-sink buffer chan",
               "refId": "B"
             }
           ],
@@ -3533,7 +3534,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Processor/Mounter buffer size",
+          "title": "Sink/Mounter buffer size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4401,6 +4402,570 @@
         "w": 24,
         "x": 0,
         "y": 3
+      },
+      "id": 130,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fill": 1,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 1
+          },
+          "id": 131,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(ticdc_sorter_consume_count{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Unified Sorter intake rate",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fill": 1,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 1
+          },
+          "id": 132,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(ticdc_sorter_event_count{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Unified Sorter event output rate",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fill": 1,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 133,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(ticdc_sorter_on_disk_data_size_gauge{capture=~\"$capture\"}) by (capture)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Unified Sorter on disk data size",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fill": 1,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "id": 134,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(ticdc_sorter_in_memory_data_size_gauge{capture=~\"$capture\"}) by (capture)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Unified Sorter in-memory data size",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "max": null,
+            "min": null,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "${DS_TEST-CLUSTER}",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 17
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 135,
+          "legend": {
+            "show": false
+          },
+          "links": [],
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(ticdc_sorter_flush_count_histogram_bucket{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (le)",
+              "format": "heatmap",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Unified Sorter flush sizes",
+          "tooltip": {
+            "show": true,
+            "showHistogram": false
+          },
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "none",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateBlues",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "${DS_TEST-CLUSTER}",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 17
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 136,
+          "legend": {
+            "show": false
+          },
+          "links": [],
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(ticdc_sorter_merge_count_histogram_bucket{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (le)",
+              "format": "heatmap",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Unified Sorter merge size",
+          "tooltip": {
+            "show": true,
+            "showHistogram": false
+          },
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "none",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fill": 1,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 25
+          },
+          "id": 137,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "min(ticdc_sorter_resolved_ts_gauge{changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Unified Sorter resolved ts",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "dateTimeAsIso",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Unified Sorter",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
       },
       "id": 58,
       "panels": [
@@ -5488,5 +6053,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 12
+  "version": 13
 }

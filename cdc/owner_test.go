@@ -14,6 +14,7 @@
 package cdc
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -1029,4 +1030,39 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
+}
+
+func (s *ownerSuite) TestWriteDebugInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	owner := &Owner{
+		changeFeeds: map[model.ChangeFeedID]*changeFeed{
+			"test": {
+				id: "test",
+				info: &model.ChangeFeedInfo{
+					SinkURI: "blackhole://",
+					Config:  config.GetDefaultReplicaConfig(),
+				},
+				status: &model.ChangeFeedStatus{
+					ResolvedTs:   120,
+					CheckpointTs: 100,
+				},
+			},
+		},
+		stoppedFeeds: map[model.ChangeFeedID]*model.ChangeFeedStatus{
+			"test-2": {
+				ResolvedTs:   120,
+				CheckpointTs: 100,
+			},
+		},
+		captures: map[model.CaptureID]*model.CaptureInfo{
+			"capture-1": {
+				ID:            "capture-1",
+				AdvertiseAddr: "127.0.0.1:8301",
+			},
+		},
+	}
+	var buf bytes.Buffer
+	owner.writeDebugInfo(&buf)
+	c.Assert(buf.String(), check.Matches, `[\s\S]*active changefeeds[\s\S]*stopped changefeeds[\s\S]*captures[\s\S]*`)
 }
