@@ -60,10 +60,8 @@ func NewPipeline(ctx context.Context, tickDuration time.Duration) (context.Conte
 				p.close()
 			}
 		} else {
-			select {
-			case <-ctx.Done():
-				p.close()
-			}
+			<-ctx.Done()
+			p.close()
 		}
 	}()
 	return ctx, p

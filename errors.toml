@@ -646,6 +646,11 @@ error = '''
 this api supports POST method only
 '''
 
+["CDC:ErrTableProcessorStoppedSafely"]
+error = '''
+table processor stopped safely
+'''
+
 ["CDC:ErrTaskPositionNotExists"]
 error = '''
 task position not exists, key: %s
