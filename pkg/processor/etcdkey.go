@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package processor
 
 import (
@@ -22,8 +35,10 @@ const (
 	jobKey            = "/job"
 )
 
+// CDCEtcdKeyType is the type of etcd key
 type CDCEtcdKeyType = int
 
+// the types of etcd key
 const (
 	CDCEtcdKeyTypeUnknown CDCEtcdKeyType = iota
 	CDCEtcdKeyTypeOnwer
@@ -35,6 +50,7 @@ const (
 	CDCEtcdKeyTypeTaskWorkload
 )
 
+// CDCEtcdKey represents a etcd key which is defined by TiCDC
 type CDCEtcdKey struct {
 	Tp           CDCEtcdKeyType
 	ChangefeedID model.ChangeFeedID
@@ -42,6 +58,7 @@ type CDCEtcdKey struct {
 	OwnerLeaseID string
 }
 
+// Parse parses the given etcd key
 func (k *CDCEtcdKey) Parse(key string) error {
 	if !strings.HasPrefix(key, etcdKeyBase) {
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
@@ -110,9 +127,8 @@ func (k *CDCEtcdKey) String() string {
 	case CDCEtcdKeyTypeOnwer:
 		if len(k.OwnerLeaseID) == 0 {
 			return etcdKeyBase + ownerKey
-		} else {
-			return etcdKeyBase + ownerKey + "/" + k.OwnerLeaseID
 		}
+		return etcdKeyBase + ownerKey + "/" + k.OwnerLeaseID
 	case CDCEtcdKeyTypeCapture:
 		return etcdKeyBase + captureKey + "/" + k.CaptureID
 	case CDCEtcdKeyTypeChangefeedInfo:

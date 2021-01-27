@@ -48,10 +48,12 @@ func (t *TablePipeline) ResolvedTs() model.Ts {
 	return t.sinkNode.ResolvedTs()
 }
 
+// CheckpointTs returns the checkpoint ts in this table pipeline
 func (t *TablePipeline) CheckpointTs() model.Ts {
 	return t.sinkNode.CheckpointTs()
 }
 
+// UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *TablePipeline) UpdateBarrierTs(ts model.Ts) {
 	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
 	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {

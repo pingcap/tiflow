@@ -78,7 +78,6 @@ func (s *mockSink) Check(c *check.C, expected []struct {
 }
 
 func (s *mockSink) Reset() {
-
 }
 
 type outputSuite struct{}
@@ -181,5 +180,4 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	sink.Reset()
 	c.Assert(node.ResolvedTs(), check.Equals, uint64(2))
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(2))
-
 }

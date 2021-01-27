@@ -56,10 +56,10 @@ const (
 	schemaStorageGCLag = time.Minute * 20
 )
 
-//resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-//metricResolvedTsLagGauge := resolvedTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-//checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-//metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+// resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+// metricResolvedTsLagGauge := resolvedTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+// checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+// metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 type processor struct {
 	changefeed *changefeedState
 
@@ -79,12 +79,13 @@ type processor struct {
 	cancel     context.CancelFunc
 }
 
+// NewProcessor creates a new processor
 func NewProcessor(
 	pdCli pd.Client,
 	credential *security.Credential,
 	captureInfo *model.CaptureInfo,
 ) *processor {
-	//log.Info("start processor with startts",
+	// log.Info("start processor with startts",
 	//	zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	return &processor{
 		pdCli:       pdCli,
@@ -255,14 +256,13 @@ ReceiveErr:
 			zap.String("captureAddr", p.captureInfo.AdvertiseAddr),
 			zap.Errors("errors", errs))
 		return errs[0]
-	} else {
-		log.Info("processor exited",
-			util.ZapFieldCapture(ctx),
-			zap.String("changefeed", p.changefeed.ID),
-			zap.String("captureID", p.captureInfo.ID),
-			zap.String("captureAddr", p.captureInfo.AdvertiseAddr))
-		return context.Canceled
 	}
+	log.Info("processor exited",
+		util.ZapFieldCapture(ctx),
+		zap.String("changefeed", p.changefeed.ID),
+		zap.String("captureID", p.captureInfo.ID),
+		zap.String("captureAddr", p.captureInfo.AdvertiseAddr))
+	return context.Canceled
 }
 
 func (p *processor) handleTableOperation(ctx context.Context) error {
@@ -451,11 +451,11 @@ func (p *processor) handlePosition() error {
 		}
 	}
 
-	//phyTs := oracle.ExtractPhysical(minResolvedTs)
+	// phyTs := oracle.ExtractPhysical(minResolvedTs)
 	// It is more accurate to get tso from PD, but in most cases we have
 	// deployed NTP service, a little bias is acceptable here.
-	//metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-	//resolvedTsGauge.Set(float64(phyTs))
+	// metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	// resolvedTsGauge.Set(float64(phyTs))
 
 	minCheckpointTs := minResolvedTs
 	for _, table := range p.tables {
@@ -541,7 +541,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		tableName = strconv.Itoa(int(tableID))
 	}
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
-	//resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	// resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 
 	_, table := tablepipeline.NewTablePipeline(
 		cdcCtx,
@@ -575,7 +575,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 
 	p.tables[tableID] = table
 
-	//syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
+	// syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 	return nil
 }
 
@@ -621,8 +621,8 @@ func (p *processor) doGCSchemaStorage() error {
 //	flushCheckpointInterval time.Duration,
 //) (*processor, error) {
 
-//log.Info("start to run processor", zap.String("changefeed", changefeedID), zap.String("processor", processor.id))
-//processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
+// log.Info("start to run processor", zap.String("changefeed", changefeedID), zap.String("processor", processor.id))
+// processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
 
 //}
 

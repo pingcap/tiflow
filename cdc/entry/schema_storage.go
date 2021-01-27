@@ -765,6 +765,7 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	}
 }
 
+// ResolvedTs returns the resolved ts of the schema storage
 func (s *SchemaStorage) ResolvedTs() uint64 {
 	return atomic.LoadUint64(&s.resolvedTs)
 }

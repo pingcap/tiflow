@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package processor
 
 import (
@@ -19,6 +32,7 @@ type globalState struct {
 	removedChangefeedIDs []model.ChangeFeedID
 }
 
+// NewGlobalState creates a new global state for processor manager
 func NewGlobalState(captureID model.CaptureID) orchestrator.ReactorState {
 	return &globalState{
 		CaptureID:   captureID,
@@ -192,9 +206,11 @@ func (s *changefeedState) GetPatches() []*orchestrator.DataPatch {
 	return pendingPatches
 }
 
-var taskPositionTPI *model.TaskPosition
-var taskStatusTPI *model.TaskStatus
-var taskWorkloadTPI *model.TaskWorkload
+var (
+	taskPositionTPI *model.TaskPosition
+	taskStatusTPI   *model.TaskStatus
+	taskWorkloadTPI *model.TaskWorkload
+)
 
 func (s *changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) (*model.TaskPosition, error)) {
 	key := &CDCEtcdKey{
@@ -205,9 +221,8 @@ func (s *changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) (*model
 	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, error) {
 		if e == nil {
 			return fn(nil)
-		} else {
-			return fn(e.(*model.TaskPosition))
 		}
+		return fn(e.(*model.TaskPosition))
 	})
 }
 
@@ -220,9 +235,8 @@ func (s *changefeedState) PatchTaskStatus(fn func(*model.TaskStatus) (*model.Tas
 	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, error) {
 		if e == nil {
 			return fn(nil)
-		} else {
-			return fn(e.(*model.TaskStatus))
 		}
+		return fn(e.(*model.TaskStatus))
 	})
 }
 
@@ -235,9 +249,8 @@ func (s *changefeedState) PatchTaskWorkload(fn func(model.TaskWorkload) (model.T
 	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, error) {
 		if e == nil {
 			return fn(nil)
-		} else {
-			return fn(*e.(*model.TaskWorkload))
 		}
+		return fn(*e.(*model.TaskWorkload))
 	})
 }
 
@@ -260,9 +273,8 @@ func (s *changefeedState) patchAny(key string, tpi interface{}, fn func(interfac
 			}
 			if ne == nil {
 				return nil, nil
-			} else {
-				return json.Marshal(ne)
 			}
+			return json.Marshal(ne)
 		},
 	}
 	s.pendingPatches = append(s.pendingPatches, patch)

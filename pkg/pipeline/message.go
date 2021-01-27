@@ -18,14 +18,11 @@ import "github.com/pingcap/ticdc/cdc/model"
 // MessageType is the type of Message
 type MessageType int
 
+// types of Message
 const (
-	// MessageTypeUnknown is unknown message type
 	MessageTypeUnknown MessageType = iota
-	// MessageTypeCommand is command message type
 	MessageTypeCommand
-	// MessageTypePolymorphicEvent is the row changed event message type
 	MessageTypePolymorphicEvent
-	// MessageTypeBarrier is the barrier ts of a table pipeline
 	MessageTypeBarrier
 	MessageTypeTick
 )
@@ -59,6 +56,7 @@ func CommandMessage(command *Command) *Message {
 	}
 }
 
+// BarrierMessage creates the message of Command
 func BarrierMessage(barrierTs model.Ts) *Message {
 	return &Message{
 		Tp:        MessageTypeBarrier,
@@ -66,6 +64,7 @@ func BarrierMessage(barrierTs model.Ts) *Message {
 	}
 }
 
+// TickMessage creates the message of Tick
 func TickMessage() *Message {
 	return &Message{
 		Tp: MessageTypeTick,
