@@ -5913,7 +5913,7 @@
         "options": [
 
         ],
-        "query": "label_values(ticdc_processor_resolved_ts, cluster)",
+        "query": "label_values(ticdc_processor_resolved_ts, tidb_cluster)",
         "refresh": 2,
         "regex": "",
         "sort": 1,
