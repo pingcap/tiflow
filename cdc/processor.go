@@ -75,11 +75,12 @@ type processor struct {
 
 	sinkManager *sink.Manager
 
-	globalResolvedTs        uint64
-	localResolvedTs         uint64
-	checkpointTs            uint64
-	globalcheckpointTs      uint64
-	flushCheckpointInterval time.Duration
+	globalResolvedTs         uint64
+	localResolvedTs          uint64
+	checkpointTs             uint64
+	globalcheckpointTs       uint64
+	appliedLocalCheckpointTs uint64
+	flushCheckpointInterval  time.Duration
 
 	ddlPuller       puller.Puller
 	ddlPullerCancel context.CancelFunc
@@ -223,6 +224,15 @@ func newProcessor(
 	}
 	p.status = status
 	p.statusModRevision = modRevision
+
+	info, _, err := p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+		return nil, errors.Trace(err)
+	}
+
+	if err == nil {
+		p.globalcheckpointTs = info.CheckpointTs
+	}
 
 	for tableID, replicaInfo := range p.status.Tables {
 		p.addTable(ctx, tableID, replicaInfo)
@@ -387,7 +397,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			p.stateMu.Unlock()
 			if checkpointTs == 0 {
-				log.Warn("0 is not a valid checkpointTs", util.ZapFieldChangefeed(ctx))
+				log.Debug("0 is not a valid checkpointTs", util.ZapFieldChangefeed(ctx))
 				continue
 			}
 			atomic.StoreUint64(&p.checkpointTs, checkpointTs)
@@ -405,6 +415,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if err := retryFlushTaskStatusAndPosition(); err != nil {
 				return errors.Trace(err)
 			}
+			atomic.StoreUint64(&p.appliedLocalCheckpointTs, checkpointTs)
 			lastFlushTime = time.Now()
 		}
 	}
@@ -768,6 +779,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
 
 	if replicaInfo.StartTs < globalcheckpointTs {
+		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+		// The cdc_state_checker will catch a real inconsistency in integration tests.
 		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
@@ -906,7 +919,12 @@ func (p *processor) sorterConsume(
 	checkDone := func() {
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs {
+		tableCheckPointTs := atomic.LoadUint64(pCheckpointTs)
+		localCheckpoint := atomic.LoadUint64(&p.appliedLocalCheckpointTs)
+
+		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs &&
+			tableCheckPointTs >= localCheckpoint {
+
 			log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
 				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
 				zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
@@ -928,6 +946,8 @@ func (p *processor) sorterConsume(
 				zap.Uint64("tableResolvedTs", lastResolvedTs),
 				zap.Uint64("localResolvedTs", localResolvedTs),
 				zap.Uint64("globalResolvedTs", globalResolvedTs),
+				zap.Uint64("tableCheckpointTs", tableCheckPointTs),
+				zap.Uint64("localCheckpointTs", localCheckpoint),
 				zap.Int64("tableID", tableID))
 		}
 	}
@@ -1054,7 +1074,7 @@ func (p *processor) sorterConsume(
 			} else {
 				minTs = globalResolvedTs
 			}
-			if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
+			if minTs == 0 {
 				continue
 			}
 
@@ -1065,6 +1085,11 @@ func (p *processor) sorterConsume(
 				}
 				return
 			}
+
+			if checkpointTs < replicaInfo.StartTs {
+				checkpointTs = replicaInfo.StartTs
+			}
+
 			if checkpointTs != 0 {
 				atomic.StoreUint64(pCheckpointTs, checkpointTs)
 				p.localCheckpointTsNotifier.Notify()
