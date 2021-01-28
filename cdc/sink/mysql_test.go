@@ -65,6 +65,7 @@ func newMySQLSink4Test(ctx context.Context, c *check.C) *mysqlSink {
 	}
 }
 
+<<<<<<< HEAD
 func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testCases := []struct {
@@ -268,6 +269,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 	}
 }
 
+=======
+>>>>>>> bba9ea4... sink: fix atomicity of transactions is broken (#1371)
 func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testCases := []struct {
