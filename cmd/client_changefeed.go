@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/version"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -34,29 +32,23 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
-<<<<<<< HEAD
 var (
 	forceEnableOldValueProtocols = []string{
 		"canal",
 		"maxwell",
 	}
 )
-=======
+
 const (
 	defaultSortDir = "/tmp/cdc_sort"
 )
-
-var forceEnableOldValueProtocols = []string{
-	"canal",
-	"maxwell",
-}
->>>>>>> e19ddc5... cli: adjust default sort-dir and add warnings (#1358)
 
 func newChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
@@ -407,13 +399,8 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "", "sink uri")
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
-<<<<<<< HEAD
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", model.SortInMemory, "sort engine used for data sort")
-	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
-=======
-	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "unified", "sort engine used for data sort")
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", defaultSortDir, "directory used for data sort")
->>>>>>> e19ddc5... cli: adjust default sort-dir and add warnings (#1358)
 	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")

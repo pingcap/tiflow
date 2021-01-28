@@ -44,11 +44,8 @@ enable-old-value = false
 	sinkURI = "blackhole:///?protocol=maxwell"
 	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
 	c.Assert(err, check.IsNil)
-<<<<<<< HEAD
-=======
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 	c.Assert(info.SortDir, check.Equals, defaultSortDir)
->>>>>>> e19ddc5... cli: adjust default sort-dir and add warnings (#1358)
 
 	sinkURI = ""
 	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil)
