@@ -65,6 +65,11 @@ func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 }
 
 // Append adds unresolved rows to cache
+// the rows inputed into this function will go through the following handling logic
+// 1. group by tableID from one input stream
+// 2. for each tableID stream, the callers of this function should **make sure** that the CommitTs of rows is **strictly increasing**
+// 3. group by CommitTs, according to CommitTs cut the rows into many group of rows in the same CommitTs
+// 4. group by StartTs, cause the StartTs is the unique identifier of the transaction, according to StartTs cut the rows into many txns
 func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowChangedEvent) int {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
@@ -96,6 +101,7 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 }
 
 // Resolved returns resolved txns according to resolvedTs
+// The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
 	if resolvedTs <= atomic.LoadUint64(&c.checkpointTs) {
 		return nil
