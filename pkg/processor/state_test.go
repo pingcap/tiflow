@@ -230,7 +230,8 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 			if len(value) == 0 {
 				value = nil
 			}
-			state.Update(util.NewEtcdKey(k), value, false)
+			err = state.Update(util.NewEtcdKey(k), value, false)
+			c.Assert(err, check.IsNil)
 		}
 		c.Assert(cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(changefeedState{})), check.IsTrue,
 			check.Commentf("%s", cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(changefeedState{}))))
@@ -410,7 +411,8 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 			if len(value) == 0 {
 				value = nil
 			}
-			state.Update(util.NewEtcdKey(k), value, false)
+			err := state.Update(util.NewEtcdKey(k), value, false)
+			c.Assert(err, check.IsNil)
 		}
 		c.Assert(cmp.Equal(state, &tc.expected, cmp.AllowUnexported(globalState{}), cmpopts.IgnoreUnexported(changefeedState{})), check.IsTrue,
 			check.Commentf("%s", cmp.Diff(state, &tc.expected, cmp.AllowUnexported(globalState{}), cmpopts.IgnoreUnexported(changefeedState{}))))
