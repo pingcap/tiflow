@@ -381,6 +381,8 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()

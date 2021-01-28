@@ -77,7 +77,7 @@
       {
         "datasource": "${DS_TEST-CLUSTER}",
         "enable": true,
-        "expr": "min(up{job=~\"tikv|ticdc\"}) by (job, instance) == BOOL 0",
+        "expr": "min(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}) by (job, instance) == BOOL 0",
         "hide": true,
         "iconColor": "#FF9830",
         "limit": 100,
@@ -92,7 +92,7 @@
       {
         "datasource": "${DS_TEST-CLUSTER}",
         "enable": false,
-        "expr": "sum(ALERTS{alertstate=\"firing\", alertname=~\"ticdc.*\"}) by (alertname) > BOOL 0",
+        "expr": "sum(ALERTS{tidb_cluster=\"$tidb_cluster\", alertstate=\"firing\", alertname=~\"ticdc.*\"}) by (alertname) > BOOL 0",
         "hide": false,
         "iconColor": "#B877D9",
         "limit": 100,
@@ -168,14 +168,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "(time() - process_start_time_seconds{job=\"ticdc\"})",
+              "expr": "(time() - process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"})",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "TiCDC - {{instance}}",
               "refId": "A"
             },
             {
-              "expr": "(time() - process_start_time_seconds{job=\"tikv\"})",
+              "expr": "(time() - process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"tikv\"})",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "TiKV - {{instance}}",
@@ -269,7 +269,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": " go_goroutines{job=\"ticdc\"}",
+              "expr": " go_goroutines{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}",
@@ -363,7 +363,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "process_open_fds{job=\"ticdc\"}",
+              "expr": "process_open_fds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}",
@@ -481,7 +481,7 @@
           ],
           "targets": [
             {
-              "expr": "rate(ticdc_owner_ownership_counter[30s])",
+              "expr": "rate(ticdc_owner_ownership_counter{tidb_cluster=\"$tidb_cluster\"}[30s])",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
@@ -540,7 +540,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "rate(process_cpu_seconds_total{job=\"ticdc\"}[1m])",
+              "expr": "rate(process_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}[1m])",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}",
@@ -635,14 +635,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "process_resident_memory_bytes{job=\"ticdc\"}",
+              "expr": "process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "process-{{instance}}",
               "refId": "A"
             },
             {
-              "expr": "go_memstats_heap_alloc_bytes{job=\"ticdc\"}",
+              "expr": "go_memstats_heap_alloc_bytes{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "heap-{{instance}}",
@@ -730,7 +730,7 @@
           "steppedLine": true,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_owner_ownership_counter[30s])) by (instance) > 0",
+              "expr": "sum(rate(ticdc_owner_ownership_counter{tidb_cluster=\"$tidb_cluster\"}[30s])) by (instance) > 0",
               "format": "time_series",
               "interval": "30s",
               "intervalFactor": 1,
@@ -825,21 +825,21 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_server_etcd_health_check_duration_bucket{capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_server_etcd_health_check_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "p999-{{instance}}",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_server_etcd_health_check_duration_bucket{capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_server_etcd_health_check_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "p99-{{instance}}",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_server_etcd_health_check_duration_bucket{capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_server_etcd_health_check_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "p95-{{instance}}",
@@ -950,7 +950,7 @@
           ],
           "targets": [
             {
-              "expr": "sum(ticdc_processor_num_of_tables{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_processor_num_of_tables{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1024,7 +1024,7 @@
           ],
           "targets": [
             {
-              "expr": "max(ticdc_processor_resolved_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "max(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1032,7 +1032,7 @@
               "refId": "A"
             },
             {
-              "expr": "max(ticdc_processor_checkpoint_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) > 0",
+              "expr": "max(ticdc_processor_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) > 0",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1106,15 +1106,16 @@
           ],
           "targets": [
             {
-              "expr": "max(ticdc_processor_table_resolved_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,table)",
+              "expr": "max(ticdc_processor_table_resolved_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,table)",
               "format": "time_series",
+              "instant": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-{{table}}",
               "refId": "A"
             },
             {
-              "expr": "max(ticdc_processor_checkpoint_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) > 0",
+              "expr": "max(ticdc_processor_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) > 0",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1175,7 +1176,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "max(ticdc_owner_checkpoint_ts{changefeed=~\"$changefeed\"}) by (changefeed) > 0",
+              "expr": "max(ticdc_owner_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed) > 0",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1183,7 +1184,7 @@
               "refId": "A"
             },
             {
-              "expr": "max(pd_cluster_tso) * 1000",
+              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}) * 1000",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -1282,7 +1283,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_etcd_request_count{capture=~\"$capture\"}[1m])) by (capture, type)",
+              "expr": "sum(rate(ticdc_etcd_request_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (capture, type)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1371,7 +1372,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(delta(ticdc_processor_exit_with_error_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
+              "expr": "sum(delta(ticdc_processor_exit_with_error_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}",
@@ -1465,7 +1466,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "max(ticdc_owner_checkpoint_ts_lag{changefeed=~\"$changefeed\"}) by (changefeed)",
+              "expr": "max(ticdc_owner_checkpoint_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1562,7 +1563,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_processor_resolved_ts_lag{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_processor_resolved_ts_lag{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1657,7 +1658,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "max(rate(ticdc_sink_txn_exec_duration_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -1736,21 +1737,21 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p95",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p99",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p999",
@@ -1844,14 +1845,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
+              "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}",
               "refId": "A"
             },
             {
-              "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=~\"$changefeed\"}[1m])) by (changefeed)",
+              "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (changefeed)",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -1947,21 +1948,21 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-p90",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-p99",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_batch_size_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 1,
@@ -2054,7 +2055,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "max(rate(ticdc_sink_flush_event_duration_seconds_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_sink_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -2133,21 +2134,21 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_processor_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}-p95",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}-p99",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_flush_event_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (le,instance,type))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}-p999",
@@ -2240,7 +2241,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "max(rate(ticdc_sink_conflict_detect_duration_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -2318,7 +2319,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95,sum(rate(ticdc_sink_conflict_detect_duration_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.95,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -2326,7 +2327,7 @@
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.99,sum(rate(ticdc_sink_conflict_detect_duration_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.99,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -2334,7 +2335,7 @@
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.999,sum(rate(ticdc_sink_conflict_detect_duration_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
+              "expr": "histogram_quantile(0.999,sum(rate(ticdc_sink_conflict_detect_duration_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,instance))",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -2430,7 +2431,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture,bucket)",
+              "expr": "sum(rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture,bucket)",
               "format": "time_series",
               "hide": true,
               "interval": "",
@@ -2439,7 +2440,7 @@
               "refId": "A"
             },
             {
-              "expr": "count(rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) >= 0)",
+              "expr": "count(rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) >= 0)",
               "format": "time_series",
               "hide": true,
               "interval": "",
@@ -2448,7 +2449,7 @@
               "refId": "B"
             },
             {
-              "expr": "count(rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) <= 2)",
+              "expr": "count(rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) <= 2)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -2456,7 +2457,7 @@
               "refId": "C"
             },
             {
-              "expr": "count(rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) > 2 and rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) <= 10)",
+              "expr": "count(rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) > 2 and rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) <= 10)",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -2465,7 +2466,7 @@
               "refId": "D"
             },
             {
-              "expr": "count(rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) > 10 and rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) <= 100)",
+              "expr": "count(rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) > 10 and rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) <= 100)",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -2474,7 +2475,7 @@
               "refId": "E"
             },
             {
-              "expr": "count(rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) > 100)",
+              "expr": "count(rate(ticdc_sink_bucket_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m]) > 100)",
               "format": "time_series",
               "hide": false,
               "interval": "",
@@ -2585,7 +2586,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_kvclient_event_feed_count",
+              "expr": "ticdc_kvclient_event_feed_count{tidb_cluster=\"$tidb_cluster\"}",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}",
@@ -2680,14 +2681,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_kvclient_event_size_bytes_bucket[1m])) by (le, instance))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_kvclient_event_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p999",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_kvclient_event_size_bytes_bucket[1m])) by (le, instance))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_kvclient_event_size_bytes_bucket{tidb_cluster=\"$tidb_cluster\"}[1m])) by (le, instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p95",
@@ -2783,7 +2784,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(increase(ticdc_kvclient_event_feed_error_count{capture=~\"$capture\"}[1m])) by (type)",
+              "expr": "sum(increase(ticdc_kvclient_event_feed_error_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (type)",
               "format": "time_series",
               "hide": false,
               "interval": "1m",
@@ -2792,7 +2793,7 @@
               "refId": "A"
             },
             {
-              "expr": "-sum(increase(pd_schedule_operators_count{event=\"create\", type=~\".*leader\"}[1m]))",
+              "expr": "-sum(increase(pd_schedule_operators_count{tidb_cluster=\"$tidb_cluster\", event=\"create\", type=~\".*leader\"}[1m]))",
               "format": "time_series",
               "hide": false,
               "interval": "1m",
@@ -2801,7 +2802,7 @@
               "refId": "B"
             },
             {
-              "expr": "-sum(increase(pd_schedule_operators_count{event=\"create\", type=~\".*(peer|region)\"}[1m]))",
+              "expr": "-sum(increase(pd_schedule_operators_count{tidb_cluster=\"$tidb_cluster\", event=\"create\", type=~\".*(peer|region)\"}[1m]))",
               "format": "time_series",
               "interval": "1m",
               "intervalFactor": 1,
@@ -2898,7 +2899,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_kvclient_pull_event_count{changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
+              "expr": "sum(rate(ticdc_kvclient_pull_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}",
@@ -2992,7 +2993,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum (rate(ticdc_puller_kv_event_count{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture, type)",
+              "expr": "sum (rate(ticdc_puller_kv_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture, type)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}} - {{type}}",
@@ -3086,7 +3087,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum (rate(ticdc_puller_txn_collect_event_count{changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
+              "expr": "sum (rate(ticdc_puller_txn_collect_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}} - {{type}}",
@@ -3181,7 +3182,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sink_total_flushed_rows_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
+              "expr": "sum(rate(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}",
@@ -3281,21 +3282,21 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_mem_buffer_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_puller_mem_buffer_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}} - output chan",
               "refId": "A"
             },
             {
-              "expr": "-sum(ticdc_puller_output_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) ",
+              "expr": "-sum(ticdc_puller_output_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) ",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}} - memory  buffer",
               "refId": "B"
             },
             {
-              "expr": "-sum(ticdc_puller_event_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "-sum(ticdc_puller_event_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}} - input chan",
@@ -3399,14 +3400,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_entry_sorter_unsorted_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_puller_entry_sorter_unsorted_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-unsorted events",
               "refId": "A"
             },
             {
-              "expr": "-sum(ticdc_puller_entry_sorter_resolved_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "-sum(ticdc_puller_entry_sorter_resolved_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 1,
@@ -3414,7 +3415,7 @@
               "refId": "B"
             },
             {
-              "expr": "-sum(ticdc_puller_entry_sorter_output_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "-sum(ticdc_puller_entry_sorter_output_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -3515,14 +3516,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_mounter_input_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_mounter_input_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-mounter input chan",
               "refId": "A"
             },
             {
-              "expr": "-sum(ticdc_sink_buffer_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "-sum(ticdc_sink_buffer_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-sink buffer chan",
@@ -3617,7 +3618,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_total_rows_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) - sum(ticdc_sink_total_flushed_rows_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) - sum(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -3709,7 +3710,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_puller_entry_sorter_sort_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_puller_entry_sorter_sort_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -3789,14 +3790,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_puller_entry_sorter_sort_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_puller_entry_sorter_sort_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-p999",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_puller_entry_sorter_sort_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_puller_entry_sorter_sort_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -3888,7 +3889,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_puller_entry_sorter_merge_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_puller_entry_sorter_merge_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -3968,14 +3969,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_puller_entry_sorter_merge_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_puller_entry_sorter_merge_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-p999",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(ticdc_puller_entry_sorter_merge_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
+              "expr": "histogram_quantile(0.95, sum(rate(ticdc_puller_entry_sorter_merge_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -4067,7 +4068,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "max(rate(ticdc_mounter_unmarshal_and_mount_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "max(rate(ticdc_mounter_unmarshal_and_mount_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -4148,7 +4149,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_mounter_unmarshal_and_mount_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le, capture))",
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_mounter_unmarshal_and_mount_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le, capture))",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -4156,7 +4157,7 @@
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_mounter_unmarshal_and_mount_bucket{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le, capture))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_mounter_unmarshal_and_mount_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le, capture))",
               "format": "time_series",
               "hide": true,
               "instant": false,
@@ -4259,14 +4260,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_kvclient_send_event_count{changefeed=~\"$changefeed\"}[1m])) by (capture, type)",
+              "expr": "sum(rate(ticdc_kvclient_send_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (capture, type)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-{{type}}",
               "refId": "A"
             },
             {
-              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture, table)",
+              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture, table)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-batch-resolved",
@@ -4357,7 +4358,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_bucket{instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -4441,7 +4442,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sorter_consume_count{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture)",
+              "expr": "sum(rate(ticdc_sorter_consume_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "refId": "A"
@@ -4525,7 +4526,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sorter_event_count{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture)",
+              "expr": "sum(rate(ticdc_sorter_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "refId": "A"
@@ -4609,7 +4610,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sorter_on_disk_data_size_gauge{capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_sorter_on_disk_data_size_gauge{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "refId": "A"
@@ -4693,7 +4694,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sorter_in_memory_data_size_gauge{capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_sorter_in_memory_data_size_gauge{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "refId": "A"
@@ -4773,7 +4774,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sorter_flush_count_histogram_bucket{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_sorter_flush_count_histogram_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "intervalFactor": 1,
               "legendFormat": "{{le}}",
@@ -4837,7 +4838,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sorter_merge_count_histogram_bucket{changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (le)",
+              "expr": "sum(rate(ticdc_sorter_merge_count_histogram_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (le)",
               "format": "heatmap",
               "intervalFactor": 1,
               "legendFormat": "{{le}}",
@@ -4907,7 +4908,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "min(ticdc_sorter_resolved_ts_gauge{changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture)",
+              "expr": "min(ticdc_sorter_resolved_ts_gauge{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "refId": "A"
@@ -5012,7 +5013,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{instance=~\"$tikv_instance\", name=~\"cdc.*\"}[1m])) by (instance)",
+              "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdc.*\"}[1m])) by (instance)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
@@ -5110,7 +5111,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{instance=~\"$tikv_instance\", name=~\"cdcwkr.*\"}[1m])) by (instance)",
+              "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdcwkr.*\"}[1m])) by (instance)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} - worker",
@@ -5118,7 +5119,7 @@
               "step": 4
             },
             {
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{instance=~\"$tikv_instance\", name=~\"tso\"}[1m])) by (instance)",
+              "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"tso\"}[1m])) by (instance)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} - tso",
@@ -5233,14 +5234,14 @@
           ],
           "targets": [
             {
-              "expr": "tikv_cdc_min_resolved_ts{instance=~\"$tikv_instance\"}",
+              "expr": "tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
               "refId": "A"
             },
             {
-              "expr": "max(pd_cluster_tso) * 1000",
+              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}) * 1000",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -5292,7 +5293,7 @@
           ],
           "targets": [
             {
-              "expr": "tikv_cdc_min_resolved_ts_region{instance=~\"$tikv_instance\"}",
+              "expr": "tikv_cdc_min_resolved_ts_region{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
@@ -5351,7 +5352,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.99999, sum(rate(tikv_cdc_resolved_ts_gap_seconds_bucket{instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
+              "expr": "histogram_quantile(0.99999, sum(rate(tikv_cdc_resolved_ts_gap_seconds_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p9999",
@@ -5445,7 +5446,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(tikv_cdc_scan_duration_seconds_bucket{instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "expr": "sum(rate(tikv_cdc_scan_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -5525,7 +5526,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.9999, sum(rate(tikv_cdc_scan_duration_seconds_bucket{instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
+              "expr": "histogram_quantile(0.9999, sum(rate(tikv_cdc_scan_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p9999",
@@ -5621,7 +5622,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(process_resident_memory_bytes{instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
+              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -5630,7 +5631,7 @@
               "step": 10
             },
             {
-              "expr": "avg(process_resident_memory_bytes{instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
+              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -5639,7 +5640,7 @@
               "step": 10
             },
             {
-              "expr": "(avg(process_resident_memory_bytes{instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
+              "expr": "(avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -5738,7 +5739,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(tikv_cdc_min_resolved_ts{instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
+              "expr": "avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -5837,7 +5838,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(tikv_cdc_captured_region_total{instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "avg(tikv_cdc_captured_region_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -5900,17 +5901,42 @@
   "templating": {
     "list": [
       {
+        "allValue": null,
+        "current": {
+        },
+        "datasource": "${DS_TEST-CLUSTER}",
+        "hide": 2,
+        "includeAll": false,
+        "label": "tidb_cluster",
+        "multi": false,
+        "name": "tidb_cluster",
+        "options": [
+
+        ],
+        "query": "label_values(ticdc_processor_resolved_ts, tidb_cluster)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [
+
+        ],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
-        "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
+        "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "hide": 0,
         "includeAll": false,
         "label": "Changefeed",
         "multi": false,
         "name": "changefeed",
         "options": [],
-        "query": "label_values(ticdc_processor_resolved_ts, changefeed)",
+        "query": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -5925,14 +5951,14 @@
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
-        "definition": "label_values(ticdc_processor_resolved_ts, capture)",
+        "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, capture)",
         "hide": 0,
         "includeAll": true,
         "label": "TiCDC",
         "multi": false,
         "name": "capture",
         "options": [],
-        "query": "label_values(ticdc_processor_resolved_ts, capture)",
+        "query": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, capture)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -5947,14 +5973,14 @@
         "allValue": ".*",
         "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
-        "definition": "label_values(tikv_engine_size_bytes, instance)",
+        "definition": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
         "hide": 0,
         "includeAll": true,
         "label": "TiKV",
         "multi": false,
         "name": "tikv_instance",
         "options": [],
-        "query": "label_values(tikv_engine_size_bytes, instance)",
+        "query": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
