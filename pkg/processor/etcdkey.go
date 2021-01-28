@@ -141,8 +141,7 @@ func (k *CDCEtcdKey) String() string {
 		return etcdKeyBase + taskStatusKey + "/" + k.CaptureID + "/" + k.ChangefeedID
 	case CDCEtcdKeyTypeTaskWorkload:
 		return etcdKeyBase + taskWorkloadKey + "/" + k.CaptureID + "/" + k.ChangefeedID
-	default:
-		log.Panic("unreachable")
 	}
+	log.Panic("unreachable")
 	return ""
 }
