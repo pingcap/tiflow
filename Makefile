@@ -19,7 +19,7 @@ GOVENDORFLAG := -mod=vendor
 endif
 
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
-GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath 
+GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 ifeq ($(GOVERSION114), 1)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
@@ -29,11 +29,10 @@ endif
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration|testing_utils'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto')
-TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
 CDC_PKG := github.com/pingcap/ticdc
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
 FAILPOINT := bin/failpoint-ctl
@@ -118,9 +117,9 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/run.sh kafka "$(CASE)"
 
-fmt:
+fmt: tools/bin/gofumports
 	@echo "gofmt (simplify)"
-	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
 lint: tools/bin/revive
 	@echo "linting"
@@ -134,11 +133,6 @@ check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
 
-check-leaktest-added:
-	GO111MODULE=off go get golang.org/x/tools/cmd/goimports
-	@echo "check leak test added in all unit tests"
-	./scripts/add-leaktest.sh $(TEST_FILES)
-
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -147,7 +141,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added
+check: check-copyright fmt lint check-static tidy errdoc
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -166,12 +160,13 @@ endif
 check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen
 
-data-flow-diagram: docs/data-flow.dot
-	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
-
 clean:
 	go clean -i ./...
 	rm -rf *.out
+
+tools/bin/gofumports: tools/check/go.mod
+	cd tools/check; test -e ../bin/gofumports || \
+	$(GO) build -o ../bin/gofumports mvdan.cc/gofumpt
 
 tools/bin/revive: tools/check/go.mod
 	cd tools/check; test -e ../bin/revive || \
@@ -179,7 +174,7 @@ tools/bin/revive: tools/check/go.mod
 
 tools/bin/errdoc-gen: tools/check/go.mod
 	cd tools/check; test -e ../bin/errdoc-gen || \
-	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
+	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/tiup/components/errdoc/errdoc-gen
 
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \
