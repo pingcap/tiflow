@@ -397,7 +397,11 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 				return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
 			}
 			taskStatus.Tables = status.Tables
-			taskStatus.Operation = status.Operation
+			if status.SomeOperationsUnapplied() {
+				taskStatus.Operation = status.Operation
+			} else {
+				taskStatus.Operation = nil
+			}
 			return true, nil
 		})
 		if err != nil {
