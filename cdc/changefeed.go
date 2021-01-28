@@ -987,20 +987,29 @@ func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Dur
 }
 
 func (c *changeFeed) Close() {
-	err := c.ddlHandler.Close()
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Warn("failed to close ddl handler", zap.Error(err))
+	if c.ddlHandler != nil {
+		err := c.ddlHandler.Close()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("failed to close ddl handler", zap.Error(err))
+		}
 	}
-	err = c.sink.Close()
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Warn("failed to close owner sink", zap.Error(err))
-	}
-	if c.syncpointStore != nil {
-		err = c.syncpointStore.Close()
+
+	if c.sink != nil {
+		err := c.sink.Close()
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("failed to close owner sink", zap.Error(err))
 		}
 	}
-	c.cancel()
+
+	if c.syncpointStore != nil {
+		err := c.syncpointStore.Close()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("failed to close owner sink", zap.Error(err))
+		}
+	}
+
+	if c.cancel != nil {
+		c.cancel()
+	}
 	log.Info("changefeed closed", zap.String("id", c.id))
 }
