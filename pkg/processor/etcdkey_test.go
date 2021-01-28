@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func TestSuite(t *testing.T) {
@@ -28,6 +29,7 @@ type etcdkeySuite struct{}
 var _ = check.Suite(&etcdkeySuite{})
 
 func (s *etcdkeySuite) TestEtcdKey(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testcases := []struct {
 		key      string
 		expected *CDCEtcdKey
@@ -106,6 +108,7 @@ func (s *etcdkeySuite) TestEtcdKey(c *check.C) {
 }
 
 func (s *etcdkeySuite) TestEtcdKeyParseError(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		key   string
 		error bool

@@ -40,7 +40,7 @@ func NewGlobalState(captureID model.CaptureID) orchestrator.ReactorState {
 	}
 }
 
-func (s *globalState) Update(key util.EtcdKey, value []byte) error {
+func (s *globalState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	k := new(CDCEtcdKey)
 	err := k.Parse(key.String())
 	if err != nil {
@@ -100,7 +100,7 @@ func newChangeFeedState(id model.ChangeFeedID, captureID model.CaptureID) *chang
 	}
 }
 
-func (s *changefeedState) Update(key util.EtcdKey, value []byte) error {
+func (s *changefeedState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	k := new(CDCEtcdKey)
 	err := k.Parse(key.String())
 	if err != nil {
@@ -160,7 +160,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 			s.TaskStatus = nil
 			return nil
 		}
-		if s.TaskPosition == nil {
+		if s.TaskStatus == nil {
 			s.TaskStatus = new(model.TaskStatus)
 		}
 		e = s.TaskStatus
@@ -186,7 +186,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 	if key.Tp == CDCEtcdKeyTypeChangefeedInfo {
 		err = s.Info.VerifyAndFix()
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 	return nil
@@ -271,7 +271,7 @@ func (s *changefeedState) patchAny(key string, tpi interface{}, fn func(interfac
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			if ne == nil {
+			if reflect.ValueOf(ne).IsNil() {
 				return nil, nil
 			}
 			return json.Marshal(ne)
