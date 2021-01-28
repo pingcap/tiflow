@@ -56,33 +56,6 @@ func (m *mockReactorStatePatcher) applyPatches() {
 	}
 }
 
-/*
-Key: /tidb/cdc/changefeed/info/test-leak-2,
-Value: {"sink-uri":"blackhole://","opts":{},"create-time":"2021-01-04T10:49:28.712724+08:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":".","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}
-Key: /tidb/cdc/changefeed/info/test-leak-3,
-Value: {"sink-uri":"blackhole://","opts":{},"create-time":"2021-01-04T10:48:07.2785+08:00","start-ts":421980664562188289,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":".","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}
-Key: /tidb/cdc/job/test-leak-2,
-Value: {"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}
-Key: /tidb/cdc/job/test-leak-3,
-Value: {"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}
-Key: /tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-leak-2,
-Value: {"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}
-Key: /tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-leak-3,
-Value: {"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}
-Key: /tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-leak-2,
-Value: {"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}
-Key: /tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-leak-3,
-Value: {"tables":{"45":{"start-ts":421980670892703758,"mark-table-id":0}},"operation":null,"admin-job-type":0}
-Key: /tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-leak-2,
-Value: {"45":{"workload":1}}
-Key: /tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-leak-3,
-Value: {"45":{"workload":1}}
-Key: /tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225,
-Value: {"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}
-Key: /tidb/cdc/owner/223176cb44d20a13,
-Value: 6bbc01c8-0605-4f86-a0f9-b3119109b225
-*/
-
 func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 	defer testleak.AfterTest(c)()
 	createTime, err := time.Parse("2006-01-02", "2020-02-02")
@@ -366,7 +339,7 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 		updateValue []string
 		expected    globalState
 	}{
-		{
+		{ // common case
 			captureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			updateKey: []string{
 				"/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
@@ -379,9 +352,54 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 			expected: globalState{
 				CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 				Changefeeds: map[model.ChangeFeedID]*changefeedState{
-					"test1": {},
-					"test2": {},
+					"test1": {
+						ID:           "test1",
+						CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+						TaskPosition: &model.TaskPosition{CheckPointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+					},
+					"test2": {
+						ID:        "test2",
+						CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+						Workload:  model.TaskWorkload{45: {Workload: 1}},
+					},
 				},
+			},
+		}, { // testing captureID not match
+			captureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+			updateKey: []string{
+				"/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b226/test1",
+				"/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b226/test2",
+			},
+			updateValue: []string{
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"45":{"workload":1}}`,
+			},
+			expected: globalState{
+				CaptureID:   "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				Changefeeds: map[model.ChangeFeedID]*changefeedState{},
+			},
+		}, { // testing remove changefeed
+			captureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+			updateKey: []string{
+				"/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				"/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test2",
+				"/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+			},
+			updateValue: []string{
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"45":{"workload":1}}`,
+				"",
+			},
+			expected: globalState{
+				CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				Changefeeds: map[model.ChangeFeedID]*changefeedState{
+					"test2": {
+						ID:        "test2",
+						CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+						Workload:  model.TaskWorkload{45: {Workload: 1}},
+					},
+				},
+				removedChangefeedIDs: []model.ChangeFeedID{"test1"},
 			},
 		},
 	}
