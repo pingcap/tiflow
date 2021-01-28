@@ -1350,6 +1350,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 
 	// the minimum valid TiKV version is "4.0.0-rc.1"
 	incompatibilityVers := []string{"v2.1.10", "v3.0.10", "v3.1.0", "v4.0.0-rc"}
+	var genLock sync.Mutex
 	nextVer := -1
 	call := int32(0)
 	// 20 here not too much, since check version itself has 3 time retry, and
@@ -1357,6 +1358,8 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	// generator too.
 	versionGenCallBoundary := int32(20)
 	gen := func() string {
+		genLock.Lock()
+		defer genLock.Unlock()
 		atomic.AddInt32(&call, 1)
 		if atomic.LoadInt32(&call) < versionGenCallBoundary {
 			nextVer = (nextVer + 1) % len(incompatibilityVers)
