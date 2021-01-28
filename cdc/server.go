@@ -16,20 +16,23 @@ package cdc
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/kv"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -238,6 +241,18 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		err := kvStore.Close()
+		if err != nil {
+			log.Warn("kv store close failed", zap.Error(err))
+		}
+	}()
+	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 	// When a capture suicided, restart it
 	for {
 		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
@@ -278,7 +293,8 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			log.Warn("campaign owner failed", zap.Error(err))
 			continue
 		}
-		log.Info("campaign owner successfully", zap.String("capture-id", s.capture.info.ID))
+		captureID := s.capture.info.ID
+		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
 		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
@@ -288,13 +304,19 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		s.setOwner(owner)
 		if err := owner.Run(ctx, ownerRunInterval); err != nil {
 			if errors.Cause(err) == context.Canceled {
-				log.Info("owner exited", zap.String("capture-id", s.capture.info.ID))
-				return nil
+				log.Info("owner exited", zap.String("capture-id", captureID))
+				select {
+				case <-ctx.Done():
+					// only exits the campaignOwnerLoop if parent context is done
+					return ctx.Err()
+				default:
+				}
+				log.Info("owner exited", zap.String("capture-id", captureID))
 			}
 			err2 := s.capture.Resign(ctx)
 			if err2 != nil {
 				// if regisn owner failed, return error to let capture exits
-				return errors.Annotatef(err2, "resign owner failed, capture: %s", s.capture.info.ID)
+				return errors.Annotatef(err2, "resign owner failed, capture: %s", captureID)
 			}
 			log.Warn("run owner failed", zap.Error(err))
 		}
@@ -303,23 +325,53 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 	}
 }
 
+func (s *Server) etcdHealthChecker(ctx context.Context) error {
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
+
+	httpCli, err := httputil.NewClient(s.opts.credential)
+	if err != nil {
+		return err
+	}
+	defer httpCli.CloseIdleConnections()
+	metrics := make(map[string]prometheus.Observer)
+	for _, pdEndpoint := range s.pdEndpoints {
+		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(s.opts.advertiseAddr, pdEndpoint)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			for _, pdEndpoint := range s.pdEndpoints {
+				start := time.Now()
+				ctx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*10))
+				req, err := http.NewRequestWithContext(
+					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
+				if err != nil {
+					log.Warn("etcd health check failed", zap.Error(err))
+					cancel()
+					continue
+				}
+				_, err = httpCli.Do(req)
+				if err != nil {
+					log.Warn("etcd health check error", zap.Error(err))
+				} else {
+					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
+				}
+				cancel()
+			}
+		}
+	}
+}
+
 func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
-	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		err := kvStore.Close()
-		if err != nil {
-			log.Warn("kv store close failed", zap.Error(err))
-		}
-	}()
-	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
 	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr, procOpts)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, s.opts.advertiseAddr, procOpts)
 	if err != nil {
 		return err
 	}
@@ -331,6 +383,14 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return s.campaignOwnerLoop(cctx)
+	})
+
+	wg.Go(func() error {
+		return s.etcdHealthChecker(cctx)
+	})
+
+	wg.Go(func() error {
+		return sorter.RunWorkerPool(cctx)
 	})
 
 	wg.Go(func() error {

@@ -25,12 +25,12 @@ function prepare() {
 
     TOPIC_NAME="ticdc-processor-panic-test-$RANDOM"
     case $SINK_TYPE in
-        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=cdc_test_processor_panic";;
+        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=cdc_test_processor_panic&kafka-version=${KAFKA_VERSION}";;
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
-      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
+      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 }
 
@@ -41,8 +41,8 @@ prepare $*
 cd "$(dirname "$0")"
 set -o pipefail
 GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
-check_table_exists test.end_mark_table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+check_table_exists test.end_mark_table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
 check_sync_diff $WORK_DIR $CUR/diff_config.toml
 cleanup_process $CDC_BINARY
-
+check_cdc_state_log $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

@@ -126,6 +126,10 @@ func newMqSink(
 		return ret
 	}
 
+	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
@@ -137,7 +141,7 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
+		resolvedReceiver:    resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -148,6 +152,8 @@ func newMqSink(
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
@@ -424,7 +430,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 
 	s = sinkURI.Query().Get("max-batch-size")
 	if s != "" {
-		opts["max-message-bytes"] = s
+		opts["max-batch-size"] = s
 	}
 
 	s = sinkURI.Query().Get("compression")
@@ -494,7 +500,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 
 	s = sinkURI.Query().Get("max-batch-size")
 	if s != "" {
-		opts["max-message-bytes"] = s
+		opts["max-batch-size"] = s
 	}
 	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
 	// and it may needs credential.

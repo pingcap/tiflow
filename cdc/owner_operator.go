@@ -31,7 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-//TODO: add tests
+// TODO: add tests
 type ddlHandler struct {
 	puller     puller.Puller
 	resolvedTS uint64

@@ -35,4 +35,5 @@ prepare $*
 test_owner_ha $*
 test_capture_ha $*
 test_processor_ha $*
+check_cdc_state_log $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

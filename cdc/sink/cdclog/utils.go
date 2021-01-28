@@ -200,7 +200,6 @@ func (l *logSink) flushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 		}
 	}
 	return resolvedTs, nil
-
 }
 
 type logMeta struct {

@@ -16,10 +16,13 @@ package sink
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
+	"net"
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,13 +30,19 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/infoschema"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -118,7 +127,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -139,7 +149,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  3,
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 			},
 		},
@@ -187,7 +198,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -198,7 +210,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  3,
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -209,7 +222,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  5,
 							CommitTs: 6,
 							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						}},
+						},
+					},
 				},
 			},
 			2: {
@@ -222,7 +236,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
@@ -233,7 +248,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  3,
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						}},
+						},
+					},
 				},
 				{
 					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
@@ -244,7 +260,8 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  5,
 							CommitTs: 6,
 							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						}},
+						},
+					},
 				},
 			},
 		},
@@ -373,7 +390,8 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			},
 			exportedOutputReplicaIDs: []uint64{1, 1, 1},
 			maxTxnRow:                2,
-		}}
+		},
+	}
 	ctx := context.Background()
 
 	notifier := new(notify.Notifier)
@@ -381,9 +399,11 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		cctx, cancel := context.WithCancel(ctx)
 		var outputRows [][]*model.RowChangedEvent
 		var outputReplicaIDs []uint64
+		receiver, err := notifier.NewReceiver(-1)
+		c.Assert(err, check.IsNil)
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
 			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
-			notifier.NewReceiver(-1),
+			receiver,
 			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 				outputRows = append(outputRows, events)
 				outputReplicaIDs = append(outputReplicaIDs, replicaID)
@@ -803,6 +823,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
 	})
 	c.Assert(param2, check.DeepEquals, &sinkParams{
@@ -814,49 +835,76 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
 	})
 }
 
 func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	defer testleak.AfterTest(c)()
-	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
-	defer db.Close() //nolint:errcheck
-	columns := []string{"Variable_name", "Value"}
-	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
-	)
-	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
-	)
-	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
-	)
-	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
-	)
 
-	dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-	c.Assert(err, check.IsNil)
-	params := defaultParams.Clone()
-	dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-	c.Assert(err, check.IsNil)
-	expectedParams := []string{
-		"tidb_txn_mode=optimistic",
-		"readTimeout=2m",
-		"writeTimeout=2m",
-		"allow_auto_random_explicit_insert=1",
-	}
-	for _, param := range expectedParams {
-		c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
-	}
-	c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
+	testDefaultParams := func() {
+		db, err := mockTestDB()
+		c.Assert(err, check.IsNil)
+		defer db.Close()
 
-	params.timezone = `"UTC"`
-	dsnStr, err = configureSinkURI(context.TODO(), dsn, params, db)
-	c.Assert(err, check.IsNil)
-	c.Assert(strings.Contains(dsnStr, "time_zone=%22UTC%22"), check.IsTrue)
+		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+		c.Assert(err, check.IsNil)
+		params := defaultParams.Clone()
+		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
+		c.Assert(err, check.IsNil)
+		expectedParams := []string{
+			"tidb_txn_mode=optimistic",
+			"readTimeout=2m",
+			"writeTimeout=2m",
+			"allow_auto_random_explicit_insert=1",
+		}
+		for _, param := range expectedParams {
+			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+		}
+		c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
+	}
+
+	testTimezoneParam := func() {
+		db, err := mockTestDB()
+		c.Assert(err, check.IsNil)
+		defer db.Close()
+
+		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+		c.Assert(err, check.IsNil)
+		params := defaultParams.Clone()
+		params.timezone = `"UTC"`
+		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
+		c.Assert(err, check.IsNil)
+		c.Assert(strings.Contains(dsnStr, "time_zone=%22UTC%22"), check.IsTrue)
+	}
+
+	testTimeoutParams := func() {
+		db, err := mockTestDB()
+		c.Assert(err, check.IsNil)
+		defer db.Close()
+
+		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+		c.Assert(err, check.IsNil)
+		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
+		c.Assert(err, check.IsNil)
+		params, err := parseSinkURI(context.TODO(), uri, map[string]string{})
+		c.Assert(err, check.IsNil)
+		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
+		c.Assert(err, check.IsNil)
+		expectedParams := []string{
+			"readTimeout=4m",
+			"writeTimeout=5m",
+			"timeout=3m",
+		}
+		for _, param := range expectedParams {
+			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+		}
+	}
+
+	testDefaultParams()
+	testTimezoneParam()
+	testTimeoutParams()
 }
 
 func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
@@ -960,300 +1008,417 @@ func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
 	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
 }
 
-/*
-   import (
-   	"context"
-   	"sort"
-   	"testing"
+func mockTestDB() (*sql.DB, error) {
+	// mock for test db, which is used querying TiDB session variable
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		return nil, err
+	}
+	columns := []string{"Variable_name", "Value"}
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	)
+	mock.ExpectClose()
+	return db, nil
+}
 
-   	"github.com/DATA-DOG/go-sqlmock"
-   	dmysql "github.com/go-sql-driver/mysql"
-   	"github.com/pingcap/check"
-   	timodel "github.com/pingcap/parser/model"
-   	"github.com/pingcap/parser/mysql"
-   	"github.com/pingcap/parser/types"
-   	"github.com/pingcap/ticdc/cdc/model"
-   	"github.com/pingcap/ticdc/cdc/schema"
-   	"github.com/pingcap/tidb/infoschema"
-   	dbtypes "github.com/pingcap/tidb/types"
-   )
+func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
+	defer testleak.AfterTest(c)()
 
-   type EmitSuite struct{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-   func Test(t *testing.T) { check.TestingT(t) }
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
+			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
+				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
+		mock.ExpectExec("SET sql_mode = 'ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE';").
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConn
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
 
-   var _ = check.Suite(&EmitSuite{})
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	rc.Cyclic = &config.CyclicConfig{
+		Enable:          true,
+		ReplicaID:       1,
+		FilterReplicaID: []uint64{2},
+	}
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	cyclicConfig, err := rc.Cyclic.Marshal()
+	c.Assert(err, check.IsNil)
+	opts := map[string]string{
+		mark.OptCyclicConfig: cyclicConfig,
+	}
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
+	c.Assert(err, check.IsNil)
 
-   func (s EmitSuite) TestShouldExecDDL(c *check.C) {
-   	// Set up
-   	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-   	c.Assert(err, check.IsNil)
-   	defer db.Close()
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
 
-   	sink := mysqlSink{
-   		db: db,
-   	}
+type mockUnavailableMySQL struct {
+	listener net.Listener
+	quit     chan interface{}
+	wg       sync.WaitGroup
+}
 
-   	t := model.SingleTableTxn{
-   		DDL: &model.DDL{
-   			Database: "test",
-   			Table:    "user",
-   			Job: &timodel.Job{
-   				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
-   			},
-   		},
-   	}
+func newMockUnavailableMySQL(addr string, c *check.C) *mockUnavailableMySQL {
+	s := &mockUnavailableMySQL{
+		quit: make(chan interface{}),
+	}
+	l, err := net.Listen("tcp", addr)
+	c.Assert(err, check.IsNil)
+	s.listener = l
+	s.wg.Add(1)
+	go s.serve(c)
+	return s
+}
 
-   	mock.ExpectBegin()
-   	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-   	mock.ExpectExec(t.DDL.Job.Query).WillReturnResult(sqlmock.NewResult(1, 1))
-   	mock.ExpectCommit()
+func (s *mockUnavailableMySQL) serve(c *check.C) {
+	defer s.wg.Done()
 
-   	// Execute
-   	err = sink.EmitDDL(context.Background(), t)
+	for {
+		_, err := s.listener.Accept()
+		if err != nil {
+			select {
+			case <-s.quit:
+				return
+			default:
+				c.Error(err)
+			}
+		} else {
+			s.wg.Add(1)
+			go func() {
+				// don't read from TCP connection, to simulate database service unavailable
+				<-s.quit
+				s.wg.Done()
+			}()
+		}
+	}
+}
 
-   	// Validate
-   	c.Assert(err, check.IsNil)
-   	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
-   }
+func (s *mockUnavailableMySQL) Stop() {
+	close(s.quit)
+	s.listener.Close()
+	s.wg.Wait()
+}
 
-   func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
-   	// Set up
-   	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-   	c.Assert(err, check.IsNil)
-   	defer db.Close()
+func (s MySQLSinkSuite) TestNewMySQLTimeout(c *check.C) {
+	defer testleak.AfterTest(c)()
 
-   	sink := mysqlSink{
-   		db: db,
-   	}
+	addr := "127.0.0.1:33333"
+	mockMySQL := newMockUnavailableMySQL(addr, c)
+	defer mockMySQL.Stop()
 
-   	t := model.SingleTableTxn{
-   		DDL: &model.DDL{
-   			Database: "test",
-   			Table:    "user",
-   			Job: &timodel.Job{
-   				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
-   			},
-   		},
-   	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=2s&timeout=2s", addr))
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	_, err = newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(errors.Cause(err), check.Equals, driver.ErrBadConn)
+}
 
-   	mock.ExpectBegin()
-   	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-   	ignorable := dmysql.MySQLError{
-   		Number: uint16(infoschema.ErrTableExists.Code()),
-   	}
-   	mock.ExpectExec(t.DDL.Job.Query).WillReturnError(&ignorable)
+func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
+	defer testleak.AfterTest(c)()
 
-   	// Execute
-   	err = sink.EmitDDL(context.Background(), t)
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
+			WithArgs(1, "test", 2, "test").
+			WillReturnResult(sqlmock.NewResult(2, 2))
+		mock.ExpectCommit()
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t2`(`a`,`b`) VALUES (?,?),(?,?)").
+			WithArgs(1, "test", 2, "test").
+			WillReturnResult(sqlmock.NewResult(2, 2))
+		mock.ExpectCommit()
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConn
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
 
-   	// Validate
-   	c.Assert(err, check.IsNil)
-   	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
-   }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
 
-   type tableHelper struct {
-   }
+	rows := []*model.RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  5,
+			CommitTs: 6,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 3},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  3,
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+		{
+			StartTs:  3,
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+	}
 
-   func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
-   	return schema.WrapTableInfo(&timodel.TableInfo{
-   		Columns: []*timodel.ColumnInfo{
-   			{
-   				Name:  timodel.CIStr{O: "id"},
-   				State: timodel.StatePublic,
-   				FieldType: types.FieldType{
-   					Tp:      mysql.TypeLong,
-   					Flen:    types.UnspecifiedLength,
-   					Decimal: types.UnspecifiedLength,
-   				},
-   			},
-   			{
-   				Name:  timodel.CIStr{O: "name"},
-   				State: timodel.StatePublic,
-   				FieldType: types.FieldType{
-   					Tp:      mysql.TypeString,
-   					Flen:    types.UnspecifiedLength,
-   					Decimal: types.UnspecifiedLength,
-   				},
-   			},
-   		},
-   	}), true
-   }
+	err = sink.EmitRowChangedEvents(ctx, rows...)
+	c.Assert(err, check.IsNil)
 
-   func (h *tableHelper) GetTableByName(schema, table string) (*schema.TableInfo, bool) {
-   	return h.TableByID(42)
-   }
+	err = retry.Run(time.Millisecond*20, 10, func() error {
+		ts, err := sink.FlushRowChangedEvents(ctx, uint64(2))
+		c.Assert(err, check.IsNil)
+		if ts < uint64(2) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
+		}
+		return nil
+	})
+	c.Assert(err, check.IsNil)
 
-   func (h *tableHelper) GetTableIDByName(schema, table string) (int64, bool) {
-   	return 42, true
-   }
+	err = retry.Run(time.Millisecond*20, 10, func() error {
+		ts, err := sink.FlushRowChangedEvents(ctx, uint64(4))
+		c.Assert(err, check.IsNil)
+		if ts < uint64(4) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
+		}
+		return nil
+	})
+	c.Assert(err, check.IsNil)
 
-   func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
-   	// Set up
-   	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-   	c.Assert(err, check.IsNil)
-   	defer db.Close()
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
 
-   	helper := tableHelper{}
-   	sink := mysqlSink{
-   		db:         db,
-   		infoGetter: &helper,
-   	}
+func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
+	defer testleak.AfterTest(c)()
 
-   	t := model.SingleTableTxn{
-   		DMLs: []*model.DML{
-   			{
-   				Database: "test",
-   				Table:    "user",
-   				Tp:       model.InsertDMLType,
-   				Values: map[string]dbtypes.Datum{
-   					"id":   dbtypes.NewDatum(42),
-   					"name": dbtypes.NewDatum("tester1"),
-   				},
-   			},
-   		},
-   	}
+	rows := []*model.RowChangedEvent{
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			},
+		},
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+			},
+		},
+	}
 
-   	mock.ExpectBegin()
-   	mock.ExpectExec("REPLACE INTO `test`.`user`(`id`,`name`) VALUES (?,?);").
-   		WithArgs(42, "tester1").
-   		WillReturnResult(sqlmock.NewResult(1, 1))
-   	mock.ExpectCommit()
+	errDatabaseNotExists := &dmysql.MySQLError{
+		Number: uint16(infoschema.ErrDatabaseNotExists.Code()),
+	}
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		for i := 0; i < defaultDMLMaxRetryTime+1; i++ {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+				WithArgs(1, 2).
+				WillReturnError(errDatabaseNotExists)
+			mock.ExpectRollback()
+		}
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConn
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
 
-   	// Execute
-   	err = sink.EmitDMLs(context.Background(), t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
 
-   	// Validate
-   	c.Assert(err, check.IsNil)
-   	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
-   }
+	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	c.Assert(errors.Cause(err), check.Equals, errDatabaseNotExists)
 
-   func (s EmitSuite) TestShouldExecDelete(c *check.C) {
-   	// Set up
-   	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-   	c.Assert(err, check.IsNil)
-   	defer db.Close()
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
 
-   	helper := tableHelper{}
-   	sink := mysqlSink{
-   		db:         db,
-   		infoGetter: &helper,
-   	}
+func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
+	defer testleak.AfterTest(c)()
 
-   	t := model.SingleTableTxn{
-   		DMLs: []*model.DML{
-   			{
-   				Database: "test",
-   				Table:    "user",
-   				Tp:       model.DeleteDMLType,
-   				Values: map[string]dbtypes.Datum{
-   					"id":   dbtypes.NewDatum(123),
-   					"name": dbtypes.NewDatum("tester1"),
-   				},
-   			},
-   		},
-   	}
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		mock.ExpectBegin()
+		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+		mock.ExpectBegin()
+		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").
+			WillReturnError(&dmysql.MySQLError{
+				Number: uint16(infoschema.ErrColumnExists.Code()),
+			})
+		mock.ExpectRollback()
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConn
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
 
-   	mock.ExpectBegin()
-   	mock.ExpectExec("DELETE FROM `test`.`user` WHERE `id` = ? AND `name` = ? LIMIT 1;").
-   		WithArgs(123, "tester1").
-   		WillReturnResult(sqlmock.NewResult(1, 1))
-   	mock.ExpectCommit()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	rc.Filter = &config.FilterConfig{
+		Rules: []string{"test.t1"},
+	}
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
 
-   	// Execute
-   	err = sink.EmitDMLs(context.Background(), t)
+	ddl1 := &model.DDLEvent{
+		StartTs:  1000,
+		CommitTs: 1010,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "test",
+			Table:  "t1",
+		},
+		Type:  timodel.ActionAddColumn,
+		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
+	}
+	ddl2 := &model.DDLEvent{
+		StartTs:  1020,
+		CommitTs: 1030,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "test",
+			Table:  "t2",
+		},
+		Type:  timodel.ActionAddColumn,
+		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
+	}
 
-   	// Validate
-   	c.Assert(err, check.IsNil)
-   	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
-   }
+	err = sink.EmitDDLEvent(ctx, ddl1)
+	c.Assert(err, check.IsNil)
+	err = sink.EmitDDLEvent(ctx, ddl2)
+	c.Assert(cerror.ErrDDLEventIgnored.Equal(err), check.IsTrue)
+	// DDL execute failed, but error can be ignored
+	err = sink.EmitDDLEvent(ctx, ddl1)
+	c.Assert(err, check.IsNil)
 
-   type splitSuite struct{}
-
-   var _ = check.Suite(&splitSuite{})
-
-   func (s *splitSuite) TestCanHandleEmptyInput(c *check.C) {
-   	c.Assert(splitIndependentGroups(nil), check.HasLen, 0)
-   }
-
-   func (s *splitSuite) TestShouldSplitByTable(c *check.C) {
-   	var dmls []*model.DML
-   	addDMLs := func(n int, db, tbl string) {
-   		for i := 0; i < n; i++ {
-   			dml := model.DML{
-   				Database: db,
-   				Table:    tbl,
-   			}
-   			dmls = append(dmls, &dml)
-   		}
-   	}
-   	addDMLs(3, "db", "tbl1")
-   	addDMLs(2, "db", "tbl2")
-   	addDMLs(2, "db", "tbl1")
-   	addDMLs(2, "db2", "tbl2")
-
-   	groups := splitIndependentGroups(dmls)
-
-   	assertAllAreFromTbl := func(dmls []*model.DML, db, tbl string) {
-   		for _, dml := range dmls {
-   			c.Assert(dml.Database, check.Equals, db)
-   			c.Assert(dml.Table, check.Equals, tbl)
-   		}
-   	}
-   	c.Assert(groups, check.HasLen, 3)
-   	sort.Slice(groups, func(i, j int) bool {
-   		tblI := groups[i][0]
-   		tblJ := groups[j][0]
-   		if tblI.Database != tblJ.Database {
-   			return tblI.Database < tblJ.Database
-   		}
-   		return tblI.Table < tblJ.Table
-   	})
-   	assertAllAreFromTbl(groups[0], "db", "tbl1")
-   	assertAllAreFromTbl(groups[1], "db", "tbl2")
-   	assertAllAreFromTbl(groups[2], "db2", "tbl2")
-   }
-
-   type mysqlSinkSuite struct{}
-
-   var _ = check.Suite(&mysqlSinkSuite{})
-
-   func (s *mysqlSinkSuite) TestBuildDBAndParams(c *check.C) {
-   	tests := []struct {
-   		sinkURI string
-   		opts    map[string]string
-   		params  params
-   	}{
-   		{
-   			sinkURI: "mysql://root:123@localhost:4000?worker-count=20",
-   			opts:    map[string]string{dryRunOpt: ""},
-   			params: params{
-   				workerCount: 20,
-   				dryRun:      true,
-   			},
-   		},
-   		{
-   			sinkURI: "tidb://root:123@localhost:4000?worker-count=20",
-   			opts:    map[string]string{dryRunOpt: ""},
-   			params: params{
-   				workerCount: 20,
-   				dryRun:      true,
-   			},
-   		},
-   		{
-   			sinkURI: "root@tcp(127.0.0.1:3306)/", // dsn not uri
-   			opts:    nil,
-   			params:  defaultParams,
-   		},
-   	}
-
-   	for _, t := range tests {
-   		c.Log("case sink: ", t.sinkURI)
-   		db, params, err := buildDBAndParams(t.sinkURI, t.opts)
-   		c.Assert(err, check.IsNil)
-   		c.Assert(params, check.Equals, t.params)
-   		c.Assert(db, check.NotNil)
-   	}
-   }
-
-*/
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}

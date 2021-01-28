@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -57,4 +58,32 @@ func (s *clientSuite) TestRetry(c *check.C) {
 	_, err = retrycli.Put(context.TODO(), "", "")
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.ErrorMatches, "mock error")
+}
+
+func (s *etcdSuite) TestDelegateLease(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx := context.Background()
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{s.clientURL.String()},
+		DialTimeout: 3 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	defer cli.Close()
+
+	ttl := int64(10)
+	lease, err := cli.Grant(ctx, ttl)
+	c.Assert(err, check.IsNil)
+
+	ttlResp, err := cli.TimeToLive(ctx, lease.ID)
+	c.Assert(err, check.IsNil)
+	c.Assert(ttlResp.GrantedTTL, check.Equals, ttl)
+	c.Assert(ttlResp.TTL, check.Less, ttl)
+	c.Assert(ttlResp.TTL, check.Greater, int64(0))
+
+	_, err = cli.Revoke(ctx, lease.ID)
+	c.Assert(err, check.IsNil)
+	ttlResp, err = cli.TimeToLive(ctx, lease.ID)
+	c.Assert(err, check.IsNil)
+	c.Assert(ttlResp.TTL, check.Equals, int64(-1))
 }

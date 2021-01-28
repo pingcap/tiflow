@@ -23,12 +23,12 @@ function prepare() {
 
     TOPIC_NAME="ticdc-cdc-test-$RANDOM"
     case $SINK_TYPE in
-        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
+        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
-        run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
+        run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 }
 
@@ -39,4 +39,5 @@ cd "$(dirname "$0")"
 set -o pipefail
 GO111MODULE=on go run cdc.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
 cleanup_process $CDC_BINARY
+check_cdc_state_log $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
