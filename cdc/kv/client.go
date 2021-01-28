@@ -880,6 +880,8 @@ func (s *eventFeedSession) partialRegionFeed(
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
 
+	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
+
 	now := time.Now()
 	delay := limiter.ReserveN(now, 1).Delay()
 	if delay != 0 {

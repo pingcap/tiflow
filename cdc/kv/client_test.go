@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -1847,4 +1848,158 @@ func (s *etcdSuite) TestDuplicateRequest(c *check.C) {
 		}},
 	}
 	s.testEventCommitTsFallback(c, events)
+}
+
+// TestEventAfterFeedStop tests kv client can drop events sent after region feed is stopped
+func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	// add 2s delay to simulate event feed processor has been marked stopped, but
+	// before event feed processor is reconstruct, some duplicated events are
+	// sent to event feed processor.
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientSingleFeedProcessDelay", "1*sleep(2000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientSingleFeedProcessDelay")
+	}()
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	// an error event will mark the corresponding region feed as stopped
+	epochNotMatch := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Error{
+				Error: &cdcpb.Error{
+					EpochNotMatch: &errorpb.EpochNotMatch{},
+				},
+			},
+		},
+	}}
+	ch1 <- epochNotMatch
+
+	// sleep to ensure event feed processor has been marked as stopped
+	time.Sleep(1 * time.Second)
+	committed := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a"),
+						Value:    []byte("committed put event before init"),
+						StartTs:  105,
+						CommitTs: 115,
+					}},
+				},
+			},
+		},
+	}}
+	initialized := mockInitializedEvent(regionID, currentRequestID())
+	resolved := &cdcpb.ChangeDataEvent{
+		ResolvedTs: &cdcpb.ResolvedTs{
+			Regions: []uint64{3},
+			Ts:      120,
+		},
+	}
+	// clone to avoid data race, these are exactly the same events
+	committedClone := proto.Clone(committed).(*cdcpb.ChangeDataEvent)
+	initializedClone := proto.Clone(initialized).(*cdcpb.ChangeDataEvent)
+	resolvedClone := proto.Clone(resolved).(*cdcpb.ChangeDataEvent)
+	ch1 <- committed
+	ch1 <- initialized
+	ch1 <- resolved
+
+	// wait request id allocated with: new session, 2 * new request
+	waitRequestID(c, baseAllocatedID+2)
+	committedClone.Events[0].RequestId = currentRequestID()
+	initializedClone.Events[0].RequestId = currentRequestID()
+	ch1 <- committedClone
+	ch1 <- initializedClone
+	ch1 <- resolvedClone
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("a"),
+				Value:    []byte("committed put event before init"),
+				StartTs:  105,
+				CRTs:     115,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+	}
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+	cancel()
 }
