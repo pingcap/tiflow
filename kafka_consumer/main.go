@@ -143,7 +143,6 @@ func init() {
 		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
 		kafkaMaxBatchSize = c
 	}
-
 }
 
 func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
@@ -187,6 +186,7 @@ func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error 
 	}
 	return errors.Errorf("wait the topic(%s) created timeout", topic)
 }
+
 func newSaramaConfig() (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
@@ -544,7 +544,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
-			//flush DMLs
+			// flush DMLs
 			err := c.forEachSink(func(sink *struct {
 				sink.Sink
 				resolvedTs uint64

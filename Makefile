@@ -29,7 +29,7 @@ endif
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration|testing_utils'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration|testing_utils|proto'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto')
@@ -118,9 +118,9 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/run.sh kafka "$(CASE)"
 
-fmt:
+fmt: tools/bin/gofumports
 	@echo "gofmt (simplify)"
-	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
 lint: tools/bin/revive
 	@echo "linting"
@@ -134,8 +134,7 @@ check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
 
-check-leaktest-added:
-	GO111MODULE=off go get golang.org/x/tools/cmd/goimports
+check-leaktest-added: tools/bin/gofumports
 	@echo "check leak test added in all unit tests"
 	./scripts/add-leaktest.sh $(TEST_FILES)
 
@@ -172,6 +171,10 @@ data-flow-diagram: docs/data-flow.dot
 clean:
 	go clean -i ./...
 	rm -rf *.out
+
+tools/bin/gofumports: tools/check/go.mod
+	cd tools/check; test -e ../bin/gofumports || \
+	$(GO) build -o ../bin/gofumports mvdan.cc/gofumpt
 
 tools/bin/revive: tools/check/go.mod
 	cd tools/check; test -e ../bin/revive || \

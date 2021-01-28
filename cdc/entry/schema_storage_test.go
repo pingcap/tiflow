@@ -281,7 +281,6 @@ func (*schemaSuite) TestTable(c *check.C) {
 	// drop schema
 	err = snap.dropSchema(3)
 	c.Assert(err, check.IsNil)
-
 }
 
 func (t *schemaSuite) TestHandleDDL(c *check.C) {
@@ -399,7 +398,8 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
-			{Name: timodel.CIStr{O: "name"},
+			{
+				Name: timodel.CIStr{O: "name"},
 				FieldType: types.FieldType{
 					Flag: mysql.NotNullFlag,
 				},
@@ -412,8 +412,10 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "name",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "name"},
-						Offset: 0},
+					{
+						Name:   timodel.CIStr{O: "name"},
+						Offset: 0,
+					},
 				},
 				Unique: true,
 			},
@@ -422,8 +424,10 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "PRIMARY",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "id"},
-						Offset: 1},
+					{
+						Name:   timodel.CIStr{O: "id"},
+						Offset: 1,
+					},
 				},
 				Primary: true,
 			},
@@ -851,7 +855,7 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 			PARTITION p3 VALUES LESS THAN (20)
 		)`, // ActionCreateTable
 		"ALTER TABLE test_ddl2.employees DROP PARTITION p2",                                  // ActionDropTablePartition
-		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", //ActionAddTablePartition
+		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", // ActionAddTablePartition
 		"ALTER TABLE test_ddl2.employees TRUNCATE PARTITION p3",                              // ActionTruncateTablePartition
 		"alter table test_ddl2.employees comment='modify comment'",                           // ActionModifyTableComment
 		"alter table test_ddl2.simple_test1 drop primary key",                                // ActionDropPrimaryKey
@@ -958,7 +962,6 @@ func tidySchemaSnapshot(snap *schemaSnapshot) {
 	for _, v := range snap.tableInSchema {
 		sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
 	}
-
 }
 
 func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {

@@ -67,5 +67,4 @@ func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 		"t_bigint": uint64(0xFEEDBEEFFEEDBEEF),
 		"t_bit":    uint64(0xFFFFFFFFFFFFFFFA),
 	}).Send().Wait().Check()
-
 }

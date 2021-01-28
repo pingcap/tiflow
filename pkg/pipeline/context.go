@@ -91,6 +91,7 @@ func (ctx *rootContext) SendToNextNode(msg *Message) {
 func (ctx *rootContext) ReplicaConfig() *config.ReplicaConfig {
 	return ctx.config
 }
+
 func (ctx *rootContext) Done() <-chan struct{} {
 	return ctx.closeCh
 }

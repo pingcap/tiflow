@@ -43,8 +43,23 @@ func (s TxnsHeapSuite) TestTxnsHeap(c *check.C) {
 				{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3},
 			},
 		},
-		expected: []*model.SingleTableTxn{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2},
-			{CommitTs: 3}, {CommitTs: 3}, {CommitTs: 5}, {CommitTs: 7}, {CommitTs: 9}, {CommitTs: 10}, {CommitTs: 15}, {CommitTs: 15}, {CommitTs: 15}},
+		expected: []*model.SingleTableTxn{
+			{CommitTs: 1},
+			{CommitTs: 1},
+			{CommitTs: 1},
+			{CommitTs: 1},
+			{CommitTs: 1},
+			{CommitTs: 2},
+			{CommitTs: 3},
+			{CommitTs: 3},
+			{CommitTs: 5},
+			{CommitTs: 7},
+			{CommitTs: 9},
+			{CommitTs: 10},
+			{CommitTs: 15},
+			{CommitTs: 15},
+			{CommitTs: 15},
+		},
 	}}
 
 	for _, tc := range testCases {

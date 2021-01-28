@@ -26,8 +26,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var testProtocol = flag.String("protocol", "avro", "the protocol we want to test: avro or canal")
-var dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
+var (
+	testProtocol      = flag.String("protocol", "avro", "the protocol we want to test: avro or canal")
+	dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
+)
 
 func testAvro() {
 	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
@@ -52,9 +54,9 @@ func testCanal() {
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
 		tests.NewCompositePKeyCase(task),
-		//tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
+		// tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
 
 	runTests(testCases, env)
@@ -68,7 +70,7 @@ func testCanalJSON() {
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		// tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
 		tests.NewCompositePKeyCase(task),
 		tests.NewAlterCase(task),
 	}

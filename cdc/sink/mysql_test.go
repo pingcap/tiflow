@@ -179,7 +179,8 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			},
 			exportedOutputReplicaIDs: []uint64{1, 1, 1},
 			maxTxnRow:                2,
-		}}
+		},
+	}
 	ctx := context.Background()
 
 	notifier := new(notify.Notifier)

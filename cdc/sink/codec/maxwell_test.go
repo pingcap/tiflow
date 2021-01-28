@@ -41,7 +41,6 @@ var _ = check.Suite(&maxwellbatchSuite{
 })
 
 func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder) {
-
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {

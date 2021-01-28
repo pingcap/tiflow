@@ -735,7 +735,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 // handleSyncPoint record every syncpoint to downstream if the syncpoint feature is enable
 func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
-	//sync-point on
+	// sync-point on
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
 		defer c.syncpointMutex.Unlock()
@@ -903,7 +903,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	var tsUpdated bool
 
-	//syncpoint on
+	// syncpoint on
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
 		if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {

@@ -486,7 +486,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	//p.position.Count = p.sink.Count()
+	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
@@ -827,7 +827,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0755)
+					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
 					if err != nil {
 						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
 						return nil
