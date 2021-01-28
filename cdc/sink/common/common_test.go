@@ -35,7 +35,7 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 		input      []*model.RowChangedEvent
 		resolvedTs model.Ts
 		expected   map[model.TableID][]*model.SingleTableTxn
-	}{{{
+	}{{{ // Testing basic transaction collocation, no txns with the same committs
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
@@ -75,7 +75,7 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 3}},
 			}}},
 		},
-	}}, {{
+	}}, {{ // Testing the short circuit path
 		input:      []*model.RowChangedEvent{},
 		resolvedTs: 6,
 		expected:   nil,
@@ -87,7 +87,7 @@ func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
 		},
 		resolvedTs: 6,
 		expected:   map[model.TableID][]*model.SingleTableTxn{},
-	}}, {{
+	}}, {{ // Testing the txns with the same commitTs
 		input: []*model.RowChangedEvent{
 			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
 			{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
