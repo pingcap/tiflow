@@ -24,17 +24,43 @@ import (
 	"go.uber.org/zap"
 )
 
+type txnsWithTheSameCommitTs struct {
+	txns     map[model.Ts]*model.SingleTableTxn
+	commitTs model.Ts
+}
+
+func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
+	if row.CommitTs != t.commitTs {
+		log.Panic("unexpected row change event",
+			zap.Uint64("commitTs of txn", t.commitTs),
+			zap.Any("row", row))
+	}
+	if t.txns == nil {
+		t.txns = make(map[model.Ts]*model.SingleTableTxn)
+	}
+	txn, exist := t.txns[row.StartTs]
+	if !exist {
+		txn = &model.SingleTableTxn{
+			StartTs:  row.StartTs,
+			CommitTs: row.CommitTs,
+			Table:    row.Table,
+		}
+		t.txns[row.StartTs] = txn
+	}
+	txn.Append(row)
+}
+
 // UnresolvedTxnCache caches unresolved txns
 type UnresolvedTxnCache struct {
 	unresolvedTxnsMu sync.Mutex
-	unresolvedTxns   map[model.TableID][]*model.SingleTableTxn
+	unresolvedTxns   map[model.TableID][]txnsWithTheSameCommitTs
 	checkpointTs     uint64
 }
 
 // NewUnresolvedTxnCache returns a new UnresolvedTxnCache
 func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 	return &UnresolvedTxnCache{
-		unresolvedTxns: make(map[model.TableID][]*model.SingleTableTxn),
+		unresolvedTxns: make(map[model.TableID][]txnsWithTheSameCommitTs),
 	}
 }
 
@@ -44,25 +70,22 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 	defer c.unresolvedTxnsMu.Unlock()
 	appendRows := 0
 	for _, row := range rows {
-		if filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
+		if filter != nil && filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
 		txns := c.unresolvedTxns[row.Table.TableID]
-		if len(txns) == 0 || txns[len(txns)-1].StartTs != row.StartTs {
+		if len(txns) == 0 || txns[len(txns)-1].commitTs != row.CommitTs {
 			// fail-fast check
-			if len(txns) != 0 && txns[len(txns)-1].CommitTs > row.CommitTs {
+			if len(txns) != 0 && txns[len(txns)-1].commitTs > row.CommitTs {
 				log.Panic("the commitTs of the emit row is less than the received row",
 					zap.Stringer("table", row.Table),
 					zap.Uint64("emit row startTs", row.StartTs),
 					zap.Uint64("emit row commitTs", row.CommitTs),
-					zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
-					zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
+					zap.Uint64("last received row commitTs", txns[len(txns)-1].commitTs))
 			}
-			txns = append(txns, &model.SingleTableTxn{
-				StartTs:  row.StartTs,
-				CommitTs: row.CommitTs,
-				Table:    row.Table,
+			txns = append(txns, txnsWithTheSameCommitTs{
+				commitTs: row.CommitTs,
 			})
 			c.unresolvedTxns[row.Table.TableID] = txns
 		}
@@ -88,40 +111,44 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*mo
 	return resolvedTxnsMap
 }
 
-// Unresolved returns unresolved txns
-func (c *UnresolvedTxnCache) Unresolved() map[model.TableID][]*model.SingleTableTxn {
-	return c.unresolvedTxns
-}
-
 // UpdateCheckpoint updates the checkpoint ts
 func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
 	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
 }
 
 func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableID][]*model.SingleTableTxn,
+	resolvedTs uint64, unresolvedTxns map[model.TableID][]txnsWithTheSameCommitTs,
 ) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
 	minTs = resolvedTs
 	for tableID, txns := range unresolvedTxns {
 		i := sort.Search(len(txns), func(i int) bool {
-			return txns[i].CommitTs > resolvedTs
+			return txns[i].commitTs > resolvedTs
 		})
 		if i == 0 {
 			continue
 		}
-		var resolvedTxns []*model.SingleTableTxn
+		var resolvedTxnsWithTheSameCommitTs []txnsWithTheSameCommitTs
 		if i == len(txns) {
-			resolvedTxns = txns
+			resolvedTxnsWithTheSameCommitTs = txns
 			delete(unresolvedTxns, tableID)
 		} else {
-			resolvedTxns = txns[:i]
+			resolvedTxnsWithTheSameCommitTs = txns[:i]
 			unresolvedTxns[tableID] = txns[i:]
 		}
+		var txnsLength int
+		for _, txns := range resolvedTxnsWithTheSameCommitTs {
+			txnsLength += len(txns.txns)
+		}
+		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
+		for _, txns := range resolvedTxnsWithTheSameCommitTs {
+			for _, txn := range txns.txns {
+				resolvedTxns = append(resolvedTxns, txn)
+			}
+		}
 		resolvedRowsMap[tableID] = resolvedTxns
-
-		if len(resolvedTxns) > 0 && resolvedTxns[0].CommitTs < minTs {
-			minTs = resolvedTxns[0].CommitTs
+		if len(resolvedTxnsWithTheSameCommitTs) > 0 && resolvedTxnsWithTheSameCommitTs[0].commitTs < minTs {
+			minTs = resolvedTxnsWithTheSameCommitTs[0].commitTs
 		}
 	}
 	return
