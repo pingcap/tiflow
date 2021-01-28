@@ -14,12 +14,12 @@
 package filter
 
 import (
-	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // ChangefeedFastFailError checks the error, returns true if it is meaningless
 // to retry on this error
 func ChangefeedFastFailError(err error) bool {
-	return terror.ErrorEqual(err, tikv.ErrGCTooEarly)
+	return cerror.ErrStartTsBeforeGC.Equal(errors.Cause(err))
 }
