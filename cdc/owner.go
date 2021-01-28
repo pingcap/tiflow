@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -242,7 +241,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
-		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
+		failpoint.Return(nil, cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 
 	failpoint.Inject("NewChangefeedRetryError", func() {
@@ -711,11 +710,45 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		}
 	}
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
-		_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
-			log.Warn("failed to update service safe point", zap.Error(err))
+			sinceLastUpdate := time.Since(o.gcSafepointLastUpdate)
+			log.Warn("failed to update service safe point", zap.Error(err),
+				zap.Duration("since-last-update", sinceLastUpdate))
+			// We do not throw an error unless updating GC safepoint has been failing for more than gcTTL.
+			if sinceLastUpdate >= time.Second*time.Duration(o.gcTTL) {
+				return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
+			}
 		} else {
 			o.gcSafepointLastUpdate = time.Now()
+		}
+
+		failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
+			actual = uint64(val.(int))
+		})
+
+		if actual > minCheckpointTs {
+			// UpdateServiceGCSafePoint has failed.
+			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("actual-safepoint", actual))
+
+			for cfID, cf := range o.changeFeeds {
+				if cf.status.CheckpointTs < actual {
+					runningError := &model.RunningError{
+						Addr:    util.CaptureAddrFromCtx(ctx),
+						Code:    "CDC-owner-1001",
+						Message: cerror.ErrServiceSafepointLost.GenWithStackByArgs(actual).Error(),
+					}
+
+					err := o.EnqueueJob(model.AdminJob{
+						CfID:  cfID,
+						Type:  model.AdminStop,
+						Error: runningError,
+					})
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -917,6 +950,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if job.Error != nil {
 				cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
 			}
+
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
