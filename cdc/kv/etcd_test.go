@@ -289,18 +289,16 @@ func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
 func (s etcdSuite) TestGetAllChangeFeedStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
-	var (
-		changefeeds = map[model.ChangeFeedID]*model.ChangeFeedStatus{
-			"cf1": {
-				ResolvedTs:   100,
-				CheckpointTs: 90,
-			},
-			"cf2": {
-				ResolvedTs:   100,
-				CheckpointTs: 70,
-			},
-		}
-	)
+	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
+		"cf1": {
+			ResolvedTs:   100,
+			CheckpointTs: 90,
+		},
+		"cf2": {
+			ResolvedTs:   100,
+			CheckpointTs: 70,
+		},
+	}
 	err := s.client.PutAllChangeFeedStatus(context.Background(), changefeeds)
 	c.Assert(err, check.IsNil)
 	statuses, err := s.client.GetAllChangeFeedStatus(context.Background())

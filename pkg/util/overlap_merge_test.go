@@ -46,47 +46,68 @@ func (s *overlapSuite) TestOverlapCoveringMerge(c *check.C) {
 		// payloads would be "02" for [1, 2) and "12" for [2, 3).
 		expectedPayloads []string
 	}{
-		{"no input",
+		{
+			"no input",
 			[][]byte{},
 			nil, nil,
 		},
-		{"one empty covering",
+		{
+			"one empty covering",
 			[][]byte{{}},
 			nil, nil,
 		},
-		{"two empty coverings",
+		{
+			"two empty coverings",
 			[][]byte{{}, {}},
 			nil, nil,
 		},
-		{"one",
+		{
+			"one",
 			[][]byte{{1, 2}, {}},
-			[]byte{1, 2}, []string{"0"},
+			[]byte{1, 2},
+			[]string{"0"},
 		},
-		{"same",
+		{
+			"same",
 			[][]byte{{1, 2}, {1, 2}},
-			[]byte{1, 2}, []string{"01"},
+			[]byte{1, 2},
+			[]string{"01"},
 		},
-		{"overlap",
+		{
+			"overlap",
 			[][]byte{{1, 3}, {2, 3}},
-			[]byte{1, 2, 2, 3}, []string{"0", "01"}},
-		{"overlap reversed",
+			[]byte{1, 2, 2, 3},
+			[]string{"0", "01"},
+		},
+		{
+			"overlap reversed",
 			[][]byte{{2, 3}, {1, 3}},
-			[]byte{1, 2, 2, 3}, []string{"1", "01"}},
-		{"no overlap",
+			[]byte{1, 2, 2, 3},
+			[]string{"1", "01"},
+		},
+		{
+			"no overlap",
 			[][]byte{{1, 2, 5, 6}, {3, 4}},
-			[]byte{1, 2, 3, 4, 5, 6}, []string{"0", "2", "1"},
+			[]byte{1, 2, 3, 4, 5, 6},
+			[]string{"0", "2", "1"},
 		},
-		{"range splits and merges",
+		{
+			"range splits and merges",
 			[][]byte{{1, 3, 3, 4}, {1, 4}, {1, 2, 2, 4}},
-			[]byte{1, 2, 2, 3, 3, 4}, []string{"023", "024", "124"},
+			[]byte{1, 2, 2, 3, 3, 4},
+			[]string{"023", "024", "124"},
 		},
-		{"godoc example",
+		{
+			"godoc example",
 			[][]byte{{1, 2, 3, 4, 6, 7}, {1, 5}},
-			[]byte{1, 2, 2, 3, 3, 4, 4, 5, 6, 7}, []string{"03", "3", "13", "3", "2"},
+			[]byte{1, 2, 2, 3, 3, 4, 4, 5, 6, 7},
+			[]string{"03", "3", "13", "3", "2"},
 		},
-		{"empty",
+		{
+			"empty",
 			[][]byte{{1, 2, 2, 2, 2, 2, 4, 5}, {1, 5}},
-			[]byte{1, 2, 2, 2, 2, 4, 4, 5}, []string{"04", "124", "4", "34"},
+			[]byte{1, 2, 2, 2, 2, 4, 4, 5},
+			[]string{"04", "124", "4", "34"},
 		},
 	}
 

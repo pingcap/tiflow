@@ -32,9 +32,7 @@ const (
 	magic          = 0xbeefbeef
 )
 
-var (
-	openFDCount int64
-)
+var openFDCount int64
 
 type fileBackEnd struct {
 	fileName string
@@ -94,7 +92,7 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 }
 
 func (f *fileBackEnd) writer() (backEndWriter, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0644)
+	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -225,7 +223,6 @@ func (r *fileBackEndReader) resetAndClose() error {
 		failpoint.Inject("sorterDebug", func() {
 			atomic.StoreInt32(&r.backEnd.borrowed, 0)
 		})
-
 	}()
 
 	if r.f == nil {

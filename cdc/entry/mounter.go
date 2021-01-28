@@ -357,8 +357,10 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, raw
 	}, nil
 }
 
-const ddlJobListKey = "DDLJobList"
-const ddlAddIndexJobListKey = "DDLJobAddIdxList"
+const (
+	ddlJobListKey         = "DDLJobList"
+	ddlAddIndexJobListKey = "DDLJobAddIdxList"
+)
 
 // UnmarshalDDL unmarshals the ddl job from RawKVEntry
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {

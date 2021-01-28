@@ -54,8 +54,10 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "group",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "group"},
-						Offset: 0},
+					{
+						Name:   timodel.CIStr{O: "group"},
+						Offset: 0,
+					},
 				},
 				Unique: false,
 			},
@@ -64,8 +66,10 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "name",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "name"},
-						Offset: 0},
+					{
+						Name:   timodel.CIStr{O: "name"},
+						Offset: 0,
+					},
 				},
 				Unique: true,
 			},
@@ -74,8 +78,10 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "PRIMARY",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "id"},
-						Offset: 1},
+					{
+						Name:   timodel.CIStr{O: "id"},
+						Offset: 1,
+					},
 				},
 				Primary: true,
 			},
@@ -157,8 +163,10 @@ func (s *schemaStorageSuite) TestUniqueKeyIsHandle(c *check.C) {
 					O: "group",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "group"},
-						Offset: 0},
+					{
+						Name:   timodel.CIStr{O: "group"},
+						Offset: 0,
+					},
 				},
 				Unique: false,
 			},
@@ -167,8 +175,10 @@ func (s *schemaStorageSuite) TestUniqueKeyIsHandle(c *check.C) {
 					O: "name",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "name"},
-						Offset: 0},
+					{
+						Name:   timodel.CIStr{O: "name"},
+						Offset: 0,
+					},
 				},
 				Unique: true,
 			},

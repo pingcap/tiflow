@@ -39,12 +39,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	forceEnableOldValueProtocols = []string{
-		"canal",
-		"maxwell",
-	}
-)
+var forceEnableOldValueProtocols = []string{
+	"canal",
+	"maxwell",
+}
 
 const (
 	defaultSortDir = "/tmp/cdc_sort"

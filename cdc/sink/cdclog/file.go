@@ -31,8 +31,8 @@ import (
 )
 
 const (
-	defaultDirMode  = 0755
-	defaultFileMode = 0644
+	defaultDirMode  = 0o755
+	defaultFileMode = 0o644
 
 	defaultFileName = "cdclog"
 

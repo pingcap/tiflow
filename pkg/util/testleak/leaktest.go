@@ -81,8 +81,10 @@ func interestingGoroutines() (gs []string) {
 	return
 }
 
-var beforeTestGoroutines = map[string]bool{}
-var testGoroutinesInited bool
+var (
+	beforeTestGoroutines = map[string]bool{}
+	testGoroutinesInited bool
+)
 
 // BeforeTest gets the current goroutines.
 // It's used for check.Suite.SetUpSuite() function.

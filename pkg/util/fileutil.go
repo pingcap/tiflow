@@ -32,13 +32,12 @@ func IsDirAndWritable(path string) error {
 		return cerror.WrapError(cerror.ErrCheckDirWritable, errors.Errorf("%s is not a directory", path))
 	}
 	return IsDirWritable(path)
-
 }
 
 // IsDirWritable checks if a dir is writable, return error nil means it is writable
 func IsDirWritable(dir string) error {
 	f := filepath.Join(dir, ".writable.test")
-	if err := ioutil.WriteFile(f, []byte(""), 0600); err != nil {
+	if err := ioutil.WriteFile(f, []byte(""), 0o600); err != nil {
 		return cerror.WrapError(cerror.ErrCheckDirWritable, err)
 	}
 	return cerror.WrapError(cerror.ErrCheckDirWritable, os.Remove(f))

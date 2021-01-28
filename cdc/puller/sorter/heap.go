@@ -38,6 +38,7 @@ func (h sortHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 func (h *sortHeap) Push(x interface{}) {
 	*h = append(*h, x.(*sortItem))
 }
+
 func (h *sortHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
