@@ -53,14 +53,14 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 // UnresolvedTxnCache caches unresolved txns
 type UnresolvedTxnCache struct {
 	unresolvedTxnsMu sync.Mutex
-	unresolvedTxns   map[model.TableID][]txnsWithTheSameCommitTs
+	unresolvedTxns   map[model.TableID][]*txnsWithTheSameCommitTs
 	checkpointTs     uint64
 }
 
 // NewUnresolvedTxnCache returns a new UnresolvedTxnCache
 func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 	return &UnresolvedTxnCache{
-		unresolvedTxns: make(map[model.TableID][]txnsWithTheSameCommitTs),
+		unresolvedTxns: make(map[model.TableID][]*txnsWithTheSameCommitTs),
 	}
 }
 
@@ -89,7 +89,7 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 					zap.Uint64("emit row commitTs", row.CommitTs),
 					zap.Uint64("last received row commitTs", txns[len(txns)-1].commitTs))
 			}
-			txns = append(txns, txnsWithTheSameCommitTs{
+			txns = append(txns, &txnsWithTheSameCommitTs{
 				commitTs: row.CommitTs,
 			})
 			c.unresolvedTxns[row.Table.TableID] = txns
@@ -123,7 +123,7 @@ func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
 }
 
 func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableID][]txnsWithTheSameCommitTs,
+	resolvedTs uint64, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
 ) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
 	minTs = resolvedTs
@@ -134,7 +134,7 @@ func splitResolvedTxn(
 		if i == 0 {
 			continue
 		}
-		var resolvedTxnsWithTheSameCommitTs []txnsWithTheSameCommitTs
+		var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
 		if i == len(txns) {
 			resolvedTxnsWithTheSameCommitTs = txns
 			delete(unresolvedTxns, tableID)
