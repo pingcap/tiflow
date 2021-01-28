@@ -102,7 +102,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, p := NewPipeline(ctx)
+	ctx, p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
@@ -210,7 +210,7 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, p := NewPipeline(ctx)
+	ctx, p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &errorNode{c: c})
 	p.AppendNode(ctx, "check node", &checkNode{
@@ -290,7 +290,7 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, p := NewPipeline(ctx)
+	ctx, p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -324,7 +324,7 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, p := NewPipeline(ctx)
+	ctx, p := NewPipeline(ctx, -1)
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{

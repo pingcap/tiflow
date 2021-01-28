@@ -50,13 +50,18 @@ func NewPipeline(ctx context.Context, tickDuration time.Duration) (context.Conte
 		p.close()
 	})
 	go func() {
-		ticker := time.NewTicker(tickDuration)
-		select {
-		case <-ticker.C:
-			p.SendToFirstNode(TickMessage()) //nolint:errcheck
-		case <-ctx.Done():
+		if tickDuration > 0 {
+			ticker := time.NewTicker(tickDuration)
+			defer ticker.Stop()
+			select {
+			case <-ticker.C:
+				p.SendToFirstNode(TickMessage()) //nolint:errcheck
+			case <-ctx.Done():
+				p.close()
+			}
+		} else {
+			<-ctx.Done()
 			p.close()
-			ticker.Stop()
 		}
 	}()
 	return ctx, p
