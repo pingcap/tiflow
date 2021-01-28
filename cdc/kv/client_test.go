@@ -204,9 +204,11 @@ func mockInitializedEvent(regionID, requestID uint64) *cdcpb.ChangeDataEvent {
 }
 
 type mockChangeDataService struct {
-	c        *check.C
-	ch       chan *cdcpb.ChangeDataEvent
-	recvLoop func(server cdcpb.ChangeData_EventFeedServer)
+	c           *check.C
+	ch          chan *cdcpb.ChangeDataEvent
+	recvLoop    func(server cdcpb.ChangeData_EventFeedServer)
+	exitNotify  sync.Map
+	eventFeedID uint64
 }
 
 func newMockChangeDataService(c *check.C, ch chan *cdcpb.ChangeDataEvent) *mockChangeDataService {
@@ -217,16 +219,50 @@ func newMockChangeDataService(c *check.C, ch chan *cdcpb.ChangeDataEvent) *mockC
 	return s
 }
 
+type notifyCh struct {
+	notify   chan struct{}
+	callback chan struct{}
+}
+
+func (s *mockChangeDataService) registerExitNotify(id uint64, ch *notifyCh) {
+	s.exitNotify.Store(id, ch)
+}
+
+func (s *mockChangeDataService) notifyExit(id uint64) chan struct{} {
+	if ch, ok := s.exitNotify.Load(id); ok {
+		nch := ch.(*notifyCh)
+		nch.notify <- struct{}{}
+		return nch.callback
+	}
+	return nil
+}
+
 func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServer) error {
 	if s.recvLoop != nil {
 		go func() {
 			s.recvLoop(server)
 		}()
 	}
-	for e := range s.ch {
-		err := server.Send(e)
-		s.c.Assert(err, check.IsNil)
+	notify := &notifyCh{
+		notify:   make(chan struct{}),
+		callback: make(chan struct{}, 1), // callback is not always retrieved
 	}
+	s.registerExitNotify(atomic.LoadUint64(&s.eventFeedID), notify)
+	atomic.AddUint64(&s.eventFeedID, 1)
+loop:
+	for {
+		select {
+		case e := <-s.ch:
+			if e == nil {
+				break loop
+			}
+			err := server.Send(e)
+			s.c.Assert(err, check.IsNil)
+		case <-notify.notify:
+			break loop
+		}
+	}
+	notify.callback <- struct{}{}
 	return nil
 }
 
@@ -1179,6 +1215,125 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
 	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
+	cancel()
+}
+
+// TestStreamSendWithError mainly tests the scenario that the `Recv` call of a gPRC
+// stream in kv client meets error, and kv client logs the error and re-establish
+// new request
+func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
+	}()
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	initialized1 := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized1
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		if len(ch1) == 0 {
+			return nil
+		}
+		return errors.New("message is not sent")
+	})
+	c.Assert(err, check.IsNil)
+
+	// another stream will be established, so we notify and wait the first
+	// EventFeed loop exits.
+	callback := srv1.notifyExit(0)
+	select {
+	case <-callback:
+	case <-time.After(time.Second * 3):
+		c.Error("event feed loop can't exit")
+	}
+
+	// wait request id allocated with: new session, new request*2
+	waitRequestID(c, baseAllocatedID+2)
+	initialized2 := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized2
+
+	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  regionID,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 120},
+		},
+	}}
+	ch1 <- resolved
+	ch1 <- resolved
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+	}
+
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
 	cancel()
 }
 
