@@ -82,6 +82,12 @@ var (
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 )
 
+var (
+	// unreachable error, only used in unit test
+	errUnreachable = errors.New("kv client unreachable error")
+	logPanic       = log.Panic
+)
+
 func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
 	return singleRegionInfo{
 		verID:        verID,
@@ -848,6 +854,12 @@ func (s *eventFeedSession) partialRegionFeed(
 		return nil
 	}
 
+	failpoint.Inject("kvClientErrUnreachable", func() {
+		if err == errUnreachable {
+			failpoint.Return(err)
+		}
+	})
+
 	if maxTs > ts {
 		ts = maxTs
 	}
@@ -984,9 +996,9 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			log.Panic("tikv reported duplicated request to the same region, which is not expected",
+			logPanic("tikv reported duplicated request to the same region, which is not expected",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
-			return nil
+			return errUnreachable
 		} else if compatibility := innerErr.GetCompatibility(); compatibility != nil {
 			log.Error("tikv reported compatibility error, which is not expected",
 				zap.String("rpcCtx", errInfo.rpcCtx.String()),
@@ -1386,11 +1398,12 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
-							log.Panic("The CommitTs must be greater than the resolvedTs",
+							logPanic("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMITTED"),
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
+							return lastResolvedTs, errUnreachable
 						}
 						select {
 						case s.eventCh <- revent:
@@ -1404,11 +1417,12 @@ func (s *eventFeedSession) singleEventFeed(
 					case cdcpb.Event_COMMIT:
 						metricPullEventCommitCounter.Inc()
 						if entry.CommitTs <= lastResolvedTs {
-							log.Panic("The CommitTs must be greater than the resolvedTs",
+							logPanic("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMIT"),
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
+							return lastResolvedTs, errUnreachable
 						}
 						ok := matcher.matchRow(entry)
 						if !ok {
