@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/version"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -34,6 +32,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
@@ -45,6 +44,10 @@ var (
 		"canal",
 		"maxwell",
 	}
+)
+
+const (
+	defaultSortDir = "/tmp/cdc_sort"
 )
 
 func newChangefeedCommand() *cobra.Command {
@@ -318,6 +321,18 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		CreatorVersion:    version.ReleaseVersion,
 	}
 
+	if info.Engine != model.SortInMemory && (info.SortDir == ".") {
+		cmd.Printf("[WARN] you are using the directory containing the cdc binary as sort-dir. " +
+			"make sure that is what you intend, and that the directory is writable. " +
+			"Adjust \"sort-dir\" accordingly if you'd like to use another directory. ")
+	}
+
+	if info.Engine == model.SortInFile {
+		cmd.Printf("[WARN] file sorter is deprecated. " +
+			"make sure that you DO NOT use it in production. " +
+			"Adjust \"sort-engine\" to make use of the right sorter.")
+	}
+
 	tz, err := util.GetTimezone(timezone)
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
@@ -385,7 +400,7 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", model.SortInMemory, "sort engine used for data sort")
-	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
+	command.PersistentFlags().StringVar(&sortDir, "sort-dir", defaultSortDir, "directory used for data sort")
 	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
