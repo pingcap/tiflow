@@ -156,7 +156,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, true, lockresolver, isPullInit, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -244,7 +244,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, true, lockresolver, isPullInit, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -266,7 +266,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, true, lockresolver, isPullInit, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}

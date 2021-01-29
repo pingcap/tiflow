@@ -42,10 +42,10 @@ type ddlHandler struct {
 	cancel func()
 }
 
-func newDDLHandler(pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
+func newDDLHandler(pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64, enableRegionWorker bool) *ddlHandler {
 	// TODO: context should be passed from outter caller
 	ctx, cancel := context.WithCancel(context.Background())
-	plr := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
+	plr := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false, enableRegionWorker)
 	h := &ddlHandler{
 		puller: plr,
 		cancel: cancel,
