@@ -166,7 +166,8 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	enableRegionWorker := changefeed.Config.ExperimentRegionWorker
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false, enableRegionWorker)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -812,13 +813,16 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
+		ExperimentRegionWorker := p.changefeed.Config.ExperimentRegionWorker
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
 			p.sendError(err)
 			return nil
 		}
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
+		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
+			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
+			enableOldValue, ExperimentRegionWorker)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
