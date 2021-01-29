@@ -14,8 +14,12 @@
 package pipeline
 
 import (
+	"fmt"
+
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/pkg/pipeline"
+	"go.uber.org/zap"
 )
 
 type mounterNode struct {
@@ -39,6 +43,7 @@ func (n *mounterNode) Receive(ctx pipeline.NodeContext) error {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
 		msg.PolymorphicEvent.SetUpFinishedChan()
+		log.Debug("LEOPPRO put into mounter", zap.Reflect("e", msg.PolymorphicEvent), zap.String("p", fmt.Sprintf("%p", msg.PolymorphicEvent)))
 		select {
 		case <-ctx.Done():
 			return nil

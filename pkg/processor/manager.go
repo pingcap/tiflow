@@ -48,7 +48,6 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 
 // Tick implements the `orchestrator.State` interface
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	log.Debug("LEOPPRO tick in processor manager", zap.Any("state", state))
 	globalState := state.(*globalState)
 	closeProcessor := func(changefeedID model.ChangeFeedID) {
 		if processor, exist := m.Processors[changefeedID]; exist {

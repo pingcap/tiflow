@@ -14,6 +14,7 @@
 package pipeline
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -116,6 +117,7 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 	stdCtx := ctx.StdContext()
 	for _, ev := range n.eventBuffer {
+		log.Debug("LEOPPRO wait", zap.Reflect("e", ev), zap.String("p", fmt.Sprintf("%p", ev)))
 		err := ev.WaitPrepare(stdCtx)
 		if err != nil {
 			return errors.Trace(err)

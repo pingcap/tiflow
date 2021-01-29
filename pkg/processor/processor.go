@@ -132,6 +132,7 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Debug("1")
 	if p.changefeed.TaskStatus.AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
@@ -281,6 +282,13 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
+	if !p.changefeed.TaskStatus.SomeOperationsUnapplied() && len(p.changefeed.TaskStatus.Operation) != 0 {
+		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
+			status.Operation = nil
+			return status, nil
+		})
+
+	}
 	for tableID, opt := range p.changefeed.TaskStatus.Operation {
 		if opt.TableApplied() {
 			continue
@@ -385,9 +393,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	go func() {
-		p.sendError(ddlPuller.Run(ctx))
-	}()
+	go p.sendError(ddlPuller.Run(ctx))
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
 	go func() {
 		var ddlRawKV *model.RawKVEntry
@@ -444,8 +450,10 @@ func (p *processor) initTables(ctx context.Context) error {
 
 func (p *processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
+	log.Debug("resolvedTs", zap.Uint64("schema", minResolvedTs))
 	for _, table := range p.tables {
 		ts := table.ResolvedTs()
+		log.Debug("resolvedTs", zap.Uint64(table.Name(), ts))
 		if ts < minResolvedTs {
 			minResolvedTs = ts
 		}
@@ -565,9 +573,14 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 			}
 			p.sendError(err)
 		}
+		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
+			util.ZapFieldChangefeed(ctx),
+			zap.String("name", table.Name()),
+			zap.Any("replicaInfo", replicaInfo),
+			zap.Uint64("globalResolvedTs", globalResolvedTs))
 	}()
 
-	log.Debug("Add table", zap.Int64("tableID", tableID),
+	log.Debug("Add table pipeline", zap.Int64("tableID", tableID),
 		util.ZapFieldChangefeed(ctx),
 		zap.String("name", table.Name()),
 		zap.Any("replicaInfo", replicaInfo),
