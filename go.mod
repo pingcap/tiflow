@@ -26,14 +26,14 @@ require (
 	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/philhofer/fwd v1.0.0 // indirect
-	github.com/pingcap/br v4.0.9-0.20201215065036-804aa9087197+incompatible
+	github.com/pingcap/br v4.0.11-0.20210119023619-139df44843ab+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/kvproto v0.0.0-20201126113434-70db5fb4b0dc
 	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
-	github.com/pingcap/parser v0.0.0-20201130080042-c3ddfec58248
-	github.com/pingcap/tidb v1.1.0-beta.0.20201222030240-39da88186a2d
+	github.com/pingcap/parser v0.0.0-20210107054750-53e33b4018fe
+	github.com/pingcap/tidb v1.1.0-beta.0.20210129090404-9a904e1f9f44
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
