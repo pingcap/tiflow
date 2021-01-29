@@ -22,12 +22,18 @@ import (
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	_ "github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
+	"sort"
+	"time"
 )
 
 type changeFeedManager interface {
+	// GetChangeFeedOperations checks for new change-feeds and returns changeFeedOperations to be executed.
 	GetChangeFeedOperations(ctx context.Context) ([]*changeFeedOperation, error)
-	GetGCSafePointLowerBound() int64
-	AddAdminJob(job model.AdminJob)
+	// GetGCSafePointUpperBound returns a lower bound of GC service safe point. This lower bound has to be used
+	// with the checkpointTs of the running changefeeds to produce a correct safe point.
+	GetGCSafePointUpperBound() uint64
+	// AddAdminJob is called by the HTTP handler to initiate an admin-job.
+	AddAdminJob(ctx context.Context, job model.AdminJob) error
 }
 
 type changeFeedOperationType = int
@@ -35,6 +41,7 @@ type changeFeedOperationType = int
 const (
 	startChangeFeedOperation = changeFeedOperationType(iota)
 	stopChangeFeedOperation
+	failChangeFeedOperation
 )
 
 type changeFeedOperation struct {
@@ -83,7 +90,7 @@ func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]
 	for {
 		select {
 		case adminJob := <-m.adminJobsQueue:
-			operation, err := m.handleAdminJob(adminJob)
+			operation, err := m.handleAdminJob(ctx, adminJob)
 			if err != nil {
 				return nil, err
 			}
@@ -97,24 +104,47 @@ func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]
 	return changeFeedOperations, nil
 }
 
-func (m *changeFeedManagerImpl) AddAdminJob(job model.AdminJob) {
-	panic("implement me")
+func (m *changeFeedManagerImpl) AddAdminJob(ctx context.Context, job model.AdminJob) error {
+	// TODO some verification on the job? Since this function will be called by the HTTP handler.
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case m.adminJobsQueue <- &job:
+	}
+
+	log.Info("AdminJob accepted and queued", zap.Reflect("job", job))
+	return nil
 }
 
-func (m *changeFeedManagerImpl) GetGCSafePointLowerBound() int64 {
-	panic("implement me")
+func (m *changeFeedManagerImpl) GetGCSafePointUpperBound() uint64 {
+	var upperBound uint64
+
+	for cfID, cfInfo := range m.changeFeedInfos {
+		cfStatus, ok := m.ownerState.ChangeFeedStatuses[cfID]
+		if !ok {
+			if upperBound < cfInfo.StartTs {
+				upperBound = cfInfo.StartTs
+			}
+		} else {
+			if upperBound < cfStatus.CheckpointTs {
+				upperBound = cfStatus.CheckpointTs
+			}
+		}
+	}
+
+	return upperBound
 }
 
 func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (*changeFeedOperation, error) {
 	primarySink, ddlHdlr, err := m.bootstrapChangeFeed(ctx, cfID)
 	if err != nil {
 		newErr := m.handleOwnerChangeFeedFailure(cfID, err)
+		// if newErr != nil, it means that the original error is not ignorable
 		if newErr != nil {
 			return nil, errors.Trace(newErr)
 		}
 		return nil, nil
 	}
-
 
 	return &changeFeedOperation{
 		op:           startChangeFeedOperation,
@@ -132,7 +162,7 @@ func (m *changeFeedManagerImpl) handleOwnerChangeFeedFailure(cfID model.ChangeFe
 	panic("implement me")
 }
 
-func (m *changeFeedManagerImpl) handleAdminJob(adminJob *model.AdminJob) (*changeFeedOperation, error) {
+func (m *changeFeedManagerImpl) handleAdminJob(ctx context.Context, adminJob *model.AdminJob) (*changeFeedOperation, error) {
 	log.Info("handle admin job", zap.Reflect("admin-job", adminJob))
 
 	cfInfo, ok := m.changeFeedInfos[adminJob.CfID]
@@ -143,6 +173,7 @@ func (m *changeFeedManagerImpl) handleAdminJob(adminJob *model.AdminJob) (*chang
 	switch adminJob.Type {
 	case model.AdminNone:
 		return nil, nil
+
 	case model.AdminStop:
 		if cfInfo.State != model.StateNormal {
 			log.Info("AdminStop ignored because change-feed is not running",
@@ -150,8 +181,45 @@ func (m *changeFeedManagerImpl) handleAdminJob(adminJob *model.AdminJob) (*chang
 			return nil, nil
 		}
 
+		m.ownerState.AlterChangeFeedRuntimeState(
+			adminJob.CfID, adminJob.Type, model.StateStopped, adminJob.Error, time.Now().UnixNano()/1e6)
 
+		return &changeFeedOperation{
+			op:           stopChangeFeedOperation,
+			changeFeedID: adminJob.CfID,
+		}, nil
+
+	case model.AdminResume:
+		if cfInfo.State == model.StateNormal {
+			log.Info("AdminResume ignored because change-feed is already running",
+				zap.Reflect("admin-job", adminJob))
+			return nil, nil
+		}
+
+		if cfInfo.State != model.StateStopped {
+			log.Warn("AdminResume failed because change-feed state is not normal",
+				zap.Reflect("admin-job", adminJob), zap.String("change-feed-state", string(cfInfo.State)))
+			return nil, nil
+		}
+
+		m.ownerState.AlterChangeFeedRuntimeState(
+			adminJob.CfID, adminJob.Type, model.StateNormal, nil, time.Now().UnixNano()/1e6)
+
+		operation, err := m.startChangeFeed(ctx, adminJob.CfID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return operation, err
+
+	case model.AdminFinish:
+		log.Debug("AdminFinish received", zap.Reflect("admin-job", adminJob))
+
+	default:
+		log.Warn("Unknown adminJob type", zap.Int("type", int(adminJob.Type)))
+		return nil, cerrors.ErrInvalidAdminJobType.GenWithStackByArgs(adminJob.Type)
 	}
+
+	panic("unreachable")
 }
 
 func checkNeedStartChangeFeed(cfID model.ChangeFeedID, info *model.ChangeFeedInfo) bool {
@@ -163,12 +231,14 @@ func checkNeedStartChangeFeed(cfID model.ChangeFeedID, info *model.ChangeFeedInf
 		return false
 	}
 
-	// TODO better error history checking and GC
-	_, canInit := info.CheckErrorHistory()
-	if canInit {
-		return true
-	}
+	i := sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < model.ErrorHistoryCheckInterval
+	})
+	canInit := len(info.ErrorHis)-i < model.ErrorHistoryThreshold
 
-	log.Debug("changeFeed should not be started", zap.String("changefeed-id", cfID))
-	return false
+	if !canInit {
+		log.Debug("changeFeed should not be started due to too many errors", zap.String("changefeed-id", cfID))
+	}
+	return canInit
 }

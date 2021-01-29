@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"regexp"
+	"sort"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -428,8 +430,56 @@ func (s *ownerReactorState) AlterChangeFeedRuntimeState(
 
 			info.State = state
 			info.AdminJobType = adminJobType
-			info.Error = cfErr
-			info.ErrorHis = append(info.ErrorHis, errTs)
+
+			if cfErr != nil {
+				info.Error = cfErr
+				info.ErrorHis = append(info.ErrorHis, errTs)
+			}
+
+			newBytes, err := json.Marshal(&info)
+			if err != nil {
+				return nil, cerrors.ErrMarshalFailed.Wrap(err)
+			}
+
+			return newBytes, nil
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) cleanUpChangeFeedErrorHistory(cfID model.ChangeFeedID) {
+	_, ok := s.ChangeFeedInfos[cfID]
+	if !ok {
+		log.Panic("owner bug: changeFeedInfo not found", zap.String("cfID", cfID))
+	}
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyChangeFeedInfo(cfID)),
+		Fun: func(old []byte) ([]byte, error) {
+			if old == nil {
+				log.Warn("cleanUpChangeFeedErrorHistory: changeFeedInfo forcibly removed", zap.String("cfID", cfID))
+				return nil, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
+			}
+
+			var info model.ChangeFeedInfo
+			err := json.Unmarshal(old, &info)
+			if err != nil {
+				return nil, cerrors.ErrUnmarshalFailed.Wrap(err)
+			}
+
+			i := sort.Search(len(info.ErrorHis), func(i int) bool {
+				ts := info.ErrorHis[i]
+				return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < model.ErrorHistoryGCInterval
+			})
+
+			if i == 0 {
+				return nil, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
+			}
+
+			if i < len(info.ErrorHis) {
+				info.ErrorHis = info.ErrorHis[i:]
+			}
 
 			newBytes, err := json.Marshal(&info)
 			if err != nil {
