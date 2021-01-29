@@ -466,6 +466,9 @@ type eventFeedSession struct {
 	regionChSizeGauge prometheus.Gauge
 	errChSizeGauge    prometheus.Gauge
 	rangeChSizeGauge  prometheus.Gauge
+
+	streams     map[string]cdcpb.ChangeData_EventFeedClient
+	streamsLock sync.RWMutex
 }
 
 type rangeRequestTask struct {
@@ -502,6 +505,7 @@ func newEventFeedSession(
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
+		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
 	}
 }
 
@@ -633,7 +637,6 @@ func (s *eventFeedSession) dispatchRequest(
 	ctx context.Context,
 	g *errgroup.Group,
 ) error {
-	streams := make(map[string]cdcpb.ChangeData_EventFeedClient)
 	// Stores pending regions info for each stream. After sending a new request, the region info wil be put to the map,
 	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
 	// to pass the region info to the receiver since the region info cannot be inferred from the response from TiKV.
@@ -716,7 +719,7 @@ MainLoop:
 			state := newRegionFeedState(sri, requestID)
 			pendingRegions.insert(requestID, state)
 
-			stream, ok := streams[rpcCtx.Addr]
+			stream, ok := s.getStream(rpcCtx.Addr)
 			// Establish the stream if it has not been connected yet.
 			if !ok {
 				storeID := rpcCtx.Peer.GetStoreId()
@@ -747,7 +750,7 @@ MainLoop:
 					pendingRegions.take(requestID)
 					continue
 				}
-				streams[rpcCtx.Addr] = stream
+				s.addStream(rpcCtx.Addr, stream)
 
 				limiter := s.client.getRegionLimiter(regionID)
 				g.Go(func() error {
@@ -779,7 +782,7 @@ MainLoop:
 				}
 				// Delete the stream from the map so that the next time the store is accessed, the stream will be
 				// re-established.
-				delete(streams, rpcCtx.Addr)
+				s.deleteStream(rpcCtx.Addr)
 				// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
 				// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
 				// pending regions, the new pending regions that are requested after reconnecting won't be stopped
@@ -1072,6 +1075,9 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
+		failpoint.Inject("kvClientStreamRecvError", func() {
+			err = errors.New("injected stream recv error")
+		})
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
 			for _, state := range regionStates {
@@ -1094,6 +1100,17 @@ func (s *eventFeedSession) receiveFromStream(
 					zap.Error(err),
 				)
 			}
+
+			// Use the same delay mechanism as `stream.Send` error handling, since
+			// these two errors often mean upstream store suffers an accident, which
+			// needs time to recover, kv client doesn't need to retry frequently.
+			// TODO: add a better retry backoff or rate limitter
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+
+			// TODO: better to closes the send direction of the stream to notify
+			// the other side, but it is not safe to call CloseSend concurrently
+			// with SendMsg, in future refactor we should refine the recv loop
+			s.deleteStream(addr)
 
 			for _, state := range regionStates {
 				select {
@@ -1468,6 +1485,25 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 		}
 	}
+}
+
+func (s *eventFeedSession) addStream(storeAddr string, stream cdcpb.ChangeData_EventFeedClient) {
+	s.streamsLock.Lock()
+	defer s.streamsLock.Unlock()
+	s.streams[storeAddr] = stream
+}
+
+func (s *eventFeedSession) deleteStream(storeAddr string) {
+	s.streamsLock.Lock()
+	defer s.streamsLock.Unlock()
+	delete(s.streams, storeAddr)
+}
+
+func (s *eventFeedSession) getStream(storeAddr string) (stream cdcpb.ChangeData_EventFeedClient, ok bool) {
+	s.streamsLock.RLock()
+	defer s.streamsLock.RUnlock()
+	stream, ok = s.streams[storeAddr]
+	return
 }
 
 func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (*model.RegionFeedEvent, error) {
