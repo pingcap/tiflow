@@ -119,6 +119,7 @@ func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 	for _, ev := range n.eventBuffer {
 		log.Debug("LEOPPRO wait", zap.Reflect("e", ev), zap.String("p", fmt.Sprintf("%p", ev)))
 		err := ev.WaitPrepare(stdCtx)
+		log.Debug("LEOPPRO wait finished", zap.Reflect("e", ev), zap.String("p", fmt.Sprintf("%p", ev)))
 		if err != nil {
 			return errors.Trace(err)
 		}

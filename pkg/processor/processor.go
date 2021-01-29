@@ -109,6 +109,9 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 				code = string(cerror.ErrProcessorUnknown.RFCCode())
 			}
 			state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+				if position == nil {
+					position = &model.TaskPosition{}
+				}
 				position.Error = &model.RunningError{
 					Addr:    p.captureInfo.AdvertiseAddr,
 					Code:    code,
@@ -132,7 +135,6 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Debug("1")
 	if p.changefeed.TaskStatus.AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
@@ -199,6 +201,9 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	}
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
+	go func() {
+		p.sendError(p.mounter.Run(ctx))
+	}()
 
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
@@ -282,12 +287,12 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
+	// TODO: remove this six line, applied operation should be removed by owner
 	if !p.changefeed.TaskStatus.SomeOperationsUnapplied() && len(p.changefeed.TaskStatus.Operation) != 0 {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
 			status.Operation = nil
 			return status, nil
 		})
-
 	}
 	for tableID, opt := range p.changefeed.TaskStatus.Operation {
 		if opt.TableApplied() {
@@ -323,6 +328,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 							return nil
 						})
 					}
+					table.Cancel()
 					delete(p.tables, tableID)
 					log.Debug("Operation done signal received",
 						util.ZapFieldChangefeed(ctx),
@@ -393,7 +399,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	go p.sendError(ddlPuller.Run(ctx))
+	go func() {
+		p.sendError(ddlPuller.Run(ctx))
+	}()
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
 	go func() {
 		var ddlRawKV *model.RawKVEntry
@@ -459,12 +467,6 @@ func (p *processor) handlePosition() error {
 		}
 	}
 
-	// phyTs := oracle.ExtractPhysical(minResolvedTs)
-	// It is more accurate to get tso from PD, but in most cases we have
-	// deployed NTP service, a little bias is acceptable here.
-	// metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-	// resolvedTsGauge.Set(float64(phyTs))
-
 	minCheckpointTs := minResolvedTs
 	for _, table := range p.tables {
 		ts := table.CheckpointTs()
@@ -509,6 +511,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.Cancel()
+			delete(p.tables, tableID)
 		} else {
 			log.Warn("Ignore existing table", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			return nil
@@ -549,7 +552,6 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		tableName = strconv.Itoa(int(tableID))
 	}
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
-	// resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 
 	_, table := tablepipeline.NewTablePipeline(
 		cdcCtx,
@@ -587,8 +589,15 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		zap.Uint64("globalResolvedTs", globalResolvedTs))
 
 	p.tables[tableID] = table
+	return nil
+}
 
-	// syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
+func (p *processor) doGCSchemaStorage() error {
+	// Delay GC to accommodate pullers starting from a startTs that's too small
+	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
+	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
+	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
+	p.schemaStorage.DoGC(gcTs)
 	return nil
 }
 
@@ -611,153 +620,3 @@ func (p *processor) Close() error {
 	})
 	return p.sinkManager.Close()
 }
-
-func (p *processor) doGCSchemaStorage() error {
-	// Delay GC to accommodate pullers starting from a startTs that's too small
-	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
-	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
-	p.schemaStorage.DoGC(gcTs)
-	return nil
-}
-
-//// runProcessor creates a new processor then starts it.
-//func runProcessor(
-//	ctx context.Context,
-//	pdCli pd.Client,
-//	credential *security.Credential,
-//	session *concurrency.Session,
-//	info model.ChangeFeedInfo,
-//	changefeedID string,
-//	captureInfo model.CaptureInfo,
-//	checkpointTs uint64,
-//	flushCheckpointInterval time.Duration,
-//) (*processor, error) {
-
-// log.Info("start to run processor", zap.String("changefeed", changefeedID), zap.String("processor", processor.id))
-// processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
-
-//}
-
-/*
-// globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
-func (p *processor) globalStatusWorker(ctx context.Context) error {
-	log.Info("Global status worker started", util.ZapFieldChangefeed(ctx))
-
-	var (
-		changefeedStatus         *model.ChangeFeedStatus
-		statusRev                int64
-		lastCheckPointTs         uint64
-		lastResolvedTs           uint64
-		watchKey                 = kv.GetEtcdKeyJob(p.changefeedID)
-		globalResolvedTsNotifier = new(notify.Notifier)
-	)
-	defer globalResolvedTsNotifier.Close()
-	globalResolvedTsReceiver, err := globalResolvedTsNotifier.NewReceiver(1 * time.Second)
-	if err != nil {
-		return err
-	}
-
-	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
-		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
-		if lastResolvedTs == changefeedStatus.ResolvedTs &&
-			lastCheckPointTs == changefeedStatus.CheckpointTs {
-			return
-		}
-		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			// Delay GC to accommodate pullers starting from a startTs that's too small
-			// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-			gcTime := oracle.GetTimeFromTS(changefeedStatus.CheckpointTs).Add(-schemaStorageGCLag)
-			gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
-			p.schemaStorage.DoGC(gcTs)
-			lastCheckPointTs = changefeedStatus.CheckpointTs
-		}
-		if lastResolvedTs < changefeedStatus.ResolvedTs {
-			lastResolvedTs = changefeedStatus.ResolvedTs
-			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
-			log.Debug("Update globalResolvedTs",
-				zap.Uint64("globalResolvedTs", lastResolvedTs), util.ZapFieldChangefeed(ctx))
-			globalResolvedTsNotifier.Notify()
-		}
-	}
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case event := <-p.outputFromTable:
-				select {
-				case <-ctx.Done():
-					return
-				case p.output2Sink <- event:
-				}
-			case <-globalResolvedTsReceiver.C:
-				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-				if globalResolvedTs > localResolvedTs {
-					log.Warn("globalResolvedTs too large", zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("localResolvedTs", localResolvedTs), util.ZapFieldChangefeed(ctx))
-					// we do not issue resolved events if globalResolvedTs > localResolvedTs.
-					continue
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case p.output2Sink <- model.NewResolvedPolymorphicEvent(0, globalResolvedTs):
-					// regionID = 0 means the event is produced by TiCDC
-				}
-			}
-		}
-	}()
-
-	retryCfg := backoff.WithMaxRetries(
-		backoff.WithContext(
-			backoff.NewExponentialBackOff(), ctx),
-		5,
-	)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("Global resolved worker exited", util.ZapFieldChangefeed(ctx))
-			return ctx.Err()
-		default:
-		}
-
-		err := backoff.Retry(func() error {
-			var err error
-			changefeedStatus, statusRev, err = p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
-			if err != nil {
-				if errors.Cause(err) == context.Canceled {
-					return backoff.Permanent(err)
-				}
-				log.Error("Global resolved worker: read global resolved ts failed",
-					util.ZapFieldChangefeed(ctx), zap.Error(err))
-			}
-			return err
-		}, retryCfg)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		updateStatus(changefeedStatus)
-
-		ch := p.etcdCli.Client.Watch(ctx, watchKey, clientv3.WithRev(statusRev+1), clientv3.WithFilterDelete())
-		for resp := range ch {
-			if resp.Err() == mvcc.ErrCompacted {
-				break
-			}
-			if resp.Err() != nil {
-				return cerror.WrapError(cerror.ErrProcessorEtcdWatch, err)
-			}
-			for _, ev := range resp.Events {
-				var status model.ChangeFeedStatus
-				if err := status.Unmarshal(ev.Kv.Value); err != nil {
-					return err
-				}
-				updateStatus(&status)
-			}
-		}
-	}
-}
-*/
