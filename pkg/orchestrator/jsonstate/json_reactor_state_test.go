@@ -55,7 +55,7 @@ type simpleJSONReactor struct {
 
 func (r *simpleJSONReactor) Tick(_ context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	if r.oldVal >= 100 {
-		return nil, cerrors.ErrReactorFinished
+		return r.state, cerrors.ErrReactorFinished
 	}
 	newState := state.(*JSONReactorState)
 	r.state = newState

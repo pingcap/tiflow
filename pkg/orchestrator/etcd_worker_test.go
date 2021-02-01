@@ -477,11 +477,11 @@ func (r *coverReactor) Tick(ctx context.Context, state ReactorState) (nextState 
 		return
 	})
 	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-		newValue = append(old, []byte("fin")...)
-		return
+		return nil, nil
 	})
 	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-		return nil, nil
+		newValue = append(old, []byte("fin")...)
+		return
 	})
 	return r.state, cerrors.ErrReactorFinished
 }
@@ -511,7 +511,8 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 	c.Assert(string(resp.Kvs[0].Value), check.Equals, "abccbaabccbafinfin")
 	resp, err = cli.Get(ctx, prefix+"/key2")
 	c.Assert(err, check.IsNil)
-	c.Assert(resp.Kvs, check.HasLen, 0)
+	c.Assert(string(resp.Kvs[0].Key), check.Equals, "/cdc_etcd_worker_test/cover/key2")
+	c.Assert(string(resp.Kvs[0].Value), check.Equals, "fin")
 	err = cli.Unwrap().Close()
 	c.Assert(err, check.IsNil)
 }

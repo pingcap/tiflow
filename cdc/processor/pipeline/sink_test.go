@@ -78,6 +78,7 @@ func (s *mockSink) Check(c *check.C, expected []struct {
 }
 
 func (s *mockSink) Reset() {
+	s.received = s.received[:0]
 }
 
 type outputSuite struct{}
