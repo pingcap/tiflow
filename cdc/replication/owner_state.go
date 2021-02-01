@@ -254,6 +254,40 @@ func (s *ownerReactorState) GetPatches() []*orchestrator.DataPatch {
 	return ret
 }
 
+func (s *ownerReactorState) UpdateChangeFeedStatus(cfID model.ChangeFeedID, resolvedTs uint64, checkpointTs uint64) {
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyChangeFeedStatus(cfID)),
+		Fun: func(old []byte) ([]byte, error) {
+			var changeFeedStatus model.ChangeFeedStatus
+
+			if old != nil {
+				err := json.Unmarshal(old, &changeFeedStatus)
+				if err != nil {
+					return nil, cerrors.ErrUnmarshalFailed.Wrap(err)
+				}
+
+				if changeFeedStatus.CheckpointTs > checkpointTs {
+					log.Panic("checkpointTs regressed",
+						zap.Reflect("changeFeedStatus", changeFeedStatus),
+						zap.Uint64("newCheckpointTs", checkpointTs))
+				}
+			}
+
+			changeFeedStatus.CheckpointTs = checkpointTs
+			changeFeedStatus.ResolvedTs = resolvedTs
+
+			newBytes, err := json.Marshal(&changeFeedStatus)
+			if err != nil {
+				return nil, cerrors.ErrMarshalFailed.Wrap(err)
+			}
+
+			return newBytes, nil
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
 func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID, replicaInfo model.TableReplicaInfo) {
 	captureTaskStatuses, ok := s.TaskStatuses[cfID]
 	if !ok {

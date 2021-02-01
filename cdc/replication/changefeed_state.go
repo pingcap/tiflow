@@ -22,8 +22,7 @@ import (
 
 // changeFeedState is part of the replication model that implements the control logic of a changeFeed
 type changeFeedState struct {
-	TableTasks    map[tableIDWithSchema]*tableTask
-	CheckpointTs  uint64
+	TableTasks    map[model.TableID]*tableTask
 	DDLResolvedTs uint64
 	Barriers      []*barrier
 
@@ -34,11 +33,6 @@ type tableTask struct {
 	TableID      model.TableID
 	CheckpointTs uint64
 	ResolvedTs   uint64
-}
-
-type tableIDWithSchema struct {
-	SchemaID model.SchemaID
-	TableID  model.TableID
 }
 
 type barrierType = int
@@ -61,8 +55,12 @@ const (
 
 type ddlResult struct {
 	FinishTs uint64
-	Action   ddlResultAction
-	tableID  model.TableID
+	Actions  []tableAction
+}
+
+type tableAction struct {
+	Action  ddlResultAction
+	tableID model.TableID
 }
 
 func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
@@ -88,17 +86,25 @@ func (cf *changeFeedState) AddDDLBarrier(barrierTs uint64) {
 	})
 }
 
+func (cf *changeFeedState) PopDDLBarrier() {
+	if len(cf.Barriers) == 0 {
+		log.Panic("changeFeedState: no DDL barrier to pop")
+	}
+
+	cf.Barriers = cf.Barriers[1:]
+}
+
 func (cf *changeFeedState) ShouldRunDDL() *barrier {
 	if len(cf.Barriers) > 0 {
-		if cf.Barriers[0].BarrierTs == cf.CheckpointTs+1 &&
+		if cf.Barriers[0].BarrierTs == cf.CheckpointTs()+1 &&
 			cf.Barriers[0].BarrierType == DDLBarrier {
 
 			return cf.Barriers[0]
 		}
 
-		if cf.Barriers[0].BarrierTs <= cf.CheckpointTs {
+		if cf.Barriers[0].BarrierTs <= cf.CheckpointTs() {
 			log.Panic("changeFeedState: Checkpoint run past barrier",
-				zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs),
+				zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs()),
 				zap.Reflect("barriers", cf.Barriers))
 		}
 	}
@@ -107,9 +113,9 @@ func (cf *changeFeedState) ShouldRunDDL() *barrier {
 }
 
 func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
-	if cf.CheckpointTs != result.FinishTs-1 {
+	if cf.CheckpointTs() != result.FinishTs-1 {
 		log.Panic("changeFeedState: Unexpected checkpoint when DDL is done",
-			zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs),
+			zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs()),
 			zap.Reflect("ddl-result", result))
 	}
 
@@ -124,21 +130,23 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 
 	cf.Barriers = cf.Barriers[1:]
 
-	switch result.Action {
-	case AddTableAction:
-		cf.TableTasks[result.tableID] = &tableTask{
-			TableID:      result.tableID,
-			CheckpointTs: cf.CheckpointTs,
-			ResolvedTs:   0,
-		}
-	case DropTableAction:
-		if _, ok := cf.TableTasks[result.tableID]; !ok {
-			log.Panic("changeFeedState: Dropping unknown table", zap.Int64("table-id", result.tableID))
-		}
+	for _, tableAction := range result.Actions {
+		switch tableAction.Action {
+		case AddTableAction:
+			cf.TableTasks[tableAction.tableID] = &tableTask{
+				TableID:      tableAction.tableID,
+				CheckpointTs: cf.CheckpointTs(),
+				ResolvedTs:   0,
+			}
+		case DropTableAction:
+			if _, ok := cf.TableTasks[tableAction.tableID]; !ok {
+				log.Panic("changeFeedState: Dropping unknown table", zap.Int64("table-id", tableAction.tableID))
+			}
 
-		delete(cf.TableTasks, result.tableID)
-	default:
-		log.Panic("changeFeedState: unknown action")
+			delete(cf.TableTasks, tableAction.tableID)
+		default:
+			log.Panic("changeFeedState: unknown action")
+		}
 	}
 
 	cf.Scheduler.SyncTasks(cf.TableTasks)
@@ -164,6 +172,18 @@ func (cf *changeFeedState) ResolvedTs() uint64 {
 	return resolvedTs
 }
 
+func (cf *changeFeedState) CheckpointTs() uint64 {
+	checkpointTs := uint64(math.MaxUint64)
+
+	for _, table := range cf.TableTasks {
+		if checkpointTs > table.CheckpointTs {
+			checkpointTs = table.CheckpointTs
+		}
+	}
+
+	return checkpointTs
+}
+
 func (cf *changeFeedState) SetTableResolvedTs(tableID model.TableID, resolvedTs uint64) {
 	tableTask, ok := cf.TableTasks[tableID]
 
@@ -181,11 +201,11 @@ func (cf *changeFeedState) SetTableCheckpointTs(tableID model.TableID, checkpoin
 		log.Panic("changeFeedState: unknown table", zap.Int("tableID", int(tableID)))
 	}
 
-	if tableTask.ResolvedTs > checkpointTs {
+	if tableTask.CheckpointTs > checkpointTs {
 		log.Panic("changeFeedState: table checkpoint regressed. Report a bug.",
 			zap.Int("tableID", int(tableID)),
 			zap.Uint64("checkpointTs", checkpointTs))
 	}
 
-	tableTask.ResolvedTs = checkpointTs
+	tableTask.CheckpointTs = checkpointTs
 }

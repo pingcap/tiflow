@@ -571,7 +571,7 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 	return errors.Trace(err)
 }
 
-func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
+func (c *changeFeed)  applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
 	schemaID := job.SchemaID
 	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		tableID := job.BinlogInfo.TableInfo.ID

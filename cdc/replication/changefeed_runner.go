@@ -15,14 +15,15 @@ package replication
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -34,19 +35,21 @@ type changeFeedRunner interface {
 }
 
 type changeFeedRunnerImpl struct {
-	cfID           model.ChangeFeedID
+	cfID   model.ChangeFeedID
+	config *config.ReplicaConfig
 
-	sink           sink.Sink
-	sinkErrCh      <-chan error
-	ddlHandler     ddlHandler
-	schemaSnapshot *entry.SingleSchemaSnapshot
-	filter         *filter.Filter
+	sink       sink.Sink
+	sinkErrCh  <-chan error
+	ddlHandler ddlHandler
+
+	schemaManager *schemaManager
+	filter        *filter.Filter
 
 	ownerState      *ownerReactorState
 	changeFeedState *changeFeedState
 
-	ddlJobQueue     []*timodel.Job
-	schemas         map[model.SchemaID][]model.TableID
+	ddlJobQueue []*ddlJobWithPreTableInfo
+	schemas     map[model.SchemaID][]model.TableID
 }
 
 func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
@@ -71,136 +74,117 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	c.ddlJobQueue = append(c.ddlJobQueue, newDDLJobs...)
-
 	for _, job := range newDDLJobs {
+		c.ddlJobQueue = append(c.ddlJobQueue, &ddlJobWithPreTableInfo{job, nil})
 		c.changeFeedState.AddDDLBarrier(job.BinlogInfo.FinishedTS)
+	}
+	if len(newDDLJobs) > 0 {
+		c.preFilterDDL()
 	}
 	c.changeFeedState.SetDDLResolvedTs(ddlResolvedTs)
 
 	// Run DDL
 	if barrier := c.changeFeedState.ShouldRunDDL(); barrier != nil {
+		tableActions, err := c.handleDDL(ctx, c.ddlJobQueue[0])
+		if err != nil {
+			return errors.Trace(err)
+		}
 
+		c.changeFeedState.MarkDDLDone(ddlResult{
+			FinishTs: c.ddlJobQueue[0].BinlogInfo.FinishedTS,
+			Actions:  tableActions,
+		})
+
+		c.preFilterDDL()
 	}
 
+	resolvedTs := c.changeFeedState.ResolvedTs()
+	checkpointTs := c.changeFeedState.CheckpointTs()
+	c.ownerState.UpdateChangeFeedStatus(c.cfID, resolvedTs, checkpointTs)
+
+	return nil
 }
 
-func (c *changeFeedRunnerImpl) sendDDLToSink(ctx context.Context, todoDDLJob *timodel.Job) error {
+func (c *changeFeedRunnerImpl) handleDDL(ctx context.Context, job *ddlJobWithPreTableInfo) ([]tableAction, error) {
 	ddlEvent := new(model.DDLEvent)
-	preTableInfo, err := c.schemaSnapshot.PreTableInfo(todoDDLJob)
+
+	actions, err := c.schemaManager.ApplyDDL(job.Job)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
-	err = c.schemaSnapshot.HandleDDL(todoDDLJob)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = c.schemaSnapshot.FillSchemaName(todoDDLJob)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	ddlEvent.FromJob(todoDDLJob, preTableInfo)
-
-	skip, err := c.applyJob(ctx, todoDDLJob)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if skip {
-		log.Info("ddl job ignored", zap.String("changefeed", c.id), zap.Reflect("job", todoDDLJob))
-		c.ddlJobHistory = c.ddlJobHistory[1:]
-		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-		c.ddlState = model.ChangeFeedSyncDML
-		return nil
-	}
+	ddlEvent.FromJob(job.Job, job.preTableInfo)
 
 	executed := false
-	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
+	if !c.config.Cyclic.IsEnabled() || c.config.Cyclic.SyncDDL {
 		failpoint.Inject("InjectChangefeedDDLError", func() {
 			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
 		})
 
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
-		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
 			if cerror.ErrDDLEventIgnored.NotEqual(err) {
-				c.ddlState = model.ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", c.id),
+					zap.String("ChangeFeedID", c.cfID),
 					zap.Error(err),
-					zap.Reflect("ddlJob", todoDDLJob))
-				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
+					zap.Reflect("ddlJob", job))
+				return nil, cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			}
 		} else {
 			executed = true
 		}
 	}
+
 	if executed {
-		log.Info("Execute DDL succeeded", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+		log.Info("Execute DDL succeeded", zap.String("changefeed", c.cfID), zap.Reflect("ddlJob", job))
 	} else {
-		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+		log.Info("Execute DDL ignored", zap.String("changefeed", c.cfID), zap.Reflect("ddlJob", job))
 	}
+
+	return actions, nil
 }
 
-func (c *changeFeedRunnerImpl) applyDDL(job *timodel.Job) (skip bool, err error) {
-	schemaID := job.SchemaID
-	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schemaSnapshot.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
-		// TODO is this really necessary?
-		tableID := job.BinlogInfo.TableInfo.ID
-		c.changeFeedState.MarkDDLDone(ddlResult{
-			FinishTs: job.BinlogInfo.FinishedTS,
-			Action:   DropTableAction,
-			tableID:  tableID,
-		})
-		return true, nil
-	}
-
-	err = func() error {
-		// case table id set may change
-		switch job.Type {
-		case timodel.ActionCreateSchema:
-			c.addSchema(schemaID)
-		case timodel.ActionDropSchema:
-			c.dropSchema(schemaID, job.BinlogInfo.FinishedTS)
-		case timodel.ActionCreateTable, timodel.ActionRecoverTable:
-			addID := job.BinlogInfo.TableInfo.ID
-			table, exist := c.schema.TableByID(addID)
-			if !exist {
-				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
-			}
-			c.addTable(table, job.BinlogInfo.FinishedTS)
-		case timodel.ActionDropTable:
-			dropID := job.TableID
-			c.removeTable(schemaID, dropID, job.BinlogInfo.FinishedTS)
-		case timodel.ActionRenameTable:
-			tableName, exist := c.schema.GetTableNameByID(job.TableID)
-			if !exist {
-				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(job.TableID)
-			}
-			// no id change just update name
-			c.tables[job.TableID] = tableName
-		case timodel.ActionTruncateTable:
-			dropID := job.TableID
-			c.removeTable(schemaID, dropID, job.BinlogInfo.FinishedTS)
-
-			addID := job.BinlogInfo.TableInfo.ID
-			table, exist := c.schema.TableByID(addID)
-			if !exist {
-				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
-			}
-			c.addTable(table, job.BinlogInfo.FinishedTS)
-		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
-			c.updatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
+func (c *changeFeedRunnerImpl) preFilterDDL() {
+	shouldIgnoreTable := func(schemaName string, tableName string) bool {
+		if c.filter.ShouldIgnoreTable(schemaName, tableName) {
+			return true
 		}
-		return nil
-	}()
-	if err != nil {
-		log.Error("failed to applyJob, start to print debug info", zap.Error(err))
-		c.schema.PrintStatus(log.Error)
+		if c.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
+			return true
+		}
+		return false
 	}
-	return false, err
+
+	for len(c.ddlJobQueue) > 0 {
+		nextJobCandidate := c.ddlJobQueue[0]
+		tableInfo, ok := c.schemaManager.schemaSnapshot.TableByID(nextJobCandidate.TableID)
+		if !ok {
+			log.Panic("preFilterDDL: tableID not found", zap.Stringer("job", nextJobCandidate.Job))
+		}
+
+		preSchemaName := tableInfo.TableName.Schema
+		preTableName := tableInfo.TableName.Table
+
+		if nextJobCandidate.Type == timodel.ActionRenameTable {
+			postSchemaName := nextJobCandidate.BinlogInfo.DBInfo.Name.String()
+			postTableName := nextJobCandidate.BinlogInfo.TableInfo.Name.String()
+
+			if shouldIgnoreTable(preSchemaName, preTableName) && shouldIgnoreTable(postSchemaName, postTableName) {
+				goto ignoreDDL
+			}
+		} else {
+			if shouldIgnoreTable(preSchemaName, preTableName) {
+				goto ignoreDDL
+			}
+		}
+		// DDL is not ignored
+		break
+	ignoreDDL:
+		c.ddlJobQueue = c.ddlJobQueue[1:]
+		c.changeFeedState.PopDDLBarrier()
+		continue
+	}
 }
