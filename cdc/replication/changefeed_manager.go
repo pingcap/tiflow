@@ -15,14 +15,15 @@ package replication
 
 import (
 	"context"
+	"sort"
+	"time"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	_ "github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
-	"sort"
-	"time"
 )
 
 type changeFeedManager interface {
