@@ -415,7 +415,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 			if ddlRawKV == nil {
 				continue
 			}
-			failpoint.Inject("processorDDLResolved", func() {})
+			failpoint.Inject("processorDDLResolved", nil)
 			if ddlRawKV.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			}
@@ -477,7 +477,7 @@ func (p *processor) handlePosition() error {
 	if minResolvedTs > p.changefeed.TaskPosition.ResolvedTs ||
 		minCheckpointTs > p.changefeed.TaskPosition.CheckPointTs {
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
-			failpoint.Inject("ProcessorUpdatePositionDelaying", func() {})
+			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 			position.CheckPointTs = minCheckpointTs
 			position.ResolvedTs = minResolvedTs
 			return position, nil
