@@ -16,10 +16,10 @@ package cdc
 import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/processor"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/processor"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

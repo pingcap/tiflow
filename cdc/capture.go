@@ -17,17 +17,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-
-	"github.com/pingcap/ticdc/pkg/processor"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/processor"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	pd "github.com/tikv/pd/client"

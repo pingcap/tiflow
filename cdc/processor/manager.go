@@ -17,15 +17,14 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 // Manager is a manager of processor, which maintains the state and behavior of processors

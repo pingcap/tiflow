@@ -17,13 +17,12 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"go.uber.org/zap"
 )
 
 type globalState struct {
