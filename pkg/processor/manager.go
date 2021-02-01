@@ -15,6 +15,7 @@ package processor
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -34,6 +35,8 @@ type Manager struct {
 	pdCli       pd.Client
 	credential  *security.Credential
 	captureInfo *model.CaptureInfo
+
+	close int32
 }
 
 // NewManager creates a new processor manager
@@ -49,37 +52,46 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 // Tick implements the `orchestrator.State` interface
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*globalState)
-	closeProcessor := func(changefeedID model.ChangeFeedID) {
-		if processor, exist := m.Processors[changefeedID]; exist {
-			err := processor.Close()
-			if err != nil {
-				log.Warn("failed to close processor", zap.Error(err))
-			}
-			delete(m.Processors, changefeedID)
+	if atomic.LoadInt32(&m.close) != 0 {
+		for changefeedID := range m.Processors {
+			m.closeProcessor(changefeedID)
 		}
+		return state, cerrors.ErrReactorFinished
 	}
+
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active() {
-			closeProcessor(changefeedID)
+			m.closeProcessor(changefeedID)
 			continue
 		}
 		processor, exist := m.Processors[changefeedID]
 		if !exist {
-			processor = NewProcessor(m.pdCli, m.credential, m.captureInfo)
+			processor = newProcessor(m.pdCli, m.credential, m.captureInfo)
 			m.Processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
+			m.closeProcessor(changefeedID)
 			if cerrors.ErrReactorFinished.Equal(err) {
-				closeProcessor(changefeedID)
 				continue
 			}
 			return state, errors.Trace(err)
 		}
 	}
-	for _, changefeedID := range globalState.GetRemovedChangefeeds() {
-		closeProcessor(changefeedID)
-	}
 	return state, nil
+}
+
+func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
+	if processor, exist := m.Processors[changefeedID]; exist {
+		err := processor.Close()
+		if err != nil {
+			log.Warn("failed to close processor", zap.Error(err))
+		}
+		delete(m.Processors, changefeedID)
+	}
+}
+
+func (m *Manager) AsyncClose() {
+	atomic.StoreInt32(&m.close, 1)
 }
 
 func (m *Manager) writeDebugInfo() {}

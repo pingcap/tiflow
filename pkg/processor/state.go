@@ -27,9 +27,8 @@ import (
 )
 
 type globalState struct {
-	CaptureID            model.CaptureID
-	Changefeeds          map[model.ChangeFeedID]*changefeedState
-	removedChangefeedIDs []model.ChangeFeedID
+	CaptureID   model.CaptureID
+	Changefeeds map[model.ChangeFeedID]*changefeedState
 }
 
 // NewGlobalState creates a new global state for processor manager
@@ -62,7 +61,6 @@ func (s *globalState) Update(key util.EtcdKey, value []byte, isInit bool) error 
 	}
 	if value == nil && !changefeedState.Exist() {
 		delete(s.Changefeeds, k.ChangefeedID)
-		s.removedChangefeedIDs = append(s.removedChangefeedIDs, k.ChangefeedID)
 	}
 	return nil
 }
@@ -73,12 +71,6 @@ func (s *globalState) GetPatches() []*orchestrator.DataPatch {
 		pendingPatches = append(pendingPatches, changefeedState.GetPatches()...)
 	}
 	return pendingPatches
-}
-
-func (s *globalState) GetRemovedChangefeeds() (removedChangefeedIDs []model.ChangeFeedID) {
-	removedChangefeedIDs = s.removedChangefeedIDs
-	s.removedChangefeedIDs = nil
-	return
 }
 
 type changefeedState struct {

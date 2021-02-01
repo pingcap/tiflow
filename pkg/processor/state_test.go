@@ -400,7 +400,6 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 						Workload:  model.TaskWorkload{45: {Workload: 1}},
 					},
 				},
-				removedChangefeedIDs: []model.ChangeFeedID{"test1"},
 			},
 		},
 	}

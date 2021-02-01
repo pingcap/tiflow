@@ -14,7 +14,6 @@
 package pipeline
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -117,9 +116,7 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 	stdCtx := ctx.StdContext()
 	for _, ev := range n.eventBuffer {
-		log.Debug("LEOPPRO wait", zap.Reflect("e", ev), zap.String("p", fmt.Sprintf("%p", ev)))
 		err := ev.WaitPrepare(stdCtx)
-		log.Debug("LEOPPRO wait finished", zap.Reflect("e", ev), zap.String("p", fmt.Sprintf("%p", ev)))
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -152,6 +149,9 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			if n.status == TableStatusInitializing {
 				atomic.StoreInt32(&n.status, TableStatusRunning)
 			}
+			failpoint.Inject("ProcessorSyncResolvedError", func() {
+				failpoint.Return(errors.New("processor sync resolved injected error"))
+			})
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return errors.Trace(err)
 			}

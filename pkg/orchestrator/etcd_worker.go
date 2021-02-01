@@ -83,6 +83,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
 	var pendingPatches []*DataPatch
+	var exiting bool
 
 	for {
 		var response clientv3.WatchResponse
@@ -131,6 +132,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			// `applyPatches` is all-or-none, so in case of success, we should clear all the pendingPatches.
 			pendingPatches = pendingPatches[:0]
 		} else {
+			if exiting {
+				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick, and all pending patches is applied.
+				return nil
+			}
 			if worker.revision < worker.barrierRev {
 				// We hold off notifying the Reactor because barrierRev has not been reached.
 				// This usually happens when a committed write Txn has not been received by Watch.
@@ -138,21 +143,17 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			}
 
 			// We are safe to update the ReactorState only if there is no pending patch.
-			for _, update := range worker.pendingUpdates {
-				err := worker.state.Update(update.key, update.value, false)
-				if err != nil {
-					return errors.Trace(err)
-				}
+			if err := worker.applyUpdates(); err != nil {
+				return errors.Trace(err)
 			}
 
-			worker.pendingUpdates = worker.pendingUpdates[:0]
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
-				if errors.Cause(err) == cerrors.ErrReactorFinished {
-					// normal exit
-					return nil
+				if errors.Cause(err) != cerrors.ErrReactorFinished {
+					return errors.Trace(err)
 				}
-				return errors.Trace(err)
+				// normal exit
+				exiting = true
 			}
 			worker.state = nextState
 			pendingPatches = append(pendingPatches, nextState.GetPatches()...)
@@ -268,6 +269,18 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		return nil
 	}
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
+}
+
+func (worker *EtcdWorker) applyUpdates() error {
+	for _, update := range worker.pendingUpdates {
+		err := worker.state.Update(update.key, update.value, false)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	worker.pendingUpdates = worker.pendingUpdates[:0]
+	return nil
 }
 
 func logEtcdOps(ops []clientv3.Op, commited bool) {

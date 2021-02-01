@@ -79,8 +79,8 @@ type processor struct {
 	cancel     context.CancelFunc
 }
 
-// NewProcessor creates a new processor
-func NewProcessor(
+// newProcessor creates a new processor
+func newProcessor(
 	pdCli pd.Client,
 	credential *security.Credential,
 	captureInfo *model.CaptureInfo,
@@ -458,10 +458,8 @@ func (p *processor) initTables(ctx context.Context) error {
 
 func (p *processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
-	log.Debug("resolvedTs", zap.Uint64("schema", minResolvedTs))
 	for _, table := range p.tables {
 		ts := table.ResolvedTs()
-		log.Debug("resolvedTs", zap.Uint64(table.Name(), ts))
 		if ts < minResolvedTs {
 			minResolvedTs = ts
 		}
@@ -479,6 +477,7 @@ func (p *processor) handlePosition() error {
 	if minResolvedTs > p.changefeed.TaskPosition.ResolvedTs ||
 		minCheckpointTs > p.changefeed.TaskPosition.CheckPointTs {
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+			failpoint.Inject("ProcessorUpdatePositionDelaying", func() {})
 			position.CheckPointTs = minCheckpointTs
 			position.ResolvedTs = minResolvedTs
 			return position, nil
