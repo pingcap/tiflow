@@ -19,11 +19,14 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -80,6 +83,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
 	var pendingPatches []*DataPatch
+	var exiting bool
 
 	for {
 		var response clientv3.WatchResponse
@@ -128,6 +132,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			// `applyPatches` is all-or-none, so in case of success, we should clear all the pendingPatches.
 			pendingPatches = pendingPatches[:0]
 		} else {
+			if exiting {
+				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick, and all pending patches is applied.
+				return nil
+			}
 			if worker.revision < worker.barrierRev {
 				// We hold off notifying the Reactor because barrierRev has not been reached.
 				// This usually happens when a committed write Txn has not been received by Watch.
@@ -135,21 +143,17 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 			}
 
 			// We are safe to update the ReactorState only if there is no pending patch.
-			for _, update := range worker.pendingUpdates {
-				err := worker.state.Update(update.key, update.value, false)
-				if err != nil {
-					return errors.Trace(err)
-				}
+			if err := worker.applyUpdates(); err != nil {
+				return errors.Trace(err)
 			}
 
-			worker.pendingUpdates = worker.pendingUpdates[:0]
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
-				if errors.Cause(err) == cerrors.ErrReactorFinished {
-					// normal exit
-					return nil
+				if errors.Cause(err) != cerrors.ErrReactorFinished {
+					return errors.Trace(err)
 				}
-				return errors.Trace(err)
+				// normal exit
+				exiting = true
 			}
 			worker.state = nextState
 			pendingPatches = append(pendingPatches, nextState.GetPatches()...)
@@ -194,11 +198,18 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
-	cmps := make([]clientv3.Cmp, 0)
-	ops := make([]clientv3.Op, 0)
+	cmpSet := make(map[util.EtcdKey]clientv3.Cmp)
+	opSet := make(map[util.EtcdKey]clientv3.Op)
 
+	// tmpRawState cache the changed values which are uncommitted to etcd.
+	tmpRawState := make(map[util.EtcdKey][]byte)
 	for _, patch := range patches {
-		old, ok := worker.rawState[patch.Key]
+		// check the tmpRawState to get the newest uncommitted value if exists
+		old, ok := tmpRawState[patch.Key]
+		if !ok {
+			// get the committed value
+			old, ok = worker.rawState[patch.Key]
+		}
 
 		value, err := patch.Fun(old)
 		if err != nil {
@@ -208,10 +219,19 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			return errors.Trace(err)
 		}
 
-		// make sure someone else has not updated the key after the last snapshot
-		if ok {
-			cmp := clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
-			cmps = append(cmps, cmp)
+		// if there are multiple patches with the same key, we should keep the compare of the first patch
+		if _, cmpExist := cmpSet[patch.Key]; !cmpExist {
+			// make sure someone else has not updated the key after the last snapshot
+			var cmp clientv3.Cmp
+			// if ok is false, it means that the key of this patch is not exist in a committed state
+			// and also not exist in the uncommitted value cache(tmpRawState)
+			if ok {
+				cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
+			} else {
+				// this compare is equivalent to `patch.Key` is not exist
+				cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "=", 0)
+			}
+			cmpSet[patch.Key] = cmp
 		}
 
 		if bytes.Equal(old, value) {
@@ -225,6 +245,16 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		} else {
 			op = clientv3.OpDelete(patch.Key.String())
 		}
+		// if there are multiple patches with the same key, we should keep the value of the last patch
+		opSet[patch.Key] = op
+		tmpRawState[patch.Key] = value
+	}
+	cmps := make([]clientv3.Cmp, 0, len(cmpSet))
+	ops := make([]clientv3.Op, 0, len(opSet))
+	for _, cmp := range cmpSet {
+		cmps = append(cmps, cmp)
+	}
+	for _, op := range opSet {
 		ops = append(ops, op)
 	}
 
@@ -233,12 +263,38 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		return errors.Trace(err)
 	}
 
+	logEtcdOps(ops, resp.Succeeded)
 	if resp.Succeeded {
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil
 	}
-
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
+}
+
+func (worker *EtcdWorker) applyUpdates() error {
+	for _, update := range worker.pendingUpdates {
+		err := worker.state.Update(update.key, update.value, false)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	worker.pendingUpdates = worker.pendingUpdates[:0]
+	return nil
+}
+
+func logEtcdOps(ops []clientv3.Op, commited bool) {
+	if log.GetLevel() == zapcore.DebugLevel {
+		for _, op := range ops {
+			log.Debug("[etcd worker] ==========Update State to ETCD==========")
+			if op.IsDelete() {
+				log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+			} else {
+				log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+			}
+			log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+		}
+	}
 }
 
 func (worker *EtcdWorker) cleanUp() {
