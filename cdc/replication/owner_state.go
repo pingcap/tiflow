@@ -38,6 +38,7 @@ type ownerReactorState struct {
 	TaskStatuses       map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
 
 	patches []*orchestrator.DataPatch
+	tableToCaptureMapCache map[model.ChangeFeedID]map[model.TableID]model.CaptureID
 }
 
 // The regex based parsing logic is only temporary.
@@ -227,6 +228,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 
 		s.TaskStatuses[changefeedID][captureID] = &newTaskStatus
 
+		s.tableToCaptureMapCache[changefeedID] = s.GetTableToCaptureMap(changefeedID)
 		return nil
 	}
 
@@ -255,7 +257,7 @@ func (s *ownerReactorState) GetPatches() []*orchestrator.DataPatch {
 func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID, replicaInfo model.TableReplicaInfo) {
 	captureTaskStatuses, ok := s.TaskStatuses[cfID]
 	if !ok {
-		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+		log.Panic("owner bug: changeFeedState not found", zap.String("cfID", cfID))
 	}
 
 	taskStatus, ok := captureTaskStatuses[captureID]
@@ -307,7 +309,7 @@ func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID mod
 func (s *ownerReactorState) RemoveTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID) {
 	captureTaskStatuses, ok := s.TaskStatuses[cfID]
 	if !ok {
-		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+		log.Panic("owner bug: changeFeedState not found", zap.String("cfID", cfID))
 	}
 
 	taskStatus, ok := captureTaskStatuses[captureID]
@@ -343,7 +345,7 @@ func (s *ownerReactorState) RemoveTable(cfID model.ChangeFeedID, captureID model
 func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID) {
 	captureTaskStatuses, ok := s.TaskStatuses[cfID]
 	if !ok {
-		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+		log.Panic("owner bug: changeFeedState not found", zap.String("cfID", cfID))
 	}
 
 	_, ok = captureTaskStatuses[captureID]
@@ -377,7 +379,7 @@ func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureI
 func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID) {
 	captureTaskStatuses, ok := s.TaskStatuses[cfID]
 	if !ok {
-		log.Panic("owner bug: changeFeed not found", zap.String("cfID", cfID))
+		log.Panic("owner bug: changeFeedState not found", zap.String("cfID", cfID))
 	}
 
 	_, ok = captureTaskStatuses[captureID]
@@ -448,7 +450,7 @@ func (s *ownerReactorState) AlterChangeFeedRuntimeState(
 	s.patches = append(s.patches, patch)
 }
 
-func (s *ownerReactorState) cleanUpChangeFeedErrorHistory(cfID model.ChangeFeedID) {
+func (s *ownerReactorState) CleanUpChangeFeedErrorHistory(cfID model.ChangeFeedID) {
 	_, ok := s.ChangeFeedInfos[cfID]
 	if !ok {
 		log.Panic("owner bug: changeFeedInfo not found", zap.String("cfID", cfID))
@@ -491,4 +493,44 @@ func (s *ownerReactorState) cleanUpChangeFeedErrorHistory(cfID model.ChangeFeedI
 	}
 
 	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) GetTableToCaptureMap(cfID model.ChangeFeedID) map[model.TableID]model.CaptureID {
+	tableToCaptureMap := make(map[model.TableID]model.CaptureID)
+	for captureID, taskStatus := range s.TaskStatuses[cfID] {
+		for tableID := range taskStatus.Tables {
+			tableToCaptureMap[tableID] = captureID
+		}
+	}
+
+	return tableToCaptureMap
+}
+
+type tableProgress struct {
+	resolvedTs   uint64
+	checkpointTs uint64
+}
+
+func (s *ownerReactorState) GetTableProgress(cfID model.ChangeFeedID, tableID model.TableID) *tableProgress {
+	m := s.tableToCaptureMapCache[cfID]
+	if captureID, ok := m[tableID]; ok {
+		position := s.TaskPositions[cfID][captureID]
+		return &tableProgress{
+			resolvedTs:   position.ResolvedTs,
+			checkpointTs: position.CheckPointTs,
+		}
+	}
+
+	return nil
+}
+
+func (s *ownerReactorState) GetChangeFeedActiveTables(cfID model.ChangeFeedID) []model.TableID {
+	m := s.tableToCaptureMapCache[cfID]
+
+	var tableIDs []model.TableID
+	for tableID := range m {
+		tableIDs = append(tableIDs, tableID)
+	}
+
+	return tableIDs
 }

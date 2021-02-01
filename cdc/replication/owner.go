@@ -26,7 +26,7 @@ type Owner interface {
 
 type ownerReactor struct {
 	state *ownerReactorState
-	changeFeeds []*changeFeed
+	changeFeeds []*changeFeedState
 }
 
 func (o *ownerReactor) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {

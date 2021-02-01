@@ -39,7 +39,7 @@ func (s *schedulerImpl) SyncTasks(tables map[model.TableID]*tableTask) {
 		pendingSet[tableID] = struct{}{}
 	}
 
-	tableToCaptureMap := s.getTableToCaptureMap()
+	tableToCaptureMap := s.ownerState.GetTableToCaptureMap(s.cfID)
 
 	// handle adding table
 	for tableID, task := range tables {
@@ -109,17 +109,6 @@ func (s *schedulerImpl) cleanUpOperations() []model.TableID {
 	}
 
 	return pendingList
-}
-
-func (s *schedulerImpl) getTableToCaptureMap() map[model.TableID]model.CaptureID {
-	tableToCaptureMap := make(map[model.TableID]model.CaptureID)
-	for captureID, taskStatus := range s.ownerState.TaskStatuses[s.cfID] {
-		for tableID := range taskStatus.Tables {
-			tableToCaptureMap[tableID] = captureID
-		}
-	}
-
-	return tableToCaptureMap
 }
 
 func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {

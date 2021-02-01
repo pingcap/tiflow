@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	_ "github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
@@ -47,15 +46,15 @@ const (
 type changeFeedOperation struct {
 	op           changeFeedOperationType
 	changeFeedID model.ChangeFeedID
-	err          error
-	sink         sink.Sink
-	ddlHandler   ddlHandler
+	runner       changeFeedRunner
 }
 
 type changeFeedManagerImpl struct {
 	changeFeedInfos map[model.ChangeFeedID]*model.ChangeFeedInfo
 	ownerState      *ownerReactorState
-	adminJobsQueue  chan *model.AdminJob
+	bootstrapper    changeFeedBootstrapper
+
+	adminJobsQueue chan *model.AdminJob
 }
 
 func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]*changeFeedOperation, error) {
@@ -86,7 +85,7 @@ func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]
 	}
 
 	// handle admin jobs
-	loop:
+loop:
 	for {
 		select {
 		case adminJob := <-m.adminJobsQueue:
@@ -136,7 +135,12 @@ func (m *changeFeedManagerImpl) GetGCSafePointUpperBound() uint64 {
 }
 
 func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (*changeFeedOperation, error) {
-	primarySink, ddlHdlr, err := m.bootstrapChangeFeed(ctx, cfID)
+	startTs := m.changeFeedInfos[cfID].StartTs
+	if cfStatus, ok := m.ownerState.ChangeFeedStatuses[cfID]; ok {
+		startTs = cfStatus.CheckpointTs
+	}
+
+	runner, err := m.bootstrapper.bootstrapChangeFeed(ctx, cfID, m.changeFeedInfos[cfID], startTs)
 	if err != nil {
 		newErr := m.handleOwnerChangeFeedFailure(cfID, err)
 		// if newErr != nil, it means that the original error is not ignorable
@@ -149,12 +153,11 @@ func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.
 	return &changeFeedOperation{
 		op:           startChangeFeedOperation,
 		changeFeedID: cfID,
-		sink:         primarySink,
-		ddlHandler:   ddlHdlr,
+		runner:       runner,
 	}, nil
 }
 
-func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (sink.Sink, ddlHandler, error) {
+func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (changeFeedRunner, error) {
 	panic("implement me")
 }
 
@@ -238,7 +241,7 @@ func checkNeedStartChangeFeed(cfID model.ChangeFeedID, info *model.ChangeFeedInf
 	canInit := len(info.ErrorHis)-i < model.ErrorHistoryThreshold
 
 	if !canInit {
-		log.Debug("changeFeed should not be started due to too many errors", zap.String("changefeed-id", cfID))
+		log.Debug("changeFeedState should not be started due to too many errors", zap.String("changefeed-id", cfID))
 	}
 	return canInit
 }
