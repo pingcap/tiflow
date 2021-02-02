@@ -57,9 +57,10 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 		}
 		return state, cerrors.ErrReactorFinished
 	}
-
+	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active() {
+			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
 		}
@@ -74,6 +75,14 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 				continue
 			}
 			return state, errors.Trace(err)
+		}
+	}
+	// check if the processors in memory is leaked
+	if len(globalState.Changefeeds)-inactiveChangefeedCount != len(m.Processors) {
+		for changefeedID := range m.Processors {
+			if _, exist := globalState.Changefeeds[changefeedID]; !exist {
+				m.closeProcessor(changefeedID)
+			}
 		}
 	}
 	return state, nil

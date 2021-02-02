@@ -16,6 +16,7 @@ package processor
 import (
 	"context"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -42,24 +43,12 @@ import (
 )
 
 const (
-	// TODO: processor output chan size, the accumulated data is determined by
-	// the count of sorted data and unmounted data. In current benchmark a single
-	// processor can reach 50k-100k QPS, and accumulated data is around
-	// 200k-400k in most cases. We need a better chan cache mechanism.
-	defaultOutputChanSize = 1280000
-
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
-	defaultSyncResolvedBatch = 1024
 
 	schemaStorageGCLag = time.Minute * 20
 )
 
-// resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-// metricResolvedTsLagGauge := resolvedTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-// checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-// metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 type processor struct {
 	changefeed *changefeedState
 
@@ -77,6 +66,7 @@ type processor struct {
 	lazyInited bool
 	errCh      chan error
 	cancel     context.CancelFunc
+	wg         sync.WaitGroup
 }
 
 // newProcessor creates a new processor
@@ -85,14 +75,13 @@ func newProcessor(
 	credential *security.Credential,
 	captureInfo *model.CaptureInfo,
 ) *processor {
-	// log.Info("start processor with startts",
-	//	zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	return &processor{
 		pdCli:       pdCli,
 		credential:  credential,
 		captureInfo: captureInfo,
 		limitter:    puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
 		tables:      make(map[model.TableID]*tablepipeline.TablePipeline),
+		errCh:       make(chan error, 1),
 	}
 }
 
@@ -100,7 +89,7 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 	log.Debug("LEOPPRO tick in processor", zap.Any("state", state))
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
-		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) && cerror.ErrReactorFinished.NotEqual(cause) {
 			// record error information in etcd
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
@@ -220,6 +209,14 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
 
+	// Clean up possible residual error states
+	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+		if position != nil && position.Error != nil {
+			position.Error = nil
+		}
+		return position, nil
+	})
+
 	p.lazyInited = true
 	log.Info("run processor",
 		zap.String("capture-id", p.captureInfo.ID), util.ZapFieldCapture(ctx),
@@ -234,41 +231,24 @@ func (p *processor) handleErrorCh(ctx context.Context) error {
 	default:
 		return nil
 	}
-	var errs []error
-	appendError := func(err error) {
-		log.Debug("processor received error", zap.Error(err))
-		cause := errors.Cause(err)
-		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
-			errs = append(errs, err)
-		}
-	}
-	appendError(err)
-	// sleep 500ms to wait all the errors are sent to errCh
-	time.Sleep(500 * time.Millisecond)
-ReceiveErr:
-	for {
-		select {
-		case err := <-p.errCh:
-			appendError(err)
-		default:
-			break ReceiveErr
-		}
-	}
-	if len(errs) > 0 {
+	p.cancel()
+	p.wg.Wait()
+	cause := errors.Cause(err)
+	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 		log.Error("error on running processor",
 			util.ZapFieldCapture(ctx),
 			zap.String("changefeed", p.changefeed.ID),
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("captureAddr", p.captureInfo.AdvertiseAddr),
-			zap.Errors("errors", errs))
-		return errs[0]
+			zap.Error(err))
+		return err
 	}
 	log.Info("processor exited",
 		util.ZapFieldCapture(ctx),
 		zap.String("changefeed", p.changefeed.ID),
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("captureAddr", p.captureInfo.AdvertiseAddr))
-	return context.Canceled
+	return cerrors.ErrReactorFinished
 }
 
 func (p *processor) handleTableOperation(ctx context.Context) error {
@@ -566,7 +546,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		sink,
 		p.changefeed.Info.GetTargetTs(),
 	)
-
+	p.wg.Add(1)
 	go func() {
 		for _, err := range table.Wait() {
 			if cerror.ErrTableProcessorStoppedSafely.Equal(err) || errors.Cause(err) == context.Canceled {
@@ -574,6 +554,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 			}
 			p.sendError(err)
 		}
+		p.wg.Done()
 		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
 			util.ZapFieldChangefeed(ctx),
 			zap.String("name", table.Name()),
@@ -608,7 +589,13 @@ func (p *processor) Close() error {
 	p.cancel()
 	// mark tables share the same context with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
-	p.changefeed.PatchTaskPosition(func(_ *model.TaskPosition) (*model.TaskPosition, error) {
+	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+		if position == nil {
+			return nil, nil
+		}
+		if position.Error != nil {
+			return position, nil
+		}
 		return nil, nil
 	})
 	p.changefeed.PatchTaskStatus(func(_ *model.TaskStatus) (*model.TaskStatus, error) {
