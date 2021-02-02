@@ -277,8 +277,8 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
-	enableRegionWorker := info.Config.ExperimentRegionWorker
-	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs, enableRegionWorker)
+	kvClientV2 := info.Config.KVClientV2
+	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs, kvClientV2)
 	defer func() {
 		if resultErr != nil {
 			ddlHandler.Close()
