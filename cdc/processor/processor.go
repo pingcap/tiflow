@@ -178,6 +178,7 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
 
+	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
 	if err != nil {
@@ -200,14 +201,12 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = p.captureInfo.AdvertiseAddr
-	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
-	errCh := make(chan error, 16)
-	s, err := sink.NewSink(ctx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	s, err := sink.NewSink(ctx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, p.errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
+	p.sinkManager = sink.NewManager(ctx, s, p.errCh, checkpointTs)
 
 	// Clean up possible residual error states
 	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
