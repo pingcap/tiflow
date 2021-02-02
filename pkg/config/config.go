@@ -44,23 +44,23 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Tp:          "table-number",
 		PollingTime: -1,
 	},
-	ExperimentRegionWorker: false,
+	KVClientV2: false,
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive          bool             `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue         bool             `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate         bool             `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint       bool             `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	Filter                 *FilterConfig    `toml:"filter" json:"filter"`
-	Mounter                *MounterConfig   `toml:"mounter" json:"mounter"`
-	Sink                   *SinkConfig      `toml:"sink" json:"sink"`
-	Cyclic                 *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
-	Scheduler              *SchedulerConfig `toml:"scheduler" json:"scheduler"`
-	ExperimentRegionWorker bool             `toml:"experiment-region-worker" json:"experiment-region-worker"`
+	CaseSensitive    bool             `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool             `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool             `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool             `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	Filter           *FilterConfig    `toml:"filter" json:"filter"`
+	Mounter          *MounterConfig   `toml:"mounter" json:"mounter"`
+	Sink             *SinkConfig      `toml:"sink" json:"sink"`
+	Cyclic           *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
+	Scheduler        *SchedulerConfig `toml:"scheduler" json:"scheduler"`
+	KVClientV2       bool             `toml:"kv-client-v2" json:"kv-client-v2"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

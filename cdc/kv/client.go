@@ -304,7 +304,7 @@ type CDCKVClient interface {
 		span regionspan.ComparableSpan,
 		ts uint64,
 		enableOldValue bool,
-		enableRegionWorker bool,
+		kvClientV2 bool,
 		lockResolver txnutil.LockResolver,
 		isPullerInit PullerInitialization,
 		eventCh chan<- *model.RegionFeedEvent,
@@ -436,14 +436,14 @@ type PullerInitialization interface {
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
 	enableOldValue bool,
-	enableRegionWorker bool,
+	kvClientV2 bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span,
 		lockResolver, isPullerInit,
-		enableOldValue, enableRegionWorker, ts, eventCh)
+		enableOldValue, kvClientV2, ts, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -479,9 +479,9 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock          *regionspan.RegionRangeLock
-	enableOldValue     bool
-	enableRegionWorker bool
+	rangeLock      *regionspan.RegionRangeLock
+	enableOldValue bool
+	kvClientV2     bool
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -509,31 +509,31 @@ func newEventFeedSession(
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
 	enableOldValue bool,
-	enableRegionWorker bool,
+	kvClientV2 bool,
 	startTs uint64,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	return &eventFeedSession{
-		client:             client,
-		regionCache:        regionCache,
-		kvStorage:          kvStorage,
-		totalSpan:          totalSpan,
-		eventCh:            eventCh,
-		regionCh:           make(chan singleRegionInfo, 16),
-		errCh:              make(chan regionErrorInfo, 16),
-		requestRangeCh:     make(chan rangeRequestTask, 16),
-		rangeLock:          regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
-		enableOldValue:     enableOldValue,
-		enableRegionWorker: enableRegionWorker,
-		lockResolver:       lockResolver,
-		isPullerInit:       isPullerInit,
-		id:                 id,
-		regionChSizeGauge:  clientChannelSize.WithLabelValues(id, "region"),
-		errChSizeGauge:     clientChannelSize.WithLabelValues(id, "err"),
-		rangeChSizeGauge:   clientChannelSize.WithLabelValues(id, "range"),
-		streams:            make(map[string]cdcpb.ChangeData_EventFeedClient),
-		workers:            make(map[string]*regionWorker),
+		client:            client,
+		regionCache:       regionCache,
+		kvStorage:         kvStorage,
+		totalSpan:         totalSpan,
+		eventCh:           eventCh,
+		regionCh:          make(chan singleRegionInfo, 16),
+		errCh:             make(chan regionErrorInfo, 16),
+		requestRangeCh:    make(chan rangeRequestTask, 16),
+		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
+		enableOldValue:    enableOldValue,
+		kvClientV2:        kvClientV2,
+		lockResolver:      lockResolver,
+		isPullerInit:      isPullerInit,
+		id:                id,
+		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
+		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
+		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
+		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
+		workers:           make(map[string]*regionWorker),
 	}
 }
 
@@ -782,7 +782,7 @@ MainLoop:
 
 				limiter := s.client.getRegionLimiter(regionID)
 				g.Go(func() error {
-					if !s.enableRegionWorker {
+					if !s.kvClientV2 {
 						return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 					}
 					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
@@ -1175,7 +1175,7 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 		if cevent.ResolvedTs != nil {
 			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			err = s.SendResolvedTs(ctx, g, cevent.ResolvedTs, regionStates, pendingRegions, addr)
+			err = s.sendResolvedTs(ctx, g, cevent.ResolvedTs, regionStates, pendingRegions, addr)
 			if err != nil {
 				return err
 			}
@@ -1253,7 +1253,7 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 	return nil
 }
 
-func (s *eventFeedSession) SendResolvedTs(
+func (s *eventFeedSession) sendResolvedTs(
 	ctx context.Context,
 	g *errgroup.Group,
 	resolvedTs *cdcpb.ResolvedTs,
