@@ -58,6 +58,15 @@ type changeFeedManagerImpl struct {
 	adminJobsQueue chan *model.AdminJob
 }
 
+func newChangeFeedManager(ownerState *ownerReactorState) changeFeedManager {
+	return &changeFeedManagerImpl{
+		changeFeedInfos: make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
+		ownerState:      ownerState,
+		bootstrapper:    nil,
+		adminJobsQueue:  nil,
+	}
+}
+
 func (m *changeFeedManagerImpl) GetChangeFeedOperations(ctx context.Context) ([]*changeFeedOperation, error) {
 	newChangeFeedInfos := m.ownerState.ChangeFeedInfos
 	var changeFeedOperations []*changeFeedOperation

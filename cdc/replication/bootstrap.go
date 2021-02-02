@@ -44,6 +44,13 @@ type changeFeedBootstrapperImpl struct {
 	credential *security.Credential
 }
 
+func newBootstrapper(pdClient pd.Client, credential *security.Credential) changeFeedBootstrapper {
+	return &changeFeedBootstrapperImpl{
+		pdClient:   pdClient,
+		credential: credential,
+	}
+}
+
 func (c *changeFeedBootstrapperImpl) bootstrapChangeFeed(
 	ctx context.Context,
 	cfID model.ChangeFeedID,
