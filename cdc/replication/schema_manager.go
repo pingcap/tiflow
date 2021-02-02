@@ -28,10 +28,17 @@ type schemaManager struct {
 	schemaSnapshot *entry.SingleSchemaSnapshot
 }
 
-
 type ddlJobWithPreTableInfo struct {
 	*timodel.Job
 	preTableInfo *model.TableInfo
+}
+
+func newSchemaManager(schemaSnapshot *entry.SingleSchemaSnapshot) *schemaManager {
+	return &schemaManager{
+		schemas:        make(map[model.SchemaID]map[model.TableID]struct{}),
+		partitions:     make(map[model.TableID][]int64),
+		schemaSnapshot: schemaSnapshot,
+	}
 }
 
 func (m *schemaManager) PreprocessDDL(job *ddlJobWithPreTableInfo) error {
