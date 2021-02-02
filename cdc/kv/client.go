@@ -108,12 +108,6 @@ type regionEvent struct {
 	resolvedTs  *cdcpb.ResolvedTs
 }
 
-type regionStatefulEvent struct {
-	changeEvent *cdcpb.Event
-	resolvedTs  *cdcpb.ResolvedTs
-	state       *regionFeedState
-}
-
 type regionFeedState struct {
 	sri           singleRegionInfo
 	requestID     uint64
