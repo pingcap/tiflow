@@ -63,10 +63,10 @@ type processor struct {
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
 
-	lazyInited bool
-	errCh      chan error
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
+	firstTick bool
+	errCh     chan error
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 // newProcessor creates a new processor
@@ -82,6 +82,7 @@ func newProcessor(
 		limitter:    puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
 		tables:      make(map[model.TableID]*tablepipeline.TablePipeline),
 		errCh:       make(chan error, 1),
+		firstTick:   true,
 	}
 }
 
@@ -116,6 +117,7 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 		}
 		return state, cerrors.ErrReactorFinished
 	}
+	p.firstTick = false
 	return state, nil
 }
 
@@ -156,6 +158,9 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 
 func (p *processor) initPosition() bool {
 	if p.changefeed.TaskPosition == nil {
+		if !p.firstTick {
+			log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
+		}
 		checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 			if position == nil {
@@ -172,7 +177,7 @@ func (p *processor) initPosition() bool {
 }
 
 func (p *processor) lazyInit(ctx context.Context) error {
-	if p.lazyInited {
+	if p.firstTick {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -216,7 +221,6 @@ func (p *processor) lazyInit(ctx context.Context) error {
 		return position, nil
 	})
 
-	p.lazyInited = true
 	log.Info("run processor",
 		zap.String("capture-id", p.captureInfo.ID), util.ZapFieldCapture(ctx),
 		zap.String("changefeed-id", p.changefeed.ID))
@@ -425,11 +429,19 @@ func (p *processor) sendError(err error) {
 
 func (p *processor) initTables(ctx context.Context) error {
 	for tableID, replicaInfo := range p.changefeed.TaskStatus.Tables {
-		if _, exist := p.tables[tableID]; !exist {
-			err := p.addTable(ctx, tableID, replicaInfo)
-			if err != nil {
-				return errors.Trace(err)
-			}
+		if _, exist := p.tables[tableID]; exist {
+			continue
+		}
+		opt := p.changefeed.TaskStatus.Operation
+		if opt != nil && opt[tableID] != nil {
+			continue
+		}
+		if !p.firstTick {
+			log.Warn("The table was left out", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+		}
+		err := p.addTable(ctx, tableID, replicaInfo)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 	return nil

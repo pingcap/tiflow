@@ -153,6 +153,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return t.manager.getCheckpointTs(), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
+	log.Debug("LEOPPRO show emittedTs", zap.Int64("tableID", t.tableID), zap.Uint64("ts", resolvedTs))
 	return t.manager.flushBackendSink(ctx)
 }
 
