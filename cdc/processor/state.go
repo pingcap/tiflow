@@ -115,9 +115,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 			s.Info = nil
 			return nil
 		}
-		if s.Info == nil {
-			s.Info = new(model.ChangeFeedInfo)
-		}
+		s.Info = new(model.ChangeFeedInfo)
 		e = s.Info
 	case CDCEtcdKeyTypeChangeFeedStatus:
 		if key.ChangefeedID != s.ID {
@@ -127,9 +125,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 			s.Status = nil
 			return nil
 		}
-		if s.Status == nil {
-			s.Status = new(model.ChangeFeedStatus)
-		}
+		s.Status = new(model.ChangeFeedStatus)
 		e = s.Status
 	case CDCEtcdKeyTypeTaskPosition:
 		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
@@ -139,9 +135,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 			s.TaskPosition = nil
 			return nil
 		}
-		if s.TaskPosition == nil {
-			s.TaskPosition = new(model.TaskPosition)
-		}
+		s.TaskPosition = new(model.TaskPosition)
 		e = s.TaskPosition
 	case CDCEtcdKeyTypeTaskStatus:
 		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
@@ -151,9 +145,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 			s.TaskStatus = nil
 			return nil
 		}
-		if s.TaskStatus == nil {
-			s.TaskStatus = new(model.TaskStatus)
-		}
+		s.TaskStatus = new(model.TaskStatus)
 		e = s.TaskStatus
 	case CDCEtcdKeyTypeTaskWorkload:
 		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
@@ -163,9 +155,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 			s.Workload = nil
 			return nil
 		}
-		if s.Workload == nil {
-			s.Workload = make(model.TaskWorkload)
-		}
+		s.Workload = make(model.TaskWorkload)
 		e = &s.Workload
 	default:
 		return nil
