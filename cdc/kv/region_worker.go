@@ -15,6 +15,9 @@ package kv
 
 import (
 	"context"
+	"io"
+	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -26,7 +29,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type regionWorker struct {
@@ -129,14 +135,14 @@ func (w *regionWorker) run(ctx context.Context) error {
 						event.state,
 					)
 				case *cdcpb.Event_ResolvedTs:
-					if err := w.handleResolvedTs(ctx, x.ResolvedTs, event.state, metricSendEventResolvedCounter); err != nil {
+					if err = w.handleResolvedTs(ctx, x.ResolvedTs, event.state, metricSendEventResolvedCounter); err != nil {
 						err = w.handleSingleRegionError(ctx, err, event.state)
 					}
 				}
 			}
 
 			if event.resolvedTs != nil {
-				if err := w.handleResolvedTs(ctx, event.resolvedTs.Ts, event.state, metricSendEventResolvedCounter); err != nil {
+				if err = w.handleResolvedTs(ctx, event.resolvedTs.Ts, event.state, metricSendEventResolvedCounter); err != nil {
 					err = w.handleSingleRegionError(ctx, err, event.state)
 				}
 			}
@@ -280,4 +286,143 @@ func (w *regionWorker) handleResolvedTs(
 		return errors.Trace(ctx.Err())
 	}
 	return nil
+}
+
+func (s *eventFeedSession) receiveFromStreamV2(
+	ctx context.Context,
+	g *errgroup.Group,
+	addr string,
+	storeID uint64,
+	stream cdcpb.ChangeData_EventFeedClient,
+	pendingRegions *syncRegionFeedStateMap,
+	limiter *rate.Limiter,
+) error {
+	// Cancel the pending regions if the stream failed. Otherwise it will remain unhandled in the pendingRegions list
+	// however not registered in the new reconnected stream.
+	var wg sync.WaitGroup
+	defer func() {
+		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
+
+		remainingRegions := pendingRegions.takeAll()
+		for _, state := range remainingRegions {
+			err := s.onRegionFail(ctx, regionErrorInfo{
+				singleRegionInfo: state.sri,
+				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
+			})
+			if err != nil {
+				// The only possible is that the ctx is cancelled. Simply return.
+				return
+			}
+		}
+
+		wg.Wait()
+
+		s.workersLock.Lock()
+		delete(s.workers, addr)
+		s.workersLock.Unlock()
+	}()
+
+	captureAddr := util.CaptureAddrFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	metricSendEventBatchResolvedSize := batchResolvedEventSize.WithLabelValues(captureAddr, changefeedID)
+
+	s.workersLock.Lock()
+	worker, ok := s.workers[addr]
+	if !ok {
+		worker = &regionWorker{
+			session:        s,
+			limiter:        limiter,
+			inputCh:        make(chan *regionStatefulEvent, 1024),
+			outputCh:       s.eventCh,
+			regionStates:   make(map[uint64]*regionFeedState),
+			enableOldValue: s.enableOldValue,
+		}
+		s.workers[addr] = worker
+	}
+	s.workersLock.Unlock()
+
+	wg.Add(1)
+	go func() {
+		err := worker.run(ctx)
+		if err != nil && errors.Cause(err) != context.Canceled && !cerror.ErrEventFeedAborted.Equal(err) {
+			// TODO: should this error be propagated?
+			log.Error("run region worker failed", zap.Error(err))
+		}
+		wg.Done()
+	}()
+
+	for {
+		cevent, err := stream.Recv()
+
+		failpoint.Inject("kvClientStreamRecvError", func() {
+			err = errors.New("injected stream recv error")
+		})
+		if err == io.EOF {
+			close(worker.inputCh)
+			return nil
+		}
+		if err != nil {
+			if status.Code(errors.Cause(err)) == codes.Canceled {
+				log.Debug(
+					"receive from stream canceled",
+					zap.String("addr", addr),
+					zap.Uint64("storeID", storeID),
+				)
+			} else {
+				log.Error(
+					"failed to receive from stream",
+					zap.String("addr", addr),
+					zap.Uint64("storeID", storeID),
+					zap.Error(err),
+				)
+			}
+
+			// Use the same delay mechanism as `stream.Send` error handling, since
+			// these two errors often mean upstream store suffers an accident, which
+			// needs time to recover, kv client doesn't need to retry frequently.
+			// TODO: add a better retry backoff or rate limitter
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+
+			// TODO: better to closes the send direction of the stream to notify
+			// the other side, but it is not safe to call CloseSend concurrently
+			// with SendMsg, in future refactor we should refine the recv loop
+			s.deleteStream(addr)
+
+			// send nil regionStatefulEvent to signal worker exit
+			select {
+			case worker.inputCh <- nil:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
+			// connection will be retried.
+			return nil
+		}
+
+		size := cevent.Size()
+		if size > warnRecvMsgSizeThreshold {
+			regionCount := 0
+			if cevent.ResolvedTs != nil {
+				regionCount = len(cevent.ResolvedTs.Regions)
+			}
+			log.Warn("change data event size too large",
+				zap.Int("size", size), zap.Int("event length", len(cevent.Events)),
+				zap.Int("resolved region count", regionCount))
+		}
+
+		for _, event := range cevent.Events {
+			err = s.sendRegionChangeEventV2(ctx, g, event, worker, pendingRegions, addr, limiter)
+			if err != nil {
+				return err
+			}
+		}
+		if cevent.ResolvedTs != nil {
+			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
+			err = s.sendResolvedTsV2(ctx, g, cevent.ResolvedTs, worker, addr)
+			if err != nil {
+				return err
+			}
+		}
+	}
 }
