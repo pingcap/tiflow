@@ -177,7 +177,7 @@ func (p *processor) initPosition() bool {
 }
 
 func (p *processor) lazyInit(ctx context.Context) error {
-	if p.firstTick {
+	if !p.firstTick {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(ctx)
