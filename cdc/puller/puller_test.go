@@ -74,6 +74,7 @@ func (mc *mockCDCKVClient) EventFeed(
 	span regionspan.ComparableSpan,
 	ts uint64,
 	enableOldValue bool,
+	enableRegionWorker bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit kv.PullerInitialization,
 	eventCh chan<- *model.RegionFeedEvent,
@@ -123,7 +124,7 @@ func (s *pullerSuite) newPullerForTest(
 		kv.NewCDCKVClient = backupNewCDCKVClient
 	}()
 	pdCli := &mockPdClientForPullerTest{clusterID: uint64(1)}
-	plr := NewPuller(ctx, pdCli, nil /* credential */, store, checkpointTs, spans, nil /* limitter */, enableOldValue)
+	plr := NewPuller(ctx, pdCli, nil /* credential */, store, checkpointTs, spans, nil /* limitter */, enableOldValue, false /*enableRegionWorker*/)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
