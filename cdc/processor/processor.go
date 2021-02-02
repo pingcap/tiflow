@@ -459,6 +459,7 @@ func (p *processor) handlePosition() error {
 	minCheckpointTs := minResolvedTs
 	for _, table := range p.tables {
 		ts := table.CheckpointTs()
+		log.Info("LEOPPRO checkpoint ", zap.Any("ts", ts))
 
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
@@ -471,6 +472,7 @@ func (p *processor) handlePosition() error {
 			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 			position.CheckPointTs = minCheckpointTs
 			position.ResolvedTs = minResolvedTs
+			log.Info("LEOPPRO update position", zap.Any("position", position))
 			return position, nil
 		})
 	}

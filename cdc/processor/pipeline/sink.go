@@ -92,6 +92,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) erro
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("LEOPPRO checkpoint in sink", zap.Any("ts", checkpointTs))
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
 	if checkpointTs >= n.targetTs {
 		atomic.StoreInt32(&n.status, TableStatusStopped)
