@@ -25,6 +25,12 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type regionStatefulEvent struct {
+	changeEvent *cdcpb.Event
+	resolvedTs  *cdcpb.ResolvedTs
+	state       *regionFeedState
+}
+
 func (s *eventFeedSession) sendRegionChangeEventV2(
 	ctx context.Context,
 	g *errgroup.Group,
@@ -87,9 +93,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 			},
 		}:
 		}
-		// g.Go(func() error {
-		// 	return s.partialRegionFeed(ctx, state, limiter)
-		// })
 	} else if state.isStopped() {
 		log.Warn("drop event due to region feed stopped",
 			zap.Uint64("regionID", event.RegionId),
