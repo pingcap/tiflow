@@ -340,14 +340,12 @@ func (o *Owner) newChangeFeed(
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
-		// `existingTables` are tables dispatched to a processor, however the
-		// capture that this processor belongs to could have crashed or exited.
-		// So we check this before task dispatching, but after the update of
-		// changefeed schema information.
-		if ts, ok := existingTables[tid]; ok {
-			log.Info("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
-			continue
-		}
+
+		//We delete the logic here for the reason: if cdc restart, this logic will
+		//overlap all the meta data in log.meta if there is not table change during
+		//the gap(crash then start or just restart). in this case sinkTableInfo is
+		//empty thus we will write empty data in log.meta
+
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
