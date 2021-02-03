@@ -86,6 +86,7 @@ func (p *Pipeline) AppendNode(ctx context.Context, name string, node Node) {
 func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runner) {
 	defer p.runnersWg.Done()
 	defer blackhole(previousRunner)
+	defer log.Debug("LEOPPRO exit runner", zap.String("name", runner.getName()))
 	err := runner.run(ctx)
 	if err != nil {
 		p.close()

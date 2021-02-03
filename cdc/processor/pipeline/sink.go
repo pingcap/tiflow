@@ -93,7 +93,9 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) erro
 		log.Info("LEOPPRO err in sink", zap.Error(err))
 		return errors.Trace(err)
 	}
-	log.Info("LEOPPRO checkpoint in sink", zap.Any("ts", checkpointTs))
+	if checkpointTs == 0 {
+		return nil
+	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
 	if checkpointTs >= n.targetTs {
 		atomic.StoreInt32(&n.status, TableStatusStopped)
@@ -152,6 +154,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 				atomic.StoreInt32(&n.status, TableStatusRunning)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
+				log.Debug("LEOPPRO processor sync resolved injected error")
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {

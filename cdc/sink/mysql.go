@@ -124,6 +124,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	checkpointTs := resolvedTs
 	for _, worker := range s.workers {
 		workerCheckpointTs := atomic.LoadUint64(&worker.checkpointTs)
+		log.Debug("LEOPPRO show worker checkpointTs", zap.Any("ts", checkpointTs))
 		if workerCheckpointTs < checkpointTs {
 			checkpointTs = workerCheckpointTs
 		}

@@ -100,6 +100,7 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	if err != nil {
 		return m.getCheckpointTs(), errors.Trace(err)
 	}
+	log.Debug("LEOPPRO show checkpointTs", zap.Uint64("ts", checkpointTs))
 	atomic.StoreUint64(&m.checkpointTs, checkpointTs)
 	return checkpointTs, nil
 }
@@ -143,6 +144,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
+		log.Debug("LEOPPRO show emittedTs i == 0", zap.Int64("tableID", t.tableID), zap.Uint64("ts", resolvedTs))
 		return t.manager.flushBackendSink(ctx)
 	}
 	resolvedRows := t.buffer[:i]
