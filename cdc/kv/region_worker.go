@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -41,7 +42,21 @@ type regionWorker struct {
 	inputCh        chan *regionStatefulEvent
 	outputCh       chan<- *model.RegionFeedEvent
 	regionStates   map[uint64]*regionFeedState
+	statesLock     sync.RWMutex
 	enableOldValue bool
+}
+
+func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
+	w.statesLock.RLock()
+	defer w.statesLock.RUnlock()
+	state, ok := w.regionStates[regionID]
+	return state, ok
+}
+
+func (w *regionWorker) setRegionState(regionID uint64, state *regionFeedState) {
+	w.statesLock.Lock()
+	defer w.statesLock.Unlock()
+	w.regionStates[regionID] = state
 }
 
 func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, state *regionFeedState) error {
@@ -79,6 +94,56 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	})
 }
 
+func (w *regionWorker) resolveLock(ctx context.Context) {
+	resolveLockInterval := 20 * time.Second
+	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
+		resolveLockInterval = time.Duration(val.(int)) * time.Second
+	})
+	advanceCheckTicker := time.NewTicker(time.Second * 5)
+	defer advanceCheckTicker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-advanceCheckTicker.C:
+			if w.session.isPullerInit.IsInitialized() {
+				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
+				continue
+			}
+			// TODO: add a better expired heap, so we don't need to iterate each region every time
+			w.statesLock.RLock()
+			version, err := w.session.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
+			for regionID, state := range w.regionStates {
+				sinceLastEvent := time.Since(state.lastReceivedEventTime)
+				if sinceLastEvent > resolveLockInterval {
+					log.Warn("region not receiving event from tikv for too long time",
+						zap.Uint64("regionID", regionID), zap.Stringer("span", state.sri.span), zap.Duration("duration", sinceLastEvent))
+				}
+				if err != nil {
+					log.Warn("failed to get current version from PD", zap.Error(err))
+					continue
+				}
+				currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
+				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
+				if sinceLastResolvedTs > resolveLockInterval && state.initialized {
+					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
+						zap.Uint64("regionID", regionID), zap.Stringer("span", state.sri.span),
+						zap.Duration("duration", sinceLastResolvedTs),
+						zap.Uint64("resolvedTs", state.lastResolvedTs))
+					maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
+					err = w.session.lockResolver.Resolve(ctx, regionID, maxVersion)
+					if err != nil {
+						log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+						continue
+					}
+				}
+			}
+			w.statesLock.RUnlock()
+		}
+	}
+}
+
 func (w *regionWorker) run(ctx context.Context) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
@@ -109,6 +174,7 @@ func (w *regionWorker) run(ctx context.Context) error {
 			if event.state.isStopped() {
 				continue
 			}
+			event.state.lastReceivedEventTime = time.Now()
 			if event.changeEvent != nil {
 				metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
 				switch x := event.changeEvent.Event.(type) {

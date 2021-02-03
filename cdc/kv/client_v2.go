@@ -40,7 +40,7 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 	addr string,
 	limiter *rate.Limiter,
 ) error {
-	state, ok := worker.regionStates[event.RegionId]
+	state, ok := worker.getRegionState(event.RegionId)
 	// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
 	// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
 	// is receiving messages with different requestID, only the messages with the larges requestID is valid.
@@ -79,7 +79,7 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 		state.start()
 		// Then spawn the goroutine to process messages of this region.
-		worker.regionStates[event.RegionId] = state
+		worker.setRegionState(event.RegionId, state)
 
 		// send resolved event when starting a single event feed
 		select {
@@ -120,7 +120,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 	addr string,
 ) error {
 	for _, regionID := range resolvedTs.Regions {
-		state, ok := worker.regionStates[regionID]
+		state, ok := worker.getRegionState(regionID)
 		if ok {
 			if state.isStopped() {
 				log.Warn("drop resolved ts due to region feed stopped",
