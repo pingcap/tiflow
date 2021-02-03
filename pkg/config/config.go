@@ -44,7 +44,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Tp:          "table-number",
 		PollingTime: -1,
 	},
-	KVClientV2: false,
+	KVClientV2: true,
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
