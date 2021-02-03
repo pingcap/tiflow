@@ -94,7 +94,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	})
 }
 
-func (w *regionWorker) resolveLock(ctx context.Context) {
+func (w *regionWorker) resolveLock(ctx context.Context) error {
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
@@ -105,9 +105,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return errors.Trace(ctx.Err())
 		case <-advanceCheckTicker.C:
-			if w.session.isPullerInit.IsInitialized() {
+			if !w.session.isPullerInit.IsInitialized() {
 				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
 				continue
 			}
@@ -144,7 +144,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) {
 	}
 }
 
-func (w *regionWorker) run(ctx context.Context) error {
+func (w *regionWorker) eventHandler(ctx context.Context) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricEventSize := eventSize.WithLabelValues(captureAddr)
@@ -217,6 +217,17 @@ func (w *regionWorker) run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (w *regionWorker) run(ctx context.Context) error {
+	wg, ctx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		return w.resolveLock(ctx)
+	})
+	wg.Go(func() error {
+		return w.eventHandler(ctx)
+	})
+	return wg.Wait()
 }
 
 func (w *regionWorker) handleEventEntry(
