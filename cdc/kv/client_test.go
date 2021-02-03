@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -38,6 +39,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -202,9 +204,11 @@ func mockInitializedEvent(regionID, requestID uint64) *cdcpb.ChangeDataEvent {
 }
 
 type mockChangeDataService struct {
-	c        *check.C
-	ch       chan *cdcpb.ChangeDataEvent
-	recvLoop func(server cdcpb.ChangeData_EventFeedServer)
+	c           *check.C
+	ch          chan *cdcpb.ChangeDataEvent
+	recvLoop    func(server cdcpb.ChangeData_EventFeedServer)
+	exitNotify  sync.Map
+	eventFeedID uint64
 }
 
 func newMockChangeDataService(c *check.C, ch chan *cdcpb.ChangeDataEvent) *mockChangeDataService {
@@ -215,16 +219,50 @@ func newMockChangeDataService(c *check.C, ch chan *cdcpb.ChangeDataEvent) *mockC
 	return s
 }
 
+type notifyCh struct {
+	notify   chan struct{}
+	callback chan struct{}
+}
+
+func (s *mockChangeDataService) registerExitNotify(id uint64, ch *notifyCh) {
+	s.exitNotify.Store(id, ch)
+}
+
+func (s *mockChangeDataService) notifyExit(id uint64) chan struct{} {
+	if ch, ok := s.exitNotify.Load(id); ok {
+		nch := ch.(*notifyCh)
+		nch.notify <- struct{}{}
+		return nch.callback
+	}
+	return nil
+}
+
 func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServer) error {
 	if s.recvLoop != nil {
 		go func() {
 			s.recvLoop(server)
 		}()
 	}
-	for e := range s.ch {
-		err := server.Send(e)
-		s.c.Assert(err, check.IsNil)
+	notify := &notifyCh{
+		notify:   make(chan struct{}),
+		callback: make(chan struct{}, 1), // callback is not always retrieved
 	}
+	s.registerExitNotify(atomic.LoadUint64(&s.eventFeedID), notify)
+	atomic.AddUint64(&s.eventFeedID, 1)
+loop:
+	for {
+		select {
+		case e := <-s.ch:
+			if e == nil {
+				break loop
+			}
+			err := server.Send(e)
+			s.c.Assert(err, check.IsNil)
+		case <-notify.notify:
+			break loop
+		}
+	}
+	notify.callback <- struct{}{}
 	return nil
 }
 
@@ -1180,6 +1218,125 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cancel()
 }
 
+// TestStreamSendWithError mainly tests the scenario that the `Recv` call of a gPRC
+// stream in kv client meets error, and kv client logs the error and re-establish
+// new request
+func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
+	}()
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	initialized1 := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized1
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		if len(ch1) == 0 {
+			return nil
+		}
+		return errors.New("message is not sent")
+	})
+	c.Assert(err, check.IsNil)
+
+	// another stream will be established, so we notify and wait the first
+	// EventFeed loop exits.
+	callback := srv1.notifyExit(0)
+	select {
+	case <-callback:
+	case <-time.After(time.Second * 3):
+		c.Error("event feed loop can't exit")
+	}
+
+	// wait request id allocated with: new session, new request*2
+	waitRequestID(c, baseAllocatedID+2)
+	initialized2 := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized2
+
+	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  regionID,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 120},
+		},
+	}}
+	ch1 <- resolved
+	ch1 <- resolved
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+	}
+
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+	cancel()
+}
+
 // TestIncompatibleTiKV tests TiCDC new request to TiKV meets `ErrVersionIncompatible`
 // error (in fact this error is raised before EventFeed API is really called),
 // TiCDC will wait 20s and then retry. This is a common scenario when rolling
@@ -1193,6 +1350,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 
 	// the minimum valid TiKV version is "4.0.0-rc.1"
 	incompatibilityVers := []string{"v2.1.10", "v3.0.10", "v3.1.0", "v4.0.0-rc"}
+	var genLock sync.Mutex
 	nextVer := -1
 	call := int32(0)
 	// 20 here not too much, since check version itself has 3 time retry, and
@@ -1200,6 +1358,8 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	// generator too.
 	versionGenCallBoundary := int32(20)
 	gen := func() string {
+		genLock.Lock()
+		defer genLock.Unlock()
 		atomic.AddInt32(&call, 1)
 		if atomic.LoadInt32(&call) < versionGenCallBoundary {
 			nextVer = (nextVer + 1) % len(incompatibilityVers)
@@ -1453,6 +1613,389 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	ch1 <- initialized
 	ch1 <- eventsAfterInit
 
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+	cancel()
+}
+
+// TestResolveLock tests the resolve lock logic in kv client
+func (s *etcdSuite) TestResolveLock(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval", "return(3)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval")
+	}()
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	initialized := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized
+	physical, logical, err := pdClient.GetTS(ctx)
+	c.Assert(err, check.IsNil)
+	tso := oracle.ComposeTS(physical, logical)
+	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  regionID,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: tso},
+		},
+	}}
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: tso,
+			},
+			RegionID: regionID,
+		},
+	}
+	ch1 <- resolved
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+
+	// sleep 10s to simulate no resolved event longer than ResolveLockInterval
+	// resolve lock check ticker is 5s.
+	time.Sleep(10 * time.Second)
+
+	cancel()
+}
+
+func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.ChangeDataEvent) {
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	logPanic = log.Error
+	defer func() {
+		logPanic = log.Panic
+	}()
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientErrUnreachable", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientErrUnreachable")
+	}()
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	var clientWg sync.WaitGroup
+	clientWg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(err, check.Equals, errUnreachable)
+		cdcClient.Close() //nolint:errcheck
+		clientWg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	for _, event := range events {
+		for _, ev := range event.Events {
+			ev.RequestId = currentRequestID()
+		}
+		ch1 <- event
+	}
+	clientWg.Wait()
+
+	cancel()
+}
+
+// TestCommittedFallback tests kv client should panic when receiving a fallback committed event
+func (s *etcdSuite) TestCommittedFallback(c *check.C) {
+	defer testleak.AfterTest(c)()
+	events := []*cdcpb.ChangeDataEvent{
+		{Events: []*cdcpb.Event{
+			{
+				RegionId:  3,
+				RequestId: currentRequestID(),
+				Event: &cdcpb.Event_Entries_{
+					Entries: &cdcpb.Event_Entries{
+						Entries: []*cdcpb.Event_Row{{
+							Type:     cdcpb.Event_COMMITTED,
+							OpType:   cdcpb.Event_Row_PUT,
+							Key:      []byte("a"),
+							Value:    []byte("committed with commit ts before resolved ts"),
+							StartTs:  92,
+							CommitTs: 98,
+						}},
+					},
+				},
+			},
+		}},
+	}
+	s.testEventCommitTsFallback(c, events)
+}
+
+// TestCommitFallback tests kv client should panic when receiving a fallback commit event
+func (s *etcdSuite) TestCommitFallback(c *check.C) {
+	defer testleak.AfterTest(c)()
+	events := []*cdcpb.ChangeDataEvent{
+		mockInitializedEvent(3, currentRequestID()),
+		{Events: []*cdcpb.Event{
+			{
+				RegionId:  3,
+				RequestId: currentRequestID(),
+				Event: &cdcpb.Event_Entries_{
+					Entries: &cdcpb.Event_Entries{
+						Entries: []*cdcpb.Event_Row{{
+							Type:     cdcpb.Event_COMMIT,
+							OpType:   cdcpb.Event_Row_PUT,
+							Key:      []byte("a-commit-event-ts-fallback"),
+							StartTs:  92,
+							CommitTs: 98,
+						}},
+					},
+				},
+			},
+		}},
+	}
+	s.testEventCommitTsFallback(c, events)
+}
+
+// TestDeuplicateRequest tests kv client should panic when meeting a duplicate error
+func (s *etcdSuite) TestDuplicateRequest(c *check.C) {
+	defer testleak.AfterTest(c)()
+	events := []*cdcpb.ChangeDataEvent{
+		{Events: []*cdcpb.Event{
+			{
+				RegionId:  3,
+				RequestId: currentRequestID(),
+				Event: &cdcpb.Event_Error{
+					Error: &cdcpb.Error{
+						DuplicateRequest: &cdcpb.DuplicateRequest{RegionId: 3},
+					},
+				},
+			},
+		}},
+	}
+	s.testEventCommitTsFallback(c, events)
+}
+
+// TestEventAfterFeedStop tests kv client can drop events sent after region feed is stopped
+func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	// add 2s delay to simulate event feed processor has been marked stopped, but
+	// before event feed processor is reconstruct, some duplicated events are
+	// sent to event feed processor.
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientSingleFeedProcessDelay", "1*sleep(2000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientSingleFeedProcessDelay")
+	}()
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	// an error event will mark the corresponding region feed as stopped
+	epochNotMatch := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Error{
+				Error: &cdcpb.Error{
+					EpochNotMatch: &errorpb.EpochNotMatch{},
+				},
+			},
+		},
+	}}
+	ch1 <- epochNotMatch
+
+	// sleep to ensure event feed processor has been marked as stopped
+	time.Sleep(1 * time.Second)
+	committed := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a"),
+						Value:    []byte("committed put event before init"),
+						StartTs:  105,
+						CommitTs: 115,
+					}},
+				},
+			},
+		},
+	}}
+	initialized := mockInitializedEvent(regionID, currentRequestID())
+	resolved := &cdcpb.ChangeDataEvent{
+		ResolvedTs: &cdcpb.ResolvedTs{
+			Regions: []uint64{3},
+			Ts:      120,
+		},
+	}
+	// clone to avoid data race, these are exactly the same events
+	committedClone := proto.Clone(committed).(*cdcpb.ChangeDataEvent)
+	initializedClone := proto.Clone(initialized).(*cdcpb.ChangeDataEvent)
+	resolvedClone := proto.Clone(resolved).(*cdcpb.ChangeDataEvent)
+	ch1 <- committed
+	ch1 <- initialized
+	ch1 <- resolved
+
+	// wait request id allocated with: new session, 2 * new request
+	waitRequestID(c, baseAllocatedID+2)
+	committedClone.Events[0].RequestId = currentRequestID()
+	initializedClone.Events[0].RequestId = currentRequestID()
+	ch1 <- committedClone
+	ch1 <- initializedClone
+	ch1 <- resolvedClone
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("a"),
+				Value:    []byte("committed put event before init"),
+				StartTs:  105,
+				CRTs:     115,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+	}
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:

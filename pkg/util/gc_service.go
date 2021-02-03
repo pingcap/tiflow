@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/store/tikv"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	pd "github.com/tikv/pd/client"
 )
 
@@ -37,7 +37,7 @@ func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, startTs uint64) 
 		return errors.Trace(err)
 	}
 	if startTs < minServiceGCTs {
-		return errors.Wrap(tikv.ErrGCTooEarly.GenWithStackByArgs(startTs, minServiceGCTs), "startTs less than gcSafePoint")
+		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
 	return nil
 }
