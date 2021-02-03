@@ -62,7 +62,8 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	opts *processorOpts
+	opts   *processorOpts
+	closed chan struct{}
 }
 
 // NewCapture returns a new Capture instance
@@ -131,6 +132,7 @@ func NewCapture(
 		opts:             opts,
 		pdCli:            pdCli,
 		processorManager: processorManager,
+		closed:           make(chan struct{}),
 	}
 
 	return
@@ -141,6 +143,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	// TODO: we'd better to add some wait mechanism to ensure no routine is blocked
 	defer cancel()
+	defer close(c.closed)
 	err = c.register(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -150,12 +153,15 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, 200*time.Millisecond); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
 		// 1/3 of session ttl that `session.Done` can't be triggered even
 		// the lease is already revoked.
+		if cerror.ErrEtcdSessionDone.Equal(err) {
+			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+		}
 		lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
 			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
@@ -186,9 +192,12 @@ func (c *Capture) Resign(ctx context.Context) error {
 }
 
 // Close closes the capture by unregistering it from etcd
-func (c *Capture) Close() error {
-	// TODO close the capture
-	return c.session.Close()
+func (c *Capture) Close(ctx context.Context) error {
+	select {
+	case <-c.closed:
+	case <-ctx.Done():
+	}
+	return errors.Trace(c.etcdClient.DeleteCaptureInfo(ctx, c.info.ID))
 }
 
 // register registers the capture information in etcd

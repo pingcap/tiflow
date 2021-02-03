@@ -633,7 +633,6 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 		s.workers[i] = worker
 		go func() {
 			err := worker.run(ctx)
-			log.Info("LEOPPRO exit sink", zap.Error(err))
 			if err != nil && errors.Cause(err) != context.Canceled {
 				select {
 				case s.errCh <- err:

@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -67,7 +68,7 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
-func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) error {
+func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration) error {
 	defer worker.cleanUp()
 
 	err := worker.syncRawState(ctx)
@@ -84,12 +85,21 @@ func (worker *EtcdWorker) Run(ctx context.Context, timerInterval time.Duration) 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
 	var pendingPatches []*DataPatch
 	var exiting bool
+	var sessionDone <-chan struct{}
+	if session != nil {
+		sessionDone = session.Done()
+	} else {
+		// should never be closed
+		sessionDone = make(chan struct{})
+	}
 
 	for {
 		var response clientv3.WatchResponse
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-sessionDone:
+			return cerrors.ErrEtcdSessionDone
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
 		case response = <-watchCh:
