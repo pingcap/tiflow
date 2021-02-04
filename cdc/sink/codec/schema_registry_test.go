@@ -372,7 +372,7 @@ func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister(c *check.C) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
-				codec, id, err = manager.GetCachedOrRegister(getTestingContext(), table, uint64(finalI), schemaGen)
+				codec, id, err := manager.GetCachedOrRegister(getTestingContext(), table, uint64(finalI), schemaGen)
 				c.Assert(err, check.IsNil)
 				c.Assert(id, check.Greater, 0)
 				c.Assert(codec, check.NotNil)
