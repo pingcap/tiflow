@@ -58,12 +58,12 @@ type changeFeedManagerImpl struct {
 	adminJobsQueue chan *model.AdminJob
 }
 
-func newChangeFeedManager(ownerState *ownerReactorState) changeFeedManager {
+func newChangeFeedManager(ownerState *ownerReactorState, bootstrapper changeFeedBootstrapper) changeFeedManager {
 	return &changeFeedManagerImpl{
 		changeFeedInfos: make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
 		ownerState:      ownerState,
-		bootstrapper:    nil,
-		adminJobsQueue:  nil,
+		bootstrapper:    bootstrapper,
+		adminJobsQueue:  make(chan *model.AdminJob, 1024),
 	}
 }
 

@@ -15,6 +15,7 @@ package replication
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/pkg/security"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -35,9 +36,10 @@ type Owner struct {
 	tickInterval time.Duration
 }
 
-func NewOwner(etcdClient *etcd.Client, pdClient pd.Client) (*Owner, error) {
+func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.Credential) (*Owner, error) {
 	state := newCDCReactorState()
-	cfManager := newChangeFeedManager(state)
+	bootstrapper := newBootstrapper(pdClient, credential)
+	cfManager := newChangeFeedManager(state, bootstrapper)
 	gcManager := newGCManager(pdClient, 600)
 	reactor := newOwnerReactor(state, cfManager, gcManager)
 
