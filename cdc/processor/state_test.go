@@ -14,6 +14,7 @@
 package processor
 
 import (
+	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -25,6 +26,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
+
+func TestSuite(t *testing.T) {
+	check.TestingT(t)
+}
 
 type stateSuite struct{}
 

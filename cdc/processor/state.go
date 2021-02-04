@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.uber.org/zap"
@@ -39,12 +40,12 @@ func NewGlobalState(captureID model.CaptureID) orchestrator.ReactorState {
 }
 
 func (s *globalState) Update(key util.EtcdKey, value []byte, isInit bool) error {
-	k := new(CDCEtcdKey)
+	k := new(etcd.CDCKey)
 	err := k.Parse(key.String())
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if k.Tp == CDCEtcdKeyTypeCapture || k.Tp == CDCEtcdKeyTypeOnwer {
+	if k.Tp == etcd.CDCKeyTypeCapture || k.Tp == etcd.CDCKeyTypeOnwer {
 		return nil
 	}
 	if len(k.CaptureID) != 0 && k.CaptureID != s.CaptureID {
@@ -92,7 +93,7 @@ func newChangeFeedState(id model.ChangeFeedID, captureID model.CaptureID) *chang
 }
 
 func (s *changefeedState) Update(key util.EtcdKey, value []byte, isInit bool) error {
-	k := new(CDCEtcdKey)
+	k := new(etcd.CDCKey)
 	err := k.Parse(key.String())
 	if err != nil {
 		return errors.Trace(err)
@@ -104,10 +105,10 @@ func (s *changefeedState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	return nil
 }
 
-func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
+func (s *changefeedState) UpdateCDCKey(key *etcd.CDCKey, value []byte) error {
 	var e interface{}
 	switch key.Tp {
-	case CDCEtcdKeyTypeChangefeedInfo:
+	case etcd.CDCKeyTypeChangefeedInfo:
 		if key.ChangefeedID != s.ID {
 			return nil
 		}
@@ -117,7 +118,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 		}
 		s.Info = new(model.ChangeFeedInfo)
 		e = s.Info
-	case CDCEtcdKeyTypeChangeFeedStatus:
+	case etcd.CDCKeyTypeChangeFeedStatus:
 		if key.ChangefeedID != s.ID {
 			return nil
 		}
@@ -127,7 +128,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 		}
 		s.Status = new(model.ChangeFeedStatus)
 		e = s.Status
-	case CDCEtcdKeyTypeTaskPosition:
+	case etcd.CDCKeyTypeTaskPosition:
 		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
 			return nil
 		}
@@ -137,7 +138,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 		}
 		s.TaskPosition = new(model.TaskPosition)
 		e = s.TaskPosition
-	case CDCEtcdKeyTypeTaskStatus:
+	case etcd.CDCKeyTypeTaskStatus:
 		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
 			return nil
 		}
@@ -147,7 +148,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 		}
 		s.TaskStatus = new(model.TaskStatus)
 		e = s.TaskStatus
-	case CDCEtcdKeyTypeTaskWorkload:
+	case etcd.CDCKeyTypeTaskWorkload:
 		if key.ChangefeedID != s.ID || key.CaptureID != s.CaptureID {
 			return nil
 		}
@@ -164,7 +165,7 @@ func (s *changefeedState) UpdateCDCKey(key *CDCEtcdKey, value []byte) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if key.Tp == CDCEtcdKeyTypeChangefeedInfo {
+	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
 		err = s.Info.VerifyAndFix()
 		if err != nil {
 			return errors.Trace(err)
@@ -194,12 +195,13 @@ var (
 )
 
 func (s *changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) (*model.TaskPosition, error)) {
-	key := &CDCEtcdKey{
-		Tp:           CDCEtcdKeyTypeTaskPosition,
+	key := &etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeTaskPosition,
 		CaptureID:    s.CaptureID,
 		ChangefeedID: s.ID,
 	}
 	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, error) {
+		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
 		}
@@ -208,12 +210,13 @@ func (s *changefeedState) PatchTaskPosition(fn func(*model.TaskPosition) (*model
 }
 
 func (s *changefeedState) PatchTaskStatus(fn func(*model.TaskStatus) (*model.TaskStatus, error)) {
-	key := &CDCEtcdKey{
-		Tp:           CDCEtcdKeyTypeTaskStatus,
+	key := &etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeTaskStatus,
 		CaptureID:    s.CaptureID,
 		ChangefeedID: s.ID,
 	}
 	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, error) {
+		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
 		}
@@ -222,12 +225,13 @@ func (s *changefeedState) PatchTaskStatus(fn func(*model.TaskStatus) (*model.Tas
 }
 
 func (s *changefeedState) PatchTaskWorkload(fn func(model.TaskWorkload) (model.TaskWorkload, error)) {
-	key := &CDCEtcdKey{
-		Tp:           CDCEtcdKeyTypeTaskWorkload,
+	key := &etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeTaskWorkload,
 		CaptureID:    s.CaptureID,
 		ChangefeedID: s.ID,
 	}
 	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, error) {
+		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
 		}

@@ -11,18 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package etcd
 
 import (
-	"testing"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
-
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
 
 type etcdkeySuite struct{}
 
@@ -32,74 +26,74 @@ func (s *etcdkeySuite) TestEtcdKey(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testcases := []struct {
 		key      string
-		expected *CDCEtcdKey
+		expected *CDCKey
 	}{{
 		key: "/tidb/cdc/owner/223176cb44d20a13",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeOnwer,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeOnwer,
 			OwnerLeaseID: "223176cb44d20a13",
 		},
 	}, {
 		key: "/tidb/cdc/owner",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeOnwer,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeOnwer,
 			OwnerLeaseID: "",
 		},
 	}, {
 		key: "/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
-		expected: &CDCEtcdKey{
-			Tp:        CDCEtcdKeyTypeCapture,
+		expected: &CDCKey{
+			Tp:        CDCKeyTypeCapture,
 			CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}, {
 		key: "/tidb/cdc/changefeed/info/test-_@#$%changefeed",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeChangefeedInfo,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeChangefeedInfo,
 			ChangefeedID: "test-_@#$%changefeed",
 		},
 	}, {
 		key: "/tidb/cdc/changefeed/info/test/changefeed",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeChangefeedInfo,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeChangefeedInfo,
 			ChangefeedID: "test/changefeed",
 		},
 	}, {
 		key: "/tidb/cdc/job/test-changefeed",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeChangeFeedStatus,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeChangeFeedStatus,
 			ChangefeedID: "test-changefeed",
 		},
 	}, {
 		key: "/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeTaskPosition,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeTaskPosition,
 			ChangefeedID: "test-changefeed",
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}, {
 		key: "/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test/changefeed",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeTaskPosition,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeTaskPosition,
 			ChangefeedID: "test/changefeed",
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}, {
 		key: "/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeTaskStatus,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeTaskStatus,
 			ChangefeedID: "test-changefeed",
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}, {
 		key: "/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
-		expected: &CDCEtcdKey{
-			Tp:           CDCEtcdKeyTypeTaskWorkload,
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeTaskWorkload,
 			ChangefeedID: "test-changefeed",
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}}
 	for _, tc := range testcases {
-		k := new(CDCEtcdKey)
+		k := new(CDCKey)
 		err := k.Parse(tc.key)
 		c.Assert(err, check.IsNil)
 		c.Assert(k, check.DeepEquals, tc.expected)
@@ -135,7 +129,7 @@ func (s *etcdkeySuite) TestEtcdKeyParseError(c *check.C) {
 		error: true,
 	}}
 	for _, tc := range testCases {
-		k := new(CDCEtcdKey)
+		k := new(CDCKey)
 		err := k.Parse(tc.key)
 		if tc.error {
 			c.Assert(err, check.NotNil)

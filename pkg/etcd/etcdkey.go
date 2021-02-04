@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package etcd
 
 import (
 	"log"
@@ -35,38 +35,61 @@ const (
 	jobKey            = "/job"
 )
 
-// CDCEtcdKeyType is the type of etcd key
-type CDCEtcdKeyType = int
+// CDCKeyType is the type of etcd key
+type CDCKeyType = int
 
 // the types of etcd key
 const (
-	CDCEtcdKeyTypeUnknown CDCEtcdKeyType = iota
-	CDCEtcdKeyTypeOnwer
-	CDCEtcdKeyTypeCapture
-	CDCEtcdKeyTypeChangefeedInfo
-	CDCEtcdKeyTypeChangeFeedStatus
-	CDCEtcdKeyTypeTaskPosition
-	CDCEtcdKeyTypeTaskStatus
-	CDCEtcdKeyTypeTaskWorkload
+	CDCKeyTypeUnknown CDCKeyType = iota
+	CDCKeyTypeOnwer
+	CDCKeyTypeCapture
+	CDCKeyTypeChangefeedInfo
+	CDCKeyTypeChangeFeedStatus
+	CDCKeyTypeTaskPosition
+	CDCKeyTypeTaskStatus
+	CDCKeyTypeTaskWorkload
 )
 
-// CDCEtcdKey represents a etcd key which is defined by TiCDC
-type CDCEtcdKey struct {
-	Tp           CDCEtcdKeyType
+// CDCKey represents a etcd key which is defined by TiCDC
+/*
+ Usage:
+ we can parse a raw etcd key:
+ ```
+ 	k := new(CDCKey)
+ 	rawKey := "/tidb/cdc/changefeed/info/test/changefeed"
+	err := k.Parse(rawKey)
+ 	c.Assert(k, check.DeepEquals, &CDCKey{
+			Tp:           CDCKeyTypeChangefeedInfo,
+			ChangefeedID: "test/changefeed",
+	})
+ ```
+
+ and we can generate a raw key from CDCKey
+ ```
+ 	k := &CDCKey{
+			Tp:           CDCKeyTypeChangefeedInfo,
+			ChangefeedID: "test/changefeed",
+	}
+ 	c.Assert(k.String(), check.Equals, "/tidb/cdc/changefeed/info/test/changefeed")
+ ```
+
+*/
+type CDCKey struct {
+	Tp           CDCKeyType
 	ChangefeedID model.ChangeFeedID
 	CaptureID    model.CaptureID
 	OwnerLeaseID string
 }
 
 // Parse parses the given etcd key
-func (k *CDCEtcdKey) Parse(key string) error {
+func (k *CDCKey) Parse(key string) error {
 	if !strings.HasPrefix(key, etcdKeyBase) {
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
 	key = key[len(etcdKeyBase):]
 	switch {
 	case strings.HasPrefix(key, ownerKey):
-		k.Tp = CDCEtcdKeyTypeOnwer
+		k.Tp = CDCKeyTypeOnwer
 		k.CaptureID = ""
 		k.ChangefeedID = ""
 		key = key[len(ownerKey):]
@@ -75,17 +98,17 @@ func (k *CDCEtcdKey) Parse(key string) error {
 		}
 		k.OwnerLeaseID = key
 	case strings.HasPrefix(key, captureKey):
-		k.Tp = CDCEtcdKeyTypeCapture
+		k.Tp = CDCKeyTypeCapture
 		k.CaptureID = key[len(captureKey)+1:]
 		k.ChangefeedID = ""
 		k.OwnerLeaseID = ""
 	case strings.HasPrefix(key, changefeedInfoKey):
-		k.Tp = CDCEtcdKeyTypeChangefeedInfo
+		k.Tp = CDCKeyTypeChangefeedInfo
 		k.CaptureID = ""
 		k.ChangefeedID = key[len(changefeedInfoKey)+1:]
 		k.OwnerLeaseID = ""
 	case strings.HasPrefix(key, jobKey):
-		k.Tp = CDCEtcdKeyTypeChangeFeedStatus
+		k.Tp = CDCKeyTypeChangeFeedStatus
 		k.CaptureID = ""
 		k.ChangefeedID = key[len(jobKey)+1:]
 		k.OwnerLeaseID = ""
@@ -94,7 +117,7 @@ func (k *CDCEtcdKey) Parse(key string) error {
 		if len(splitKey) != 2 {
 			return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 		}
-		k.Tp = CDCEtcdKeyTypeTaskStatus
+		k.Tp = CDCKeyTypeTaskStatus
 		k.CaptureID = splitKey[0]
 		k.ChangefeedID = splitKey[1]
 		k.OwnerLeaseID = ""
@@ -103,7 +126,7 @@ func (k *CDCEtcdKey) Parse(key string) error {
 		if len(splitKey) != 2 {
 			return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 		}
-		k.Tp = CDCEtcdKeyTypeTaskPosition
+		k.Tp = CDCKeyTypeTaskPosition
 		k.CaptureID = splitKey[0]
 		k.ChangefeedID = splitKey[1]
 		k.OwnerLeaseID = ""
@@ -112,7 +135,7 @@ func (k *CDCEtcdKey) Parse(key string) error {
 		if len(splitKey) != 2 {
 			return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 		}
-		k.Tp = CDCEtcdKeyTypeTaskWorkload
+		k.Tp = CDCKeyTypeTaskWorkload
 		k.CaptureID = splitKey[0]
 		k.ChangefeedID = splitKey[1]
 		k.OwnerLeaseID = ""
@@ -122,24 +145,24 @@ func (k *CDCEtcdKey) Parse(key string) error {
 	return nil
 }
 
-func (k *CDCEtcdKey) String() string {
+func (k *CDCKey) String() string {
 	switch k.Tp {
-	case CDCEtcdKeyTypeOnwer:
+	case CDCKeyTypeOnwer:
 		if len(k.OwnerLeaseID) == 0 {
 			return etcdKeyBase + ownerKey
 		}
 		return etcdKeyBase + ownerKey + "/" + k.OwnerLeaseID
-	case CDCEtcdKeyTypeCapture:
+	case CDCKeyTypeCapture:
 		return etcdKeyBase + captureKey + "/" + k.CaptureID
-	case CDCEtcdKeyTypeChangefeedInfo:
+	case CDCKeyTypeChangefeedInfo:
 		return etcdKeyBase + changefeedInfoKey + "/" + k.ChangefeedID
-	case CDCEtcdKeyTypeChangeFeedStatus:
+	case CDCKeyTypeChangeFeedStatus:
 		return etcdKeyBase + jobKey + "/" + k.ChangefeedID
-	case CDCEtcdKeyTypeTaskPosition:
+	case CDCKeyTypeTaskPosition:
 		return etcdKeyBase + taskPositionKey + "/" + k.CaptureID + "/" + k.ChangefeedID
-	case CDCEtcdKeyTypeTaskStatus:
+	case CDCKeyTypeTaskStatus:
 		return etcdKeyBase + taskStatusKey + "/" + k.CaptureID + "/" + k.ChangefeedID
-	case CDCEtcdKeyTypeTaskWorkload:
+	case CDCKeyTypeTaskWorkload:
 		return etcdKeyBase + taskWorkloadKey + "/" + k.CaptureID + "/" + k.ChangefeedID
 	}
 	log.Panic("unreachable")
