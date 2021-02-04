@@ -59,7 +59,6 @@ func (r *nodeRunner) run(ctx context.Context) error {
 	for msg := range r.previous.getOutputCh() {
 		err := r.node.Receive(withMessage(nodeCtx, msg))
 		if err != nil {
-			log.Debug("LEOPPRO", zap.Error(err))
 			return err
 		}
 	}

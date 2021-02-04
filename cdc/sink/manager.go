@@ -100,7 +100,6 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	if err != nil {
 		return m.getCheckpointTs(), errors.Trace(err)
 	}
-	log.Debug("LEOPPRO show checkpointTs", zap.Uint64("ts", checkpointTs))
 	atomic.StoreUint64(&m.checkpointTs, checkpointTs)
 	return checkpointTs, nil
 }

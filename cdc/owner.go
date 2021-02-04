@@ -629,7 +629,6 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			Error: err,
 		}
 		o.adminJobs = append(o.adminJobs, job)
-		log.Debug("LEOPPRO add job", zap.Any("job", job), zap.Stack("stack"))
 	}
 	o.adminJobsLock.Unlock()
 	return nil
@@ -1289,7 +1288,6 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	default:
 		return cerror.ErrInvalidAdminJobType.GenWithStackByArgs(job.Type)
 	}
-	log.Debug("LEOPPRO add job", zap.Any("job", job), zap.Stack("stack"))
 	o.adminJobsLock.Lock()
 	o.adminJobs = append(o.adminJobs, job)
 	o.adminJobsLock.Unlock()

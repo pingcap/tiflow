@@ -182,6 +182,10 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	if !p.firstTick {
 		return nil
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	p.cancel = cancel
+	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+
 	errCh := make(chan error, 16)
 	go func() {
 		// there are some other objects need errCh, such as sink and sink manager
@@ -194,7 +198,6 @@ func (p *processor) lazyInit(ctx context.Context) error {
 				close(errCh)
 				return
 			case err := <-errCh:
-				log.Debug("LEOPPRO error received", zap.Error(err))
 				if err == nil {
 					return
 				}
@@ -202,10 +205,7 @@ func (p *processor) lazyInit(ctx context.Context) error {
 			}
 		}
 	}()
-	ctx, cancel := context.WithCancel(ctx)
-	p.cancel = cancel
 
-	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	var err error
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
 	if err != nil {
@@ -483,7 +483,6 @@ func (p *processor) handlePosition() error {
 	minCheckpointTs := minResolvedTs
 	for _, table := range p.tables {
 		ts := table.CheckpointTs()
-		log.Info("LEOPPRO checkpoint ", zap.Any("ts", ts))
 
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
@@ -496,7 +495,6 @@ func (p *processor) handlePosition() error {
 			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 			position.CheckPointTs = minCheckpointTs
 			position.ResolvedTs = minResolvedTs
-			log.Info("LEOPPRO update position", zap.Any("position", position))
 			return position, nil
 		})
 	}
