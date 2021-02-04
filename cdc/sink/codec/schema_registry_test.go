@@ -36,9 +36,9 @@ type AvroSchemaRegistrySuite struct {
 var _ = check.Suite(&AvroSchemaRegistrySuite{})
 
 type mockRegistry struct {
+	mu       sync.Mutex
 	subjects map[string]*mockRegistrySchema
 	newID    int
-	mu       sync.Mutex
 }
 
 type mockRegistrySchema struct {
@@ -96,8 +96,8 @@ func startHTTPInterceptForTestingRegistry(c *check.C) {
 					respData.ID = registry.newID
 				}
 			}
-			registry.mu.Unlock()
 			registry.newID++
+			registry.mu.Unlock()
 			return httpmock.NewJsonResponse(200, &respData)
 		})
 
