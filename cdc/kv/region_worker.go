@@ -88,6 +88,12 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		}
 	}
 
+	failpoint.Inject("kvClientErrUnreachable", func() {
+		if err == errUnreachable {
+			failpoint.Return(err)
+		}
+	})
+
 	return w.session.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
@@ -115,6 +121,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 			w.statesLock.RLock()
 			version, err := w.session.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			for regionID, state := range w.regionStates {
+				state.lock.RLock()
 				sinceLastEvent := time.Since(state.lastReceivedEventTime)
 				if sinceLastEvent > resolveLockInterval {
 					log.Warn("region not receiving event from tikv for too long time",
@@ -122,6 +129,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				}
 				if err != nil {
 					log.Warn("failed to get current version from PD", zap.Error(err))
+					state.lock.RUnlock()
 					continue
 				}
 				currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
@@ -135,9 +143,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					err = w.session.lockResolver.Resolve(ctx, regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+						state.lock.RUnlock()
 						continue
 					}
 				}
+				state.lock.RUnlock()
 			}
 			w.statesLock.RUnlock()
 		}
@@ -174,6 +184,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			if event.state.isStopped() {
 				continue
 			}
+			event.state.lock.Lock()
 			event.state.lastReceivedEventTime = time.Now()
 			if event.changeEvent != nil {
 				metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
@@ -212,6 +223,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 					err = w.handleSingleRegionError(ctx, err, event.state)
 				}
 			}
+			event.state.lock.Unlock()
 			if err != nil {
 				return err
 			}
@@ -376,7 +388,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 ) error {
 	// Cancel the pending regions if the stream failed. Otherwise it will remain unhandled in the pendingRegions list
 	// however not registered in the new reconnected stream.
-	var wg sync.WaitGroup
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
@@ -391,9 +402,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 				return
 			}
 		}
-
-		wg.Wait()
-
 		s.workersLock.Lock()
 		delete(s.workers, addr)
 		s.workersLock.Unlock()
@@ -418,15 +426,9 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	}
 	s.workersLock.Unlock()
 
-	wg.Add(1)
-	go func() {
-		err := worker.run(ctx)
-		if err != nil && errors.Cause(err) != context.Canceled && !cerror.ErrEventFeedAborted.Equal(err) {
-			// TODO: should this error be propagated?
-			log.Error("run region worker failed", zap.Error(err))
-		}
-		wg.Done()
-	}()
+	g.Go(func() error {
+		return worker.run(ctx)
+	})
 
 	for {
 		cevent, err := stream.Recv()

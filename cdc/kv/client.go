@@ -114,6 +114,7 @@ type regionFeedState struct {
 	regionEventCh chan *regionEvent
 	stopped       int32
 
+	lock                  sync.RWMutex
 	initialized           bool
 	matcher               *matcher
 	startFeedTime         time.Time
