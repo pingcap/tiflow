@@ -46,6 +46,8 @@ const (
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
+	waitTableCloseTimeout = 15 * time.Second
+
 	schemaStorageGCLag = time.Minute * 20
 )
 
@@ -180,6 +182,26 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	if !p.firstTick {
 		return nil
 	}
+	errCh := make(chan error, 16)
+	go func() {
+		// there are some other objects need errCh, such as sink and sink manager
+		// but we can't ensure that all the producer of errCh are non-blocking
+		// It's very tricky that create a goroutine to receive the local errCh
+		// TODO(leoppro): we should using `pkg/context.Context` instead of standard context and handle error by `pkg/context.Context.Throw`
+		for {
+			select {
+			case <-ctx.Done():
+				close(errCh)
+				return
+			case err := <-errCh:
+				log.Debug("LEOPPRO error received", zap.Error(err))
+				if err == nil {
+					return
+				}
+				p.sendError(err)
+			}
+		}
+	}()
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
 
@@ -206,12 +228,12 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = p.captureInfo.AdvertiseAddr
-	s, err := sink.NewSink(ctx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, p.errCh)
+	s, err := sink.NewSink(ctx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.sinkManager = sink.NewManager(ctx, s, p.errCh, checkpointTs)
+	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
 
 	// Clean up possible residual error states
 	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
@@ -235,7 +257,9 @@ func (p *processor) handleErrorCh(ctx context.Context) error {
 		return nil
 	}
 	p.cancel()
-	p.wg.Wait()
+	if util.WaitTimeout(&p.wg, waitTableCloseTimeout) {
+		log.Warn("timeout when waiting for all the tables exit", zap.String("changefeedID", p.changefeed.ID))
+	}
 	cause := errors.Cause(err)
 	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 		log.Error("error on running processor",
