@@ -111,6 +111,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 }
 
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	log.Debug("LEOPPRO flush in mysql sink", zap.Any("ts", resolvedTs))
 	atomic.StoreUint64(&s.resolvedTs, resolvedTs)
 	s.resolvedNotifier.Notify()
 
@@ -149,6 +150,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
 		if len(resolvedTxnsMap) == 0 {
 			for _, worker := range s.workers {
+				log.Debug("LEOPPRO store checkpointts", zap.Uint64("ts", resolvedTs))
 				atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
 			}
 			s.txnCache.UpdateCheckpoint(resolvedTs)
@@ -163,6 +165,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 		}
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		for _, worker := range s.workers {
+			log.Debug("LEOPPRO store checkpointts", zap.Uint64("ts", resolvedTs))
 			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
 		}
 		s.txnCache.UpdateCheckpoint(resolvedTs)
@@ -772,6 +775,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			txnNum = 0
 			return err
 		}
+		log.Debug("LEOPPRO store checkpointts", zap.Uint64("ts", lastCommitTs))
 		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))

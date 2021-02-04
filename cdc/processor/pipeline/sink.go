@@ -88,6 +88,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) erro
 	if err := n.flushRow2Sink(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	log.Debug("LEOPPRO flush in  sink node ", zap.Any("ts", resolvedTs))
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx.StdContext(), resolvedTs)
 	if err != nil {
 		log.Info("LEOPPRO err in sink", zap.Error(err))

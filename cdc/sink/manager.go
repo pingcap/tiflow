@@ -213,6 +213,8 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			if e.rows == nil {
 				// A resolved event received
 				start := time.Now()
+
+				log.Debug("LEOPPRO flush in buffer sink", zap.Any("ts", e.resolvedTs))
 				checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, e.resolvedTs)
 				if err != nil {
 					if errors.Cause(err) != context.Canceled {
