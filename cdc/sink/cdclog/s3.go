@@ -333,6 +333,8 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	oldMeta, e := s.readLogMeta(ctx)
+	log.Info("[OldMetaData] read old meta data from s3", zap.Any("meta", oldMeta),
+		zap.Any("exception", e))
 	if e != nil {
 		return e
 	}
