@@ -263,7 +263,7 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 				return errors.Trace(err)
 			}
 
-			return errors.Trace(etcdWorker.Run(ctx, 10*time.Millisecond))
+			return errors.Trace(etcdWorker.Run(ctx, nil, 10*time.Millisecond))
 		})
 	}
 
@@ -339,7 +339,7 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	c.Assert(err, check.IsNil)
 	errg := &errgroup.Group{}
 	errg.Go(func() error {
-		return reactor.Run(ctx, 10*time.Millisecond)
+		return reactor.Run(ctx, nil, 10*time.Millisecond)
 	})
 
 	time.Sleep(500 * time.Millisecond)
@@ -427,7 +427,7 @@ func (s *etcdWorkerSuite) TestFinished(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, 10*time.Millisecond)
+	err = reactor.Run(ctx, nil, 10*time.Millisecond)
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -503,7 +503,7 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, 10*time.Millisecond)
+	err = reactor.Run(ctx, nil, 10*time.Millisecond)
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
