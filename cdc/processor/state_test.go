@@ -222,6 +222,27 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 				Workload:     nil,
 			},
 		},
+		{ // testing the same key case
+			changefeedID: "test1",
+			captureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+			updateKey: []string{
+				"/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				"/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				"/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+			},
+			updateValue: []string{
+				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
+				`{"tables":{"46":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
+				`{"tables":{"47":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
+			},
+			expected: changefeedState{
+				ID:        "test1",
+				CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				TaskStatus: &model.TaskStatus{
+					Tables: map[int64]*model.TableReplicaInfo{47: {StartTs: 421980685886554116}},
+				},
+			},
+		},
 	}
 	for _, tc := range testCases {
 		state := newChangeFeedState(tc.changefeedID, tc.captureID)
@@ -400,7 +421,6 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 						Workload:  model.TaskWorkload{45: {Workload: 1}},
 					},
 				},
-				removedChangefeedIDs: []model.ChangeFeedID{"test1"},
 			},
 		},
 	}
