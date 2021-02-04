@@ -84,12 +84,14 @@ func (p *Pipeline) AppendNode(ctx context.Context, name string, node Node) {
 }
 
 func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runner) {
-	defer p.runnersWg.Done()
-	defer blackhole(previousRunner)
-	defer log.Debug("LEOPPRO exit runner", zap.String("name", runner.getName()))
+	defer func() {
+		log.Info("a pipeline node is exited, stopping the hole pipeline", zap.String("name", runner.getName()))
+		p.close()
+		blackhole(previousRunner)
+		p.runnersWg.Done()
+	}()
 	err := runner.run(ctx)
 	if err != nil {
-		p.close()
 		p.addError(err)
 		log.Error("found error when running the node", zap.String("name", runner.getName()), zap.Error(err))
 	}
@@ -108,14 +110,12 @@ func (p *Pipeline) SendToFirstNode(msg *Message) error {
 }
 
 func (p *Pipeline) close() {
-	defer func() {
-		// Avoid panic because repeated close channel
-		recover() //nolint:errcheck
-	}()
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
-	p.isClosed = true
-	close(p.header)
+	if !p.isClosed {
+		close(p.header)
+		p.isClosed = true
+	}
 }
 
 func (p *Pipeline) addError(err error) {
