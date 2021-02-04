@@ -275,7 +275,7 @@ func (m *AvroSchemaManager) GetCachedOrRegister(ctx context.Context, tableName m
 	key := m.tableNameToSchemaSubject(tableName)
 	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
-		log.Info("Avro schema GetCachedOrRegister cache hit",
+		log.Debug("Avro schema GetCachedOrRegister cache hit",
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID),
 			zap.Int("registryID", entry.registryID))
