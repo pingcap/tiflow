@@ -178,8 +178,8 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				return nil
 			}
 			if event == nil {
-				log.Debug("region worker closed by error")
-				return cerror.ErrEventFeedAborted.GenWithStackByArgs()
+				log.Info("region worker closed by error")
+				return w.evitAllRegions(ctx)
 			}
 			if event.state.isStopped() {
 				continue
@@ -373,6 +373,24 @@ func (w *regionWorker) handleResolvedTs(
 		metricSendEventResolvedCounter.Inc()
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
+	}
+	return nil
+}
+
+func (w *regionWorker) evitAllRegions(ctx context.Context) error {
+	w.statesLock.Lock()
+	defer w.statesLock.Unlock()
+	for _, state := range w.regionStates {
+		log.Info("on region fail fired", zap.Reflect("state", state))
+		err := w.session.onRegionFail(ctx, regionErrorInfo{
+			singleRegionInfo: state.sri,
+			err: &rpcCtxUnavailableErr{
+				verID: state.sri.verID,
+			},
+		})
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
