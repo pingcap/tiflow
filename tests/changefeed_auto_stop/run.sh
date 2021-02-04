@@ -52,8 +52,6 @@ function run() {
     fi
 
     ensure 10 check_changefeed_state  ${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "stopped"
-    # sleep 5  seconds to avoid the admin job covered
-    sleep 5
 
     cdc cli changefeed resume --changefeed-id=${changefeedid} --pd="http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     for i in $(seq $DB_COUNT); do

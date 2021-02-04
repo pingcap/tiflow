@@ -124,7 +124,7 @@ func (s *jsonReactorStateSuite) TestSimpleJSONRecord(c *check.C) {
 		c.Assert(err, check.IsNil)
 
 		errg.Go(func() error {
-			err := etcdWorker.Run(ctx, 10*time.Millisecond)
+			err := etcdWorker.Run(ctx, nil, 10*time.Millisecond)
 			if err != nil {
 				log.Error("etcdWorker returned error", zap.Error(err))
 			}

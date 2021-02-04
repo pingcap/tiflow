@@ -60,16 +60,19 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active() {
+			log.Info("LEOPPRO inactive processor", zap.String("changefeed", changefeedID))
 			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
 		}
 		processor, exist := m.Processors[changefeedID]
 		if !exist {
+			log.Info("LEOPPRO new processor", zap.String("changefeed", changefeedID))
 			processor = newProcessor(m.pdCli, m.credential, m.captureInfo)
 			m.Processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
+			log.Info("LEOPPRO processor error", zap.String("changefeed", changefeedID), zap.Error(err))
 			m.closeProcessor(changefeedID)
 			if cerrors.ErrReactorFinished.Equal(err) {
 				continue
@@ -90,6 +93,7 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 
 func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.Processors[changefeedID]; exist {
+		log.Info("LEOPPRO close processor true", zap.String("changefeed", changefeedID))
 		err := processor.Close()
 		if err != nil {
 			log.Warn("failed to close processor", zap.Error(err))
