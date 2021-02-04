@@ -352,7 +352,7 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 		}
 		// update log meta to record the relationship about tableName and tableID
 		s.logMeta = makeLogMetaContent(tableInfo)
-		if oldMeta != nil {
+		if oldMeta != nil && oldMeta.GlobalResolvedTS != 0 {
 			s.logMeta.GlobalResolvedTS = oldMeta.GlobalResolvedTS
 		}
 
