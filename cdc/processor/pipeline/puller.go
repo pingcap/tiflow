@@ -69,10 +69,11 @@ func (n *pullerNode) tableSpan(ctx context.Context) []regionspan.Span {
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	enableOldValue := ctx.Vars().Config.EnableOldValue
+	kvClientV2 := ctx.Vars().Config.KVClientV2
 	ctxC, cancel := stdContext.WithCancel(ctx.StdContext())
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
-		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
+		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue, kvClientV2)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil
