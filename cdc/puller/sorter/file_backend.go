@@ -120,6 +120,9 @@ func (f *fileBackEnd) free() error {
 	})
 
 	log.Debug("Removing file", zap.String("file", f.fileName))
+
+	f.cleanStats()
+
 	err := os.Remove(f.fileName)
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
@@ -130,6 +133,13 @@ func (f *fileBackEnd) free() error {
 	}
 
 	return nil
+}
+
+func (f *fileBackEnd) cleanStats() {
+	if pool != nil {
+		atomic.AddInt64(&pool.onDiskDataSize, -f.size)
+	}
+	f.size = 0
 }
 
 type fileBackEndReader struct {
@@ -208,7 +218,7 @@ func (r *fileBackEndReader) resetAndClose() error {
 		// fail-fast for double-close
 		r.f = nil
 
-		atomic.AddInt64(&pool.onDiskDataSize, -r.backEnd.size)
+		r.backEnd.cleanStats()
 
 		failpoint.Inject("sorterDebug", func() {
 			atomic.StoreInt32(&r.backEnd.borrowed, 0)

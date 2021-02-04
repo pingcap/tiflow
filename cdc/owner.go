@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -36,7 +37,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -94,7 +94,8 @@ type Owner struct {
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 
-	captures map[model.CaptureID]*model.CaptureInfo
+	captureLoaded int32
+	captures      map[model.CaptureID]*model.CaptureInfo
 
 	adminJobs     []model.AdminJob
 	adminJobsLock sync.Mutex
@@ -129,6 +130,10 @@ func NewOwner(
 ) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
 	endpoints := sess.Client().Endpoints()
+
+	failpoint.Inject("ownerFlushIntervalInject", func(val failpoint.Value) {
+		flushChangefeedInterval = time.Millisecond * time.Duration(val.(int))
+	})
 
 	owner := &Owner{
 		done:                    make(chan struct{}),
@@ -170,7 +175,7 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	for _, feed := range o.changeFeeds {
 		task, ok := feed.taskStatus[info.ID]
 		if !ok {
-			log.Warn("task status not found", zap.String("capture", info.ID), zap.String("changefeed", feed.id))
+			log.Warn("task status not found", zap.String("capture-id", info.ID), zap.String("changefeed", feed.id))
 			continue
 		}
 		var startTs uint64
@@ -179,28 +184,35 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 			startTs = pos.CheckPointTs
 		} else {
 			log.Warn("task position not found, fallback to use changefeed checkpointts",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id))
 			// maybe the processor hasn't added table yet, fallback to use the
 			// global checkpoint ts as the start ts of the table.
 			startTs = feed.status.CheckpointTs
 		}
 
-		for tableID := range task.Tables {
+		for tableID, replicaInfo := range task.Tables {
 			feed.orphanTables[tableID] = startTs
+			if startTs < replicaInfo.StartTs {
+				log.Warn("table startTs not consistent",
+					zap.Uint64("table-start-ts", replicaInfo.StartTs),
+					zap.Uint64("checkpoint-ts", startTs),
+					zap.Reflect("status", feed.status))
+				feed.orphanTables[tableID] = replicaInfo.StartTs
+			}
 		}
 
 		ctx := context.TODO()
 		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
 			log.Warn("failed to delete task status",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
 			log.Warn("failed to delete task position",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 		if err := o.etcdClient.DeleteTaskWorkload(ctx, feed.id, info.ID); err != nil {
 			log.Warn("failed to delete task workload",
-				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 	}
 }
@@ -229,7 +241,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
-		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
+		failpoint.Return(nil, cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 
 	failpoint.Inject("NewChangefeedRetryError", func() {
@@ -413,23 +425,24 @@ func (o *Owner) newChangeFeed(
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
-		scheduler:         scheduler.NewScheduler(info.Config.Scheduler.Tp),
-		ddlState:          model.ChangeFeedSyncDML,
-		ddlExecutedTs:     checkpointTs,
-		targetTs:          info.GetTargetTs(),
-		ddlTs:             0,
-		updateResolvedTs:  true,
-		startTimer:        make(chan bool),
-		syncpointStore:    syncpointStore,
-		syncCancel:        nil,
-		taskStatus:        processorsInfos,
-		taskPositions:     taskPositions,
-		etcdCli:           o.etcdClient,
-		filter:            filter,
-		sink:              primarySink,
-		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
-		lastRebalanceTime: time.Now(),
-		cancel:            cancel,
+		appliedCheckpointTs: checkpointTs,
+		scheduler:           scheduler.NewScheduler(info.Config.Scheduler.Tp),
+		ddlState:            model.ChangeFeedSyncDML,
+		ddlExecutedTs:       checkpointTs,
+		targetTs:            info.GetTargetTs(),
+		ddlTs:               0,
+		updateResolvedTs:    true,
+		startTimer:          make(chan bool),
+		syncpointStore:      syncpointStore,
+		syncCancel:          nil,
+		taskStatus:          processorsInfos,
+		taskPositions:       taskPositions,
+		etcdCli:             o.etcdClient,
+		filter:              filter,
+		sink:                primarySink,
+		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
+		lastRebalanceTime:   time.Now(),
+		cancel:              cancel,
 	}
 	return cf, nil
 }
@@ -657,6 +670,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	// no running or stopped changefeed, clear gc safepoint.
 	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 {
 		if !o.gcSafepointLastUpdate.IsZero() {
+			log.Info("clean service safe point", zap.String("service-id", CDCServiceSafePointID))
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
 			if err != nil {
 				log.Warn("failed to update service safe point", zap.Error(err))
@@ -672,8 +686,8 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 		for id, changefeed := range o.changeFeeds {
 			snapshot[id] = changefeed.status
-			if changefeed.status.CheckpointTs < minCheckpointTs {
-				minCheckpointTs = changefeed.status.CheckpointTs
+			if changefeed.appliedCheckpointTs < minCheckpointTs {
+				minCheckpointTs = changefeed.appliedCheckpointTs
 			}
 
 			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
@@ -687,6 +701,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			for id, changefeedStatus := range snapshot {
+				o.changeFeeds[id].appliedCheckpointTs = changefeedStatus.CheckpointTs
+			}
 			o.lastFlushChangefeeds = time.Now()
 		}
 	}
@@ -696,11 +713,45 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		}
 	}
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
-		_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
-			log.Warn("failed to update service safe point", zap.Error(err))
+			sinceLastUpdate := time.Since(o.gcSafepointLastUpdate)
+			log.Warn("failed to update service safe point", zap.Error(err),
+				zap.Duration("since-last-update", sinceLastUpdate))
+			// We do not throw an error unless updating GC safepoint has been failing for more than gcTTL.
+			if sinceLastUpdate >= time.Second*time.Duration(o.gcTTL) {
+				return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
+			}
 		} else {
 			o.gcSafepointLastUpdate = time.Now()
+		}
+
+		failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
+			actual = uint64(val.(int))
+		})
+
+		if actual > minCheckpointTs {
+			// UpdateServiceGCSafePoint has failed.
+			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("actual-safepoint", actual))
+
+			for cfID, cf := range o.changeFeeds {
+				if cf.status.CheckpointTs < actual {
+					runningError := &model.RunningError{
+						Addr:    util.CaptureAddrFromCtx(ctx),
+						Code:    "CDC-owner-1001",
+						Message: cerror.ErrServiceSafepointLost.GenWithStackByArgs(actual).Error(),
+					}
+
+					err := o.EnqueueJob(model.AdminJob{
+						CfID:  cfID,
+						Type:  model.AdminStop,
+						Error: runningError,
+					})
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -721,12 +772,20 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		err := cf.handleDDL(ctx, o.captures)
 		if err != nil {
-			if cerror.ErrExecDDLFailed.NotEqual(err) {
-				return errors.Trace(err)
+			var code string
+			if terror, ok := err.(*errors.Error); ok {
+				code = string(terror.RFCCode())
+			} else {
+				code = string(cerror.ErrExecDDLFailed.RFCCode())
 			}
 			err = o.EnqueueJob(model.AdminJob{
 				CfID: cf.id,
 				Type: model.AdminStop,
+				Error: &model.RunningError{
+					Addr:    util.CaptureAddrFromCtx(ctx),
+					Code:    code,
+					Message: err.Error(),
+				},
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -894,6 +953,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if job.Error != nil {
 				cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
 			}
+
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
@@ -1083,6 +1143,8 @@ loop:
 	}
 	for _, cf := range o.changeFeeds {
 		cf.Close()
+		changefeedCheckpointTsGauge.DeleteLabelValues(cf.id)
+		changefeedCheckpointTsLagGauge.DeleteLabelValues(cf.id)
 	}
 	if o.stepDown != nil {
 		if err := o.stepDown(ctx); err != nil {
@@ -1153,6 +1215,12 @@ func (o *Owner) watchFeedChange(ctx context.Context) {
 }
 
 func (o *Owner) run(ctx context.Context) error {
+	// captureLoaded == 0 means capture information is not built, owner can't
+	// run normal jobs now.
+	if atomic.LoadInt32(&o.captureLoaded) == int32(0) {
+		return nil
+	}
+
 	o.l.Lock()
 	defer o.l.Unlock()
 
@@ -1173,11 +1241,6 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	err = o.calcResolvedTs(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	err = o.handleDDL(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -1193,6 +1256,13 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	err = o.calcResolvedTs(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// It is better for flushChangeFeedInfos to follow calcResolvedTs immediately,
+	// because operations such as handleDDL and rebalancing rely on proper progress of the checkpoint in Etcd.
 	err = o.flushChangeFeedInfos(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -1238,9 +1308,17 @@ func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, to model.Capture
 }
 
 func (o *Owner) writeDebugInfo(w io.Writer) {
+	fmt.Fprintf(w, "** active changefeeds **:\n")
 	for _, info := range o.changeFeeds {
-		// fmt.Fprintf(w, "%+v\n", *info)
 		fmt.Fprintf(w, "%s\n", info)
+	}
+	fmt.Fprintf(w, "** stopped changefeeds **:\n")
+	for _, feedStatus := range o.stoppedFeeds {
+		fmt.Fprintf(w, "%+v\n", *feedStatus)
+	}
+	fmt.Fprintf(w, "\n** captures **:\n")
+	for _, capture := range o.captures {
+		fmt.Fprintf(w, "%+v\n", *capture)
 	}
 }
 
@@ -1301,7 +1379,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 					for tableID, replicaInfo := range status.Tables {
 						startTs := replicaInfo.StartTs
 						if taskPosFound {
-							startTs = pos.CheckPointTs
+							if startTs < pos.CheckPointTs {
+								startTs = pos.CheckPointTs
+							}
 						}
 						o.addOrphanTable(changeFeedID, tableID, startTs)
 					}
@@ -1380,9 +1460,9 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				if err := c.Unmarshal(ev.PrevKv.Value); err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("capture deleted",
+				log.Info("delete capture",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-addr", c.AdvertiseAddr))
+					zap.String("capture", c.AdvertiseAddr))
 				o.removeCapture(c)
 			case clientv3.EventTypePut:
 				if !ev.IsCreate() {
@@ -1391,9 +1471,9 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				if err := c.Unmarshal(ev.Kv.Value); err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("capture added",
+				log.Info("add capture",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-addr", c.AdvertiseAddr))
+					zap.String("capture", c.AdvertiseAddr))
 				o.addCapture(c)
 			}
 		}
@@ -1410,6 +1490,15 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures map[model.Cap
 			o.removeCapture(c)
 		}
 	}
+	// captureLoaded is used to check whether the owner can execute cleanup stale tasks job.
+	// Because at the very beginning of a new owner, it doesn't have capture information in
+	// memory, cleanup stale tasks could have a false positive (where positive means owner
+	// should cleanup the stale task of a specific capture). After the first time of capture
+	// rebuild, even the etcd compaction and watch capture is rerun, we don't need to check
+	// captureLoaded anymore because existing tasks must belong to a capture which is still
+	// maintained in owner's memory.
+	atomic.StoreInt32(&o.captureLoaded, 1)
+
 	// clean up stale tasks each time before watch capture event starts,
 	// for two reasons:
 	// 1. when a new owner is elected, it must clean up stale task status and positions.

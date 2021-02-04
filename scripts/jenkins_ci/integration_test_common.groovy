@@ -85,6 +85,7 @@ def tests(sink_type, node_label) {
                                 sudo pip install s3cmd
                                 rm -rf /tmp/tidb_cdc_test
                                 mkdir -p /tmp/tidb_cdc_test
+                                echo "${env.KAFKA_VERSION}" > /tmp/tidb_cdc_test/KAFKA_VERSION
                                 GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_${sink_type} CASE="${case_names}"
                                 rm -rf cov_dir
                                 mkdir -p cov_dir
@@ -97,14 +98,15 @@ def tests(sink_type, node_label) {
                             """
                         } catch (Exception e) {
                             sh """
-                                echo "print all log"
+                                echo "archive all log"
                                 for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
-                                    echo "____________________________________"
-                                    echo "\$log"
-                                    cat "\$log"
-                                    echo "____________________________________"
+                                    dirname=`dirname \$log`
+                                    basename=`basename \$log`
+                                    mkdir -p "log\$dirname"
+                                    tar zcvf "log\${log%%.*}.tgz" -C "\$dirname" "\$basename"
                                 done
                             """
+                            archiveArtifacts artifacts: "log/tmp/tidb_cdc_test/**/*.tgz", caseSensitive: false
                             throw e;
                         }
                     }
