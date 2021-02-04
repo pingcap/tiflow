@@ -293,6 +293,95 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 	}
 }
 
+func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister(c *check.C) {
+	defer testleak.AfterTest(c)()
+	table := model.TableName{
+		Schema: "testdb",
+		Table:  "test1",
+	}
+
+	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
+	c.Assert(err, check.IsNil)
+
+	called := 0
+	schemaGen := func() (string, error) {
+		called++
+		return `{
+       "type": "record",
+       "name": "test",
+       "fields":
+         [
+           {
+             "type": "string",
+             "name": "field1"
+           },
+           {
+             "type": [
+      			"null",
+      			"string"
+             ],
+             "default": null,
+             "name": "field2"
+           }
+          ]
+     }`, nil
+	}
+
+	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), table, 1, schemaGen)
+	c.Assert(err, check.IsNil)
+	c.Assert(id, check.Greater, 0)
+	c.Assert(codec, check.NotNil)
+	c.Assert(called, check.Equals, 1)
+
+	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 1, schemaGen)
+	c.Assert(err, check.IsNil)
+	c.Assert(codec1, check.Equals, codec)
+	c.Assert(called, check.Equals, 1)
+
+	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 2, schemaGen)
+	c.Assert(err, check.IsNil)
+	c.Assert(codec2, check.Not(check.Equals), codec)
+	c.Assert(called, check.Equals, 2)
+
+	schemaGen = func() (string, error) {
+		return `{
+       "type": "record",
+       "name": "test",
+       "fields":
+         [
+           {
+             "type": "string",
+             "name": "field1"
+           },
+           {
+             "type": [
+      			"null",
+      			"string"
+             ],
+             "default": null,
+             "name": "field2"
+           }
+          ]
+     }`, nil
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		finalI := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				codec, id, err = manager.GetCachedOrRegister(getTestingContext(), table, uint64(finalI), schemaGen)
+				c.Assert(err, check.IsNil)
+				c.Assert(id, check.Greater, 0)
+				c.Assert(codec, check.NotNil)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
 func (s *AvroSchemaRegistrySuite) TestHTTPRetry(c *check.C) {
 	defer testleak.AfterTest(c)()
 	payload := []byte("test")

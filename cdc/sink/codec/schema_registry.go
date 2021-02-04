@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -40,10 +41,12 @@ import (
 // in cache the local cache entry is missing.
 type AvroSchemaManager struct {
 	registryURL   string
-	cache         map[string]*schemaCacheEntry
 	subjectSuffix string
 
 	credential *security.Credential
+
+	cacheRWLock sync.RWMutex
+	cache       map[string]*schemaCacheEntry
 }
 
 type schemaCacheEntry struct {
@@ -177,15 +180,19 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 // TiSchemaId is only used to trigger fetching from the Registry server.
 // Calling this method with a tiSchemaID other than that used last time will invariably trigger a RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
+// NOT USED for now, reserved for future use.
 func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableName, tiSchemaID uint64) (*goavro.Codec, int, error) {
 	key := m.tableNameToSchemaSubject(tableName)
+	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID),
 			zap.Int("registryID", entry.registryID))
+		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.registryID, nil
 	}
+	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
@@ -245,7 +252,10 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	}
 	cacheEntry.registryID = jsonResp.RegistryID
 	cacheEntry.tiSchemaID = tiSchemaID
+
+	m.cacheRWLock.Lock()
 	m.cache[m.tableNameToSchemaSubject(tableName)] = cacheEntry
+	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema lookup successful with cache miss",
 		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
@@ -263,13 +273,16 @@ type SchemaGenerator func() (string, error)
 // If not, a new schema is generated, registered and cached.
 func (m *AvroSchemaManager) GetCachedOrRegister(ctx context.Context, tableName model.TableName, tiSchemaID uint64, schemaGen SchemaGenerator) (*goavro.Codec, int, error) {
 	key := m.tableNameToSchemaSubject(tableName)
+	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema GetCachedOrRegister cache hit",
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID),
 			zap.Int("registryID", entry.registryID))
+		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.registryID, nil
 	}
+	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
@@ -296,7 +309,10 @@ func (m *AvroSchemaManager) GetCachedOrRegister(ctx context.Context, tableName m
 	cacheEntry.codec = codec
 	cacheEntry.registryID = id
 	cacheEntry.tiSchemaID = tiSchemaID
+
+	m.cacheRWLock.Lock()
 	m.cache[m.tableNameToSchemaSubject(tableName)] = cacheEntry
+	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
@@ -308,6 +324,7 @@ func (m *AvroSchemaManager) GetCachedOrRegister(ctx context.Context, tableName m
 
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
+// NOT USED for now, reserved for future use.
 func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.TableName) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName))
 	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
