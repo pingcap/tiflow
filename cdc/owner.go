@@ -340,7 +340,6 @@ func (o *Owner) newChangeFeed(
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
-
 		// `existingTables` are tables dispatched to a processor, however the
 		// capture that this processor belongs to could have crashed or exited.
 		// So we check this before task dispatching, but after the update of
