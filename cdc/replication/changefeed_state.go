@@ -63,6 +63,14 @@ type tableAction struct {
 	tableID model.TableID
 }
 
+func newChangeFeedState(initTableTasks map[model.TableID]*tableTask, ddlStartTs uint64, scheduler scheduler) *changeFeedState {
+	return &changeFeedState{
+		TableTasks:    initTableTasks,
+		DDLResolvedTs: ddlStartTs,
+		Scheduler:     scheduler,
+	}
+}
+
 func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
 	cf.DDLResolvedTs = ddlResolvedTs
 }
@@ -149,7 +157,7 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 		}
 	}
 
-	cf.Scheduler.SyncTasks(cf.TableTasks)
+	cf.Scheduler.PutTasks(cf.TableTasks)
 }
 
 func (cf *changeFeedState) ResolvedTs() uint64 {

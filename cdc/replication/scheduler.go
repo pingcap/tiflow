@@ -22,7 +22,8 @@ import (
 )
 
 type scheduler interface {
-	SyncTasks(tables map[model.TableID]*tableTask)
+	GetTasks() map[model.TableID]*tableTask
+	PutTasks(tables map[model.TableID]*tableTask)
 }
 
 type schedulerImpl struct {
@@ -30,7 +31,33 @@ type schedulerImpl struct {
 	cfID       model.ChangeFeedID
 }
 
-func (s *schedulerImpl) SyncTasks(tables map[model.TableID]*tableTask) {
+func (s *schedulerImpl) GetTasks() (map[model.TableID]*tableTask, bool) {
+	if s.ownerState.IsInitialized() {
+		return nil, false
+	}
+
+	tableToCaptureMap := s.ownerState.GetTableToCaptureMap(s.cfID)
+	positions := s.ownerState.TaskPositions[s.cfID]
+
+	ret := make(map[model.TableID]*tableTask)
+	for tableID, captureID := range tableToCaptureMap {
+		position, ok := positions[captureID]
+		if !ok {
+			log.Warn("Position not found", zap.String("captureID", captureID))
+			return nil, false
+		}
+
+		ret[tableID] = &tableTask{
+			TableID:      tableID,
+			CheckpointTs: position.CheckPointTs,
+			ResolvedTs:   0,
+		}
+	}
+
+	return ret, true
+}
+
+func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 	// We do NOT want to touch these tables because they are being deleted.
 	// We wait for the deletion(s) to finish before redispatching.
 	pendingList := s.cleanUpOperations()

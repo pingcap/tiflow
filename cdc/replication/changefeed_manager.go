@@ -42,7 +42,6 @@ type changeFeedOperationType = int
 const (
 	startChangeFeedOperation = changeFeedOperationType(iota)
 	stopChangeFeedOperation
-	failChangeFeedOperation
 )
 
 type changeFeedOperation struct {
@@ -167,10 +166,6 @@ func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.
 		changeFeedID: cfID,
 		runner:       runner,
 	}, nil
-}
-
-func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (changeFeedRunner, error) {
-	panic("implement me")
 }
 
 func (m *changeFeedManagerImpl) handleOwnerChangeFeedFailure(cfID model.ChangeFeedID, err error) error {

@@ -32,6 +32,7 @@ import (
 
 type changeFeedRunner interface {
 	Tick(ctx context.Context) error
+	InitTables(ctx context.Context) error
 }
 
 type changeFeedRunnerImpl struct {
@@ -49,7 +50,14 @@ type changeFeedRunnerImpl struct {
 	changeFeedState *changeFeedState
 
 	ddlJobQueue []*ddlJobWithPreTableInfo
-	schemas     map[model.SchemaID][]model.TableID
+}
+
+func (c *changeFeedRunnerImpl) InitTables(ctx context.Context) error {
+	if c.changeFeedState != nil {
+		log.Panic("InitTables: unexpected state", zap.String("cfID", c.cfID))
+	}
+
+	
 }
 
 func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {

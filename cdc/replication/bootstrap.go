@@ -100,6 +100,8 @@ func (c *changeFeedBootstrapperImpl) bootstrapChangeFeed(
 	ddlHandler := newDDLHandler(ctx, c.pdClient, c.credential, kvStore, startTs)
 
 	return &changeFeedRunnerImpl{
+		cfID: cfID,
+		config: cfInfo.Config,
 		sink:           ddlSink,
 		sinkErrCh:      sinkErrCh,
 		ddlHandler:     ddlHandler,
