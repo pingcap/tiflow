@@ -177,6 +177,8 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				log.Debug("region worker receiver closed")
 				return nil
 			}
+			// event == nil means the region worker should exit and re-establish
+			// all existing regions.
 			if event == nil {
 				log.Info("region worker closed by error")
 				return w.evitAllRegions(ctx)
@@ -377,6 +379,8 @@ func (w *regionWorker) handleResolvedTs(
 	return nil
 }
 
+// evitAllRegions is used when gRPC stream meets error and re-establish, notify
+// all existing regions to re-establish
 func (w *regionWorker) evitAllRegions(ctx context.Context) error {
 	w.statesLock.Lock()
 	defer w.statesLock.Unlock()
