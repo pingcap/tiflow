@@ -18,7 +18,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
 )
@@ -108,7 +108,7 @@ func (n *cyclicMarkNode) appendMarkRow(ctx pipeline.NodeContext, event *model.Po
 	if markRow == nil {
 		return nil
 	}
-	replicaID := cyclic.ExtractReplicaID(markRow)
+	replicaID := extractReplicaID(markRow)
 	n.currentReplicaIDs[markRow.StartTs] = replicaID
 	if rows, exist := n.rowsUnknownReplicaID[markRow.StartTs]; exist {
 		delete(n.rowsUnknownReplicaID, markRow.StartTs)
@@ -146,4 +146,18 @@ func (n *cyclicMarkNode) flush(ctx pipeline.NodeContext, commitTs uint64) {
 func (n *cyclicMarkNode) Destroy(ctx pipeline.NodeContext) error {
 	// do nothing
 	return nil
+}
+
+// ExtractReplicaID extracts replica ID from the given mark row.
+func extractReplicaID(markRow *model.RowChangedEvent) uint64 {
+	for _, c := range markRow.Columns {
+		if c == nil {
+			continue
+		}
+		if c.Name == mark.CyclicReplicaIDCol {
+			return c.Value.(uint64)
+		}
+	}
+	log.Panic("bad mark table, " + mark.CyclicReplicaIDCol + " not found")
+	return 0
 }
