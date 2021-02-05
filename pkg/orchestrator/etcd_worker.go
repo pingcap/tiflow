@@ -99,7 +99,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-sessionDone:
-			return cerrors.ErrEtcdSessionDone
+			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
 		case response = <-watchCh:
@@ -159,7 +159,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
-				if errors.Cause(err) != cerrors.ErrReactorFinished {
+				if cerrors.ErrReactorFinished.Equal(err) {
 					return errors.Trace(err)
 				}
 				// normal exit
