@@ -39,5 +39,5 @@ cd "$(dirname "$0")"
 set -o pipefail
 GO111MODULE=on go run cdc.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
 cleanup_process $CDC_BINARY
-check_cdc_state_log $WORK_DIR
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
