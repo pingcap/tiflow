@@ -15,6 +15,7 @@ package replication
 
 import (
 	"context"
+	"math"
 	"sort"
 	"time"
 
@@ -126,16 +127,16 @@ func (m *changeFeedManagerImpl) AddAdminJob(ctx context.Context, job model.Admin
 }
 
 func (m *changeFeedManagerImpl) GetGCSafePointUpperBound() uint64 {
-	var upperBound uint64
+	upperBound := uint64(math.MaxUint64)
 
 	for cfID, cfInfo := range m.changeFeedInfos {
 		cfStatus, ok := m.ownerState.ChangeFeedStatuses[cfID]
 		if !ok {
-			if upperBound < cfInfo.StartTs {
+			if upperBound > cfInfo.StartTs {
 				upperBound = cfInfo.StartTs
 			}
 		} else {
-			if upperBound < cfStatus.CheckpointTs {
+			if upperBound > cfStatus.CheckpointTs {
 				upperBound = cfStatus.CheckpointTs
 			}
 		}
@@ -150,6 +151,7 @@ func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.
 		startTs = cfStatus.CheckpointTs
 	}
 
+	log.Info("startChangeFeed", zap.String("cfID", cfID), zap.Uint64("startTs", startTs))
 	runner, err := m.bootstrapper.bootstrapChangeFeed(ctx, cfID, m.changeFeedInfos[cfID], startTs)
 	if err != nil {
 		newErr := m.handleOwnerChangeFeedFailure(cfID, err)
@@ -172,7 +174,8 @@ func (m *changeFeedManagerImpl) bootstrapChangeFeed(ctx context.Context, cfID mo
 }
 
 func (m *changeFeedManagerImpl) handleOwnerChangeFeedFailure(cfID model.ChangeFeedID, err error) error {
-	panic("implement me")
+	log.Warn("changeFeed error", zap.String("cfID", cfID), zap.Error(err))
+	return err
 }
 
 func (m *changeFeedManagerImpl) handleAdminJob(ctx context.Context, adminJob *model.AdminJob) (*changeFeedOperation, error) {

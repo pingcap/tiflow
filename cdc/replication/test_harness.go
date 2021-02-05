@@ -3,6 +3,7 @@ package replication
 import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/replication/mock"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
@@ -44,17 +45,17 @@ func newOwnerTestHarness(etcdServerDir string) *ownerTestHarness {
 	}
 }
 
-func (h *ownerTestHarness) CreateOwner() *Owner {
+func (h *ownerTestHarness) CreateOwner(startTs uint64) *Owner {
 	state := newCDCReactorState()
 
 	pdClient := h.pdClient
 	if pdClient == nil {
-		pdClient =
+		pdClient = mock.NewMockPDClient(startTs - 300)
 	}
 
 	bootstrapper := h.bootstrapper
 	if bootstrapper == nil {
-		bootstrapper = newBootstrapper(h.pdClient, nil)
+		bootstrapper = newBootstrapper(pdClient, nil)
 	}
 
 	cfManager := h.cfManager
@@ -64,7 +65,7 @@ func (h *ownerTestHarness) CreateOwner() *Owner {
 
 	gcManager := h.gcManager
 	if gcManager == nil {
-		gcManager = newGCManager(h.pdClient, 600)
+		gcManager = newGCManager(pdClient, 600)
 	}
 
 	reactor := newOwnerReactor(state, cfManager, gcManager)

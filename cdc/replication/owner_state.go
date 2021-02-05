@@ -39,6 +39,8 @@ type ownerReactorState struct {
 
 	patches []*orchestrator.DataPatch
 	tableToCaptureMapCache map[model.ChangeFeedID]map[model.TableID]model.CaptureID
+
+	isInitialized bool
 }
 
 // The regex based parsing logic is only temporary.
@@ -52,6 +54,7 @@ var (
 
 func newCDCReactorState() *ownerReactorState {
 	return &ownerReactorState{
+		ChangeFeedInfos:    make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
 		Captures:           make(map[model.CaptureID]*model.CaptureInfo),
 		ChangeFeedStatuses: make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
 		TaskPositions:      make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition),
@@ -59,7 +62,16 @@ func newCDCReactorState() *ownerReactorState {
 	}
 }
 
+func (s *ownerReactorState) IsInitialized() bool {
+	return s.isInitialized
+}
+
+
 func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
+	if !isInit {
+		s.isInitialized = true
+	}
+
 	if key.String() == kv.CaptureOwnerKey {
 		if value == nil {
 			log.Info("Owner lost", zap.String("old-owner", s.Owner))
@@ -242,6 +254,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		}
 
 		s.ChangeFeedInfos[changeFeedID] = &changeFeedInfo
+		return nil
 	}
 
 	log.Debug("Etcd operation ignored", zap.String("key", key.String()), zap.ByteString("value", value))

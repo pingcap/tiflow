@@ -81,7 +81,7 @@ func newOwnerReactor(state *ownerReactorState, cfManager changeFeedManager, gcMa
 	}
 }
 
-func (o *ownerReactor) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	cfOps, err := o.changeFeedManager.GetChangeFeedOperations(ctx)
 	if err != nil {
 		// TODO graceful exit

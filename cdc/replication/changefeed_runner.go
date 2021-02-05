@@ -158,8 +158,6 @@ func (c *changeFeedRunnerImpl) preFilterDDL() {
 		return false
 	}
 
-	
-
 	for len(c.ddlJobQueue) > 0 {
 		nextJobCandidate := c.ddlJobQueue[0]
 		tableInfo, ok := c.schemaManager.schemaSnapshot.TableByID(nextJobCandidate.TableID)
