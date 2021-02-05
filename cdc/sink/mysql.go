@@ -154,12 +154,6 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			continue
 		}
 
-		if s.cyclic != nil {
-			// Filter rows if it is origined from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
-		}
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		for _, worker := range s.workers {
 			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)

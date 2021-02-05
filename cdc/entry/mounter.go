@@ -195,8 +195,8 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 			return errors.Trace(err)
 		}
 		pEvent.Row = rowEvent
-		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
+		pEvent.RawKV.OldValue = nil
 		pEvent.PrepareFinished()
 		metricMountDuration.Observe(time.Since(startTime).Seconds())
 	}
@@ -625,4 +625,12 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 
 	d := table.GetZeroValue(col)
 	return d.GetValue()
+}
+
+func DecodeTableID(key []byte) (model.TableID, error) {
+	_, physicalTableID, err := decodeTableID(key)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return physicalTableID, nil
 }

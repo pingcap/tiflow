@@ -126,6 +126,7 @@ func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 		if ev.Row == nil {
 			continue
 		}
+		ev.Row.ReplicaID = ev.ReplicaID
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
 	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
