@@ -143,7 +143,6 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
-		log.Debug("LEOPPRO show emittedTs i == 0", zap.Int64("tableID", t.tableID), zap.Uint64("ts", resolvedTs))
 		return t.manager.flushBackendSink(ctx)
 	}
 	resolvedRows := t.buffer[:i]
@@ -154,7 +153,6 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return t.manager.getCheckpointTs(), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
-	log.Debug("LEOPPRO show emittedTs", zap.Int64("tableID", t.tableID), zap.Uint64("ts", resolvedTs))
 	return t.manager.flushBackendSink(ctx)
 }
 
@@ -213,7 +211,6 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				// A resolved event received
 				start := time.Now()
 
-				log.Debug("LEOPPRO flush in buffer sink", zap.Any("ts", e.resolvedTs))
 				checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, e.resolvedTs)
 				if err != nil {
 					if errors.Cause(err) != context.Canceled {

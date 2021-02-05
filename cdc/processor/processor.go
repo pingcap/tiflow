@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cdccontext "github.com/pingcap/ticdc/pkg/context"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -89,7 +90,6 @@ func newProcessor(
 }
 
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
-	log.Debug("LEOPPRO tick in processor", zap.Any("state", state))
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
 		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) && cerror.ErrReactorFinished.NotEqual(cause) {
@@ -225,6 +225,15 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
 		opts[k] = v
+	}
+
+	// TODO(neil) find a better way to let sink know cyclic is enabled.
+	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
+		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		opts[mark.OptCyclicConfig] = string(cyclicCfg)
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = p.captureInfo.AdvertiseAddr
