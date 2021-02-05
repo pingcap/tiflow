@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -66,6 +67,7 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 		}
 		processor, exist := m.Processors[changefeedID]
 		if !exist {
+			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 			processor = newProcessor(m.pdCli, m.credential, m.captureInfo)
 			m.Processors[changefeedID] = processor
 		}
