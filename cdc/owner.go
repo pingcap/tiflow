@@ -1151,6 +1151,8 @@ loop:
 	}
 	for _, cf := range o.changeFeeds {
 		cf.Close()
+		changefeedCheckpointTsGauge.DeleteLabelValues(cf.id)
+		changefeedCheckpointTsLagGauge.DeleteLabelValues(cf.id)
 	}
 	if o.stepDown != nil {
 		if err := o.stepDown(ctx); err != nil {
