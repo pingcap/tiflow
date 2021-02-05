@@ -68,6 +68,8 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
+// If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
+// And the specified etcd session is nil-safty.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration) error {
 	defer worker.cleanUp()
 
@@ -83,9 +85,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	defer ticker.Stop()
 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
-	var pendingPatches []*DataPatch
-	var exiting bool
-	var sessionDone <-chan struct{}
+	var (
+		pendingPatches []*DataPatch
+		exiting        bool
+		sessionDone    <-chan struct{}
+	)
 	if session != nil {
 		sessionDone = session.Done()
 	} else {
