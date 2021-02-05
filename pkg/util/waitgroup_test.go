@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type waitgroupSuite struct{}
@@ -25,7 +26,15 @@ type waitgroupSuite struct{}
 var _ = check.Suite(waitgroupSuite{})
 
 func (s *gcServiceSuite) TestWaitTimeout(c *check.C) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	c.Assert(WaitTimeout(&wg, 100*time.Millisecond), check.IsTrue)
+	defer testleak.AfterTest(c)()
+	var wg1 sync.WaitGroup
+	wg1.Add(1)
+	c.Assert(WaitTimeout(&wg1, 100*time.Millisecond), check.IsTrue)
+	var wg2 sync.WaitGroup
+	wg2.Add(1)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		wg2.Done()
+	}()
+	c.Assert(WaitTimeout(&wg2, 100*time.Millisecond), check.IsFalse)
 }
