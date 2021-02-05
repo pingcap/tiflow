@@ -15,6 +15,7 @@ package processor
 
 import (
 	"context"
+	"io"
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
@@ -100,8 +101,24 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	}
 }
 
+// AsyncClose sends a close signal to Manager and closing all processors
 func (m *Manager) AsyncClose() {
 	atomic.StoreInt32(&m.close, 1)
 }
 
-func (m *Manager) writeDebugInfo() {}
+// WriteDebugInfo write the debug info to Writer
+func (m *Manager) WriteDebugInfo(w io.Writer) {
+	// TODO: implement this function
+	// fmt.Fprintf(w, "** active changefeeds **:\n")
+	// for _, info := range o.changeFeeds {
+	// 	fmt.Fprintf(w, "%s\n", info)
+	// }
+	// fmt.Fprintf(w, "** stopped changefeeds **:\n")
+	// for _, feedStatus := range o.stoppedFeeds {
+	// 	fmt.Fprintf(w, "%+v\n", *feedStatus)
+	// }
+	// fmt.Fprintf(w, "\n** captures **:\n")
+	// for _, capture := range o.captures {
+	// 	fmt.Fprintf(w, "%+v\n", *capture)
+	// }
+}

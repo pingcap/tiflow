@@ -70,7 +70,10 @@ func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 			return errors.Trace(err)
 		}
 		if tableID == n.markTableID {
-			n.appendMarkRow(ctx, event)
+			err := n.appendMarkRow(ctx, event)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		} else {
 			n.appendRow(ctx, event)
 		}
@@ -90,10 +93,9 @@ func (n *cyclicMarkNode) appendRow(ctx pipeline.NodeContext, event *model.Polymo
 		}
 		event.ReplicaID = replicaID
 		ctx.SendToNextNode(pipeline.PolymorphicEventMessage(event))
-	} else {
-		n.rowsUnknownReplicaID[event.StartTs] = append(n.rowsUnknownReplicaID[event.StartTs], event)
+		return
 	}
-	return
+	n.rowsUnknownReplicaID[event.StartTs] = append(n.rowsUnknownReplicaID[event.StartTs], event)
 }
 
 func (n *cyclicMarkNode) appendMarkRow(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {

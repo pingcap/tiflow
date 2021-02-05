@@ -511,8 +511,8 @@ func (p *processor) handlePosition() error {
 }
 
 func (p *processor) handleWorkload() error {
-	p.changefeed.PatchTaskWorkload(func(workload model.TaskWorkload) (model.TaskWorkload, error) {
-		workload = make(model.TaskWorkload, len(p.tables))
+	p.changefeed.PatchTaskWorkload(func(_ model.TaskWorkload) (model.TaskWorkload, error) {
+		workload := make(model.TaskWorkload, len(p.tables))
 		for tableID, table := range p.tables {
 			workload[tableID] = table.Workload()
 		}

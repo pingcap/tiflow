@@ -193,6 +193,7 @@ func (c *Capture) Resign(ctx context.Context) error {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
+	c.processorManager.AsyncClose()
 	select {
 	case <-c.closed:
 	case <-ctx.Done():

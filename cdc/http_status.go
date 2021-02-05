@@ -117,11 +117,8 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-	// TODO
-	//for _, p := range s.capture.processors {
-	//	p.writeDebugInfo(w)
-	//	fmt.Fprintf(w, "\n")
-	//}
+	s.capture.processorManager.WriteDebugInfo(w)
+	fmt.Fprintf(w, "\n")
 
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
 	s.writeEtcdInfo(req.Context(), s.capture.etcdClient, w)

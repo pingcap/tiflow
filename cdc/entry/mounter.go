@@ -627,6 +627,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 	return d.GetValue()
 }
 
+// DecodeTableID decodes the raw key to a table ID
 func DecodeTableID(key []byte) (model.TableID, error) {
 	_, physicalTableID, err := decodeTableID(key)
 	if err != nil {
