@@ -366,6 +366,9 @@ func (o *Owner) newChangeFeed(
 		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
 		sinkTableInfo[j-1].TableID = tid
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
+		//forget to assign value to schema and table, or file log.meta about this content are all empty
+		sinkTableInfo[j-1].Schema = table.Schema
+		sinkTableInfo[j-1].Table = table.Table
 
 		for i, colInfo := range tblInfo.Cols() {
 			sinkTableInfo[j-1].ColumnInfo[i] = new(model.ColumnInfo)
