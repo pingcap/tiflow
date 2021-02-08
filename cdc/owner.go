@@ -377,8 +377,8 @@ func (o *Owner) newChangeFeed(
 
 	}
 
-	//try to add to existingTables to sinkTableInfo, or any crash or restart will lose
-	//meta info
+	// try to add to existingTables to sinkTableInfo, or any crash or restart will lose
+	// meta info
 	for tid := range existingTables {
 		sinkTableInfo = append(sinkTableInfo, &model.SimpleTableInfo{TableID: tid})
 	}
