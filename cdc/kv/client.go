@@ -63,6 +63,11 @@ const (
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
+
+	// TiCDC always interacts with region leader, every time something goes wrong,
+	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
+	// don't need to force reload region any more.
+	regionScheduleReload = false
 )
 
 type singleRegionInfo struct {
@@ -743,7 +748,7 @@ MainLoop:
 						time.Sleep(delay)
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload(), err)
+					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
 					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
 					pendingRegions.take(requestID)
 					continue
@@ -809,13 +814,6 @@ MainLoop:
 			break
 		}
 	}
-}
-
-// TiCDC always interacts with region leader, every time something goes wrong,
-// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
-// don't need to force reload region any more.
-func regionScheduleReload() bool {
-	return false
 }
 
 // partialRegionFeed establishes a EventFeed to the region specified by regionInfo.
@@ -1014,7 +1012,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		if errInfo.rpcCtx.Meta != nil {
-			s.regionCache.OnSendFail(bo, errInfo.rpcCtx, false /* scheduleReload */, err)
+			s.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
 		}
 	}
 
