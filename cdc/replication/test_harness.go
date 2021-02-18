@@ -6,6 +6,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/replication/mock"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	kv2 "github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -17,6 +18,8 @@ import (
 type ownerTestHarness struct {
 	server    *embed.Etcd
 	newClient func() *etcd.Client
+
+	kvStore   kv2.Storage
 
 	pdClient     pd.Client
 	bootstrapper changeFeedBootstrapper

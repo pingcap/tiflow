@@ -37,7 +37,7 @@ type ownerReactorState struct {
 	TaskPositions      map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition
 	TaskStatuses       map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
 
-	patches []*orchestrator.DataPatch
+	patches                []*orchestrator.DataPatch
 	tableToCaptureMapCache map[model.ChangeFeedID]map[model.TableID]model.CaptureID
 
 	isInitialized bool
@@ -54,18 +54,18 @@ var (
 
 func newCDCReactorState() *ownerReactorState {
 	return &ownerReactorState{
-		ChangeFeedInfos:    make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
-		Captures:           make(map[model.CaptureID]*model.CaptureInfo),
-		ChangeFeedStatuses: make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
-		TaskPositions:      make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition),
-		TaskStatuses:       make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus),
+		ChangeFeedInfos:        make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
+		Captures:               make(map[model.CaptureID]*model.CaptureInfo),
+		ChangeFeedStatuses:     make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		TaskPositions:          make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition),
+		TaskStatuses:           make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus),
+		tableToCaptureMapCache: make(map[model.ChangeFeedID]map[model.TableID]model.CaptureID),
 	}
 }
 
 func (s *ownerReactorState) IsInitialized() bool {
 	return s.isInitialized
 }
-
 
 func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	if !isInit {

@@ -71,6 +71,10 @@ func newChangeFeedState(initTableTasks map[model.TableID]*tableTask, ddlStartTs 
 	}
 }
 
+func (cf *changeFeedState) SyncTasks() {
+	cf.Scheduler.PutTasks(cf.TableTasks)
+}
+
 func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
 	cf.DDLResolvedTs = ddlResolvedTs
 }

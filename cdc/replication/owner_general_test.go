@@ -2,16 +2,18 @@ package replication
 
 import (
 	"context"
-	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"go.uber.org/zap/zapcore"
 	"testing"
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/store/mockstore"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -50,6 +52,11 @@ func (s *ownerSuite) TestOwnerInitialization(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}()
 
-	err := owner.Run(ctx)
-	c.Assert(err, check.ErrorMatches, ".*canceled.*")
+	store, err := mockstore.NewMockStore()
+	c.Assert(err, check.IsNil)
+
+
+	ctx = util.PutKVStorageInCtx(ctx, store)
+	err = owner.Run(ctx)
+	c.Assert(err, check.ErrorMatches, ".*deadline exceeded.*")
 }

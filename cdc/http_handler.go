@@ -14,7 +14,6 @@
 package cdc
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -25,7 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
@@ -90,12 +88,14 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 	//
 	// A2 must occur between B1 and B2, so we register the Resign process
 	// as the stepDown function which is called when the owner exited.
-	s.owner.Close(req.Context(), func(ctx context.Context) error {
-		return s.capture.Resign(ctx)
-	})
-	s.ownerLock.RUnlock()
-	s.setOwner(nil)
-	handleOwnerResp(w, nil)
+
+	// TODO implement this for the new owner
+	//s.owner.Close(req.Context(), func(ctx context.Context) error {
+	//	return s.capture.Resign(ctx)
+	//})
+	//s.ownerLock.RUnlock()
+	//s.setOwner(nil)
+	//handleOwnerResp(w, nil)
 }
 
 func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
@@ -233,6 +233,9 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
+
+	panic("unimplemented")
+	/*
 	cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		writeInternalServerError(w, err)
@@ -243,6 +246,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		writeInternalServerError(w, err)
 		return
 	}
+
 
 	resp := &ChangefeedResp{
 		FeedState: string(feedState),
@@ -258,6 +262,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
 	writeData(w, resp)
+	*/
 }
 
 func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {

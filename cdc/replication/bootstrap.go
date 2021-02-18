@@ -105,7 +105,7 @@ func (c *changeFeedBootstrapperImpl) bootstrapChangeFeed(
 		sink:           ddlSink,
 		sinkErrCh:      sinkErrCh,
 		ddlHandler:     ddlHandler,
-		schemaManager:  newSchemaManager(schemaSnap),
+		schemaManager:  newSchemaManager(schemaSnap, eventFilter, cfInfo.Config.Cyclic),
 		filter:         eventFilter,
 	}, nil
 }

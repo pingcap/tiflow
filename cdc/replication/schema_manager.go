@@ -19,12 +19,15 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
 )
 
 type schemaManager struct {
 	schemas        map[model.SchemaID]map[model.TableID]struct{}
-	partitions     map[model.TableID][]int64
+	partitions     map[model.TableID][]model.TableID
 	schemaSnapshot *entry.SingleSchemaSnapshot
 }
 
@@ -33,12 +36,50 @@ type ddlJobWithPreTableInfo struct {
 	preTableInfo *model.TableInfo
 }
 
-func newSchemaManager(schemaSnapshot *entry.SingleSchemaSnapshot) *schemaManager {
-	return &schemaManager{
+func newSchemaManager(schemaSnapshot *entry.SingleSchemaSnapshot, filter *filter.Filter, cyclicConfig *config.CyclicConfig) *schemaManager {
+	ret := &schemaManager{
 		schemas:        make(map[model.SchemaID]map[model.TableID]struct{}),
 		partitions:     make(map[model.TableID][]int64),
 		schemaSnapshot: schemaSnapshot,
 	}
+
+	for tid, table := range schemaSnapshot.CloneTables() {
+		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
+			continue
+		}
+		if cyclicConfig.IsEnabled() && mark.IsMarkTable(table.Schema, table.Table) {
+			// skip the mark table if cyclic is enabled
+			continue
+		}
+
+		schema, ok := schemaSnapshot.SchemaByTableID(tid)
+		if !ok {
+			log.Warn("schema not found for table", zap.Int64("tid", tid))
+		}
+
+		schemaID := schema.ID
+		if _, ok := ret.schemas[schemaID]; !ok {
+			ret.schemas[schemaID] = make(map[model.TableID]struct{})
+		}
+
+		ret.schemas[schemaID][tid] = struct{}{}
+
+		tblInfo, ok := schemaSnapshot.TableByID(tid)
+		if !ok {
+			log.Warn("table not found for table ID", zap.Int64("tid", tid))
+			continue
+		}
+
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			delete(ret.partitions, tid)
+			for _, partition := range pi.Definitions {
+				id := partition.ID
+				ret.partitions[tid] = append(ret.partitions[tid], id)
+			}
+		}
+	}
+
+	return ret
 }
 
 func (m *schemaManager) PreprocessDDL(job *ddlJobWithPreTableInfo) error {
@@ -76,7 +117,7 @@ func (m *schemaManager) ApplyDDL(job *timodel.Job) ([]tableAction, error) {
 	case timodel.ActionCreateSchema:
 		m.addSchema(job.SchemaID)
 	case timodel.ActionDropSchema:
-		m.dropSchema(job.SchemaID)
+		removeTableIDs = m.dropSchema(job.SchemaID)
 	case timodel.ActionCreateTable, timodel.ActionRecoverTable:
 		startTableIDs = m.addTable(job.BinlogInfo.TableInfo.ID)
 	case timodel.ActionDropTable:
@@ -111,6 +152,22 @@ func (m *schemaManager) ApplyDDL(job *timodel.Job) ([]tableAction, error) {
 	return tableActions, nil
 }
 
+func (m *schemaManager) AllPartitions() []model.TableID {
+	var allPartitions []model.TableID
+
+	for _, tableIDs := range m.schemas {
+		for tableID := range tableIDs {
+			if partitions, ok := m.partitions[tableID]; ok {
+				allPartitions = append(allPartitions, partitions...)
+			} else {
+				allPartitions = append(allPartitions, tableID)
+			}
+		}
+	}
+
+	return allPartitions
+}
+
 func (m *schemaManager) addSchema(schemaID model.SchemaID) {
 	if _, ok := m.schemas[schemaID]; ok {
 		log.Warn("schema already exists", zap.Int("schemaID", int(schemaID)))
@@ -120,13 +177,19 @@ func (m *schemaManager) addSchema(schemaID model.SchemaID) {
 	m.schemas[schemaID] = make(map[model.TableID]struct{})
 }
 
-func (m *schemaManager) dropSchema(schemaID model.SchemaID) {
+func (m *schemaManager) dropSchema(schemaID model.SchemaID) (removeTableIDs []model.TableID) {
 	if _, ok := m.schemas[schemaID]; !ok {
 		log.Warn("schema does not exist", zap.Int("schemaID", int(schemaID)))
 		return
 	}
 
+	for tid := range m.schemas[schemaID] {
+		removeIDs := m.removeTable(schemaID, tid)
+		removeTableIDs = append(removeTableIDs, removeIDs...)
+	}
+
 	delete(m.schemas, schemaID)
+	return removeTableIDs
 }
 
 func (m *schemaManager) addTable(tableID model.TableID) (startTableIDs []model.TableID) {

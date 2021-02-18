@@ -22,13 +22,20 @@ import (
 )
 
 type scheduler interface {
-	GetTasks() map[model.TableID]*tableTask
+	GetTasks() (map[model.TableID]*tableTask, bool)
 	PutTasks(tables map[model.TableID]*tableTask)
 }
 
 type schedulerImpl struct {
 	ownerState *ownerReactorState
 	cfID       model.ChangeFeedID
+}
+
+func newScheduler(ownerState *ownerReactorState, cfID model.ChangeFeedID) *schedulerImpl {
+	return &schedulerImpl{
+		ownerState: ownerState,
+		cfID:       cfID,
+	}
 }
 
 func (s *schedulerImpl) GetTasks() (map[model.TableID]*tableTask, bool) {

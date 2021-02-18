@@ -15,7 +15,10 @@ package replication
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -32,7 +35,8 @@ import (
 
 type changeFeedRunner interface {
 	Tick(ctx context.Context) error
-	InitTables(ctx context.Context) error
+	InitTables(ctx context.Context, checkpointTs uint64) error
+	SetOwnerState(state *ownerReactorState)
 }
 
 type changeFeedRunnerImpl struct {
@@ -52,15 +56,99 @@ type changeFeedRunnerImpl struct {
 	ddlJobQueue []*ddlJobWithPreTableInfo
 }
 
-func (c *changeFeedRunnerImpl) InitTables(ctx context.Context) error {
+func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, checkpointTs uint64) error {
 	if c.changeFeedState != nil {
 		log.Panic("InitTables: unexpected state", zap.String("cfID", c.cfID))
 	}
 
-	
+	if c.ownerState == nil {
+		log.Panic("InitTables: ownerState not set")
+	}
+
+	kvStore, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs, c.config.ForceReplicate)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	filter, err := filter.NewFilter(c.config)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.schemaManager = newSchemaManager(schemaSnap, filter, c.config.Cyclic)
+
+	sinkTableInfos := make([]*model.SimpleTableInfo, 0, len(schemaSnap.CloneTables()))
+	for tid, table := range schemaSnap.CloneTables() {
+		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
+			continue
+		}
+		if c.config.Cyclic.IsEnabled() && mark.IsMarkTable(table.Schema, table.Table) {
+			// skip the mark table if cyclic is enabled
+			continue
+		}
+
+		tblInfo, ok := schemaSnap.TableByID(tid)
+		if !ok {
+			log.Warn("table not found for table ID", zap.Int64("tid", tid))
+			continue
+		}
+
+		// TODO separate function for initializing SimpleTableInfo
+		sinkTableInfo := new(model.SimpleTableInfo)
+		sinkTableInfo.TableID = tid
+		sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
+
+		for i, colInfo := range tblInfo.Cols() {
+			sinkTableInfo.ColumnInfo[i] = new(model.ColumnInfo)
+			sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+		}
+
+		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
+	}
+
+	// We call an unpartitioned table a partition too for simplicity
+	existingPartitions := c.ownerState.GetTableToCaptureMap(c.cfID)
+	allPartitions := c.schemaManager.AllPartitions()
+
+	initTableTasks := make(map[model.TableID]*tableTask)
+
+	for _, tableID := range allPartitions {
+		tableTask := &tableTask{
+			TableID:      tableID,
+			CheckpointTs: checkpointTs,
+			ResolvedTs:   checkpointTs,
+		}
+
+		if _, ok := existingPartitions[tableID]; ok {
+			// The table is currently being replicated by a processor
+			progress := c.ownerState.GetTableProgress(c.cfID, tableID)
+			if progress != nil {
+				tableTask.CheckpointTs = progress.checkpointTs
+				tableTask.ResolvedTs = progress.resolvedTs
+			}
+		}
+
+		initTableTasks[tableID] = tableTask
+	}
+
+	c.changeFeedState = newChangeFeedState(initTableTasks, checkpointTs, newScheduler(c.ownerState, c.cfID))
+
+	return nil
 }
 
 func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
+	if c.ownerState == nil {
+		log.Panic("InitTables: ownerState not set")
+	}
+
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -68,6 +156,9 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 		return errors.Trace(err)
 	default:
 	}
+
+	log.Debug("runner tick", zap.String("cfID", c.cfID))
+	defer log.Debug("runner tick end", zap.String("cfID", c.cfID))
 
 	// Update per-table status
 	for _, tableID := range c.ownerState.GetChangeFeedActiveTables(c.cfID) {
@@ -83,6 +174,7 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 	}
 
 	for _, job := range newDDLJobs {
+		log.Debug("new DDL job received", zap.Reflect("job", job))
 		c.ddlJobQueue = append(c.ddlJobQueue, &ddlJobWithPreTableInfo{job, nil})
 		c.changeFeedState.AddDDLBarrier(job.BinlogInfo.FinishedTS)
 	}
@@ -110,6 +202,7 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 	checkpointTs := c.changeFeedState.CheckpointTs()
 	c.ownerState.UpdateChangeFeedStatus(c.cfID, resolvedTs, checkpointTs)
 
+	c.changeFeedState.SyncTasks()
 	return nil
 }
 
@@ -195,4 +288,8 @@ func (c *changeFeedRunnerImpl) preFilterDDL() {
 		c.changeFeedState.PopDDLBarrier()
 		continue
 	}
+}
+
+func (c *changeFeedRunnerImpl) SetOwnerState(state *ownerReactorState) {
+	c.ownerState = state
 }

@@ -101,6 +101,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		case <-sessionDone:
 			return cerrors.ErrEtcdSessionDone
 		case <-ticker.C:
+			log.Debug("EtcdWorker timer tick")
 			// There is no new event to handle on timer ticks, so we have nothing here.
 		case response = <-watchCh:
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
@@ -109,16 +110,16 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				return errors.Trace(err)
 			}
 
-			// ProgressNotify implies no new events.
-			if response.IsProgressNotify() {
-				continue
-			}
-
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
+
+			// ProgressNotify implies no new events.
+			if response.IsProgressNotify() {
+				break
+			}
 
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
@@ -147,6 +148,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				return nil
 			}
 			if worker.revision < worker.barrierRev {
+				log.Debug("barrierRev not reached", zap.Int64("curRev", worker.revision), zap.Int64("barrierRev", worker.barrierRev))
 				// We hold off notifying the Reactor because barrierRev has not been reached.
 				// This usually happens when a committed write Txn has not been received by Watch.
 				continue
@@ -156,7 +158,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if err := worker.applyUpdates(); err != nil {
 				return errors.Trace(err)
 			}
-
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
 				if errors.Cause(err) != cerrors.ErrReactorFinished {
@@ -208,6 +209,7 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
+
 	cmpSet := make(map[util.EtcdKey]clientv3.Cmp)
 	opSet := make(map[util.EtcdKey]clientv3.Op)
 
@@ -250,6 +252,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		}
 
 		var op clientv3.Op
+		log.Debug("write key", zap.String("key", patch.Key.String()))
 		if value != nil {
 			op = clientv3.OpPut(patch.Key.String(), string(value))
 		} else {

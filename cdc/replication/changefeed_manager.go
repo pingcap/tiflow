@@ -161,6 +161,13 @@ func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.
 		return nil, nil
 	}
 
+	runner.SetOwnerState(m.ownerState)
+	err = runner.InitTables(ctx, startTs)
+	if err != nil {
+		log.Warn("Could not initialize tables", zap.Error(err))
+		return nil, nil
+	}
+
 	return &changeFeedOperation{
 		op:           startChangeFeedOperation,
 		changeFeedID: cfID,

@@ -64,6 +64,28 @@ func (o *Owner) Run(ctx context.Context) error {
 	return nil
 }
 
+func (o *Owner) EnqueueJob(adminJob model.AdminJob) error {
+	if o.reactor.changeFeedManager == nil {
+		// TODO better error
+		return errors.New("changeFeed manager is nil")
+	}
+
+	err := o.reactor.changeFeedManager.AddAdminJob(context.TODO(), adminJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
+	// TODO
+}
+
+func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID) {
+	// TODO
+}
+
 type ownerReactor struct {
 	state *ownerReactorState
 	changeFeedManager changeFeedManager
@@ -82,6 +104,8 @@ func newOwnerReactor(state *ownerReactorState, cfManager changeFeedManager, gcMa
 }
 
 func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	log.Debug("owner tick")
+	defer log.Debug("owner tick end")
 	cfOps, err := o.changeFeedManager.GetChangeFeedOperations(ctx)
 	if err != nil {
 		// TODO graceful exit

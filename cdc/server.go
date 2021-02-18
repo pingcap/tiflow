@@ -17,6 +17,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/pingcap/ticdc/cdc/replication"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"net"
 	"net/http"
 	"strings"
@@ -171,7 +173,7 @@ type ServerOption func(*options)
 type Server struct {
 	opts         options
 	capture      *Capture
-	owner        *Owner
+	owner        *replication.Owner
 	ownerLock    sync.RWMutex
 	statusServer *http.Server
 	pdClient     pd.Client
@@ -262,7 +264,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
-func (s *Server) setOwner(owner *Owner) {
+func (s *Server) setOwner(owner *replication.Owner) {
 	s.ownerLock.Lock()
 	defer s.ownerLock.Unlock()
 	s.owner = owner
@@ -295,14 +297,14 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 		captureID := s.capture.info.ID
 		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
+		owner, err := replication.NewOwner(etcd.Wrap(s.capture.session.Client(), map[string]prometheus.Counter{}), s.pdClient, s.opts.credential)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
 		}
 
 		s.setOwner(owner)
-		if err := owner.Run(ctx, ownerRunInterval); err != nil {
+		if err := owner.Run(ctx); err != nil {
 			if errors.Cause(err) == context.Canceled {
 				log.Info("owner exited", zap.String("capture-id", captureID))
 				select {
