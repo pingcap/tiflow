@@ -15,6 +15,8 @@ package processor
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -649,4 +651,13 @@ func (p *processor) Close() error {
 		return nil, nil
 	})
 	return p.sinkManager.Close()
+}
+
+// WriteDebugInfo write the debug info to Writer
+func (p *processor) WriteDebugInfo(w io.Writer) {
+	fmt.Fprintf(w, "%+v\n", *p.changefeed)
+	for tableID, tablePipeline := range p.tables {
+		fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, status: %s\n",
+			tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.Status())
+	}
 }

@@ -33,7 +33,7 @@ const (
 )
 
 // TableStatus is status of the table pipeline
-type TableStatus = int32
+type TableStatus int32
 
 // TableStatus for table pipeline
 const (
@@ -41,6 +41,25 @@ const (
 	TableStatusRunning
 	TableStatusStopped
 )
+
+func (s TableStatus) String() string {
+	switch s {
+	case TableStatusInitializing:
+		return "Initializing"
+	case TableStatusRunning:
+		return "Running"
+	case TableStatusStopped:
+		return "Stopped"
+	}
+	return "Unknown"
+}
+
+func (s *TableStatus) load() TableStatus {
+	return TableStatus(atomic.LoadInt32((*int32)(s)))
+}
+func (s *TableStatus) store(new TableStatus) {
+	atomic.StoreInt32((*int32)(s), int32(new))
+}
 
 type sinkNode struct {
 	sink   sink.Sink
@@ -68,7 +87,7 @@ func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts) *sinkNode 
 
 func (n *sinkNode) ResolvedTs() model.Ts   { return atomic.LoadUint64(&n.resolvedTs) }
 func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpointTs) }
-func (n *sinkNode) Status() TableStatus    { return atomic.LoadInt32(&n.status) }
+func (n *sinkNode) Status() TableStatus    { return n.status.load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	// do nothing
@@ -97,7 +116,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) erro
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
 	if checkpointTs >= n.targetTs {
-		atomic.StoreInt32(&n.status, TableStatusStopped)
+		n.status.store(TableStatusStopped)
 		if err := n.sink.Close(); err != nil {
 			return errors.Trace(err)
 		}
@@ -151,7 +170,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		event := msg.PolymorphicEvent
 		if event.RawKV.OpType == model.OpTypeResolved {
 			if n.status == TableStatusInitializing {
-				atomic.StoreInt32(&n.status, TableStatusRunning)
+				n.status.store(TableStatusRunning)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
@@ -188,6 +207,6 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
-	atomic.StoreInt32(&n.status, TableStatusStopped)
+	n.status.store(TableStatusStopped)
 	return n.sink.Close()
 }
