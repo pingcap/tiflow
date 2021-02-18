@@ -163,7 +163,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
-				if cerrors.ErrReactorFinished.Equal(err) {
+				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 					return errors.Trace(err)
 				}
 				// normal exit
