@@ -37,6 +37,7 @@ type changeFeedRunner interface {
 	Tick(ctx context.Context) error
 	InitTables(ctx context.Context, checkpointTs uint64) error
 	SetOwnerState(state *ownerReactorState)
+	Close()
 }
 
 type changeFeedRunnerImpl struct {
@@ -45,7 +46,10 @@ type changeFeedRunnerImpl struct {
 
 	sink       sink.Sink
 	sinkErrCh  <-chan error
+
 	ddlHandler ddlHandler
+	ddlCancel  func()
+	ddlErrCh   <-chan error
 
 	schemaManager *schemaManager
 	filter        *filter.Filter
@@ -154,11 +158,10 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 		return errors.Trace(ctx.Err())
 	case err := <-c.sinkErrCh:
 		return errors.Trace(err)
+	case err := <-c.ddlErrCh:
+		return errors.Trace(err)
 	default:
 	}
-
-	log.Debug("runner tick", zap.String("cfID", c.cfID))
-	defer log.Debug("runner tick end", zap.String("cfID", c.cfID))
 
 	// Update per-table status
 	for _, tableID := range c.ownerState.GetChangeFeedActiveTables(c.cfID) {
@@ -200,6 +203,7 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 
 	resolvedTs := c.changeFeedState.ResolvedTs()
 	checkpointTs := c.changeFeedState.CheckpointTs()
+	log.Info("Updating changeFeed", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	c.ownerState.UpdateChangeFeedStatus(c.cfID, resolvedTs, checkpointTs)
 
 	c.changeFeedState.SyncTasks()
@@ -248,6 +252,7 @@ func (c *changeFeedRunnerImpl) handleDDL(ctx context.Context, job *ddlJobWithPre
 	return actions, nil
 }
 
+// TODO (Sprint 2) rewrite this part so that it uses a stateless DDL filter
 func (c *changeFeedRunnerImpl) preFilterDDL() {
 	shouldIgnoreTable := func(schemaName string, tableName string) bool {
 		if c.filter.ShouldIgnoreTable(schemaName, tableName) {
@@ -261,23 +266,23 @@ func (c *changeFeedRunnerImpl) preFilterDDL() {
 
 	for len(c.ddlJobQueue) > 0 {
 		nextJobCandidate := c.ddlJobQueue[0]
-		tableInfo, ok := c.schemaManager.schemaSnapshot.TableByID(nextJobCandidate.TableID)
-		if !ok {
-			log.Panic("preFilterDDL: tableID not found", zap.Stringer("job", nextJobCandidate.Job))
-		}
-
-		preSchemaName := tableInfo.TableName.Schema
-		preTableName := tableInfo.TableName.Table
+		postSchemaName := nextJobCandidate.BinlogInfo.DBInfo.Name.String()
+		postTableName := nextJobCandidate.BinlogInfo.TableInfo.Name.String()
 
 		if nextJobCandidate.Type == timodel.ActionRenameTable {
-			postSchemaName := nextJobCandidate.BinlogInfo.DBInfo.Name.String()
-			postTableName := nextJobCandidate.BinlogInfo.TableInfo.Name.String()
+			tableInfo, ok := c.schemaManager.schemaSnapshot.TableByID(nextJobCandidate.TableID)
+			if !ok {
+				log.Panic("preFilterDDL: tableID not found", zap.Stringer("job", nextJobCandidate.Job))
+			}
+
+			preSchemaName := tableInfo.TableName.Schema
+			preTableName := tableInfo.TableName.Table
 
 			if shouldIgnoreTable(preSchemaName, preTableName) && shouldIgnoreTable(postSchemaName, postTableName) {
 				goto ignoreDDL
 			}
 		} else {
-			if shouldIgnoreTable(preSchemaName, preTableName) {
+			if shouldIgnoreTable(postSchemaName, postTableName) {
 				goto ignoreDDL
 			}
 		}
@@ -292,4 +297,12 @@ func (c *changeFeedRunnerImpl) preFilterDDL() {
 
 func (c *changeFeedRunnerImpl) SetOwnerState(state *ownerReactorState) {
 	c.ownerState = state
+}
+
+func (c *changeFeedRunnerImpl) Close() {
+	c.ddlCancel()
+	err := c.sink.Close()
+	if err != nil {
+		log.Warn("Sink closed with error", zap.Error(err))
+	}
 }

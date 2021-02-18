@@ -101,7 +101,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		case <-sessionDone:
 			return cerrors.ErrEtcdSessionDone
 		case <-ticker.C:
-			log.Debug("EtcdWorker timer tick")
 			// There is no new event to handle on timer ticks, so we have nothing here.
 		case response = <-watchCh:
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
@@ -269,6 +268,10 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 	}
 	for _, op := range opSet {
 		ops = append(ops, op)
+	}
+
+	if len(ops) == 0 {
+		return nil
 	}
 
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()

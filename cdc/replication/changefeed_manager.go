@@ -147,6 +147,8 @@ func (m *changeFeedManagerImpl) GetGCSafePointUpperBound() uint64 {
 func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.ChangeFeedID) (*changeFeedOperation, error) {
 	startTs := m.changeFeedInfos[cfID].StartTs
 	if cfStatus, ok := m.ownerState.ChangeFeedStatuses[cfID]; ok {
+		log.Info("found existing changeFeed progress info", zap.Uint64("old-start-ts", startTs),
+			zap.Uint64("adjusted-start-ts", cfStatus.CheckpointTs))
 		startTs = cfStatus.CheckpointTs
 	}
 

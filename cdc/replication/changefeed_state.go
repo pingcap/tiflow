@@ -185,12 +185,16 @@ func (cf *changeFeedState) ResolvedTs() uint64 {
 }
 
 func (cf *changeFeedState) CheckpointTs() uint64 {
-	checkpointTs := uint64(math.MaxUint64)
+	checkpointTs := cf.DDLResolvedTs
 
 	for _, table := range cf.TableTasks {
 		if checkpointTs > table.CheckpointTs {
 			checkpointTs = table.CheckpointTs
 		}
+	}
+
+	if len(cf.Barriers) > 0 && checkpointTs > cf.Barriers[0].BarrierTs-1 {
+		checkpointTs = cf.Barriers[0].BarrierTs - 1
 	}
 
 	return checkpointTs

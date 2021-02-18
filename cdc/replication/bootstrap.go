@@ -40,7 +40,7 @@ type changeFeedBootstrapper interface {
 }
 
 type changeFeedBootstrapperImpl struct {
-	pdClient  pd.Client
+	pdClient   pd.Client
 	credential *security.Credential
 }
 
@@ -55,7 +55,7 @@ func (c *changeFeedBootstrapperImpl) bootstrapChangeFeed(
 	ctx context.Context,
 	cfID model.ChangeFeedID,
 	cfInfo *model.ChangeFeedInfo,
-    startTs uint64) (changeFeedRunner, error) {
+	startTs uint64) (changeFeedRunner, error) {
 
 	log.Info("Bootstrapping changefeed", zap.Stringer("info", cfInfo),
 		zap.String("changefeed", cfID), zap.Uint64("checkpoint ts", startTs))
@@ -99,14 +99,26 @@ func (c *changeFeedBootstrapperImpl) bootstrapChangeFeed(
 
 	ddlHandler := newDDLHandler(ctx, c.pdClient, c.credential, kvStore, startTs)
 
+	ddlErrCh := make(chan error, 1)
+	ddlCtx, ddlCancel := context.WithCancel(ctx)
+	go func() {
+		err := ddlHandler.Run(ddlCtx)
+		if err != nil {
+			log.Warn("ddhHandler returned error", zap.Error(err))
+			ddlErrCh <- err
+		}
+		close(ddlErrCh)
+	}()
+
 	return &changeFeedRunnerImpl{
-		cfID: cfID,
-		config: cfInfo.Config,
-		sink:           ddlSink,
-		sinkErrCh:      sinkErrCh,
-		ddlHandler:     ddlHandler,
-		schemaManager:  newSchemaManager(schemaSnap, eventFilter, cfInfo.Config.Cyclic),
-		filter:         eventFilter,
+		cfID:          cfID,
+		config:        cfInfo.Config,
+		sink:          ddlSink,
+		sinkErrCh:     sinkErrCh,
+		ddlHandler:    ddlHandler,
+		ddlCancel:     ddlCancel,
+		ddlErrCh:      ddlErrCh,
+		schemaManager: newSchemaManager(schemaSnap, eventFilter, cfInfo.Config.Cyclic),
+		filter:        eventFilter,
 	}, nil
 }
-

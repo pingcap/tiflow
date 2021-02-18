@@ -56,6 +56,7 @@ func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Cr
 
 	return &ddlHandlerImpl{
 		puller: plr,
+		resolvedTS: checkpointTS,
 	}
 }
 
@@ -110,7 +111,7 @@ func (h *ddlHandlerImpl) receiveDDL(rawDDL *model.RawKVEntry) error {
 	return nil
 }
 
-
+// TODO test-case: resolvedTs not zero
 func (h *ddlHandlerImpl) PullDDL() (uint64, []*timodel.Job, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

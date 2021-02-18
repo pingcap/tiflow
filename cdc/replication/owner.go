@@ -104,8 +104,6 @@ func newOwnerReactor(state *ownerReactorState, cfManager changeFeedManager, gcMa
 }
 
 func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	log.Debug("owner tick")
-	defer log.Debug("owner tick end")
 	cfOps, err := o.changeFeedManager.GetChangeFeedOperations(ctx)
 	if err != nil {
 		// TODO graceful exit
@@ -122,6 +120,7 @@ func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (n
 			if _, ok := o.changeFeedRunners[operation.changeFeedID]; !ok {
 				log.Warn("stop changeFeed: changeFeed not found", zap.String("cfID", operation.changeFeedID))
 			}
+			o.changeFeedRunners[operation.changeFeedID].Close()
 			delete(o.changeFeedRunners, operation.changeFeedID)
 		default:
 			panic("unreachable")
@@ -144,7 +143,7 @@ func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (n
 				// TODO is this error recoverable?
 				return nil, errors.Trace(err)
 			}
-
+			o.changeFeedRunners[cfID].Close()
 			delete(o.changeFeedRunners, cfID)
 		}
 	}
