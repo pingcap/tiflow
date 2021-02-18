@@ -80,7 +80,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	n.wg.Go(func() error {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-ctxC.Done():
 				return nil
 			case rawKV := <-plr.Output():
 				if rawKV == nil {

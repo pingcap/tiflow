@@ -92,6 +92,9 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) erro
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if checkpointTs <= n.checkpointTs {
+		return nil
+	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
 	if checkpointTs >= n.targetTs {
 		atomic.StoreInt32(&n.status, TableStatusStopped)
@@ -123,6 +126,7 @@ func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 		if ev.Row == nil {
 			continue
 		}
+		ev.Row.ReplicaID = ev.ReplicaID
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
 	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
@@ -149,6 +153,9 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			if n.status == TableStatusInitializing {
 				atomic.StoreInt32(&n.status, TableStatusRunning)
 			}
+			failpoint.Inject("ProcessorSyncResolvedError", func() {
+				failpoint.Return(errors.New("processor sync resolved injected error"))
+			})
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return errors.Trace(err)
 			}
