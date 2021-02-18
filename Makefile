@@ -61,7 +61,10 @@ test: unit_test
 
 build: cdc
 
-build-failpoint: failpoint-enable cdc failpoint-disable
+build-failpoint: 
+	$(FAILPOINT_ENABLE)
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
+	$(FAILPOINT_DISABLE)
 
 cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
