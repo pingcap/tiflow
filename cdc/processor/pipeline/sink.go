@@ -57,6 +57,7 @@ func (s TableStatus) String() string {
 func (s *TableStatus) load() TableStatus {
 	return TableStatus(atomic.LoadInt32((*int32)(s)))
 }
+
 func (s *TableStatus) store(new TableStatus) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }

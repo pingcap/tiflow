@@ -32,13 +32,6 @@ var (
 			Name:      "resolved_ts_lag",
 			Help:      "local resolved ts lag of processor",
 		}, []string{"changefeed", "capture"})
-	tableResolvedTsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "table_resolved_ts",
-			Help:      "local resolved ts of processor",
-		}, []string{"changefeed", "capture", "table"})
 	checkpointTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -60,21 +53,6 @@ var (
 			Name:      "num_of_tables",
 			Help:      "number of synchronized table of processor",
 		}, []string{"changefeed", "capture"})
-	txnCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "txn_count",
-			Help:      "txn count received/executed by this processor",
-		}, []string{"type", "changefeed", "capture"})
-	updateInfoDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "update_info_duration_seconds",
-			Help:      "The time it took to update sub changefeed info.",
-			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 18),
-		}, []string{"capture"})
 	processorErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -88,11 +66,8 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(resolvedTsGauge)
 	registry.MustRegister(resolvedTsLagGauge)
-	registry.MustRegister(tableResolvedTsGauge)
 	registry.MustRegister(checkpointTsGauge)
 	registry.MustRegister(checkpointTsLagGauge)
 	registry.MustRegister(syncTableNumGauge)
-	registry.MustRegister(txnCounter)
-	registry.MustRegister(updateInfoDuration)
 	registry.MustRegister(processorErrorCounter)
 }

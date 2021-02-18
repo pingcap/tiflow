@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/processor"
+	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
@@ -35,6 +36,7 @@ func init() {
 	entry.InitMetrics(registry)
 	sorter.InitMetrics(registry)
 	processor.InitMetrics(registry)
+	tablepipeline.InitMetrics(registry)
 	initOwnerMetrics(registry)
 	initServerMetrics(registry)
 }

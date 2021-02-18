@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -72,11 +73,19 @@ type processor struct {
 	errCh     chan error
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+
+	metricResolvedTsGauge       prometheus.Gauge
+	metricResolvedTsLagGauge    prometheus.Gauge
+	metricCheckpointTsGauge     prometheus.Gauge
+	metricCheckpointTsLagGauge  prometheus.Gauge
+	metricSyncTableNumGauge     prometheus.Gauge
+	metricProcessorErrorCounter prometheus.Counter
 }
 
 // newProcessor creates a new processor
 func newProcessor(
 	pdCli pd.Client,
+	changefeedID model.ChangeFeedID,
 	credential *security.Credential,
 	captureInfo *model.CaptureInfo,
 ) *processor {
@@ -88,6 +97,13 @@ func newProcessor(
 		tables:      make(map[model.TableID]*tablepipeline.TablePipeline),
 		errCh:       make(chan error, 1),
 		firstTick:   true,
+
+		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
+		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
+		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
+		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
+		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
+		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
 	}
 }
 
@@ -95,6 +111,7 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
 		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) && cerror.ErrReactorFinished.NotEqual(cause) {
+			p.metricProcessorErrorCounter.Inc()
 			// record error information in etcd
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
@@ -500,6 +517,18 @@ func (p *processor) handlePosition() error {
 		}
 	}
 
+	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
+	// It is more accurate to get tso from PD, but in most cases we have
+	// deployed NTP service, a little bias is acceptable here.
+	p.metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-resolvedPhyTs) / 1e3)
+	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
+
+	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
+	// It is more accurate to get tso from PD, but in most cases we have
+	// deployed NTP service, a little bias is acceptable here.
+	p.metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-checkpointPhyTs) / 1e3)
+	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
+
 	if minResolvedTs > p.changefeed.TaskPosition.ResolvedTs ||
 		minCheckpointTs > p.changefeed.TaskPosition.CheckPointTs {
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
@@ -580,6 +609,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 
 	_, table := tablepipeline.NewTablePipeline(
 		cdcCtx,
+		p.changefeed.ID,
 		p.credential,
 		kvStorage,
 		p.limitter,
@@ -593,6 +623,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		p.changefeed.Info.GetTargetTs(),
 	)
 	p.wg.Add(1)
+	p.metricSyncTableNumGauge.Inc()
 	go func() {
 		for _, err := range table.Wait() {
 			if cerror.ErrTableProcessorStoppedSafely.Equal(err) || errors.Cause(err) == context.Canceled {
@@ -601,6 +632,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 			p.sendError(err)
 		}
 		p.wg.Done()
+		p.metricSyncTableNumGauge.Dec()
 		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
 			util.ZapFieldChangefeed(ctx),
 			zap.String("name", table.Name()),
@@ -650,6 +682,14 @@ func (p *processor) Close() error {
 	p.changefeed.PatchTaskWorkload(func(_ model.TaskWorkload) (model.TaskWorkload, error) {
 		return nil, nil
 	})
+
+	resolvedTsGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
+	checkpointTsGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
+	syncTableNumGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
+	processorErrorCounter.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
+
 	return p.sinkManager.Close()
 }
 

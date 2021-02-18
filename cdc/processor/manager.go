@@ -81,7 +81,7 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 		processor, exist := m.processors[changefeedID]
 		if !exist {
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = newProcessor(m.pdCli, m.credential, m.captureInfo)
+			processor = newProcessor(m.pdCli, changefeedID, m.credential, m.captureInfo)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
