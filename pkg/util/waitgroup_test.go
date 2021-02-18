@@ -30,6 +30,7 @@ func (s *gcServiceSuite) TestWaitTimeout(c *check.C) {
 	var wg1 sync.WaitGroup
 	wg1.Add(1)
 	c.Assert(WaitTimeout(&wg1, 100*time.Millisecond), check.IsTrue)
+	wg1.Done()
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
