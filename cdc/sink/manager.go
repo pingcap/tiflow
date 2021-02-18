@@ -146,7 +146,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return t.manager.flushBackendSink(ctx)
 	}
 	resolvedRows := t.buffer[:i]
-	t.buffer = t.buffer[i:]
+	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
 
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
