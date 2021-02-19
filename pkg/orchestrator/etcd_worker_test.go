@@ -516,3 +516,146 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 	err = cli.Unwrap().Close()
 	c.Assert(err, check.IsNil)
 }
+
+func (s *etcdWorkerSuite) TestMergePatches(c *check.C) {
+	testCases := []struct {
+		state   map[util.EtcdKey][]byte
+		patches []*DataPatch
+	}{
+		{
+			state:   map[util.EtcdKey][]byte{},
+			patches: []*DataPatch{},
+		},
+		{
+			state: map[util.EtcdKey][]byte{
+				util.NewEtcdKey("key1"): []byte("aa"),
+			},
+			patches: []*DataPatch{
+				{
+					Key: util.NewEtcdKey("key1"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("bb")...)
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key1"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("cc")...)
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key1"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("dd")...)
+						return
+					},
+				},
+			},
+		},
+		{
+			state: map[util.EtcdKey][]byte{
+				util.NewEtcdKey("key1"): []byte("aa"),
+			},
+			patches: []*DataPatch{
+				{
+					Key: util.NewEtcdKey("key1"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("bb")...)
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key2"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("cc")...)
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key1"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("dd")...)
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key2"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("ee")...)
+						return
+					},
+				},
+			},
+		},
+		{
+			state: map[util.EtcdKey][]byte{
+				util.NewEtcdKey("key1"): []byte("aa"),
+			},
+			patches: []*DataPatch{
+				{
+					Key: util.NewEtcdKey("key1"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("bb")...)
+						err = cerrors.ErrEtcdIgnore
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key2"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("cc")...)
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key1"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("dd")...)
+						return
+					},
+				},
+				{
+					Key: util.NewEtcdKey("key2"),
+					Fun: func(old []byte) (newValue []byte, err error) {
+						newValue = append(old, []byte("ee")...)
+						err = cerrors.ErrEtcdIgnore
+						return
+					},
+				},
+			},
+		},
+	}
+
+	applyPatches := func(state map[util.EtcdKey][]byte, patches []*DataPatch) map[util.EtcdKey][]byte {
+		// clone state map
+		clonedState := make(map[util.EtcdKey][]byte, len(state))
+		for k, v := range state {
+			clonedState[k] = v
+		}
+		// apply patches
+		for _, p := range patches {
+			newValue, err := p.Fun(clonedState[p.Key])
+			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
+				continue
+			}
+			c.Assert(err, check.IsNil)
+			clonedState[p.Key] = newValue
+		}
+		return clonedState
+	}
+	for _, tc := range testCases {
+		mergedPatches := mergePatch(tc.patches)
+		c.Assert(applyPatches(tc.state, mergedPatches), check.DeepEquals, applyPatches(tc.state, tc.patches))
+	}
+}
+
+func (s *etcdWorkerSuite) TestEtcdValueEqual(c *check.C) {
+	c.Assert(etcdValueEqual(nil, nil), check.IsTrue)
+	c.Assert(etcdValueEqual(nil, []byte{}), check.IsFalse)
+	c.Assert(etcdValueEqual([]byte{}, nil), check.IsFalse)
+	c.Assert(etcdValueEqual([]byte{}, []byte{}), check.IsTrue)
+	c.Assert(etcdValueEqual([]byte{11}, []byte{11}), check.IsTrue)
+	c.Assert(etcdValueEqual([]byte{11}, []byte{12}), check.IsFalse)
+}

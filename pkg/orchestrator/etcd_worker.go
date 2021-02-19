@@ -211,19 +211,48 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 	return nil
 }
 
-func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
-	cmpSet := make(map[util.EtcdKey]clientv3.Cmp)
-	opSet := make(map[util.EtcdKey]clientv3.Op)
-
-	// tmpRawState cache the changed values which are uncommitted to etcd.
-	tmpRawState := make(map[util.EtcdKey][]byte)
+func mergePatch(patches []*DataPatch) []*DataPatch {
+	patchMap := make(map[util.EtcdKey][]*DataPatch)
 	for _, patch := range patches {
-		// check the tmpRawState to get the newest uncommitted value if exists
-		old, ok := tmpRawState[patch.Key]
-		if !ok {
-			// get the committed value
-			old, ok = worker.rawState[patch.Key]
-		}
+		patchMap[patch.Key] = append(patchMap[patch.Key], patch)
+	}
+	result := make([]*DataPatch, 0, len(patchMap))
+	for key, patches := range patchMap {
+		patches := patches
+		result = append(result, &DataPatch{
+			Key: key,
+			Fun: func(old []byte) ([]byte, error) {
+				for _, patch := range patches {
+					newValue, err := patch.Fun(old)
+					if err != nil {
+						if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
+							continue
+						}
+						return nil, err
+					}
+					old = newValue
+				}
+				return old, nil
+			},
+		})
+	}
+	return result
+}
+
+func etcdValueEqual(left, right []byte) bool {
+	if len(left) == 0 && len(right) == 0 {
+		return (left == nil && right == nil) || (left != nil && right != nil)
+	}
+	return bytes.Equal(left, right)
+}
+
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
+	patches = mergePatch(patches)
+	cmps := make([]clientv3.Cmp, 0, len(patches))
+	ops := make([]clientv3.Op, 0, len(patches))
+
+	for _, patch := range patches {
+		old, ok := worker.rawState[patch.Key]
 
 		value, err := patch.Fun(old)
 		if err != nil {
@@ -233,22 +262,18 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			return errors.Trace(err)
 		}
 
-		// if there are multiple patches with the same key, we should keep the compare of the first patch
-		if _, cmpExist := cmpSet[patch.Key]; !cmpExist {
-			// make sure someone else has not updated the key after the last snapshot
-			var cmp clientv3.Cmp
-			// if ok is false, it means that the key of this patch is not exist in a committed state
-			// and also not exist in the uncommitted value cache(tmpRawState)
-			if ok {
-				cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
-			} else {
-				// this compare is equivalent to `patch.Key` is not exist
-				cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "=", 0)
-			}
-			cmpSet[patch.Key] = cmp
+		// make sure someone else has not updated the key after the last snapshot
+		var cmp clientv3.Cmp
+		// if ok is false, it means that the key of this patch is not exist in a committed state
+		if ok {
+			cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
+		} else {
+			// this compare is equivalent to `patch.Key` is not exist
+			cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "=", 0)
 		}
+		cmps = append(cmps, cmp)
 
-		if bytes.Equal(old, value) {
+		if etcdValueEqual(old, value) {
 			// Ignore patches that produce a new value that is the same as the old value.
 			continue
 		}
@@ -259,19 +284,8 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		} else {
 			op = clientv3.OpDelete(patch.Key.String())
 		}
-		// if there are multiple patches with the same key, we should keep the value of the last patch
-		opSet[patch.Key] = op
-		tmpRawState[patch.Key] = value
-	}
-	cmps := make([]clientv3.Cmp, 0, len(cmpSet))
-	ops := make([]clientv3.Op, 0, len(opSet))
-	for _, cmp := range cmpSet {
-		cmps = append(cmps, cmp)
-	}
-	for _, op := range opSet {
 		ops = append(ops, op)
 	}
-
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
 	if err != nil {
 		return errors.Trace(err)
@@ -282,6 +296,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil
 	}
+
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
