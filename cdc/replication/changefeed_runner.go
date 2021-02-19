@@ -60,7 +60,7 @@ type changeFeedRunnerImpl struct {
 	ddlJobQueue []*ddlJobWithPreTableInfo
 }
 
-func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, checkpointTs uint64) error {
+func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, startTs uint64) error {
 	if c.changeFeedState != nil {
 		log.Panic("InitTables: unexpected state", zap.String("cfID", c.cfID))
 	}
@@ -73,11 +73,11 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, checkpointTs uint
 	if err != nil {
 		return errors.Trace(err)
 	}
-	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs, c.config.ForceReplicate)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, c.config.ForceReplicate)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -127,8 +127,8 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, checkpointTs uint
 	for _, tableID := range allPartitions {
 		tableTask := &tableTask{
 			TableID:      tableID,
-			CheckpointTs: checkpointTs - 1,
-			ResolvedTs:   checkpointTs - 1,
+			CheckpointTs: startTs - 1,
+			ResolvedTs:   startTs - 1,
 		}
 
 		if _, ok := existingPartitions[tableID]; ok {
@@ -143,7 +143,7 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, checkpointTs uint
 		initTableTasks[tableID] = tableTask
 	}
 
-	c.changeFeedState = newChangeFeedState(initTableTasks, checkpointTs, newScheduler(c.ownerState, c.cfID))
+	c.changeFeedState = newChangeFeedState(initTableTasks, startTs, newScheduler(c.ownerState, c.cfID))
 
 	return nil
 }
@@ -270,6 +270,11 @@ func (c *changeFeedRunnerImpl) preFilterDDL() {
 
 	for len(c.ddlJobQueue) > 0 {
 		nextJobCandidate := c.ddlJobQueue[0]
+
+		if nextJobCandidate.BinlogInfo == nil || nextJobCandidate.BinlogInfo.TableInfo == nil {
+			break
+		}
+
 		schemaName := nextJobCandidate.SchemaName
 		postTableName := nextJobCandidate.BinlogInfo.TableInfo.Name.String()
 

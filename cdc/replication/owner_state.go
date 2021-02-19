@@ -262,7 +262,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 }
 
 func (s *ownerReactorState) GetPatches() []*orchestrator.DataPatch {
-	ret := orchestrator.MergeCommutativePatches(s.patches)
+	ret := s.patches
 	s.patches = nil
 	return ret
 }
@@ -321,7 +321,8 @@ func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID mod
 			}
 
 			if _, ok := taskStatus.Operation[tableID]; ok {
-				log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
+				log.Debug("already dispatched, ignore", zap.Int("tableID", int(tableID)))
+				return nil, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
 			}
 
 			if taskStatus.Tables == nil {
@@ -542,6 +543,10 @@ func (s *ownerReactorState) GetTableToCaptureMap(cfID model.ChangeFeedID) map[mo
 	tableToCaptureMap := make(map[model.TableID]model.CaptureID)
 	for captureID, taskStatus := range s.TaskStatuses[cfID] {
 		for tableID := range taskStatus.Tables {
+			tableToCaptureMap[tableID] = captureID
+		}
+
+		for tableID := range taskStatus.Operation {
 			tableToCaptureMap[tableID] = captureID
 		}
 	}

@@ -91,7 +91,7 @@ func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 			}
 
 			replicaInfo := model.TableReplicaInfo{
-				StartTs:     task.CheckpointTs,
+				StartTs:     task.CheckpointTs + 1,
 				MarkTableID: 0,  // TODO support cyclic replication
 			}
 

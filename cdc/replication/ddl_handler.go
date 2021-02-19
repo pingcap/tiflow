@@ -15,6 +15,8 @@ package replication
 
 import (
 	"context"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -44,24 +46,25 @@ type ddlHandlerImpl struct {
 }
 
 // TODO test-case: resolvedTs is initialized to (startTs - 1)
-func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandlerImpl {
+func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, startTs uint64) *ddlHandlerImpl {
 	plr := puller.NewPuller(
 		ctx,
 		pdCli,
 		credential,
 		kvStorage,
-		checkpointTS,
+		startTs,
 		[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
 		nil,
 		false)
 
 	return &ddlHandlerImpl{
 		puller: plr,
-		resolvedTS: checkpointTS - 1,
+		resolvedTS: startTs - 1,
 	}
 }
 
 func (h *ddlHandlerImpl) Run(ctx context.Context) error {
+	log.Debug("DDL puller started")
 	ctx = util.PutTableInfoInCtx(ctx, -1, "")
 	errg, ctx := errgroup.WithContext(ctx)
 
@@ -106,6 +109,7 @@ func (h *ddlHandlerImpl) receiveDDL(rawDDL *model.RawKVEntry) error {
 		return nil
 	}
 
+	log.Debug("DDL puller: received", zap.Reflect("job", job))
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ddlJobs = append(h.ddlJobs, job)

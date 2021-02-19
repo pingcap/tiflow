@@ -79,8 +79,8 @@ func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
 }
 
 func (cf *changeFeedState) AddDDLBarrier(barrierTs uint64) {
-	if len(cf.Barriers) > 0 && barrierTs > cf.Barriers[len(cf.Barriers)-1].BarrierTs {
-		log.Panic("changeFeedState: DDLBarrier too large",
+	if len(cf.Barriers) > 0 && barrierTs < cf.Barriers[len(cf.Barriers)-1].BarrierTs {
+		log.Panic("changeFeedState: DDLBarrier too small",
 			zap.Uint64("last-barrier-ts", cf.Barriers[0].BarrierTs),
 			zap.Uint64("new-barrier-ts", barrierTs))
 	}
@@ -146,8 +146,8 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 		case AddTableAction:
 			cf.TableTasks[tableAction.tableID] = &tableTask{
 				TableID:      tableAction.tableID,
-				CheckpointTs: cf.CheckpointTs(),
-				ResolvedTs:   0,
+				CheckpointTs: cf.CheckpointTs() - 1,
+				ResolvedTs:   cf.CheckpointTs() - 1,
 			}
 		case DropTableAction:
 			if _, ok := cf.TableTasks[tableAction.tableID]; !ok {
@@ -227,6 +227,7 @@ func (cf *changeFeedState) SetTableCheckpointTs(tableID model.TableID, checkpoin
 	if tableTask.CheckpointTs > checkpointTs {
 		log.Panic("changeFeedState: table checkpoint regressed. Report a bug.",
 			zap.Int("tableID", int(tableID)),
+			zap.Uint64("oldCheckpointTs", tableTask.CheckpointTs),
 			zap.Uint64("checkpointTs", checkpointTs))
 	}
 

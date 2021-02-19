@@ -462,6 +462,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 			if job == nil {
 				continue
 			}
+			log.Debug("Processor DDL received", zap.Reflect("job", job))
 			if err := schemaStorage.HandleDDLJob(job); err != nil {
 				p.sendError(errors.Trace(err))
 				return
