@@ -175,7 +175,6 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 			CaseSensitive:    true,
 			EnableOldValue:   true,
 			CheckGCSafePoint: true,
-			KVClientV2:       true,
 		},
 	}
 

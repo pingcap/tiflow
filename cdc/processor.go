@@ -166,8 +166,7 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	kvClientV2 := changefeed.Config.KVClientV2
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false, kvClientV2)
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -813,7 +812,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
-		KVClientV2 := p.changefeed.Config.KVClientV2
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
@@ -822,7 +820,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		}
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
 			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
-			enableOldValue, KVClientV2)
+			enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {

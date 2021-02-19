@@ -63,6 +63,9 @@ const (
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
+
+	// hard code switch
+	kvClientV2 = true
 )
 
 type singleRegionInfo struct {
@@ -297,7 +300,6 @@ type CDCKVClient interface {
 		span regionspan.ComparableSpan,
 		ts uint64,
 		enableOldValue bool,
-		kvClientV2 bool,
 		lockResolver txnutil.LockResolver,
 		isPullerInit PullerInitialization,
 		eventCh chan<- *model.RegionFeedEvent,
@@ -429,14 +431,13 @@ type PullerInitialization interface {
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
 	enableOldValue bool,
-	kvClientV2 bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span,
 		lockResolver, isPullerInit,
-		enableOldValue, kvClientV2, ts, eventCh)
+		enableOldValue, ts, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -502,7 +503,6 @@ func newEventFeedSession(
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
 	enableOldValue bool,
-	kvClientV2 bool,
 	startTs uint64,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {

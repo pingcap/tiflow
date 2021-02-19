@@ -277,8 +277,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
-	kvClientV2 := info.Config.KVClientV2
-	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs, kvClientV2)
+	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
 	defer func() {
 		if resultErr != nil {
 			ddlHandler.Close()

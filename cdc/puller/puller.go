@@ -62,7 +62,6 @@ type pullerImpl struct {
 	resolvedTs     uint64
 	initialized    int64
 	enableOldValue bool
-	kvClientV2     bool
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -76,7 +75,6 @@ func NewPuller(
 	spans []regionspan.Span,
 	limitter *BlurResourceLimitter,
 	enableOldValue bool,
-	kvClientV2 bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -104,7 +102,6 @@ func NewPuller(
 		resolvedTs:     checkpointTs,
 		initialized:    0,
 		enableOldValue: enableOldValue,
-		kvClientV2:     kvClientV2,
 	}
 	return p
 }
@@ -127,7 +124,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, p.kvClientV2, lockresolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
 		})
 	}
 

@@ -44,7 +44,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Tp:          "table-number",
 		PollingTime: -1,
 	},
-	KVClientV2: true,
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -60,7 +59,6 @@ type replicaConfig struct {
 	Sink             *SinkConfig      `toml:"sink" json:"sink"`
 	Cyclic           *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
 	Scheduler        *SchedulerConfig `toml:"scheduler" json:"scheduler"`
-	KVClientV2       bool             `toml:"kv-client-v2" json:"kv-client-v2"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
