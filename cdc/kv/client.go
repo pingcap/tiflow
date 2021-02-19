@@ -114,12 +114,11 @@ type regionFeedState struct {
 	regionEventCh chan *regionEvent
 	stopped       int32
 
-	lock                  sync.RWMutex
-	initialized           bool
-	matcher               *matcher
-	startFeedTime         time.Time
-	lastReceivedEventTime time.Time
-	lastResolvedTs        uint64
+	lock           sync.RWMutex
+	initialized    bool
+	matcher        *matcher
+	startFeedTime  time.Time
+	lastResolvedTs uint64
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
@@ -134,7 +133,6 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 func (s *regionFeedState) start() {
 	s.startFeedTime = time.Now()
 	s.lastResolvedTs = s.sri.ts
-	s.lastReceivedEventTime = time.Now()
 	s.matcher = newMatcher()
 }
 

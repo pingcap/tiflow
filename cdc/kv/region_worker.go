@@ -116,18 +116,13 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 			// TODO: add a better expired heap, so we don't need to iterate each region every time
 			w.statesLock.RLock()
 			version, err := w.session.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
+			if err != nil {
+				log.Warn("failed to get current version from PD", zap.Error(err))
+				w.statesLock.RUnlock()
+				continue
+			}
 			for regionID, state := range w.regionStates {
 				state.lock.RLock()
-				sinceLastEvent := time.Since(state.lastReceivedEventTime)
-				if sinceLastEvent > resolveLockInterval {
-					log.Warn("region not receiving event from tikv for too long time",
-						zap.Uint64("regionID", regionID), zap.Stringer("span", state.sri.span), zap.Duration("duration", sinceLastEvent))
-				}
-				if err != nil {
-					log.Warn("failed to get current version from PD", zap.Error(err))
-					state.lock.RUnlock()
-					continue
-				}
 				currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
 				if sinceLastResolvedTs > resolveLockInterval && state.initialized {
@@ -183,7 +178,6 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				continue
 			}
 			event.state.lock.Lock()
-			event.state.lastReceivedEventTime = time.Now()
 			if event.changeEvent != nil {
 				metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
 				switch x := event.changeEvent.Event.(type) {
