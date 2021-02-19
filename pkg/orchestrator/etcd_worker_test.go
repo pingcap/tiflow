@@ -518,6 +518,7 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 }
 
 func (s *etcdWorkerSuite) TestMergePatches(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		state   map[util.EtcdKey][]byte
 		patches []*DataPatch
@@ -652,6 +653,7 @@ func (s *etcdWorkerSuite) TestMergePatches(c *check.C) {
 }
 
 func (s *etcdWorkerSuite) TestEtcdValueEqual(c *check.C) {
+	defer testleak.AfterTest(c)()
 	c.Assert(etcdValueEqual(nil, nil), check.IsTrue)
 	c.Assert(etcdValueEqual(nil, []byte{}), check.IsFalse)
 	c.Assert(etcdValueEqual([]byte{}, nil), check.IsFalse)
