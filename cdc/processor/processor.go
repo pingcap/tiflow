@@ -695,7 +695,7 @@ func (p *processor) Close() error {
 
 // WriteDebugInfo write the debug info to Writer
 func (p *processor) WriteDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "%+v\n", *p.changefeed)
+	fmt.Fprintf(w, "%s\n", p.changefeed)
 	for tableID, tablePipeline := range p.tables {
 		fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, status: %s\n",
 			tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.Status())

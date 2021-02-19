@@ -153,7 +153,7 @@ func (m *Manager) handleDebugInfo() {
 	for changefeedID, processor := range m.processors {
 		fmt.Fprintf(debugWriter, "changefeedID: %s\n", changefeedID)
 		processor.WriteDebugInfo(debugWriter)
+		fmt.Fprintf(debugWriter, "\n")
 	}
-	fmt.Fprintf(debugWriter, "\n\n")
 	close(debugWriter.done)
 }

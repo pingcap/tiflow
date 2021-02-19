@@ -14,7 +14,9 @@
 package processor
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 
 	"github.com/pingcap/errors"
@@ -74,15 +76,15 @@ func (s *globalState) GetPatches() []*orchestrator.DataPatch {
 }
 
 type changefeedState struct {
-	ID           model.ChangeFeedID
-	CaptureID    model.CaptureID
-	Info         *model.ChangeFeedInfo
-	Status       *model.ChangeFeedStatus
-	TaskPosition *model.TaskPosition
-	TaskStatus   *model.TaskStatus
-	Workload     model.TaskWorkload
+	ID           model.ChangeFeedID      `json:"id"`
+	CaptureID    model.CaptureID         `json:"capture-id"`
+	Info         *model.ChangeFeedInfo   `json:"info"`
+	Status       *model.ChangeFeedStatus `json:"status"`
+	TaskPosition *model.TaskPosition     `json:"task-position"`
+	TaskStatus   *model.TaskStatus       `json:"task-status"`
+	Workload     model.TaskWorkload      `json:"workload"`
 
-	pendingPatches []*orchestrator.DataPatch
+	pendingPatches []*orchestrator.DataPatch `json:"-"`
 }
 
 func newChangeFeedState(id model.ChangeFeedID, captureID model.CaptureID) *changefeedState {
@@ -263,4 +265,17 @@ func (s *changefeedState) patchAny(key string, tpi interface{}, fn func(interfac
 		},
 	}
 	s.pendingPatches = append(s.pendingPatches, patch)
+}
+
+func (s *changefeedState) String() string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return fmt.Sprintf("%+v", *s)
+	}
+	var out bytes.Buffer
+	err = json.Indent(&out, b, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("%+v", *s)
+	}
+	return out.String()
 }
