@@ -14,6 +14,8 @@
 package codec
 
 import (
+	"math"
+	"strconv"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -217,6 +219,47 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		c.Assert(err, check.IsNil)
 		checkTSDecoder(mixedDecoder, cs)
 	}
+}
+
+func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
+	err := encoder.SetParams(map[string]string{})
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
+
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
+	c.Assert(err, check.ErrorMatches, ".*invalid.*")
+
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "-1"})
+	c.Assert(err, check.ErrorMatches, ".*invalid.*")
+
+	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxInt32)
+
+	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxUint32)
+
+	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
+	c.Assert(err, check.ErrorMatches, ".*invalid.*")
+
+	err = encoder.SetParams(map[string]string{"max-batch-size": "-1"})
+	c.Assert(err, check.ErrorMatches, ".*invalid.*")
+
+	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
+
+	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
+	c.Assert(err, check.IsNil)
+	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
+	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
 }
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {

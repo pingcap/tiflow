@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"sync"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/context"
@@ -36,7 +37,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new pipeline
-func NewPipeline(ctx context.Context) (context.Context, *Pipeline) {
+func NewPipeline(ctx context.Context, tickDuration time.Duration) (context.Context, *Pipeline) {
 	header := make(headRunner, 4)
 	runners := make([]runner, 0, 16)
 	runners = append(runners, header)
@@ -49,8 +50,22 @@ func NewPipeline(ctx context.Context) (context.Context, *Pipeline) {
 		p.close()
 	})
 	go func() {
-		<-ctx.Done()
-		p.close()
+		if tickDuration > 0 {
+			ticker := time.NewTicker(tickDuration)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					p.SendToFirstNode(TickMessage()) //nolint:errcheck
+				case <-ctx.Done():
+					p.close()
+					return
+				}
+			}
+		} else {
+			<-ctx.Done()
+			p.close()
+		}
 	}()
 	return ctx, p
 }
