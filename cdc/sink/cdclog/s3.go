@@ -260,13 +260,13 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		s.ddlEncoder = s.encoder()
 		firstCreated = true
 	}
+	// reset encoder buf for next round append
+	defer s.ddlEncoder.Reset()
+
 	_, err := s.ddlEncoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
-	data := s.ddlEncoder.MixedBuild(firstCreated)
-	// reset encoder buf for next round append
-	defer s.ddlEncoder.Reset()
 
 	var (
 		name     string
@@ -289,6 +289,10 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 	}
+
+	withVersion := firstCreated && size == 0
+	data := s.ddlEncoder.MixedBuild(withVersion)
+
 	if size == 0 || size > maxDDLFlushSize {
 		// no ddl file exists or
 		// exists file is oversized. we should generate a new file
