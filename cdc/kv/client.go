@@ -65,6 +65,8 @@ const (
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
 
 	// hard code switch
+	// true: use kv client v2, which has a region worker for each stream
+	// false: use kv client v1, which runs a goroutine for every single region
 	kvClientV2 = true
 )
 
