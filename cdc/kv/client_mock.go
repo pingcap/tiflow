@@ -25,7 +25,7 @@ type MockKVClient struct {
 }
 
 func NewMockKVClient() (*MockKVClient, error) {
-
+	panic("unimplemented")
 }
 
 func (m *MockKVClient) EventFeed(
@@ -37,9 +37,9 @@ func (m *MockKVClient) EventFeed(
 	isPullerInit PullerInitialization,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
-
+	panic("unimplemented")
 }
 
 func (m *MockKVClient) Close() error {
-
+	panic("unimplemented")
 }
