@@ -56,7 +56,8 @@ func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.
 }
 
 func (o *Owner) Run(ctx context.Context) error {
-	err := o.etcdWorker.Run(ctx, o.tickInterval)
+	// TODO pass session here
+	err := o.etcdWorker.Run(ctx, nil, o.tickInterval)
 	if err != nil {
 		return errors.Trace(err)
 	}
