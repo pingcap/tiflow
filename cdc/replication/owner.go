@@ -117,11 +117,15 @@ func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (n
 			o.changeFeedRunners[operation.changeFeedID] = operation.runner
 		case stopChangeFeedOperation:
 			log.Info("stop changeFeed", zap.String("cfID", operation.changeFeedID))
-			if _, ok := o.changeFeedRunners[operation.changeFeedID]; !ok {
-				log.Warn("stop changeFeed: changeFeed not found", zap.String("cfID", operation.changeFeedID))
+			// We try to close the changeFeedRunner only if it is not already closed.
+			// It will already have been closed if the changeFeedRunner itself has returned an error in the last tick,
+			// in which case, the changeFeedRunner is closed and an AdminStop is queued to notify the processors.
+			// Since the changeFeedManager is ignorant of the status of the changeFeedRunner, it will process the AdminStop
+			// and ask us to close the feed by returning a stopChangeFeedOperation.
+			if _, ok := o.changeFeedRunners[operation.changeFeedID]; ok {
+				o.changeFeedRunners[operation.changeFeedID].Close()
+				delete(o.changeFeedRunners, operation.changeFeedID)
 			}
-			o.changeFeedRunners[operation.changeFeedID].Close()
-			delete(o.changeFeedRunners, operation.changeFeedID)
 		default:
 			panic("unreachable")
 		}
@@ -130,6 +134,7 @@ func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (n
 	for cfID, runner := range o.changeFeedRunners {
 		err := runner.Tick(ctx)
 		if err != nil {
+			log.Warn("error running changeFeed owner", zap.Error(err))
 			err := o.changeFeedManager.AddAdminJob(ctx, model.AdminJob{
 				CfID:  cfID,
 				Type:  model.AdminStop,

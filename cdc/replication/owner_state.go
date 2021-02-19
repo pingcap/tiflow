@@ -268,6 +268,13 @@ func (s *ownerReactorState) GetPatches() []*orchestrator.DataPatch {
 }
 
 func (s *ownerReactorState) UpdateChangeFeedStatus(cfID model.ChangeFeedID, resolvedTs uint64, checkpointTs uint64) {
+	if resolvedTs == 0 || checkpointTs == 0 {
+		log.Panic("illegal changeFeedStatus",
+			zap.String("cfID", cfID),
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Uint64("checkpointTs", checkpointTs))
+	}
+
 	patch := &orchestrator.DataPatch{
 		Key: util.NewEtcdKey(kv.GetEtcdKeyChangeFeedStatus(cfID)),
 		Fun: func(old []byte) ([]byte, error) {
@@ -302,24 +309,6 @@ func (s *ownerReactorState) UpdateChangeFeedStatus(cfID model.ChangeFeedID, reso
 }
 
 func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID, replicaInfo model.TableReplicaInfo) {
-	captureTaskStatuses, ok := s.TaskStatuses[cfID]
-	if !ok {
-		log.Panic("owner bug: changeFeedState not found", zap.String("cfID", cfID))
-	}
-
-	taskStatus, ok := captureTaskStatuses[captureID]
-	if !ok {
-		log.Panic("owner bug: capture not found", zap.String("captureID", captureID))
-	}
-
-	if _, ok := taskStatus.Tables[tableID]; ok {
-		log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
-	}
-
-	if _, ok := taskStatus.Operation[tableID]; ok {
-		log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
-	}
-
 	patch := &orchestrator.DataPatch{
 		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
 		Fun: func(old []byte) (newValue []byte, err error) {
@@ -335,6 +324,10 @@ func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID mod
 				log.Panic("owner bug: duplicate dispatching", zap.Int64("tableID", tableID))
 			}
 
+			if taskStatus.Tables == nil {
+				taskStatus.Tables = make(map[model.TableID]*model.TableReplicaInfo)
+			}
+
 			taskStatus.Tables[tableID] = &replicaInfo
 			operation := &model.TableOperation{
 				Delete:     false,
@@ -343,6 +336,9 @@ func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID mod
 				Status:     model.OperDispatched,
 			}
 
+			if taskStatus.Operation == nil {
+				taskStatus.Operation = make(map[model.TableID]*model.TableOperation)
+			}
 			taskStatus.Operation[tableID] = operation
 
 			newValue, err = json.Marshal(&taskStatus)
@@ -562,6 +558,10 @@ func (s *ownerReactorState) GetTableProgress(cfID model.ChangeFeedID, tableID mo
 	m := s.tableToCaptureMapCache[cfID]
 	if captureID, ok := m[tableID]; ok {
 		position := s.TaskPositions[cfID][captureID]
+		if position == nil {
+			return nil
+		}
+
 		return &tableProgress{
 			resolvedTs:   position.ResolvedTs,
 			checkpointTs: position.CheckPointTs,

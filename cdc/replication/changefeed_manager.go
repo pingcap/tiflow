@@ -152,6 +152,11 @@ func (m *changeFeedManagerImpl) startChangeFeed(ctx context.Context, cfID model.
 		startTs = cfStatus.CheckpointTs
 	}
 
+	if startTs == 0 {
+		// TODO remove assertion for debugging
+		log.Panic("Unexpected startTs 0", zap.String("cfID", cfID))
+	}
+
 	log.Info("startChangeFeed", zap.String("cfID", cfID), zap.Uint64("startTs", startTs))
 	runner, err := m.bootstrapper.bootstrapChangeFeed(ctx, cfID, m.changeFeedInfos[cfID], startTs)
 	if err != nil {

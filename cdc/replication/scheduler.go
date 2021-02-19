@@ -148,6 +148,10 @@ func (s *schedulerImpl) cleanUpOperations() []model.TableID {
 func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 	workloads := make(map[model.CaptureID]int)
 
+	for captureID := range s.ownerState.Captures {
+		workloads[captureID] = 0
+	}
+
 	for _, captureStatuses := range s.ownerState.TaskStatuses {
 		for captureID, task := range captureStatuses {
 			workloads[captureID] += len(task.Tables)
@@ -159,6 +163,7 @@ func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 	for captureID, workload := range workloads {
 		if workload < minWorkLoad {
 			minCapture = captureID
+			minWorkLoad = workload
 		}
 	}
 

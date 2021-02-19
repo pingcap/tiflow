@@ -43,6 +43,7 @@ type ddlHandlerImpl struct {
 	ddlJobs    []*timodel.Job
 }
 
+// TODO test-case: resolvedTs is initialized to (startTs - 1)
 func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandlerImpl {
 	plr := puller.NewPuller(
 		ctx,
@@ -56,7 +57,7 @@ func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Cr
 
 	return &ddlHandlerImpl{
 		puller: plr,
-		resolvedTS: checkpointTS,
+		resolvedTS: checkpointTS - 1,
 	}
 }
 

@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
-	"math"
 )
 
 // changeFeedState is part of the replication model that implements the control logic of a changeFeed
@@ -26,7 +25,7 @@ type changeFeedState struct {
 	DDLResolvedTs uint64
 	Barriers      []*barrier
 
-	Scheduler scheduler
+	scheduler scheduler
 }
 
 type tableTask struct {
@@ -67,12 +66,12 @@ func newChangeFeedState(initTableTasks map[model.TableID]*tableTask, ddlStartTs 
 	return &changeFeedState{
 		TableTasks:    initTableTasks,
 		DDLResolvedTs: ddlStartTs,
-		Scheduler:     scheduler,
+		scheduler:     scheduler,
 	}
 }
 
 func (cf *changeFeedState) SyncTasks() {
-	cf.Scheduler.PutTasks(cf.TableTasks)
+	cf.scheduler.PutTasks(cf.TableTasks)
 }
 
 func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
@@ -161,11 +160,12 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 		}
 	}
 
-	cf.Scheduler.PutTasks(cf.TableTasks)
+	cf.scheduler.PutTasks(cf.TableTasks)
 }
 
+// TODO test-case: returned value is not zero
 func (cf *changeFeedState) ResolvedTs() uint64 {
-	resolvedTs := uint64(math.MaxUint64)
+	resolvedTs := cf.DDLResolvedTs
 
 	for _, table := range cf.TableTasks {
 		if resolvedTs > table.ResolvedTs {
@@ -181,9 +181,13 @@ func (cf *changeFeedState) ResolvedTs() uint64 {
 		resolvedTs = cf.DDLResolvedTs
 	}
 
+	if resolvedTs == 0 {
+		log.Panic("Unexpected resolvedTs")
+	}
 	return resolvedTs
 }
 
+// TODO test-case: returned value is not zero
 func (cf *changeFeedState) CheckpointTs() uint64 {
 	checkpointTs := cf.DDLResolvedTs
 
@@ -197,6 +201,9 @@ func (cf *changeFeedState) CheckpointTs() uint64 {
 		checkpointTs = cf.Barriers[0].BarrierTs - 1
 	}
 
+	if checkpointTs == 0 {
+		log.Panic("Unexpected checkpointTs", zap.Reflect("state", cf))
+	}
 	return checkpointTs
 }
 

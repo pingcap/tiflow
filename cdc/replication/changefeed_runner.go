@@ -127,8 +127,8 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, checkpointTs uint
 	for _, tableID := range allPartitions {
 		tableTask := &tableTask{
 			TableID:      tableID,
-			CheckpointTs: checkpointTs,
-			ResolvedTs:   checkpointTs,
+			CheckpointTs: checkpointTs - 1,
+			ResolvedTs:   checkpointTs - 1,
 		}
 
 		if _, ok := existingPartitions[tableID]; ok {
@@ -166,6 +166,10 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 	// Update per-table status
 	for _, tableID := range c.ownerState.GetChangeFeedActiveTables(c.cfID) {
 		progress := c.ownerState.GetTableProgress(c.cfID, tableID)
+		if progress == nil {
+			// Possibly the capture that is supposed to run the table is not running yet.
+			continue
+		}
 		c.changeFeedState.SetTableResolvedTs(tableID, progress.resolvedTs)
 		c.changeFeedState.SetTableCheckpointTs(tableID, progress.checkpointTs)
 	}
@@ -266,7 +270,7 @@ func (c *changeFeedRunnerImpl) preFilterDDL() {
 
 	for len(c.ddlJobQueue) > 0 {
 		nextJobCandidate := c.ddlJobQueue[0]
-		postSchemaName := nextJobCandidate.BinlogInfo.DBInfo.Name.String()
+		schemaName := nextJobCandidate.SchemaName
 		postTableName := nextJobCandidate.BinlogInfo.TableInfo.Name.String()
 
 		if nextJobCandidate.Type == timodel.ActionRenameTable {
@@ -275,14 +279,13 @@ func (c *changeFeedRunnerImpl) preFilterDDL() {
 				log.Panic("preFilterDDL: tableID not found", zap.Stringer("job", nextJobCandidate.Job))
 			}
 
-			preSchemaName := tableInfo.TableName.Schema
 			preTableName := tableInfo.TableName.Table
 
-			if shouldIgnoreTable(preSchemaName, preTableName) && shouldIgnoreTable(postSchemaName, postTableName) {
+			if shouldIgnoreTable(schemaName, preTableName) && shouldIgnoreTable(schemaName, postTableName) {
 				goto ignoreDDL
 			}
 		} else {
-			if shouldIgnoreTable(postSchemaName, postTableName) {
+			if shouldIgnoreTable(schemaName, postTableName) {
 				goto ignoreDDL
 			}
 		}
