@@ -202,6 +202,7 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 			Actions:  tableActions,
 		})
 
+		c.ddlJobQueue = append([]*ddlJobWithPreTableInfo{}, c.ddlJobQueue[1:]...)
 		c.preFilterDDL()
 	}
 

@@ -16,7 +16,6 @@ package replication
 import (
 	"context"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -42,6 +41,7 @@ type ddlHandlerImpl struct {
 
 	mu sync.Mutex
 	resolvedTS uint64
+	lastDDLTs  uint64 // TODO remove
 	ddlJobs    []*timodel.Job
 }
 
@@ -109,9 +109,13 @@ func (h *ddlHandlerImpl) receiveDDL(rawDDL *model.RawKVEntry) error {
 		return nil
 	}
 
-	log.Debug("DDL puller: received", zap.Reflect("job", job))
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if job.BinlogInfo.FinishedTS == h.lastDDLTs {
+		return nil
+	}
+	h.lastDDLTs = job.BinlogInfo.FinishedTS
 	h.ddlJobs = append(h.ddlJobs, job)
 	return nil
 }

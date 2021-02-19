@@ -406,6 +406,10 @@ func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureI
 				return nil, errors.Trace(err)
 			}
 
+			if taskStatus.Operation == nil {
+				taskStatus.Operation = make(map[model.TableID]*model.TableOperation)
+			}
+
 			taskStatus.Operation[tableID] = &model.TableOperation{
 				Delete: true,
 				// temporary, for testing with old processor

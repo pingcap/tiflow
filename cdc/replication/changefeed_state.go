@@ -211,7 +211,7 @@ func (cf *changeFeedState) SetTableResolvedTs(tableID model.TableID, resolvedTs 
 	tableTask, ok := cf.TableTasks[tableID]
 
 	if !ok {
-		log.Panic("changeFeedState: unknown table", zap.Int("tableID", int(tableID)))
+		return
 	}
 
 	tableTask.ResolvedTs = resolvedTs
@@ -221,7 +221,7 @@ func (cf *changeFeedState) SetTableCheckpointTs(tableID model.TableID, checkpoin
 	tableTask, ok := cf.TableTasks[tableID]
 
 	if !ok {
-		log.Panic("changeFeedState: unknown table", zap.Int("tableID", int(tableID)))
+		return
 	}
 
 	if tableTask.CheckpointTs > checkpointTs {
