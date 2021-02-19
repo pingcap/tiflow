@@ -518,6 +518,7 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 }
 
 func (s *etcdWorkerSuite) TestMergePatches(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		state   map[util.EtcdKey][]byte
 		patches []*DataPatch

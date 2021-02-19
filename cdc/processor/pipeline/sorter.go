@@ -83,7 +83,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			case <-stdCtx.Done():
 				return nil
 			case msg := <-sorter.Output():
-				if msg == nil{
+				if msg == nil {
 					continue
 				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
