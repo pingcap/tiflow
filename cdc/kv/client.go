@@ -67,7 +67,7 @@ const (
 	// hard code switch
 	// true: use kv client v2, which has a region worker for each stream
 	// false: use kv client v1, which runs a goroutine for every single region
-	kvClientV2 = true
+	enableKVClientV2 = true
 )
 
 type singleRegionInfo struct {
@@ -475,9 +475,9 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock      *regionspan.RegionRangeLock
-	enableOldValue bool
-	kvClientV2     bool
+	rangeLock        *regionspan.RegionRangeLock
+	enableOldValue   bool
+	enableKVClientV2 bool
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -520,7 +520,7 @@ func newEventFeedSession(
 		requestRangeCh:    make(chan rangeRequestTask, 16),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
-		kvClientV2:        kvClientV2,
+		enableKVClientV2:  enableKVClientV2,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
 		id:                id,
@@ -777,7 +777,7 @@ MainLoop:
 
 				limiter := s.client.getRegionLimiter(regionID)
 				g.Go(func() error {
-					if !s.kvClientV2 {
+					if !s.enableKVClientV2 {
 						return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 					}
 					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
