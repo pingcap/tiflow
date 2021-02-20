@@ -131,9 +131,6 @@ func (s *schedulerImpl) cleanUpOperations() []model.TableID {
 		for tableID, operation := range taskStatus.Operation {
 			if operation.Status == model.OperFinished {
 				s.ownerState.CleanOperation(s.cfID, captureID, tableID)
-				if operation.Delete {
-					s.ownerState.RemoveTable(s.cfID, captureID, tableID)
-				}
 			} else {
 				if operation.Delete {
 					pendingList = append(pendingList, tableID)
