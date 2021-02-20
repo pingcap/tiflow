@@ -32,3 +32,7 @@ func QuoteName(name string) string {
 func EscapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
 }
+
+func UnescapeName(name string) string {
+	return strings.Replace(name, "`", "", -1)
+}

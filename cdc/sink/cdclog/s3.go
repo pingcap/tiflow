@@ -346,8 +346,8 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 
 		info := &model.SimpleTableInfo{TableID: id, Schema: "", Table: ""}
 		if len(schemaAndTableName) != 0 {
-			info.Schema = quotes.EscapeName(schemaAndTableName[0])
-			info.Table = quotes.EscapeName(schemaAndTableName[1])
+			info.Schema = quotes.UnescapeName(schemaAndTableName[0])
+			info.Table = quotes.UnescapeName(schemaAndTableName[1])
 		}
 
 		tableInfo = append(tableInfo, info)
