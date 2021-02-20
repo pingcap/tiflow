@@ -541,7 +541,10 @@ func (r *emptyTxnReactor) Tick(ctx context.Context, state ReactorState) (nextSta
 	}
 	if r.tickNum == 1 {
 		// Simulating other client writes
-		r.cli.Put(ctx, "/key3", "123")
+		_, err := r.cli.Put(ctx, "/key3", "123")
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 
 		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
 			return []byte("123"), nil
