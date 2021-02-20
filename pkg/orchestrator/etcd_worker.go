@@ -316,15 +316,15 @@ func logEtcdOps(ops []clientv3.Op, commited bool) {
 	if log.GetLevel() != zapcore.DebugLevel {
 		return
 	}
+	log.Debug("[etcd worker] ==========Update State to ETCD==========")
 	for _, op := range ops {
-		log.Debug("[etcd worker] ==========Update State to ETCD==========")
 		if op.IsDelete() {
 			log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
 		} else {
 			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
 		}
-		log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
 	}
+	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
 }
 
 func (worker *EtcdWorker) cleanUp() {
