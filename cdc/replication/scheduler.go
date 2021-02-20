@@ -24,6 +24,7 @@ import (
 type scheduler interface {
 	GetTasks() (map[model.TableID]*tableTask, bool)
 	PutTasks(tables map[model.TableID]*tableTask)
+	IsReady() bool
 }
 
 type schedulerImpl struct {
@@ -142,6 +143,10 @@ func (s *schedulerImpl) cleanUpOperations() []model.TableID {
 	return pendingList
 }
 
+func (s *schedulerImpl) IsReady() bool {
+	return !s.cleanUpStaleCaptureStatus()
+}
+
 func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 	workloads := make(map[model.CaptureID]int)
 
@@ -151,7 +156,9 @@ func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 
 	for _, captureStatuses := range s.ownerState.TaskStatuses {
 		for captureID, task := range captureStatuses {
-			workloads[captureID] += len(task.Tables)
+			if _, ok := workloads[captureID]; ok {
+				workloads[captureID] += len(task.Tables)
+			}
 		}
 	}
 
@@ -165,4 +172,24 @@ func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 	}
 
 	return minCapture
+}
+
+func (s *schedulerImpl) cleanUpStaleCaptureStatus() bool {
+	if _, ok := s.ownerState.TaskStatuses[s.cfID]; !ok {
+		return false
+	}
+
+	hasPending := false
+	for captureID := range s.ownerState.TaskStatuses[s.cfID] {
+		if !s.ownerState.CaptureExists(captureID) {
+			log.Info("cleaning up stale capture",
+				zap.String("cfID", s.cfID),
+				zap.String("captureID", captureID))
+			s.ownerState.CleanUpTaskStatus(s.cfID, captureID)
+			s.ownerState.CleanUpTaskPosition(s.cfID, captureID)
+			hasPending = true
+		}
+	}
+
+	return hasPending
 }

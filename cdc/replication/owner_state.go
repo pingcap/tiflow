@@ -410,6 +410,15 @@ func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureI
 				taskStatus.Operation = make(map[model.TableID]*model.TableOperation)
 			}
 
+			if op, ok := taskStatus.Operation[tableID]; ok {
+				if op.Delete {
+					log.Panic("repeated deletion",
+						zap.String("cfID", cfID),
+						zap.String("captureID", captureID),
+						zap.Int("tableID", int(tableID)))
+				}
+			}
+
 			taskStatus.Operation[tableID] = &model.TableOperation{
 				Delete: true,
 				// temporary, for testing with old processor
@@ -445,6 +454,12 @@ func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID mo
 			}
 
 			delete(taskStatus.Operation, tableID)
+
+			if _, ok := taskStatus.Operation[tableID]; ok {
+				log.Panic("processor bug: table not cleaned before marking done flag",
+					zap.String("tableID", string(tableID)))
+			}
+
 			return json.Marshal(&taskStatus)
 		},
 	}
@@ -492,6 +507,68 @@ func (s *ownerReactorState) AlterChangeFeedRuntimeState(
 			}
 
 			return newBytes, nil
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) CleanUpTaskStatus(cfID model.ChangeFeedID, captureID model.CaptureID) {
+	taskStatuses, ok := s.TaskStatuses[cfID]
+	if !ok {
+		log.Debug("CleanUpTaskStatus: task statuses for the given change-feed not found",
+			zap.String("cfID", cfID),
+			zap.String("captureID", captureID))
+		return
+	}
+
+	if _, ok := taskStatuses[captureID]; !ok {
+		return
+	}
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
+		Fun: func(old []byte) (newValue []byte, err error) {
+			if old == nil {
+				log.Debug("CleanUpTaskStatus: already removed",
+					zap.String("cfID", cfID),
+					zap.String("captureID", captureID))
+				return nil, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
+			}
+
+			// remove the key
+			return nil, nil
+		},
+	}
+
+	s.patches = append(s.patches, patch)
+}
+
+func (s *ownerReactorState) CleanUpTaskPosition(cfID model.ChangeFeedID, captureID model.CaptureID) {
+	taskStatuses, ok := s.TaskStatuses[cfID]
+	if !ok {
+		log.Debug("CleanUpTaskPosition: task statuses for the given change-feed not found",
+			zap.String("cfID", cfID),
+			zap.String("captureID", captureID))
+		return
+	}
+
+	if _, ok := taskStatuses[captureID]; !ok {
+		return
+	}
+
+	patch := &orchestrator.DataPatch{
+		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskPosition(cfID, captureID)),
+		Fun: func(old []byte) (newValue []byte, err error) {
+			if old == nil {
+				log.Debug("CleanUpTaskPosition: already removed",
+					zap.String("cfID", cfID),
+					zap.String("captureID", captureID))
+				return nil, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
+			}
+
+			// remove the key
+			return nil, nil
 		},
 	}
 
@@ -546,12 +623,18 @@ func (s *ownerReactorState) CleanUpChangeFeedErrorHistory(cfID model.ChangeFeedI
 func (s *ownerReactorState) GetTableToCaptureMap(cfID model.ChangeFeedID) map[model.TableID]model.CaptureID {
 	tableToCaptureMap := make(map[model.TableID]model.CaptureID)
 	for captureID, taskStatus := range s.TaskStatuses[cfID] {
+		if !s.CaptureExists(captureID) {
+			continue
+		}
+
 		for tableID := range taskStatus.Tables {
 			tableToCaptureMap[tableID] = captureID
 		}
 
-		for tableID := range taskStatus.Operation {
-			tableToCaptureMap[tableID] = captureID
+		for tableID, op := range taskStatus.Operation {
+			if !op.Delete || op.Status != model.OperFinished {
+				tableToCaptureMap[tableID] = captureID
+			}
 		}
 	}
 
@@ -589,4 +672,9 @@ func (s *ownerReactorState) GetChangeFeedActiveTables(cfID model.ChangeFeedID) [
 	}
 
 	return tableIDs
+}
+
+func (s *ownerReactorState) CaptureExists(captureID model.CaptureID) bool {
+	_, ok := s.Captures[captureID]
+	return ok
 }

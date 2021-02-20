@@ -71,7 +71,9 @@ func newChangeFeedState(initTableTasks map[model.TableID]*tableTask, ddlStartTs 
 }
 
 func (cf *changeFeedState) SyncTasks() {
-	cf.scheduler.PutTasks(cf.TableTasks)
+	if cf.scheduler.IsReady() {
+		cf.scheduler.PutTasks(cf.TableTasks)
+	}
 }
 
 func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
@@ -159,8 +161,6 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 			log.Panic("changeFeedState: unknown action")
 		}
 	}
-
-	cf.scheduler.PutTasks(cf.TableTasks)
 }
 
 // TODO test-case: returned value is not zero

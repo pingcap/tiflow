@@ -322,10 +322,12 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
-	// TODO: remove this six line, applied operation should be removed by owner
-	if !p.changefeed.TaskStatus.SomeOperationsUnapplied() && len(p.changefeed.TaskStatus.Operation) != 0 {
+	removeTable := func(tableID model.TableID) {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
-			status.Operation = nil
+			if status.Tables == nil {
+				log.Panic("Tables not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
+			}
+			delete(status.Tables, tableID)
 			return status, nil
 		})
 	}
@@ -345,6 +347,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 						operation.Done = true
 						return nil
 					})
+					removeTable(tableID)
 					continue
 				}
 				switch opt.Status {
@@ -362,6 +365,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 							operation.Done = true
 							return nil
 						})
+						removeTable(tableID)
 					}
 					table.Cancel()
 					delete(p.tables, tableID)

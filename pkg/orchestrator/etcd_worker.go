@@ -208,7 +208,6 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
-
 	cmpSet := make(map[util.EtcdKey]clientv3.Cmp)
 	opSet := make(map[util.EtcdKey]clientv3.Op)
 
@@ -251,7 +250,6 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		}
 
 		var op clientv3.Op
-		log.Debug("write key", zap.String("key", patch.Key.String()))
 		if value != nil {
 			op = clientv3.OpPut(patch.Key.String(), string(value))
 		} else {
@@ -279,7 +277,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		return errors.Trace(err)
 	}
 
-	logEtcdOps(ops, resp.Succeeded)
+	//logEtcdOps(ops, resp.Succeeded)
 	if resp.Succeeded {
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil
