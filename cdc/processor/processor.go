@@ -584,7 +584,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 	}
 
 	cdcCtx := cdccontext.NewContext(ctx, &cdccontext.Vars{
-		CaptureAddr:   "TODO: CaptureAddr",
+		CaptureAddr:   p.captureInfo.AdvertiseAddr,
 		PDClient:      p.pdCli,
 		SchemaStorage: p.schemaStorage,
 		Config:        p.changefeed.Info.Config,
