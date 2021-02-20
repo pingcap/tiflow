@@ -263,11 +263,6 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	// reset encoder buf for next round append
 	defer s.ddlEncoder.Reset()
 
-	_, err := s.ddlEncoder.EncodeDDLEvent(ddl)
-	if err != nil {
-		return err
-	}
-
 	var (
 		name     string
 		size     int64
@@ -277,7 +272,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		SubDir:    ddlEventsDir,
 		ListCount: 1,
 	}
-	err = s.storage.WalkDir(ctx, opt, func(key string, fileSize int64) error {
+	err := s.storage.WalkDir(ctx, opt, func(key string, fileSize int64) error {
 		log.Debug("[EmitDDLEvent] list content from s3",
 			zap.String("key", key),
 			zap.Int64("size", size),
@@ -290,7 +285,23 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 	}
 
+	// only reboot and size = 0 should we add version to s3
 	withVersion := firstCreated && size == 0
+
+	// clean ddlEncoder version part
+	// if we reboot cdc and size > 0, we should skip version part in
+	// JSONEventBatchEncoder.keyBuf, JSONEventBatchEncoder consturctor func has
+	// alreay filled with version part, see NewJSONEventBatchEncoder and
+	// JSONEventBatchEncoder.MixedBuild
+	if firstCreated && size > 0 {
+		s.ddlEncoder.Reset()
+	}
+
+	_, er := s.ddlEncoder.EncodeDDLEvent(ddl)
+	if er != nil {
+		return er
+	}
+
 	data := s.ddlEncoder.MixedBuild(withVersion)
 
 	if size == 0 || size > maxDDLFlushSize {
