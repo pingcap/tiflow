@@ -167,6 +167,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		for {
 			select {
 			case e := <-eventCh:
+				// Note: puller will process anything received from event channel.
+				// If one key is not expected in given region, it must be filtered
+				// out before sending to puller.
 				if e.Val != nil {
 					metricEventCounterKv.Inc()
 					if err := p.buffer.AddEntry(ctx, *e); err != nil {
