@@ -517,6 +517,148 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+type emptyTxnReactor struct {
+	state   *commonReactorState
+	tickNum int
+	prefix  string
+	cli     *etcd.Client
+}
+
+func (r *emptyTxnReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
+	r.state = state.(*commonReactorState)
+	if r.tickNum == 0 {
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
+			return []byte("abc"), nil
+		})
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
+			return []byte("123"), nil
+		})
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
+			return nil, nil
+		})
+		r.tickNum++
+		return r.state, nil
+	}
+	if r.tickNum == 1 {
+		// Simulating other client writes
+		r.cli.Put(ctx, "/key3", "123")
+
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
+			return []byte("123"), nil
+		})
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
+			return nil, nil
+		})
+		r.tickNum++
+		return r.state, nil
+	}
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
+		return nil, nil
+	})
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
+		return []byte("123"), nil
+	})
+	return r.state, cerrors.ErrReactorFinished
+}
+
+func (s *etcdWorkerSuite) TestEmptyTxn(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	newClient, closer := setUpTest(c)
+	defer closer()
+
+	cli := newClient()
+	prefix := testEtcdKeyPrefix + "/empty_txn"
+	reactor, err := NewEtcdWorker(cli, prefix, &emptyTxnReactor{
+		prefix: prefix,
+		cli:    cli,
+	}, &commonReactorState{
+		state: make(map[string]string),
+	})
+	c.Assert(err, check.IsNil)
+	err = reactor.Run(ctx, nil, 10*time.Millisecond)
+	c.Assert(err, check.IsNil)
+	resp, err := cli.Get(ctx, prefix+"/key1")
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Kvs, check.HasLen, 0)
+	resp, err = cli.Get(ctx, prefix+"/key2")
+	c.Assert(err, check.IsNil)
+	c.Assert(string(resp.Kvs[0].Key), check.Equals, "/cdc_etcd_worker_test/empty_txn/key2")
+	c.Assert(string(resp.Kvs[0].Value), check.Equals, "123")
+	err = cli.Unwrap().Close()
+	c.Assert(err, check.IsNil)
+}
+
+type emptyOrNilReactor struct {
+	state   *commonReactorState
+	tickNum int
+	prefix  string
+}
+
+func (r *emptyOrNilReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
+	r.state = state.(*commonReactorState)
+	if r.tickNum == 0 {
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
+			return []byte(""), nil
+		})
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
+			return nil, nil
+		})
+		r.tickNum++
+		return r.state, nil
+	}
+	if r.tickNum == 1 {
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
+			return nil, nil
+		})
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
+			return []byte(""), nil
+		})
+		r.tickNum++
+		return r.state, nil
+	}
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
+		return []byte(""), nil
+	})
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
+		return nil, nil
+	})
+	return r.state, cerrors.ErrReactorFinished
+}
+
+func (s *etcdWorkerSuite) TestEmptyOrNil(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	newClient, closer := setUpTest(c)
+	defer closer()
+
+	cli := newClient()
+	prefix := testEtcdKeyPrefix + "/emptyOrNil"
+	reactor, err := NewEtcdWorker(cli, prefix, &emptyOrNilReactor{
+		prefix: prefix,
+	}, &commonReactorState{
+		state: make(map[string]string),
+	})
+	c.Assert(err, check.IsNil)
+	err = reactor.Run(ctx, nil, 10*time.Millisecond)
+	c.Assert(err, check.IsNil)
+	resp, err := cli.Get(ctx, prefix+"/key1")
+	c.Assert(err, check.IsNil)
+	c.Assert(string(resp.Kvs[0].Key), check.Equals, "/cdc_etcd_worker_test/emptyOrNil/key1")
+	c.Assert(string(resp.Kvs[0].Value), check.Equals, "")
+	resp, err = cli.Get(ctx, prefix+"/key2")
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Kvs, check.HasLen, 0)
+	err = cli.Unwrap().Close()
+	c.Assert(err, check.IsNil)
+}
+
 func (s *etcdWorkerSuite) TestMergePatches(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testCases := []struct {
