@@ -74,6 +74,8 @@ type processor struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 
+	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (*tablepipeline.TablePipeline, error)
+
 	metricResolvedTsGauge       prometheus.Gauge
 	metricResolvedTsLagGauge    prometheus.Gauge
 	metricCheckpointTsGauge     prometheus.Gauge
@@ -89,7 +91,7 @@ func newProcessor(
 	credential *security.Credential,
 	captureInfo *model.CaptureInfo,
 ) *processor {
-	return &processor{
+	p := &processor{
 		pdCli:       pdCli,
 		credential:  credential,
 		captureInfo: captureInfo,
@@ -105,6 +107,8 @@ func newProcessor(
 		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
 		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
 	}
+	p.createTablePipeline = p.createTablePipelineImpl
+	return p
 }
 
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
@@ -178,23 +182,23 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 }
 
 func (p *processor) initPosition() bool {
-	if p.changefeed.TaskPosition == nil {
-		if !p.firstTick {
-			log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
-		}
-		checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
-			if position == nil {
-				return &model.TaskPosition{
-					CheckPointTs: checkpointTs,
-					ResolvedTs:   checkpointTs,
-				}, nil
-			}
-			return position, nil
-		})
-		return true
+	if p.changefeed.TaskPosition != nil {
+		return false
 	}
-	return false
+	if !p.firstTick {
+		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
+	}
+	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+		if position == nil {
+			return &model.TaskPosition{
+				CheckPointTs: checkpointTs,
+				ResolvedTs:   checkpointTs,
+			}, nil
+		}
+		return position, nil
+	})
+	return true
 }
 
 func (p *processor) lazyInit(ctx context.Context) error {
@@ -573,7 +577,6 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 	}
 
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
-	globalResolvedTs := p.changefeed.Status.ResolvedTs
 
 	if replicaInfo.StartTs < globalCheckpointTs {
 		log.Warn("addTable: startTs < checkpoint",
@@ -582,7 +585,15 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 			zap.Uint64("checkpoint", globalCheckpointTs),
 			zap.Uint64("startTs", replicaInfo.StartTs))
 	}
+	table, err := p.createTablePipeline(ctx, tableID, replicaInfo)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	p.tables[tableID] = table
+	return nil
+}
 
+func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (*tablepipeline.TablePipeline, error) {
 	cdcCtx := cdccontext.NewContext(ctx, &cdccontext.Vars{
 		CaptureAddr:   p.captureInfo.AdvertiseAddr,
 		PDClient:      p.pdCli,
@@ -591,7 +602,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 	})
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	var tableName string
 	err = retry.Run(time.Millisecond*5, 3, func() error {
@@ -636,18 +647,16 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
 			util.ZapFieldChangefeed(ctx),
 			zap.String("name", table.Name()),
-			zap.Any("replicaInfo", replicaInfo),
-			zap.Uint64("globalResolvedTs", globalResolvedTs))
+			zap.Any("replicaInfo", replicaInfo))
 	}()
 
 	log.Debug("Add table pipeline", zap.Int64("tableID", tableID),
 		util.ZapFieldChangefeed(ctx),
 		zap.String("name", table.Name()),
 		zap.Any("replicaInfo", replicaInfo),
-		zap.Uint64("globalResolvedTs", globalResolvedTs))
+		zap.Uint64("globalResolvedTs", p.changefeed.Status.ResolvedTs))
 
-	p.tables[tableID] = table
-	return nil
+	return table, nil
 }
 
 func (p *processor) doGCSchemaStorage() error {
