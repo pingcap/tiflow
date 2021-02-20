@@ -33,6 +33,7 @@ func EscapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
 }
 
+// UnescapeName repalce all "`" in name with ""
 func UnescapeName(name string) string {
 	return strings.Replace(name, "`", "", -1)
 }
