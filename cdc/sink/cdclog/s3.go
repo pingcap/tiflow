@@ -339,6 +339,20 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 		return e
 	}
 
+	// try to add to old meta to sinkTableInfo, or any crash or restart will lose
+	// meta info
+	for id, name := range oldMeta.Names {
+		schemaAndTableName := strings.Split(name, ".")
+
+		info := &model.SimpleTableInfo{TableID: id, Schema: "", Table: ""}
+		if len(schemaAndTableName) != 0 {
+			info.Schema = quotes.EscapeName(schemaAndTableName[0])
+			info.Table = quotes.EscapeName(schemaAndTableName[1])
+		}
+
+		tableInfo = append(tableInfo, info)
+	}
+
 	if tableInfo != nil {
 		for _, table := range tableInfo {
 			if table != nil {

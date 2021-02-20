@@ -377,12 +377,6 @@ func (o *Owner) newChangeFeed(
 
 	}
 
-	// try to add to existingTables to sinkTableInfo, or any crash or restart will lose
-	// meta info
-	for tid := range existingTables {
-		sinkTableInfo = append(sinkTableInfo, &model.SimpleTableInfo{TableID: tid})
-	}
-
 	errCh := make(chan error, 1)
 
 	primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
