@@ -1392,6 +1392,7 @@ func (s *eventFeedSession) singleEventFeed(
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
 					comparableKey := regionspan.ToComparableKey(entry.GetKey())
+					// key for initialized event is nil
 					if !regionspan.KeyInSpan(comparableKey, span) && entry.Type != cdcpb.Event_INITIALIZED {
 						continue
 					}
