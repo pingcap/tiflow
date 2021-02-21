@@ -18,13 +18,13 @@ import "github.com/pingcap/ticdc/cdc/model"
 // MessageType is the type of Message
 type MessageType int
 
+// types of Message
 const (
-	// MessageTypeUnknown is unknown message type
 	MessageTypeUnknown MessageType = iota
-	// MessageTypeCommand is command message type
 	MessageTypeCommand
-	// MessageTypePolymorphicEvent is the row changed event message type
 	MessageTypePolymorphicEvent
+	MessageTypeBarrier
+	MessageTypeTick
 )
 
 // Message is a vehicle for transferring information between nodes
@@ -36,6 +36,8 @@ type Message struct {
 	Command *Command
 	// PolymorphicEvent represents the row change event
 	PolymorphicEvent *model.PolymorphicEvent
+	// BarrierTs
+	BarrierTs model.Ts
 }
 
 // PolymorphicEventMessage creates the message of PolymorphicEvent
@@ -54,19 +56,33 @@ func CommandMessage(command *Command) *Message {
 	}
 }
 
+// BarrierMessage creates the message of Command
+func BarrierMessage(barrierTs model.Ts) *Message {
+	return &Message{
+		Tp:        MessageTypeBarrier,
+		BarrierTs: barrierTs,
+	}
+}
+
+// TickMessage creates the message of Tick
+func TickMessage() *Message {
+	return &Message{
+		Tp: MessageTypeTick,
+	}
+}
+
 // CommandType is the type of Command
 type CommandType int
 
 const (
 	// CommandTypeUnknown is unknown message type
 	CommandTypeUnknown CommandType = iota
-	// CommandTypeShouldStop means the table pipeline should stop soon
-	CommandTypeShouldStop
-	// CommandTypeStopped means the table pipeline is stopped
-	CommandTypeStopped
+	// CommandTypeStopAtTs means the table pipeline should stop at the specified Ts
+	CommandTypeStopAtTs
 )
 
 // Command is the command about table pipeline
 type Command struct {
-	Tp CommandType
+	Tp        CommandType
+	StoppedTs model.Ts
 }
