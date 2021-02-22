@@ -108,6 +108,7 @@ func newProcessor(
 }
 
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
+	log.Debug("Processor tick")
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
 		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) && cerror.ErrReactorFinished.NotEqual(cause) {

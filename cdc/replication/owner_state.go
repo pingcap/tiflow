@@ -39,6 +39,7 @@ type ownerReactorState struct {
 
 	patches                []*orchestrator.DataPatch
 	tableToCaptureMapCache map[model.ChangeFeedID]map[model.TableID]model.CaptureID
+	newCaptureHandler      func (captureID model.CaptureID)
 
 	isInitialized bool
 }
@@ -70,9 +71,11 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 	}
 
 	switch k.Tp {
+	/*
 	case etcd.CDCKeyTypeOwner:
 		log.Warn("Owner key is modified unexpectedly", zap.ByteString("owner", value))
 		return cerrors.ErrOwnerChangedUnexpectedly.GenWithStackByArgs()
+	 */
 	case etcd.CDCKeyTypeCapture:
 		captureID := k.CaptureID
 
@@ -103,6 +106,12 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		}
 
 		s.Captures[captureID] = &newCaptureInfo
+
+		if s.newCaptureHandler != nil {
+			// Notify about the capture-added event
+			s.newCaptureHandler(captureID)
+		}
+
 		return nil
 	case etcd.CDCKeyTypeChangeFeedStatus:
 		changefeedID := k.ChangefeedID
@@ -554,6 +563,38 @@ func (s *ownerReactorState) CleanUpTaskPosition(cfID model.ChangeFeedID, capture
 	s.patches = append(s.patches, patch)
 }
 
+func (s *ownerReactorState) GetCaptureTables(cfID model.ChangeFeedID, captureID model.CaptureID) []model.TableID {
+	var ret []model.TableID
+
+	taskStatuses, ok := s.TaskStatuses[cfID]
+	if !ok {
+		return ret
+	}
+
+	taskStatus, ok := taskStatuses[captureID]
+	if !ok {
+		return ret
+	}
+
+	tableIdSet := make(map[model.TableID]struct{})
+
+	for tableID := range taskStatus.Tables {
+		tableIdSet[tableID] = struct{}{}
+	}
+
+	for tableID, op := range taskStatus.Operation {
+		if !op.Delete && op.Status != model.OperFinished {
+			tableIdSet[tableID] = struct{}{}
+		}
+	}
+
+	for tableID := range tableIdSet {
+		ret = append(ret, tableID)
+	}
+
+	return ret
+}
+
 func (s *ownerReactorState) CleanUpChangeFeedErrorHistory(cfID model.ChangeFeedID) {
 	_, ok := s.ChangeFeedInfos[cfID]
 	if !ok {
@@ -656,4 +697,8 @@ func (s *ownerReactorState) GetChangeFeedActiveTables(cfID model.ChangeFeedID) [
 func (s *ownerReactorState) CaptureExists(captureID model.CaptureID) bool {
 	_, ok := s.Captures[captureID]
 	return ok
+}
+
+func (s *ownerReactorState) SetNewCaptureHandler(handler func (id model.CaptureID)) {
+	s.newCaptureHandler = handler
 }

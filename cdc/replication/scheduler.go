@@ -15,6 +15,9 @@ package replication
 
 import (
 	"math"
+	"math/rand"
+	"sync"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -24,19 +27,36 @@ import (
 type scheduler interface {
 	GetTasks() (map[model.TableID]*tableTask, bool)
 	PutTasks(tables map[model.TableID]*tableTask)
+	SetAffinity(tableID model.TableID, captureID model.CaptureID, ttl int)
 	IsReady() bool
 }
 
 type schedulerImpl struct {
 	ownerState *ownerReactorState
 	cfID       model.ChangeFeedID
+
+	mu         sync.Mutex
+	affinities map[model.TableID]*affinity
+
+	needRebalance bool
+}
+
+type affinity struct {
+	targetCapture model.CaptureID
+	deadline      time.Time
 }
 
 func newScheduler(ownerState *ownerReactorState, cfID model.ChangeFeedID) *schedulerImpl {
-	return &schedulerImpl{
+	ret := &schedulerImpl{
 		ownerState: ownerState,
 		cfID:       cfID,
 	}
+
+	ownerState.SetNewCaptureHandler(func(captureID model.CaptureID) {
+		ret.onNewCapture(captureID)
+	})
+
+	return ret
 }
 
 func (s *schedulerImpl) GetTasks() (map[model.TableID]*tableTask, bool) {
@@ -58,7 +78,7 @@ func (s *schedulerImpl) GetTasks() (map[model.TableID]*tableTask, bool) {
 		ret[tableID] = &tableTask{
 			TableID:      tableID,
 			CheckpointTs: position.CheckPointTs,
-			ResolvedTs:   0,
+			ResolvedTs:   position.ResolvedTs,
 		}
 	}
 
@@ -89,6 +109,14 @@ func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 			if target == "" {
 				log.Warn("no capture is active")
 				break
+			}
+
+			if affCapture := s.lookUpAffinity(tableID); affCapture != "" {
+				log.Info("Dispatching table using affinity",
+					zap.String("cfID", s.cfID),
+					zap.String("tableID", string(tableID)),
+					zap.String("target-capture", affCapture))
+				target = affCapture
 			}
 
 			replicaInfo := model.TableReplicaInfo{
@@ -122,6 +150,11 @@ func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 			s.ownerState.StartDeletingTable(s.cfID, captureID, tableID)
 		}
 	}
+
+	if s.needRebalance {
+		s.needRebalance = false
+		s.triggerRebalance()
+	}
 }
 
 // cleanUpOperations returns tablesIDs of tables that are NOT suitable for immediate redispatching.
@@ -145,6 +178,92 @@ func (s *schedulerImpl) cleanUpOperations() []model.TableID {
 
 func (s *schedulerImpl) IsReady() bool {
 	return !s.cleanUpStaleCaptureStatus()
+}
+
+func (s *schedulerImpl) SetAffinity(tableID model.TableID, captureID model.CaptureID, ttl int) {
+	log.Info("Setting table affinity",
+		zap.String("cfID", s.cfID),
+		zap.String("captureID", captureID),
+		zap.Int("tableID", int(tableID)),
+		zap.Int("ttl", ttl))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.affinities[tableID] = &affinity{
+		targetCapture: captureID,
+		deadline:      time.Now().Add(time.Duration(ttl) * time.Second),
+	}
+}
+
+func (s *schedulerImpl) onNewCapture(_ model.CaptureID) {
+	s.needRebalance = true
+}
+
+func (s *schedulerImpl) lookUpAffinity(tableID model.TableID) model.CaptureID {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.cleanUpAffinities()
+
+	af, ok := s.affinities[tableID]
+	if !ok {
+		return ""
+	}
+
+	if !s.ownerState.CaptureExists(af.targetCapture) {
+		delete(s.affinities, tableID)
+		return ""
+	}
+
+	return af.targetCapture
+}
+
+// cleanUpAffinities must be called with mu locked.
+func (s *schedulerImpl) cleanUpAffinities() {
+	for tableID, af := range s.affinities {
+		if af.deadline.Before(time.Now()) {
+			delete(s.affinities, tableID)
+		}
+	}
+}
+
+func (s *schedulerImpl) triggerRebalance() {
+	tableToCaptureMap := s.ownerState.GetTableToCaptureMap(s.cfID)
+	totalTableNum := len(tableToCaptureMap)
+	captureNum := len(s.ownerState.Captures)
+
+	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
+
+	log.Info("Start rebalancing",
+		zap.String("cfID", s.cfID),
+		zap.Int("table-num", totalTableNum),
+		zap.Int("capture-num", captureNum),
+		zap.Int("target-limit", upperLimitPerCapture))
+
+	for captureID := range s.ownerState.Captures {
+		if !s.ownerState.CaptureExists(captureID) {
+			log.Debug("triggerRebalance: capture not found", zap.String("captureID", captureID))
+			continue
+		}
+
+		captureTables := s.ownerState.GetCaptureTables(s.cfID, captureID)
+
+		// Use rand.Perm as a randomization source for choosing victims uniformly.
+		randPerm := rand.Perm(len(captureTables))
+
+		for i := 0; i < len(captureTables) - upperLimitPerCapture; i++ {
+			victimIdx := randPerm[i]
+			victimTableID := captureTables[victimIdx]
+
+			log.Info("triggerRebalance: Stopping table",
+				zap.Int64("table-id", victimTableID),
+				zap.String("capture", captureID),
+				zap.String("changefeed-id", s.cfID))
+
+			s.ownerState.StartDeletingTable(s.cfID, captureID, victimTableID)
+		}
+	}
 }
 
 func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
