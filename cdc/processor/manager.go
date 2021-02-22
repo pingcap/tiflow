@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -31,6 +30,20 @@ import (
 	"go.uber.org/zap"
 )
 
+type commandTp int
+
+const (
+	commandTpUnknow commandTp = iota
+	commandTpClose
+	commandTpWriteDebugInfo
+)
+
+type command struct {
+	tp   commandTp
+	load interface{}
+	done chan struct{}
+}
+
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager struct {
 	processors map[model.ChangeFeedID]*processor
@@ -39,12 +52,14 @@ type Manager struct {
 	credential  *security.Credential
 	captureInfo *model.CaptureInfo
 
-	debugInfoCh chan struct {
-		io.Writer
-		done chan struct{}
-	}
+	commandQueue chan *command
 
-	close int32
+	newProcessor func(
+		pdCli pd.Client,
+		changefeedID model.ChangeFeedID,
+		credential *security.Credential,
+		captureInfo *model.CaptureInfo,
+	) *processor
 }
 
 // NewManager creates a new processor manager
@@ -55,21 +70,16 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 		credential:  credential,
 		captureInfo: captureInfo,
 
-		debugInfoCh: make(chan struct {
-			io.Writer
-			done chan struct{}
-		}),
+		commandQueue: make(chan *command, 4),
+		newProcessor: newProcessor,
 	}
 }
 
 // Tick implements the `orchestrator.State` interface
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*globalState)
-	if atomic.LoadInt32(&m.close) != 0 {
-		for changefeedID := range m.processors {
-			m.closeProcessor(changefeedID)
-		}
-		return state, cerrors.ErrReactorFinished
+	if err := m.handleCommand(); err != nil {
+		return state, err
 	}
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
@@ -81,7 +91,7 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 		processor, exist := m.processors[changefeedID]
 		if !exist {
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = newProcessor(m.pdCli, changefeedID, m.credential, m.captureInfo)
+			processor = m.newProcessor(m.pdCli, changefeedID, m.credential, m.captureInfo)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
@@ -100,7 +110,6 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 			}
 		}
 	}
-	m.handleDebugInfo()
 	return state, nil
 }
 
@@ -116,22 +125,13 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 
 // AsyncClose sends a close signal to Manager and closing all processors
 func (m *Manager) AsyncClose() {
-	atomic.StoreInt32(&m.close, 1)
+	m.sendCommand(commandTpClose, nil)
 }
 
 // WriteDebugInfo write the debug info to Writer
 func (m *Manager) WriteDebugInfo(w io.Writer) {
 	timeout := time.Second * 3
-	done := make(chan struct{})
-	select {
-	case m.debugInfoCh <- struct {
-		io.Writer
-		done chan struct{}
-	}{Writer: w, done: done}:
-	case <-time.After(timeout):
-		fmt.Fprintf(w, "failed to print debug info\n")
-	}
-
+	done := m.sendCommand(commandTpWriteDebugInfo, w)
 	// wait the debug info printed
 	select {
 	case <-done:
@@ -140,20 +140,44 @@ func (m *Manager) WriteDebugInfo(w io.Writer) {
 	}
 }
 
-func (m *Manager) handleDebugInfo() {
-	var debugWriter struct {
-		io.Writer
-		done chan struct{}
-	}
+func (m *Manager) sendCommand(tp commandTp, load interface{}) chan struct{} {
+	cmd := &command{tp: tp, load: load, done: make(chan struct{})}
 	select {
-	case debugWriter = <-m.debugInfoCh:
+	case m.commandQueue <- cmd:
 	default:
-		return
+		close(cmd.done)
+		log.Warn("the command queue is full, ignore this command", zap.Any("command", cmd))
 	}
+	return cmd.done
+}
+
+func (m *Manager) handleCommand() error {
+	var cmd *command
+	select {
+	case cmd = <-m.commandQueue:
+	default:
+		return nil
+	}
+	defer close(cmd.done)
+	switch cmd.tp {
+	case commandTpClose:
+		for changefeedID := range m.processors {
+			m.closeProcessor(changefeedID)
+		}
+		return cerrors.ErrReactorFinished
+	case commandTpWriteDebugInfo:
+		w := cmd.load.(io.Writer)
+		m.writeDebugInfo(w)
+	default:
+		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
+	}
+	return nil
+}
+
+func (m *Manager) writeDebugInfo(w io.Writer) {
 	for changefeedID, processor := range m.processors {
-		fmt.Fprintf(debugWriter, "changefeedID: %s\n", changefeedID)
-		processor.WriteDebugInfo(debugWriter)
+		fmt.Fprintf(w, "changefeedID: %s\n", changefeedID)
+		processor.WriteDebugInfo(w)
+		fmt.Fprintf(w, "\n")
 	}
-	fmt.Fprintf(debugWriter, "\n\n")
-	close(debugWriter.done)
 }
