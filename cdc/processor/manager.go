@@ -33,7 +33,7 @@ import (
 type commandTp int
 
 const (
-	commandTpUnknow commandTp = iota
+	commandTpUnknow commandTp = iota //nolint:varcheck,deadcode
 	commandTpClose
 	commandTpWriteDebugInfo
 )

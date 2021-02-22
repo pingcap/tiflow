@@ -76,7 +76,7 @@ func newProcessor4Test() *processor {
 func applyPatches(c *check.C, state *changefeedState) {
 	for _, patch := range state.pendingPatches {
 		key := &etcd.CDCKey{}
-		key.Parse(patch.Key.String())
+		c.Assert(key.Parse(patch.Key.String()), check.IsNil)
 		var value []byte
 		var err error
 		switch key.Tp {
