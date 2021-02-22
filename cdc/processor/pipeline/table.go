@@ -44,6 +44,7 @@ type TablePipeline interface {
 	Cancel()
 	Wait() []error
 }
+
 type tablePipelineImpl struct {
 	p *pipeline.Pipeline
 

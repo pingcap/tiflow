@@ -336,7 +336,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 }
 
 func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
-	//TODO
+	// TODO
 }
 
 func (s *processorSuite) TestInitTable(c *check.C) {

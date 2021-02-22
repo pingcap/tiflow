@@ -643,6 +643,7 @@ type SchemaStorage interface {
 	ResolvedTs() uint64
 	DoGC(ts uint64)
 }
+
 type schemaStorageImpl struct {
 	snaps      []*schemaSnapshot
 	snapsMu    sync.RWMutex
