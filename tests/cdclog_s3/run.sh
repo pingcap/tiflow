@@ -113,4 +113,5 @@ function cdclog_test() {
 trap stop EXIT
 prepare $*
 cdclog_test $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
