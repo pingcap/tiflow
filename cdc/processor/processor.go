@@ -33,7 +33,6 @@ import (
 	cdccontext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -58,13 +57,13 @@ const (
 type processor struct {
 	changefeed *changefeedState
 
-	tables map[model.TableID]*tablepipeline.TablePipeline
+	tables map[model.TableID]tablepipeline.TablePipeline
 
 	pdCli         pd.Client
 	limitter      *puller.BlurResourceLimitter
 	credential    *security.Credential
 	captureInfo   *model.CaptureInfo
-	schemaStorage *entry.SchemaStorage
+	schemaStorage entry.SchemaStorage
 	filter        *filter.Filter
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
@@ -74,7 +73,8 @@ type processor struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 
-	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (*tablepipeline.TablePipeline, error)
+	lazyInit            func(ctx context.Context) error
+	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
 	metricResolvedTsGauge       prometheus.Gauge
 	metricResolvedTsLagGauge    prometheus.Gauge
@@ -96,7 +96,7 @@ func newProcessor(
 		credential:  credential,
 		captureInfo: captureInfo,
 		limitter:    puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
-		tables:      make(map[model.TableID]*tablepipeline.TablePipeline),
+		tables:      make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:       make(chan error, 1),
 		firstTick:   true,
 
@@ -108,39 +108,41 @@ func newProcessor(
 		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
+	p.lazyInit = p.lazyInitImpl
 	return p
 }
 
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
-		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) && cerror.ErrReactorFinished.NotEqual(cause) {
-			p.metricProcessorErrorCounter.Inc()
-			// record error information in etcd
-			var code string
-			if terror, ok := err.(*errors.Error); ok {
-				code = string(terror.RFCCode())
-			} else {
-				code = string(cerror.ErrProcessorUnknown.RFCCode())
-			}
-			state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
-				if position == nil {
-					position = &model.TaskPosition{}
-				}
-				position.Error = &model.RunningError{
-					Addr:    p.captureInfo.AdvertiseAddr,
-					Code:    code,
-					Message: err.Error(),
-				}
-				return position, nil
-			})
-			log.Error("run processor failed",
-				zap.String("changefeed", p.changefeed.ID),
-				zap.String("capture-id", p.captureInfo.ID),
-				util.ZapFieldCapture(ctx),
-				zap.Error(err))
+		if cause == context.Canceled || cerror.ErrAdminStopProcessor.Equal(cause) || cerror.ErrReactorFinished.Equal(cause) {
+			return state, cerror.ErrReactorFinished
 		}
-		return state, cerrors.ErrReactorFinished
+		p.metricProcessorErrorCounter.Inc()
+		// record error information in etcd
+		var code string
+		if terror, ok := err.(*errors.Error); ok {
+			code = string(terror.RFCCode())
+		} else {
+			code = string(cerror.ErrProcessorUnknown.RFCCode())
+		}
+		state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Error = &model.RunningError{
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, nil
+		})
+		log.Error("run processor failed",
+			zap.String("changefeed", p.changefeed.ID),
+			zap.String("capture-id", p.captureInfo.ID),
+			util.ZapFieldCapture(ctx),
+			zap.Error(err))
+		return state, cerror.ErrReactorFinished
 	}
 	p.firstTick = false
 	return state, nil
@@ -201,7 +203,7 @@ func (p *processor) initPosition() bool {
 	return true
 }
 
-func (p *processor) lazyInit(ctx context.Context) error {
+func (p *processor) lazyInitImpl(ctx context.Context) error {
 	if !p.firstTick {
 		return nil
 	}
@@ -307,7 +309,7 @@ func (p *processor) handleErrorCh(ctx context.Context) error {
 		zap.String("changefeed", p.changefeed.ID),
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("captureAddr", p.captureInfo.AdvertiseAddr))
-	return cerrors.ErrReactorFinished
+	return cerror.ErrReactorFinished
 }
 
 func (p *processor) handleTableOperation(ctx context.Context) error {
@@ -339,43 +341,45 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 		}
 		localCheckpointTs := p.changefeed.TaskPosition.CheckPointTs
 		if opt.Delete {
-			if opt.BoundaryTs <= localCheckpointTs {
-				table, exist := p.tables[tableID]
-				if !exist {
-					log.Warn("table which will be deleted is not found",
-						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperFinished
-						operation.Done = true
-						return nil
-					})
+			table, exist := p.tables[tableID]
+			if !exist {
+				log.Warn("table which will be deleted is not found",
+					util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+				patchOperation(tableID, func(operation *model.TableOperation) error {
+					operation.Status = model.OperFinished
+					operation.Done = true
+					return nil
+				})
+				continue
+			}
+			switch opt.Status {
+			case model.OperDispatched:
+				if opt.BoundaryTs < localCheckpointTs {
+					log.Warn("the BoundaryTs of remove table operation is smaller than local checkpoint ts", zap.Uint64("localCheckpointTs", localCheckpointTs), zap.Any("operation", opt))
+				}
+				table.AsyncStop(opt.BoundaryTs)
+				patchOperation(tableID, func(operation *model.TableOperation) error {
+					operation.Status = model.OperProcessed
+					return nil
+				})
+			case model.OperProcessed:
+				if table.Status() != tablepipeline.TableStatusStopped {
 					continue
 				}
-				switch opt.Status {
-				case model.OperDispatched:
-					table.AsyncStop(opt.BoundaryTs)
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperProcessed
-						return nil
-					})
-				case model.OperProcessed:
-					if table.Status() == tablepipeline.TableStatusStopped {
-						patchOperation(tableID, func(operation *model.TableOperation) error {
-							operation.BoundaryTs = table.CheckpointTs()
-							operation.Status = model.OperFinished
-							operation.Done = true
-							return nil
-						})
-					}
-					table.Cancel()
-					delete(p.tables, tableID)
-					log.Debug("Operation done signal received",
-						util.ZapFieldChangefeed(ctx),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("operation", opt))
-				default:
-					log.Panic("unreachable")
-				}
+				patchOperation(tableID, func(operation *model.TableOperation) error {
+					operation.BoundaryTs = table.CheckpointTs()
+					operation.Status = model.OperFinished
+					operation.Done = true
+					return nil
+				})
+				table.Cancel()
+				delete(p.tables, tableID)
+				log.Debug("Operation done signal received",
+					util.ZapFieldChangefeed(ctx),
+					zap.Int64("tableID", tableID),
+					zap.Reflect("operation", opt))
+			default:
+				log.Panic("unreachable")
 			}
 		} else {
 			switch opt.Status {
@@ -386,6 +390,9 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 				}
 				if p.changefeed.Info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
+				}
+				if replicaInfo.StartTs != opt.BoundaryTs {
+					log.Warn("the startTs and BoundaryTs of add table operation should be always equaled", zap.Any("replicaInfo", replicaInfo))
 				}
 				err := p.addTable(ctx, tableID, replicaInfo)
 				if err != nil {
@@ -422,7 +429,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 	return nil
 }
 
-func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.SchemaStorage, error) {
+func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.SchemaStorage, error) {
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -593,7 +600,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 	return nil
 }
 
-func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (*tablepipeline.TablePipeline, error) {
+func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 	cdcCtx := cdccontext.NewContext(ctx, &cdccontext.Vars{
 		CaptureAddr:   p.captureInfo.AdvertiseAddr,
 		PDClient:      p.pdCli,
@@ -698,8 +705,10 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
-
-	return p.sinkManager.Close()
+	if p.sinkManager != nil {
+		return p.sinkManager.Close()
+	}
+	return nil
 }
 
 // WriteDebugInfo write the debug info to Writer
