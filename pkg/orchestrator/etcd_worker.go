@@ -66,6 +66,8 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 	}, nil
 }
 
+const etcdRequestProgressDuration = 2 * time.Second
+
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
@@ -96,6 +98,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		// should never be closed
 		sessionDone = make(chan struct{})
 	}
+	lastReceivedEventTime := time.Now()
 
 	for {
 		var response clientv3.WatchResponse
@@ -106,23 +109,29 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
+			if time.Since(lastReceivedEventTime) > etcdRequestProgressDuration {
+				if err := worker.client.RequestProgress(ctx); err != nil {
+					log.Warn("failed to request progress for etcd watcher", zap.Error(err))
+				}
+			}
 		case response = <-watchCh:
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
-
-			// ProgressNotify implies no new events.
-			if response.IsProgressNotify() {
-				continue
-			}
+			lastReceivedEventTime = time.Now()
 
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
+
+			// ProgressNotify implies no new events.
+			if response.IsProgressNotify() {
+				continue
+			}
 
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
@@ -160,7 +169,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if err := worker.applyUpdates(); err != nil {
 				return errors.Trace(err)
 			}
-
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
 				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
@@ -184,7 +192,11 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 
 	switch event.Type {
 	case mvccpb.PUT:
-		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = event.Kv.Value
+		value := event.Kv.Value
+		if value == nil {
+			value = []byte{}
+		}
+		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = value
 	case mvccpb.DELETE:
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
@@ -316,15 +328,15 @@ func logEtcdOps(ops []clientv3.Op, commited bool) {
 	if log.GetLevel() != zapcore.DebugLevel {
 		return
 	}
+	log.Debug("[etcd worker] ==========Update State to ETCD==========")
 	for _, op := range ops {
-		log.Debug("[etcd worker] ==========Update State to ETCD==========")
 		if op.IsDelete() {
 			log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
 		} else {
 			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
 		}
-		log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
 	}
+	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
 }
 
 func (worker *EtcdWorker) cleanUp() {
