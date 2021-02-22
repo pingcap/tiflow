@@ -23,6 +23,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: processor output chan size, the accumulated data is determined by
+// the count of sorted data and unmounted data. In current benchmark a single
+// processor can reach 50k-100k QPS, and accumulated data is around
+// 200k-400k in most cases. We need a better chan cache mechanism.
 const defaultOutputChannelSize = 1280000
 
 // Pipeline represents a pipeline includes a number of nodes
@@ -80,11 +84,14 @@ func (p *Pipeline) AppendNode(ctx context.Context, name string, node Node) {
 }
 
 func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runner) {
-	defer p.runnersWg.Done()
-	defer blackhole(previousRunner)
+	defer func() {
+		log.Info("a pipeline node is exited, stopping the hole pipeline", zap.String("name", runner.getName()))
+		p.close()
+		blackhole(previousRunner)
+		p.runnersWg.Done()
+	}()
 	err := runner.run(ctx)
 	if err != nil {
-		p.close()
 		p.addError(err)
 		log.Error("found error when running the node", zap.String("name", runner.getName()), zap.Error(err))
 	}
@@ -103,14 +110,12 @@ func (p *Pipeline) SendToFirstNode(msg *Message) error {
 }
 
 func (p *Pipeline) close() {
-	defer func() {
-		// Avoid panic because repeated close channel
-		recover() //nolint:errcheck
-	}()
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
-	p.isClosed = true
-	close(p.header)
+	if !p.isClosed {
+		close(p.header)
+		p.isClosed = true
+	}
 }
 
 func (p *Pipeline) addError(err error) {

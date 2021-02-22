@@ -41,9 +41,10 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 	txn, exist := t.txns[row.StartTs]
 	if !exist {
 		txn = &model.SingleTableTxn{
-			StartTs:  row.StartTs,
-			CommitTs: row.CommitTs,
-			Table:    row.Table,
+			StartTs:   row.StartTs,
+			CommitTs:  row.CommitTs,
+			Table:     row.Table,
+			ReplicaID: row.ReplicaID,
 		}
 		t.txns[row.StartTs] = txn
 	}
