@@ -285,15 +285,15 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 	}
 
-	// only reboot and size = 0 should we add version to s3
-	withVersion := firstCreated && size == 0
+	// only reboot and (size = 0 or size > maxRowFileSize) should we add version to s3
+	withVersion := firstCreated && (size == 0 || size >= maxDDLFlushSize)
 
 	// clean ddlEncoder version part
-	// if we reboot cdc and size > 0, we should skip version part in
+	// if we reboot cdc and size between (0, maxDDLFlushSize), we should skip version part in
 	// JSONEventBatchEncoder.keyBuf, JSONEventBatchEncoder consturctor func has
 	// alreay filled with version part, see NewJSONEventBatchEncoder and
 	// JSONEventBatchEncoder.MixedBuild
-	if firstCreated && size > 0 {
+	if firstCreated && size > 0 && size < maxDDLFlushSize {
 		s.ddlEncoder.Reset()
 	}
 
@@ -304,7 +304,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	data := s.ddlEncoder.MixedBuild(withVersion)
 
-	if size == 0 || size > maxDDLFlushSize {
+	if size == 0 || size >= maxDDLFlushSize {
 		// no ddl file exists or
 		// exists file is oversized. we should generate a new file
 		fileData = data
