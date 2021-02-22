@@ -119,7 +119,7 @@ func (p *Producer) GetPartitionNum() int32 {
 func (p *Producer) Close() error {
 	err := p.producer.Flush()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+		return cerror.WrapError(cerror.ErrPulsarSendMessage, err)
 	}
 	p.producer.Close()
 	p.client.Close()
