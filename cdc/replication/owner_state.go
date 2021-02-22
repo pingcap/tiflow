@@ -14,16 +14,16 @@
 package replication
 
 import (
-	"encoding/json"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"regexp"
 	"sort"
 	"time"
 
+	"encoding/json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.uber.org/zap"
@@ -42,15 +42,6 @@ type ownerReactorState struct {
 
 	isInitialized bool
 }
-
-// The regex based parsing logic is only temporary.
-var (
-	captureRegex        = regexp.MustCompile(regexp.QuoteMeta(kv.CaptureInfoKeyPrefix) + "/(.+)")
-	changeFeedRegex     = regexp.MustCompile(regexp.QuoteMeta(kv.JobKeyPrefix) + "/(.+)")
-	positionRegex       = regexp.MustCompile(regexp.QuoteMeta(kv.TaskPositionKeyPrefix) + "/(.+?)/(.+)")
-	statusRegex         = regexp.MustCompile(regexp.QuoteMeta(kv.TaskStatusKeyPrefix) + "/(.+?)/(.+)")
-	changeFeedInfoRegex = regexp.MustCompile("/tidb/cdc/changefeed/info/(.+)")
-)
 
 func newCDCReactorState() *ownerReactorState {
 	return &ownerReactorState{
@@ -72,20 +63,18 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		s.isInitialized = true
 	}
 
-	if key.String() == kv.CaptureOwnerKey {
-		if value == nil {
-			log.Info("Owner lost", zap.String("old-owner", s.Owner))
-			return nil
-		}
-
-		log.Info("Owner updated", zap.String("old-owner", s.Owner),
-			zap.ByteString("new-owner", value))
-		s.Owner = string(value)
-		return nil
+	k := new(etcd.CDCKey)
+	err := k.Parse(key.String())
+	if err != nil {
+		return errors.Trace(err)
 	}
 
-	if matches := captureRegex.FindSubmatch(key.Bytes()); matches != nil {
-		captureID := string(matches[1])
+	switch k.Tp {
+	case etcd.CDCKeyTypeOwner:
+		log.Warn("Owner key is modified unexpectedly", zap.ByteString("owner", value))
+		return cerrors.ErrOwnerChangedUnexpectedly.GenWithStackByArgs()
+	case etcd.CDCKeyTypeCapture:
+		captureID := k.CaptureID
 
 		if value == nil {
 			log.Info("Capture deleted",
@@ -99,26 +88,24 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		var newCaptureInfo model.CaptureInfo
 		err := json.Unmarshal(value, &newCaptureInfo)
 		if err != nil {
-			return errors.Trace(err)
+			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
 		if oldCaptureInfo, ok := s.Captures[captureID]; ok {
-			log.Info("Capture updated",
+			log.Debug("Capture updated",
 				zap.String("captureID", captureID),
 				zap.Reflect("old-capture", oldCaptureInfo),
 				zap.Reflect("new-capture", newCaptureInfo))
 		} else {
-			log.Info("Capture added",
+			log.Debug("Capture added",
 				zap.String("captureID", captureID),
 				zap.Reflect("new-capture", newCaptureInfo))
 		}
 
 		s.Captures[captureID] = &newCaptureInfo
 		return nil
-	}
-
-	if matches := changeFeedRegex.FindSubmatch(key.Bytes()); matches != nil {
-		changefeedID := string(matches[1])
+	case etcd.CDCKeyTypeChangeFeedStatus:
+		changefeedID := k.ChangefeedID
 
 		if value == nil {
 			log.Info("Changefeed deleted",
@@ -132,28 +119,25 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		var newChangefeedStatus model.ChangeFeedStatus
 		err := json.Unmarshal(value, &newChangefeedStatus)
 		if err != nil {
-			return errors.Trace(err)
+			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
 		if oldChangefeedInfo, ok := s.ChangeFeedStatuses[changefeedID]; ok {
-			log.Info("Changefeed updated",
+			log.Debug("Changefeed updated",
 				zap.String("changefeedID", changefeedID),
 				zap.Reflect("old-changefeed", oldChangefeedInfo),
 				zap.Reflect("new-changefeed", newChangefeedStatus))
 		} else {
-			log.Info("Changefeed added",
+			log.Debug("Changefeed added",
 				zap.String("changefeedID", changefeedID),
 				zap.Reflect("new-changefeed", newChangefeedStatus))
 		}
 
 		s.ChangeFeedStatuses[changefeedID] = &newChangefeedStatus
-
 		return nil
-	}
-
-	if matches := positionRegex.FindSubmatch(key.Bytes()); matches != nil {
-		captureID := string(matches[1])
-		changefeedID := string(matches[2])
+	case etcd.CDCKeyTypeTaskPosition:
+		captureID := k.CaptureID
+		changefeedID := k.ChangefeedID
 
 		if value == nil {
 			log.Info("Position deleted",
@@ -172,7 +156,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		var newTaskPosition model.TaskPosition
 		err := json.Unmarshal(value, &newTaskPosition)
 		if err != nil {
-			return errors.Trace(err)
+			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
 		if _, ok := s.TaskPositions[changefeedID]; !ok {
@@ -195,11 +179,9 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		s.TaskPositions[changefeedID][captureID] = &newTaskPosition
 
 		return nil
-	}
-
-	if matches := statusRegex.FindSubmatch(key.Bytes()); matches != nil {
-		captureID := string(matches[1])
-		changefeedID := string(matches[2])
+	case etcd.CDCKeyTypeTaskStatus:
+		captureID := k.CaptureID
+		changefeedID := k.ChangefeedID
 
 		if value == nil {
 			log.Info("Status deleted",
@@ -218,7 +200,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		var newTaskStatus model.TaskStatus
 		err := json.Unmarshal(value, &newTaskStatus)
 		if err != nil {
-			return errors.Trace(err)
+			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
 		if _, ok := s.TaskStatuses[changefeedID]; !ok {
@@ -239,25 +221,22 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 		}
 
 		s.TaskStatuses[changefeedID][captureID] = &newTaskStatus
-
 		s.tableToCaptureMapCache[changefeedID] = s.GetTableToCaptureMap(changefeedID)
 		return nil
-	}
-
-	if matches := changeFeedInfoRegex.FindSubmatch(key.Bytes()); matches != nil {
-		changeFeedID := string(matches[1])
+	case etcd.CDCKeyTypeChangefeedInfo:
+		changeFeedID := k.ChangefeedID
 
 		var changeFeedInfo model.ChangeFeedInfo
 		err := json.Unmarshal(value, &changeFeedInfo)
 		if err != nil {
-			return errors.Trace(err)
+			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
 		s.ChangeFeedInfos[changeFeedID] = &changeFeedInfo
 		return nil
+	default:
 	}
 
-	log.Debug("Etcd operation ignored", zap.String("key", key.String()), zap.ByteString("value", value))
 	return nil
 }
 
