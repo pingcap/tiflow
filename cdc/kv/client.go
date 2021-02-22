@@ -1387,6 +1387,15 @@ func (s *eventFeedSession) singleEventFeed(
 			switch x := event.changeEvent.Event.(type) {
 			case *cdcpb.Event_Entries_:
 				for _, entry := range x.Entries.GetEntries() {
+					// if a region with kv range [a, z)
+					// and we only want the get [b, c) from this region,
+					// tikv will return all key events in the region although we specified [b, c) int the request.
+					// we can make tikv only return the events about the keys in the specified range.
+					comparableKey := regionspan.ToComparableKey(entry.GetKey())
+					// key for initialized event is nil
+					if !regionspan.KeyInSpan(comparableKey, span) && entry.Type != cdcpb.Event_INITIALIZED {
+						continue
+					}
 					switch entry.Type {
 					case cdcpb.Event_INITIALIZED:
 						if time.Since(startFeedTime) > 20*time.Second {

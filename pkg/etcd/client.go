@@ -141,3 +141,8 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	return c.cli.Watch(ctx, key, opts...)
 }
+
+// RequestProgress requests a progress notify response be sent in all watch channels.
+func (c *Client) RequestProgress(ctx context.Context) error {
+	return c.cli.RequestProgress(ctx)
+}
