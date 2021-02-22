@@ -161,6 +161,11 @@ error = '''
 this patch should be excluded from the current etcd txn
 '''
 
+["CDC:ErrEtcdSessionDone"]
+error = '''
+the etcd session is done
+'''
+
 ["CDC:ErrEtcdTryAgain"]
 error = '''
 the etcd txn should be aborted and retried immediately
