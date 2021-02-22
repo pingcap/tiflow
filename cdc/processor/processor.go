@@ -491,6 +491,9 @@ func (p *processor) sendError(err error) {
 }
 
 func (p *processor) initTables(ctx context.Context) error {
+	if len(p.tables) == len(p.changefeed.TaskStatus.Tables) {
+		return nil
+	}
 	for tableID, replicaInfo := range p.changefeed.TaskStatus.Tables {
 		if _, exist := p.tables[tableID]; exist {
 			continue
@@ -506,6 +509,19 @@ func (p *processor) initTables(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	for tableID, tablePipeline := range p.tables {
+		if _, exist := p.changefeed.TaskStatus.Tables[tableID]; exist {
+			continue
+		}
+		opt := p.changefeed.TaskStatus.Operation
+		if opt != nil && opt[tableID] != nil && opt[tableID].Delete {
+			// table will be removed by normal logic
+			continue
+		}
+		tablePipeline.Cancel()
+		delete(p.tables, tableID)
+		log.Warn("the table was forcibly deleted,this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", p.changefeed.TaskStatus))
 	}
 	return nil
 }

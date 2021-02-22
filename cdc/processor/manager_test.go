@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 )
 
@@ -49,6 +50,7 @@ func newManager4Test() *Manager {
 }
 
 func (s *managerSuite) TestChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	m := newManager4Test()
 	state := &globalState{
@@ -91,6 +93,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 }
 
 func (s *managerSuite) TestDebugInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	m := newManager4Test()
 	state := &globalState{
@@ -138,6 +141,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 }
 
 func (s *managerSuite) TestClose(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	m := newManager4Test()
 	state := &globalState{
