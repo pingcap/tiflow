@@ -285,7 +285,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 	}
 
-	// only reboot and (size = 0 or size > maxRowFileSize) should we add version to s3
+	// only reboot and (size = 0 or size >= maxRowFileSize) should we add version to s3
 	withVersion := firstCreated && (size == 0 || size >= maxDDLFlushSize)
 
 	// clean ddlEncoder version part
