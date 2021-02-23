@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,7 +33,9 @@ type pullerNode struct {
 	credential *security.Credential
 	kvStorage  tidbkv.Storage
 	limitter   *puller.BlurResourceLimitter
-	tableName  string // quoted schema and table, used in metircs only
+
+	changefeedID model.ChangeFeedID
+	tableName    string // quoted schema and table, used in metircs only
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
@@ -41,17 +44,19 @@ type pullerNode struct {
 }
 
 func newPullerNode(
+	changefeedID model.ChangeFeedID,
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	limitter *puller.BlurResourceLimitter,
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
 	return &pullerNode{
-		credential:  credential,
-		kvStorage:   kvStorage,
-		limitter:    limitter,
-		tableID:     tableID,
-		replicaInfo: replicaInfo,
-		tableName:   tableName,
+		credential:   credential,
+		kvStorage:    kvStorage,
+		limitter:     limitter,
+		tableID:      tableID,
+		replicaInfo:  replicaInfo,
+		tableName:    tableName,
+		changefeedID: changefeedID,
 	}
 }
 
@@ -68,6 +73,7 @@ func (n *pullerNode) tableSpan(ctx context.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
+	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(n.changefeedID, ctx.Vars().CaptureAddr, n.tableName)
 	enableOldValue := ctx.Vars().Config.EnableOldValue
 	ctxC, cancel := stdContext.WithCancel(ctx.StdContext())
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
@@ -80,11 +86,14 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	n.wg.Go(func() error {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-ctxC.Done():
 				return nil
 			case rawKV := <-plr.Output():
 				if rawKV == nil {
 					continue
+				}
+				if rawKV.OpType == model.OpTypeResolved {
+					metricTableResolvedTsGauge.Set(float64(oracle.ExtractPhysical(rawKV.CRTs)))
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
@@ -103,6 +112,7 @@ func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
+	tableResolvedTsGauge.DeleteLabelValues(n.changefeedID, ctx.Vars().CaptureAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
 }
