@@ -220,6 +220,12 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 	case etcd.CDCKeyTypeChangefeedInfo:
 		changeFeedID := k.ChangefeedID
 
+		if value == nil {
+			log.Info("ChangeFeed deleted", zap.String("cfID", changeFeedID))
+			delete(s.ChangeFeedInfos, changeFeedID)
+			return nil
+		}
+
 		var changeFeedInfo model.ChangeFeedInfo
 		err := json.Unmarshal(value, &changeFeedInfo)
 		if err != nil {
@@ -346,6 +352,12 @@ func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureI
 	patch := &orchestrator.DataPatch{
 		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
 		Fun: func(old []byte) ([]byte, error) {
+			if len(old) == 0 {
+				return nil, cerrors.
+					ErrOwnerInconsistentStates.
+					GenWithStackByArgs("TaskStatus deleted when owner tries to stop a table")
+			}
+
 			var taskStatus model.TaskStatus
 			err := json.Unmarshal(old, &taskStatus)
 			if err != nil {
@@ -400,6 +412,12 @@ func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID mo
 	patch := &orchestrator.DataPatch{
 		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
 		Fun: func(old []byte) ([]byte, error) {
+			if len(old) == 0 {
+				return nil, cerrors.
+					ErrOwnerInconsistentStates.
+					GenWithStackByArgs("TaskStatus deleted when owner tries to clean up a table operation")
+			}
+
 			var taskStatus model.TaskStatus
 			err := json.Unmarshal(old, &taskStatus)
 			if err != nil {
@@ -409,7 +427,7 @@ func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID mo
 			delete(taskStatus.Operation, tableID)
 
 			// TODO remove this assertion
-			if _, ok := taskStatus.Operation[tableID]; ok {
+			if _, ok := taskStatus.Tables[tableID]; ok {
 				log.Panic("processor bug: table not cleaned before marking done flag",
 					zap.String("tableID", string(tableID)))
 			}
@@ -508,16 +526,16 @@ func (s *ownerReactorState) CleanUpTaskStatus(cfID model.ChangeFeedID, captureID
 
 // CleanUpTaskPosition removes the taskPosition of a changefeed for a given capture.
 func (s *ownerReactorState) CleanUpTaskPosition(cfID model.ChangeFeedID, captureID model.CaptureID) {
-	taskStatuses, ok := s.TaskStatuses[cfID]
+	taskPositions, ok := s.TaskPositions[cfID]
 	if !ok {
-		log.Debug("CleanUpTaskPosition: task statuses for the given change-feed not found",
+		log.Debug("CleanUpTaskPosition: task positions for the given change-feed not found",
 			zap.String("cfID", cfID),
 			zap.String("captureID", captureID))
 		return
 	}
 
-	if _, ok := taskStatuses[captureID]; !ok {
-		log.Debug("CleanUpTaskPosition: task statuses for the given capture not found",
+	if _, ok := taskPositions[captureID]; !ok {
+		log.Debug("CleanUpTaskPosition: task positions for the given capture not found",
 			zap.String("cfID", cfID),
 			zap.String("captureID", captureID))
 		return
