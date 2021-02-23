@@ -53,6 +53,7 @@ func parseSinkOptions(u *url.URL) (opt *Option, err error) {
 
 	p.MessageRouter = func(message *pulsar.ProducerMessage, metadata pulsar.TopicMetadata) int {
 		partition, _ := strconv.Atoi(message.Properties[route])
+		delete(message.Properties, route)
 		message.Properties = nil
 		return partition
 	}

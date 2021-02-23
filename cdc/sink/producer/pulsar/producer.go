@@ -21,6 +21,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -70,12 +71,26 @@ type Producer struct {
 	partitions int
 }
 
+func createProperties(message *codec.MQMessage, partition int32) map[string]string {
+	properties := map[string]string{route: strconv.Itoa(int(partition))}
+	properties["ts"] = strconv.FormatUint(message.Ts, 10)
+	properties["type"] = strconv.Itoa(int(message.Type))
+	properties["protocol"] = strconv.Itoa(int(message.Protocol))
+	if message.Schema != nil {
+		properties["schema"] = *message.Schema
+	}
+	if message.Table != nil {
+		properties["table"] = *message.Table
+	}
+	return properties
+}
+
 // SendMessage send key-value msg to target partition.
-func (p *Producer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+func (p *Producer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
-		Payload:    value,
-		Key:        string(key),
-		Properties: map[string]string{route: strconv.Itoa(int(partition))},
+		Payload:    message.Value,
+		Key:        string(message.Key),
+		Properties: createProperties(message, partition),
 	}, p.errors)
 	return nil
 }
@@ -91,12 +106,12 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 }
 
 // SyncBroadcastMessage send key-value msg to all partition.
-func (p *Producer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
-	for i := 0; i < p.partitions; i++ {
+func (p *Producer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+	for partition := 0; partition < p.partitions; partition++ {
 		_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
-			Payload:    value,
-			Key:        string(key),
-			Properties: map[string]string{route: strconv.Itoa(i)},
+			Payload:    message.Value,
+			Key:        string(message.Key),
+			Properties: createProperties(message, int32(partition)),
 		})
 		if err != nil {
 			return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())
