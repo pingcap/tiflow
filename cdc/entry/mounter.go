@@ -189,8 +189,8 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 			return errors.Trace(err)
 		}
 		pEvent.Row = rowEvent
-		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
+		pEvent.RawKV.OldValue = nil
 		pEvent.PrepareFinished()
 		metricMountDuration.Observe(time.Since(startTime).Seconds())
 	}
@@ -626,4 +626,13 @@ func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64,
 		pkValue.SetInt64(recordID)
 	}
 	return
+}
+
+// DecodeTableID decodes the raw key to a table ID
+func DecodeTableID(key []byte) (model.TableID, error) {
+	_, physicalTableID, err := decodeTableID(key)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return physicalTableID, nil
 }
