@@ -113,7 +113,7 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 	c.Assert(msg.Value, check.IsNil)
 	c.Assert(msg.Ts, check.Equals, uint64(1234))
 	c.Assert(msg.Type, check.Equals, model.MqMessageTypeResolved)
-	c.Assert(*msg.Schema, check.IsNil)
-	c.Assert(*msg.Table, check.IsNil)
+	c.Assert(msg.Schema, check.IsNil)
+	c.Assert(msg.Table, check.IsNil)
 	c.Assert(msg.Protocol, check.Equals, ProtocolCanal)
 }
