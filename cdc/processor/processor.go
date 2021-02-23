@@ -112,6 +112,9 @@ func newProcessor(
 	return p
 }
 
+// Tick implements the `orchestrator.State` interface
+// the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
+// The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
 	if _, err := p.tick(ctx, state); err != nil {
 		cause := errors.Cause(err)
@@ -165,7 +168,7 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := p.initTables(ctx); err != nil {
+	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if err := p.handlePosition(); err != nil {
@@ -183,6 +186,8 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 	return p.changefeed, nil
 }
 
+// initPosition create a new task position, and put it into the etcd state.
+// task position maybe be not exist only when the processor is running first time.
 func (p *processor) initPosition() bool {
 	if p.changefeed.TaskPosition != nil {
 		return false
@@ -203,6 +208,7 @@ func (p *processor) initPosition() bool {
 	return true
 }
 
+// lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx context.Context) error {
 	if !p.firstTick {
 		return nil
@@ -283,6 +289,7 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 	return nil
 }
 
+// handleErrorCh listen the error channel and throw the error if it is not expected.
 func (p *processor) handleErrorCh(ctx context.Context) error {
 	var err error
 	select {
@@ -312,6 +319,7 @@ func (p *processor) handleErrorCh(ctx context.Context) error {
 	return cerror.ErrReactorFinished
 }
 
+// handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
 func (p *processor) handleTableOperation(ctx context.Context) error {
 	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
@@ -328,13 +336,14 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
-	// TODO: remove this six line, applied operation should be removed by owner
+	// TODO: 👇👇 remove this six lines after the new owner is implemented, applied operation should be removed by owner
 	if !p.changefeed.TaskStatus.SomeOperationsUnapplied() && len(p.changefeed.TaskStatus.Operation) != 0 {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
 			status.Operation = nil
 			return status, nil
 		})
 	}
+	// 👆👆 remove this six lines
 	for tableID, opt := range p.changefeed.TaskStatus.Operation {
 		if opt.TableApplied() {
 			continue
@@ -372,6 +381,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 					operation.Done = true
 					return nil
 				})
+				// TODO: check if the goroutines created by table pipeline is actually exited. (call tablepipeline.Wait())
 				table.Cancel()
 				delete(p.tables, tableID)
 				log.Debug("Operation done signal received",
@@ -490,10 +500,14 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-func (p *processor) initTables(ctx context.Context) error {
+// checkTablesNum if the number of table pipelines is equal to the number of TaskStatus in etcd state.
+// if the table number is not right, create or remove the odd tables.
+func (p *processor) checkTablesNum(ctx context.Context) error {
 	if len(p.tables) == len(p.changefeed.TaskStatus.Tables) {
 		return nil
 	}
+	// check if a table should be listen but not
+	// this only could be happened in the first tick.
 	for tableID, replicaInfo := range p.changefeed.TaskStatus.Tables {
 		if _, exist := p.tables[tableID]; exist {
 			continue
@@ -510,6 +524,8 @@ func (p *processor) initTables(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
+	// check if a table should be removed but still exist
+	// this shouldn't be happened in any time.
 	for tableID, tablePipeline := range p.tables {
 		if _, exist := p.changefeed.TaskStatus.Tables[tableID]; exist {
 			continue
@@ -526,6 +542,7 @@ func (p *processor) initTables(ctx context.Context) error {
 	return nil
 }
 
+// handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
 	for _, table := range p.tables {
@@ -568,6 +585,7 @@ func (p *processor) handlePosition() error {
 	return nil
 }
 
+// handleWorkload calculates the workload of all tables
 func (p *processor) handleWorkload() error {
 	p.changefeed.PatchTaskWorkload(func(_ model.TaskWorkload) (model.TaskWorkload, error) {
 		workload := make(model.TaskWorkload, len(p.tables))
@@ -579,6 +597,7 @@ func (p *processor) handleWorkload() error {
 	return nil
 }
 
+// pushResolvedTs2Table sends gloabl resolved ts to all the table pipelines.
 func (p *processor) pushResolvedTs2Table() error {
 	resolvedTs := p.changefeed.Status.ResolvedTs
 	for _, table := range p.tables {
@@ -587,6 +606,7 @@ func (p *processor) pushResolvedTs2Table() error {
 	return nil
 }
 
+// addTable creates a new table pipeline and adds it to the `p.tables`
 func (p *processor) addTable(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if table, ok := p.tables[tableID]; ok {
 		if table.Status() == tablepipeline.TableStatusStopped {
@@ -682,6 +702,7 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 	return table, nil
 }
 
+// doGCSchemaStorage trigger the schema storage GC
 func (p *processor) doGCSchemaStorage() error {
 	// Delay GC to accommodate pullers starting from a startTs that's too small
 	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically

@@ -196,7 +196,7 @@ func (m *mockSchemaStorage) DoGC(ts uint64) {
 	m.lastGcTs = ts
 }
 
-func (s *processorSuite) TestInitPosition(c *check.C) {
+func (s *processorSuite) TestCheckTablesNum(c *check.C) {
 	defer testleak.AfterTest(c)()
 	p := newProcessor4Test()
 	ctx := context.Background()
