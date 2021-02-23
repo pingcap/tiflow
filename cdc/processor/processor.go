@@ -116,39 +116,40 @@ func newProcessor(
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
-	if _, err := p.tick(ctx, state); err != nil {
-		cause := errors.Cause(err)
-		if cause == context.Canceled || cerror.ErrAdminStopProcessor.Equal(cause) || cerror.ErrReactorFinished.Equal(cause) {
-			return state, cerror.ErrReactorFinished
-		}
-		p.metricProcessorErrorCounter.Inc()
-		// record error information in etcd
-		var code string
-		if terror, ok := err.(*errors.Error); ok {
-			code = string(terror.RFCCode())
-		} else {
-			code = string(cerror.ErrProcessorUnknown.RFCCode())
-		}
-		state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
-			if position == nil {
-				position = &model.TaskPosition{}
-			}
-			position.Error = &model.RunningError{
-				Addr:    p.captureInfo.AdvertiseAddr,
-				Code:    code,
-				Message: err.Error(),
-			}
-			return position, nil
-		})
-		log.Error("run processor failed",
-			zap.String("changefeed", p.changefeed.ID),
-			zap.String("capture-id", p.captureInfo.ID),
-			util.ZapFieldCapture(ctx),
-			zap.Error(err))
-		return state, cerror.ErrReactorFinished
-	}
+	_, err := p.tick(ctx, state)
 	p.firstTick = false
-	return state, nil
+	if err == nil {
+		return state, nil
+	}
+	cause := errors.Cause(err)
+	if cause == context.Canceled || cerror.ErrAdminStopProcessor.Equal(cause) || cerror.ErrReactorFinished.Equal(cause) {
+		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
+	}
+	p.metricProcessorErrorCounter.Inc()
+	// record error information in etcd
+	var code string
+	if terror, ok := err.(*errors.Error); ok {
+		code = string(terror.RFCCode())
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+		if position == nil {
+			position = &model.TaskPosition{}
+		}
+		position.Error = &model.RunningError{
+			Addr:    p.captureInfo.AdvertiseAddr,
+			Code:    code,
+			Message: err.Error(),
+		}
+		return position, nil
+	})
+	log.Error("run processor failed",
+		zap.String("changefeed", p.changefeed.ID),
+		zap.String("capture-id", p.captureInfo.ID),
+		util.ZapFieldCapture(ctx),
+		zap.Error(err))
+	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
 func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState orchestrator.ReactorState, err error) {
@@ -493,10 +494,13 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 }
 
 func (p *processor) sendError(err error) {
+	if err == nil {
+		return
+	}
 	select {
 	case p.errCh <- err:
 	default:
-		log.Error("processor receives redundant error", zap.Error(err), zap.Stack("stack"))
+		log.Error("processor receives redundant error", zap.Error(err))
 	}
 }
 
@@ -517,7 +521,7 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 			continue
 		}
 		if !p.firstTick {
-			log.Warn("The table was left out", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+			log.Warn("the table should be listen but not, already listen the table again, please report a bug", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 		}
 		err := p.addTable(ctx, tableID, replicaInfo)
 		if err != nil {
@@ -537,7 +541,7 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 		}
 		tablePipeline.Cancel()
 		delete(p.tables, tableID)
-		log.Warn("the table was forcibly deleted,this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", p.changefeed.TaskStatus))
+		log.Warn("the table was forcibly deleted, this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", p.changefeed.TaskStatus))
 	}
 	return nil
 }

@@ -101,7 +101,7 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
 			m.closeProcessor(changefeedID)
-			if cerrors.ErrReactorFinished.Equal(err) {
+			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 				continue
 			}
 			return state, errors.Trace(err)
