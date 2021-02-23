@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type codecInterfaceSuite struct {
@@ -33,6 +34,7 @@ func (s *codecInterfaceSuite) TearDownSuite(c *check.C) {
 }
 
 func (s *codecInterfaceSuite) TestCreate(c *check.C) {
+	defer testleak.AfterTest(c)()
 	rowEvent := &model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test",
