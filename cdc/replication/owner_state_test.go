@@ -15,6 +15,7 @@ package replication
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -631,4 +632,353 @@ func (s *ownerStateTestSuite) TestCleanUpTaskPosition(c *check.C) {
 	delete(tester.KVEntries(), "/tidb/cdc/task/position/capture-1/cf-1")
 	err = tester.ApplyPatches()
 	c.Assert(err, check.IsNil)
+}
+
+func (s *ownerStateTestSuite) TestGetCaptureTables(c *check.C) {
+	ownerState := newCDCReactorState()
+	taskStatus := &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {
+				StartTs:     2000,
+				MarkTableID: 0,
+			},
+			2: {
+				StartTs:     3000,
+				MarkTableID: 0,
+			},
+		},
+		Operation: map[model.TableID]*model.TableOperation{
+			2: {
+				Delete:     false,
+				BoundaryTs: 4500,
+				Done:       true,
+				Status:     model.OperFinished,
+			},
+			3: {
+				Delete:     false,
+				BoundaryTs: 4500,
+				Done:       false,
+				Status:     model.OperProcessed,
+			},
+		},
+	}
+	ownerState.TaskStatuses["cf-1"] = map[model.CaptureID]*model.TaskStatus{"capture-1": taskStatus}
+	ownerState.Captures["capture-1"] = &model.CaptureInfo{}
+
+	// test normal case 1
+	tables := ownerState.GetCaptureTables("cf-1", "capture-1")
+	if !tableIDListMatch(tables, []model.TableID{1, 2, 3}) {
+		c.Fatal(tables)
+	}
+
+	// test normal case 2
+	ownerState.TaskStatuses["cf-1"]["capture-1"].Operation[3].Delete = true
+	ownerState.TaskStatuses["cf-1"]["capture-1"].Operation[3].Status = model.OperFinished
+	tables = ownerState.GetCaptureTables("cf-1", "capture-1")
+	if !tableIDListMatch(tables, []model.TableID{1, 2}) {
+		c.Fatal(tables)
+	}
+
+	// test normal case 3
+	ownerState.TaskStatuses["cf-1"]["capture-1"].Tables[3] = &model.TableReplicaInfo{
+		StartTs:     3000,
+		MarkTableID: 0,
+	}
+
+	tables = ownerState.GetCaptureTables("cf-1", "capture-1")
+	if !tableIDListMatch(tables, []model.TableID{1, 2, 3}) {
+		c.Fatal(tables)
+	}
+
+	// test no task status case 1
+	delete(ownerState.TaskStatuses["cf-1"], "capture-1")
+	tables = ownerState.GetCaptureTables("cf-1", "capture-1")
+	c.Assert(tables, check.HasLen, 0)
+
+	// test no task status case 2
+	delete(ownerState.TaskStatuses, "cf-1")
+	tables = ownerState.GetCaptureTables("cf-1", "capture-1")
+	c.Assert(tables, check.HasLen, 0)
+
+	// test capture gone case
+	delete(ownerState.Captures, "capture-1")
+	tables = ownerState.GetCaptureTables("cf-1", "capture-1")
+	c.Assert(tables, check.HasLen, 0)
+}
+
+func tableIDListMatch(a, b []model.TableID) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	setA := make(map[model.TableID]struct{})
+	for _, tableID := range a {
+		setA[tableID] = struct{}{}
+	}
+
+	setB := make(map[model.TableID]struct{})
+	for _, tableID := range b {
+		setB[tableID] = struct{}{}
+	}
+
+	return reflect.DeepEqual(setA, setB)
+}
+
+func (s *ownerStateTestSuite) TestCleanUpChangeFeedErrorHistory(c *check.C) {
+	now := time.Now()
+	ownerState := newCDCReactorState()
+	changeFeedInfo := &model.ChangeFeedInfo{
+		SinkURI:      "blackhole:///",
+		AdminJobType: model.AdminNone,
+		State:        model.StateNormal,
+		ErrorHis: []int64{
+			now.Add(-time.Hour).UnixNano() / 1e6, now.Add(-time.Minute*20).UnixNano() / 1e6,
+			now.Add(-time.Minute*5).UnixNano() / 1e6, now.Add(-time.Minute*3).UnixNano() / 1e6,
+		},
+	}
+	changeFeedInfoJSON, err := json.Marshal(changeFeedInfo)
+	c.Assert(err, check.IsNil)
+
+	ownerState.ChangeFeedInfos["cf-1"] = changeFeedInfo
+	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{
+		"/tidb/cdc/changefeed/info/cf-1": string(changeFeedInfoJSON),
+	})
+
+	// test the normal case
+	ownerState.CleanUpChangeFeedErrorHistory("cf-1")
+	err = tester.ApplyPatches()
+	c.Assert(err, check.IsNil)
+
+	var newChangeFeedInfo model.ChangeFeedInfo
+	err = json.Unmarshal([]byte(tester.KVEntries()["/tidb/cdc/changefeed/info/cf-1"]), &newChangeFeedInfo)
+	c.Assert(err, check.IsNil)
+	c.Assert(newChangeFeedInfo.ErrorHis, check.DeepEquals,
+		[]int64{now.Add(-time.Minute*5).UnixNano() / 1e6, now.Add(-time.Minute*3).UnixNano() / 1e6})
+
+	// test the already cleaned case
+	oldJSON := tester.KVEntries()["/tidb/cdc/changefeed/info/cf-1"]
+	ownerState.CleanUpChangeFeedErrorHistory("cf-1")
+	err = tester.ApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(tester.KVEntries()["/tidb/cdc/changefeed/info/cf-1"], check.Equals, oldJSON)
+
+	// test changeFeedInfo gone case
+	ownerState.CleanUpChangeFeedErrorHistory("cf-1")
+	delete(tester.KVEntries(), "/tidb/cdc/changefeed/info/cf-1")
+	err = tester.ApplyPatches()
+	c.Assert(err, check.IsNil)
+}
+
+func (s *ownerStateTestSuite) TestGetTableToCaptureMap(c *check.C) {
+	ownerState := newCDCReactorState()
+	taskStatus1 := &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {
+				StartTs:     2000,
+				MarkTableID: 0,
+			},
+			2: {
+				StartTs:     3000,
+				MarkTableID: 0,
+			},
+		},
+	}
+	taskStatus2 := &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			3: {
+				StartTs:     2000,
+				MarkTableID: 0,
+			},
+			4: {
+				StartTs:     3000,
+				MarkTableID: 0,
+			},
+		},
+	}
+	ownerState.TaskStatuses["cf-1"] = map[model.CaptureID]*model.TaskStatus{
+		"capture-1": taskStatus1, "capture-2": taskStatus2,
+	}
+	ownerState.Captures["capture-1"] = &model.CaptureInfo{}
+	ownerState.Captures["capture-2"] = &model.CaptureInfo{}
+
+	// test the basic case
+	tableToCaptureMap := ownerState.GetTableToCaptureMap("cf-1")
+	c.Assert(tableToCaptureMap, check.DeepEquals, map[model.TableID]model.CaptureID{
+		1: "capture-1",
+		2: "capture-1",
+		3: "capture-2",
+		4: "capture-2",
+	})
+
+	// test the operation case
+	ownerState.TaskStatuses["cf-1"]["capture-1"].Operation = make(map[model.TableID]*model.TableOperation)
+	ownerState.TaskStatuses["cf-1"]["capture-1"].Operation[5] = &model.TableOperation{
+		Delete:     false,
+		BoundaryTs: 5000,
+		Done:       false,
+		Status:     model.OperDispatched,
+	}
+	ownerState.TaskStatuses["cf-1"]["capture-2"].Operation = make(map[model.TableID]*model.TableOperation)
+	ownerState.TaskStatuses["cf-1"]["capture-2"].Operation[6] = &model.TableOperation{
+		Delete:     true,
+		BoundaryTs: 5000,
+		Done:       true,
+		Status:     model.OperFinished,
+	}
+	tableToCaptureMap = ownerState.GetTableToCaptureMap("cf-1")
+	c.Assert(tableToCaptureMap, check.DeepEquals, map[model.TableID]model.CaptureID{
+		1: "capture-1",
+		2: "capture-1",
+		3: "capture-2",
+		4: "capture-2",
+		5: "capture-1",
+	})
+}
+
+func (s *ownerStateTestSuite) TestGetTableProgressAndActiveTables(c *check.C) {
+	ownerState := newCDCReactorState()
+	taskStatus1 := &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {
+				StartTs:     2000,
+				MarkTableID: 0,
+			},
+			2: {
+				StartTs:     3000,
+				MarkTableID: 0,
+			},
+		},
+	}
+	taskStatus1JSON, err := json.Marshal(taskStatus1)
+	c.Assert(err, check.IsNil)
+
+	taskStatus2 := &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			3: {
+				StartTs:     2000,
+				MarkTableID: 0,
+			},
+			4: {
+				StartTs:     3000,
+				MarkTableID: 0,
+			},
+		},
+	}
+	taskStatus2JSON, err := json.Marshal(taskStatus2)
+	c.Assert(err, check.IsNil)
+
+	taskPosition1 := &model.TaskPosition{
+		CheckPointTs: 3500,
+		ResolvedTs:   4000,
+	}
+	taskPosition1JSON, err := json.Marshal(taskPosition1)
+	c.Assert(err, check.IsNil)
+
+	taskPosition2 := &model.TaskPosition{
+		CheckPointTs: 3600,
+		ResolvedTs:   3900,
+	}
+	taskPosition2JSON, err := json.Marshal(taskPosition2)
+	c.Assert(err, check.IsNil)
+
+	captureInfo1 := &model.CaptureInfo{
+		ID:            "127.0.0.1:8081",
+		AdvertiseAddr: "127.0.0.1:8081",
+	}
+	captureInfo1JSON, err := json.Marshal(captureInfo1)
+	c.Assert(err, check.IsNil)
+
+	captureInfo2 := &model.CaptureInfo{
+		ID:            "127.0.0.1:8081",
+		AdvertiseAddr: "127.0.0.1:8081",
+	}
+	captureInfo2JSON, err := json.Marshal(captureInfo2)
+	c.Assert(err, check.IsNil)
+
+	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{})
+	err = tester.UpdateKeys(map[string][]byte{
+		"/tidb/cdc/task/status/capture-1/cf-1":   taskStatus1JSON,
+		"/tidb/cdc/task/status/capture-2/cf-1":   taskStatus2JSON,
+		"/tidb/cdc/task/position/capture-1/cf-1": taskPosition1JSON,
+		"/tidb/cdc/task/position/capture-2/cf-1": taskPosition2JSON,
+		"/tidb/cdc/capture/capture-1":            captureInfo1JSON,
+		"/tidb/cdc/capture/capture-2":            captureInfo2JSON,
+	})
+	c.Assert(err, check.IsNil)
+
+	// test the basic case
+	progress := ownerState.GetTableProgress("cf-1", 1)
+	c.Assert(progress, check.DeepEquals, &tableProgress{
+		resolvedTs:   4000,
+		checkpointTs: 3500,
+	})
+
+	progress = ownerState.GetTableProgress("cf-1", 2)
+	c.Assert(progress, check.DeepEquals, &tableProgress{
+		resolvedTs:   4000,
+		checkpointTs: 3500,
+	})
+
+	progress = ownerState.GetTableProgress("cf-1", 3)
+	c.Assert(progress, check.DeepEquals, &tableProgress{
+		resolvedTs:   3900,
+		checkpointTs: 3600,
+	})
+
+	progress = ownerState.GetTableProgress("cf-1", 4)
+	c.Assert(progress, check.DeepEquals, &tableProgress{
+		resolvedTs:   3900,
+		checkpointTs: 3600,
+	})
+
+	activeTables := ownerState.GetChangeFeedActiveTables("cf-1")
+	if !tableIDListMatch(activeTables, []model.TableID{1, 2, 3, 4}) {
+		c.Fatal(activeTables)
+	}
+
+	// test stopping table
+	delete(taskStatus1.Tables, 1)
+	taskStatus1JSON, err = json.Marshal(taskStatus1)
+	c.Assert(err, check.IsNil)
+
+	err = tester.UpdateKeys(map[string][]byte{
+		"/tidb/cdc/task/status/capture-1/cf-1": taskStatus1JSON,
+	})
+	c.Assert(err, check.IsNil)
+
+	progress = ownerState.GetTableProgress("cf-1", 1)
+	c.Assert(progress, check.IsNil)
+
+	activeTables = ownerState.GetChangeFeedActiveTables("cf-1")
+	if !tableIDListMatch(activeTables, []model.TableID{2, 3, 4}) {
+		c.Fatal(activeTables)
+	}
+
+	// test capture gone case
+	err = tester.UpdateKeys(map[string][]byte{
+		"/tidb/cdc/capture/capture-2": nil,
+	})
+	c.Assert(err, check.IsNil)
+
+	progress = ownerState.GetTableProgress("cf-1", 3)
+	c.Assert(progress, check.IsNil)
+
+	activeTables = ownerState.GetChangeFeedActiveTables("cf-1")
+	if !tableIDListMatch(activeTables, []model.TableID{2}) {
+		c.Fatal(activeTables)
+	}
+
+	// test position gone case
+	err = tester.UpdateKeys(map[string][]byte{
+		"/tidb/cdc/task/position/capture-1/cf-1": nil,
+	})
+	c.Assert(err, check.IsNil)
+
+	progress = ownerState.GetTableProgress("cf-1", 2)
+	c.Assert(progress, check.IsNil)
+
+	activeTables = ownerState.GetChangeFeedActiveTables("cf-1")
+	if !tableIDListMatch(activeTables, []model.TableID{2}) {
+		c.Fatal(activeTables)
+	}
 }

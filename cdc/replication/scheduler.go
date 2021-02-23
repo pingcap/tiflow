@@ -110,7 +110,7 @@ func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 			if affCapture := s.lookUpAffinity(tableID); affCapture != "" {
 				log.Info("Dispatching table using affinity",
 					zap.String("cfID", s.cfID),
-					zap.String("tableID", string(tableID)),
+					zap.Int("tableID", int(tableID)),
 					zap.String("target-capture", affCapture))
 				target = affCapture
 			}

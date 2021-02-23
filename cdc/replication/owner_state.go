@@ -31,16 +31,16 @@ import (
 
 // ownerReactorState is used by the Owner to manage its Etcd states.
 type ownerReactorState struct {
-	Owner              model.CaptureID
+	// These fields represent the latest state of Etcd.
 	ChangeFeedInfos    map[model.ChangeFeedID]*model.ChangeFeedInfo
 	Captures           map[model.CaptureID]*model.CaptureInfo
 	ChangeFeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
 	TaskPositions      map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition
 	TaskStatuses       map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
 
-	patches                []*orchestrator.DataPatch
-	tableToCaptureMapCache map[model.ChangeFeedID]map[model.TableID]model.CaptureID
-	newCaptureHandler      func(captureID model.CaptureID)
+	patches                []*orchestrator.DataPatch                                // patches yet to be uploaded to Etcd
+	tableToCaptureMapCache map[model.ChangeFeedID]map[model.TableID]model.CaptureID // table-to-capture mapping cached for frequent use
+	newCaptureHandler      func(captureID model.CaptureID)                          // called when a new capture is added
 }
 
 func newCDCReactorState() *ownerReactorState {
@@ -65,6 +65,10 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 	switch k.Tp {
 	case etcd.CDCKeyTypeCapture:
 		captureID := k.CaptureID
+		defer func() {
+			// invalidate cache because captures have changed.
+			s.invalidateTableToCaptureCache()
+		}()
 
 		if value == nil {
 			log.Info("Capture deleted",
@@ -98,6 +102,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 		}
 
 		s.Captures[captureID] = &newCaptureInfo
+
 		return nil
 	case etcd.CDCKeyTypeChangeFeedStatus:
 		changefeedID := k.ChangefeedID
@@ -215,7 +220,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 		}
 
 		s.TaskStatuses[changefeedID][captureID] = &newTaskStatus
-		s.tableToCaptureMapCache[changefeedID] = s.GetTableToCaptureMap(changefeedID)
+		s.updateTableToCaptureCache(changefeedID)
 		return nil
 	case etcd.CDCKeyTypeChangefeedInfo:
 		changeFeedID := k.ChangefeedID
@@ -429,7 +434,7 @@ func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID mo
 			// TODO remove this assertion
 			if _, ok := taskStatus.Tables[tableID]; ok {
 				log.Panic("processor bug: table not cleaned before marking done flag",
-					zap.String("tableID", string(tableID)))
+					zap.Int("tableID", int(tableID)))
 			}
 
 			newValue, err := json.Marshal(&taskStatus)
@@ -587,7 +592,7 @@ func (s *ownerReactorState) GetCaptureTables(cfID model.ChangeFeedID, captureID 
 	for tableID, op := range taskStatus.Operation {
 		// A table could be in the process of being added.
 		// We need to count this case.
-		if !op.Delete && op.Status != model.OperFinished {
+		if op.Status != model.OperFinished {
 			tableIDSet[tableID] = struct{}{}
 		}
 	}
@@ -622,10 +627,12 @@ func (s *ownerReactorState) CleanUpChangeFeedErrorHistory(cfID model.ChangeFeedI
 
 			i := sort.Search(len(info.ErrorHis), func(i int) bool {
 				ts := info.ErrorHis[i]
+				// `ts` is in milliseconds.
 				return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < model.ErrorHistoryGCInterval
 			})
 
 			if i == 0 {
+				// no need to clean anything. Returns ErrEtcdIgnore to ease the load on the Etcd server.
 				return nil, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
 			}
 
@@ -658,7 +665,7 @@ func (s *ownerReactorState) GetTableToCaptureMap(cfID model.ChangeFeedID) map[mo
 		}
 
 		for tableID, op := range taskStatus.Operation {
-			if !op.Delete || op.Status != model.OperFinished {
+			if op.Status != model.OperFinished {
 				tableToCaptureMap[tableID] = captureID
 			}
 		}
@@ -672,7 +679,14 @@ type tableProgress struct {
 	checkpointTs uint64
 }
 
+// GetTableProgress returns the progress of a table.
+// If the table is NOT active, or belongs to a capture that has not yet uploaded its task position,
+// then GetTableProgress returns nil.
 func (s *ownerReactorState) GetTableProgress(cfID model.ChangeFeedID, tableID model.TableID) *tableProgress {
+	if _, ok := s.tableToCaptureMapCache[cfID]; !ok {
+		s.updateTableToCaptureCache(cfID)
+	}
+
 	m := s.tableToCaptureMapCache[cfID]
 	if captureID, ok := m[tableID]; ok {
 		position := s.TaskPositions[cfID][captureID]
@@ -689,7 +703,14 @@ func (s *ownerReactorState) GetTableProgress(cfID model.ChangeFeedID, tableID mo
 	return nil
 }
 
+// GetChangeFeedActiveTables returns all the active tables in a changeFeed.
+// NOTE: Being `active` is defined as 1) appearing in a taskStatus, 2) not the target of any finished delete operation,
+// and 3) belonging to a capture that holds a valid lease.
 func (s *ownerReactorState) GetChangeFeedActiveTables(cfID model.ChangeFeedID) []model.TableID {
+	if _, ok := s.tableToCaptureMapCache[cfID]; !ok {
+		s.updateTableToCaptureCache(cfID)
+	}
+
 	m := s.tableToCaptureMapCache[cfID]
 
 	var tableIDs []model.TableID
@@ -710,4 +731,14 @@ func (s *ownerReactorState) CaptureExists(captureID model.CaptureID) bool {
 // This is normally used to trigger a table rebalance.
 func (s *ownerReactorState) SetNewCaptureHandler(handler func(id model.CaptureID)) {
 	s.newCaptureHandler = handler
+}
+
+// updateTableToCaptureCache updates the internal table-to-capture mapping cache for a given change-feed.
+func (s *ownerReactorState) updateTableToCaptureCache(cfID model.ChangeFeedID) {
+	s.tableToCaptureMapCache[cfID] = s.GetTableToCaptureMap(cfID)
+}
+
+// invalidateTableToCaptureCache used to clear all table-to-capture mapping cache.
+func (s *ownerReactorState) invalidateTableToCaptureCache() {
+	s.tableToCaptureMapCache = make(map[model.ChangeFeedID]map[model.TableID]model.CaptureID)
 }
