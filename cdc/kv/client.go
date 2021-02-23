@@ -64,6 +64,11 @@ const (
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
 
+	// TiCDC always interacts with region leader, every time something goes wrong,
+	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
+	// don't need to force reload region any more.
+	regionScheduleReload = false
+
 	// hard code switch
 	// true: use kv client v2, which has a region worker for each stream
 	// false: use kv client v1, which runs a goroutine for every single region
@@ -71,11 +76,10 @@ const (
 )
 
 type singleRegionInfo struct {
-	verID        tikv.RegionVerID
-	span         regionspan.ComparableSpan
-	ts           uint64
-	failStoreIDs map[uint64]struct{}
-	rpcCtx       *tikv.RPCContext
+	verID  tikv.RegionVerID
+	span   regionspan.ComparableSpan
+	ts     uint64
+	rpcCtx *tikv.RPCContext
 }
 
 var (
@@ -95,11 +99,10 @@ var (
 
 func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
 	return singleRegionInfo{
-		verID:        verID,
-		span:         span,
-		ts:           ts,
-		failStoreIDs: make(map[uint64]struct{}),
-		rpcCtx:       rpcCtx,
+		verID:  verID,
+		span:   span,
+		ts:     ts,
+		rpcCtx: rpcCtx,
 	}
 }
 
@@ -768,7 +771,7 @@ MainLoop:
 						time.Sleep(delay)
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
+					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
 					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
 					pendingRegions.take(requestID)
 					continue
@@ -837,17 +840,6 @@ MainLoop:
 			break
 		}
 	}
-}
-
-func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext) (need bool) {
-	failStoreIDs[getStoreID(rpcCtx)] = struct{}{}
-	need = len(failStoreIDs) == len(rpcCtx.Meta.GetPeers())
-	if need {
-		for k := range failStoreIDs {
-			delete(failStoreIDs, k)
-		}
-	}
-	return
 }
 
 // partialRegionFeed establishes a EventFeed to the region specified by regionInfo.
@@ -1046,7 +1038,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		if errInfo.rpcCtx.Meta != nil {
-			s.regionCache.OnSendFail(bo, errInfo.rpcCtx, needReloadRegion(errInfo.failStoreIDs, errInfo.rpcCtx), err)
+			s.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
 		}
 	}
 
@@ -1413,6 +1405,15 @@ func (s *eventFeedSession) singleEventFeed(
 			switch x := event.changeEvent.Event.(type) {
 			case *cdcpb.Event_Entries_:
 				for _, entry := range x.Entries.GetEntries() {
+					// if a region with kv range [a, z)
+					// and we only want the get [b, c) from this region,
+					// tikv will return all key events in the region although we specified [b, c) int the request.
+					// we can make tikv only return the events about the keys in the specified range.
+					comparableKey := regionspan.ToComparableKey(entry.GetKey())
+					// key for initialized event is nil
+					if !regionspan.KeyInSpan(comparableKey, span) && entry.Type != cdcpb.Event_INITIALIZED {
+						continue
+					}
 					switch entry.Type {
 					case cdcpb.Event_INITIALIZED:
 						if time.Since(startFeedTime) > 20*time.Second {
