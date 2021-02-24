@@ -1,4 +1,4 @@
-FROM golang:1.13 as builder
+FROM golang:1.16 as builder
 WORKDIR /go/src/github.com/pingcap/ticdc
 COPY . .
 RUN go mod download
