@@ -44,7 +44,7 @@ FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev
 RELEASE_VERSION := v5.0.0-master
 ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
 	# If we are in release branch, use tag version.
-	RELEASE_VERSION := $(shell git describe --tags --dirty="-dev"))
+	RELEASE_VERSION := $(shell git describe --tags --dirty="-dev")
 else ifneq ($(shell git status --porcelain),)
 	# Add -dirty if the working tree is dirty for non release branch.
 	RELEASE_VERSION := $(RELEASE_VERSION)-dev

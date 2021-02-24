@@ -315,7 +315,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 	switch sortEngine {
 	case model.SortUnified, model.SortInMemory, model.SortInFile:
 	default:
-		return nil, errors.Errorf("Creating chengfeed without a invaild sort engine(%s), `%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
+		return nil, errors.Errorf("Creating chengfeed with an invalid sort engine(%s), `%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
 	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
