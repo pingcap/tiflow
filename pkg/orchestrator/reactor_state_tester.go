@@ -74,6 +74,10 @@ func (t *ReactorStateTester) ApplyPatches() error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		err = t.state.Update(patch.Key, newBytes, false)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		if newBytes == nil {
 			delete(t.kvEntries, patch.Key.String())
 			continue

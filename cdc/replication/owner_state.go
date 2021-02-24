@@ -382,9 +382,16 @@ func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureI
 				}
 			}
 
+			boundaryTs := uint64(0)
+			// We may encounter the rare case when a table is being deleted when the ChangeFeedStatus has not been updated yet.
+			// TODO confirm whether this can happen.
+			if s.ChangeFeedStatuses[cfID] != nil {
+				boundaryTs = s.ChangeFeedStatuses[cfID].ResolvedTs
+			}
+
 			taskStatus.Operation[tableID] = &model.TableOperation{
 				Delete:     true,
-				BoundaryTs: s.ChangeFeedStatuses[cfID].CheckpointTs,
+				BoundaryTs: boundaryTs,
 				Done:       false,
 				Status:     model.OperDispatched,
 			}
@@ -429,13 +436,16 @@ func (s *ownerReactorState) CleanOperation(cfID model.ChangeFeedID, captureID mo
 				return nil, errors.Trace(err)
 			}
 
-			delete(taskStatus.Operation, tableID)
-
 			// TODO remove this assertion
-			if _, ok := taskStatus.Tables[tableID]; ok {
-				log.Panic("processor bug: table not cleaned before marking done flag",
-					zap.Int("tableID", int(tableID)))
+			if taskStatus.Operation[tableID] != nil && taskStatus.Operation[tableID].Delete {
+				if _, ok := taskStatus.Tables[tableID]; ok {
+					log.Panic("processor bug: table not cleaned before marking done flag",
+						zap.Int("tableID", int(tableID)),
+						zap.String("captureID", captureID))
+				}
 			}
+
+			delete(taskStatus.Operation, tableID)
 
 			newValue, err := json.Marshal(&taskStatus)
 			if err != nil {

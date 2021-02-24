@@ -241,6 +241,7 @@ func (s *ownerStateTestSuite) TestPatchChangeFeedStatus(c *check.C) {
 		AdminJobType: 0,
 	}
 	changeFeedStatusJSON, err := json.Marshal(changeFeedStatus)
+	c.Assert(err, check.IsNil)
 	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{})
 
 	// test the creation case
@@ -261,6 +262,7 @@ func (s *ownerStateTestSuite) TestPatchChangeFeedStatus(c *check.C) {
 		AdminJobType: 0,
 	}
 	targetChangeFeedStatusJSON, err := json.Marshal(targetChangeFeedStatus)
+	c.Assert(err, check.IsNil)
 	c.Assert(tester.KVEntries()["/tidb/cdc/job/cf-1"], check.Equals, string(targetChangeFeedStatusJSON))
 
 	// test the zero cases
@@ -364,7 +366,7 @@ func (s *ownerStateTestSuite) TestStartDeletingTableCase(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(newTaskStatus.Tables, check.DeepEquals, taskStatus.Tables)
 	c.Assert(newTaskStatus.Operation[1].Status, check.Equals, model.OperDispatched)
-	c.Assert(newTaskStatus.Operation[1].BoundaryTs, check.Equals, uint64(4500))
+	c.Assert(newTaskStatus.Operation[1].BoundaryTs, check.Equals, uint64(5000))
 	c.Assert(newTaskStatus.Operation[1].Delete, check.IsTrue)
 
 	// test the duplication case
@@ -453,6 +455,7 @@ func (s *ownerStateTestSuite) TestCleanOperation(c *check.C) {
 		StartTs:     2000,
 		MarkTableID: 0,
 	}
+	taskStatus.Operation[1].Delete = true
 	taskStatusJSON, err = json.Marshal(taskStatus)
 	c.Assert(err, check.IsNil)
 	tester = orchestrator.NewReactorStateTester(ownerState, map[string]string{
@@ -889,8 +892,8 @@ func (s *ownerStateTestSuite) TestGetTableProgressAndActiveTables(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	captureInfo2 := &model.CaptureInfo{
-		ID:            "127.0.0.1:8081",
-		AdvertiseAddr: "127.0.0.1:8081",
+		ID:            "127.0.0.1:8082",
+		AdvertiseAddr: "127.0.0.1:8082",
 	}
 	captureInfo2JSON, err := json.Marshal(captureInfo2)
 	c.Assert(err, check.IsNil)

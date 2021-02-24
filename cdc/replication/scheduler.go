@@ -24,8 +24,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// scheduler is designed to abstract away the complexities associated with the Etcd data model.
 type scheduler interface {
-	GetTasks() (map[model.TableID]*tableTask, bool)
 	PutTasks(tables map[model.TableID]*tableTask)
 	SetAffinity(tableID model.TableID, captureID model.CaptureID, ttl int)
 	IsReady() bool
@@ -35,12 +35,16 @@ type schedulerImpl struct {
 	ownerState *ownerReactorState
 	cfID       model.ChangeFeedID
 
+	// the affinities mutex, guarding against concurrent access from the HTTP handle
 	mu         sync.Mutex
 	affinities map[model.TableID]*affinity
 
-	needRebalance bool
+	// this flag is set by a capture-added event in the ownerState
+	needRebalance         bool
+	captureWorkloadDeltas map[model.CaptureID]int
 }
 
+// affinity is used to record a table-capture affinity setting.
 type affinity struct {
 	targetCapture model.CaptureID
 	deadline      time.Time
@@ -50,6 +54,7 @@ func newScheduler(ownerState *ownerReactorState, cfID model.ChangeFeedID) *sched
 	ret := &schedulerImpl{
 		ownerState: ownerState,
 		cfID:       cfID,
+		affinities: make(map[model.TableID]*affinity),
 	}
 
 	ownerState.SetNewCaptureHandler(func(captureID model.CaptureID) {
@@ -59,29 +64,9 @@ func newScheduler(ownerState *ownerReactorState, cfID model.ChangeFeedID) *sched
 	return ret
 }
 
-func (s *schedulerImpl) GetTasks() (map[model.TableID]*tableTask, bool) {
-	tableToCaptureMap := s.ownerState.GetTableToCaptureMap(s.cfID)
-	positions := s.ownerState.TaskPositions[s.cfID]
-
-	ret := make(map[model.TableID]*tableTask)
-	for tableID, captureID := range tableToCaptureMap {
-		position, ok := positions[captureID]
-		if !ok {
-			log.Warn("Position not found", zap.String("captureID", captureID))
-			return nil, false
-		}
-
-		ret[tableID] = &tableTask{
-			TableID:      tableID,
-			CheckpointTs: position.CheckPointTs,
-			ResolvedTs:   position.ResolvedTs,
-		}
-	}
-
-	return ret, true
-}
-
 func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
+	s.captureWorkloadDeltas = make(map[model.CaptureID]int)
+
 	// We do NOT want to touch these tables because they are being deleted.
 	// We wait for the deletion(s) to finish before redispatching.
 	pendingList := s.cleanUpOperations()
@@ -126,6 +111,7 @@ func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 				zap.String("changefeed-id", s.cfID))
 
 			s.ownerState.DispatchTable(s.cfID, target, tableID, replicaInfo)
+			s.captureWorkloadDeltas[target]++
 		}
 	}
 
@@ -144,6 +130,7 @@ func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 				zap.String("changefeed-id", s.cfID))
 
 			s.ownerState.StartDeletingTable(s.cfID, captureID, tableID)
+			s.captureWorkloadDeltas[captureID]--
 		}
 	}
 
@@ -239,11 +226,6 @@ func (s *schedulerImpl) triggerRebalance() {
 		zap.Int("target-limit", upperLimitPerCapture))
 
 	for captureID := range s.ownerState.Captures {
-		if !s.ownerState.CaptureExists(captureID) {
-			log.Debug("triggerRebalance: capture not found", zap.String("captureID", captureID))
-			continue
-		}
-
 		captureTables := s.ownerState.GetCaptureTables(s.cfID, captureID)
 
 		// Use rand.Perm as a randomization source for choosing victims uniformly.
@@ -267,13 +249,13 @@ func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 	workloads := make(map[model.CaptureID]int)
 
 	for captureID := range s.ownerState.Captures {
-		workloads[captureID] = 0
+		workloads[captureID] = s.captureWorkloadDeltas[captureID]
 	}
 
 	for _, captureStatuses := range s.ownerState.TaskStatuses {
-		for captureID, task := range captureStatuses {
+		for captureID, taskStatus := range captureStatuses {
 			if _, ok := workloads[captureID]; ok {
-				workloads[captureID] += len(task.Tables)
+				workloads[captureID] += len(taskStatus.Tables)
 			}
 		}
 	}
@@ -281,6 +263,14 @@ func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 	minCapture := ""
 	minWorkLoad := math.MaxInt32
 	for captureID, workload := range workloads {
+		if workload < 0 {
+			// TODO investigate and remove this log
+			log.Debug("negative workload, bug?",
+				zap.Reflect("workloads", workloads),
+				zap.Reflect("deltas", s.captureWorkloadDeltas))
+			workload = 0
+		}
+
 		if workload < minWorkLoad {
 			minCapture = captureID
 			minWorkLoad = workload
