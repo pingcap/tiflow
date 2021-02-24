@@ -601,7 +601,7 @@ func (p *processor) handleWorkload() error {
 	return nil
 }
 
-// pushResolvedTs2Table sends gloabl resolved ts to all the table pipelines.
+// pushResolvedTs2Table sends global resolved ts to all the table pipelines.
 func (p *processor) pushResolvedTs2Table() error {
 	resolvedTs := p.changefeed.Status.ResolvedTs
 	for _, table := range p.tables {
