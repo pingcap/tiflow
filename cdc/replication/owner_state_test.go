@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -32,6 +33,7 @@ type ownerStateTestSuite struct {
 var _ = check.Suite(&ownerStateTestSuite{})
 
 func (s *ownerStateTestSuite) TestUpdateCapture(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{})
 
@@ -79,6 +81,7 @@ func (s *ownerStateTestSuite) TestUpdateCapture(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestUpdateChangeFeedStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{})
 
@@ -118,6 +121,7 @@ func (s *ownerStateTestSuite) TestUpdateChangeFeedStatus(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestUpdateTaskPosition(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{})
 
@@ -156,6 +160,7 @@ func (s *ownerStateTestSuite) TestUpdateTaskPosition(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestUpdateTaskStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{})
 
@@ -197,6 +202,7 @@ func (s *ownerStateTestSuite) TestUpdateTaskStatus(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestUpdateChangeFeedInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	tester := orchestrator.NewReactorStateTester(ownerState, map[string]string{})
 
@@ -234,6 +240,7 @@ func (s *ownerStateTestSuite) TestUpdateChangeFeedInfo(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestPatchChangeFeedStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	changeFeedStatus := &model.ChangeFeedStatus{
 		ResolvedTs:   800,
@@ -282,6 +289,7 @@ func (s *ownerStateTestSuite) TestPatchChangeFeedStatus(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestDispatchTable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	replicaInfo := model.TableReplicaInfo{
 		StartTs:     1000,
@@ -328,6 +336,7 @@ func (s *ownerStateTestSuite) TestDispatchTable(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestStartDeletingTableCase(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	taskStatus := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -395,6 +404,7 @@ func (s *ownerStateTestSuite) TestStartDeletingTableCase(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestCleanOperation(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	taskStatus := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -479,6 +489,7 @@ func (s *ownerStateTestSuite) TestCleanOperation(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestAlterChangeFeedRuntimeState(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	changeFeedInfo := &model.ChangeFeedInfo{
 		SinkURI:      "blackhole:///",
@@ -536,6 +547,7 @@ func (s *ownerStateTestSuite) TestAlterChangeFeedRuntimeState(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestCleanUpTaskStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	taskStatus := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -596,6 +608,7 @@ func (s *ownerStateTestSuite) TestCleanUpTaskStatus(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestCleanUpTaskPosition(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	taskPosition := &model.TaskPosition{
 		CheckPointTs: 1000,
@@ -638,6 +651,7 @@ func (s *ownerStateTestSuite) TestCleanUpTaskPosition(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestGetCaptureTables(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	taskStatus := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -728,6 +742,7 @@ func tableIDListMatch(a, b []model.TableID) bool {
 }
 
 func (s *ownerStateTestSuite) TestCleanUpChangeFeedErrorHistory(c *check.C) {
+	defer testleak.AfterTest(c)()
 	now := time.Now()
 	ownerState := newCDCReactorState()
 	changeFeedInfo := &model.ChangeFeedInfo{
@@ -773,6 +788,7 @@ func (s *ownerStateTestSuite) TestCleanUpChangeFeedErrorHistory(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestGetTableToCaptureMap(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	taskStatus1 := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -839,6 +855,7 @@ func (s *ownerStateTestSuite) TestGetTableToCaptureMap(c *check.C) {
 }
 
 func (s *ownerStateTestSuite) TestGetTableProgressAndActiveTables(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ownerState := newCDCReactorState()
 	taskStatus1 := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{

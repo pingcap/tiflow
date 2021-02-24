@@ -102,26 +102,12 @@ func (cf *changeFeedState) AddDDLBarrier(barrierTs uint64) {
 	})
 }
 
-func (cf *changeFeedState) PopDDLBarrier() {
-	if len(cf.Barriers) == 0 {
-		log.Panic("changeFeedState: no DDL barrier to pop")
-	}
-
-	cf.Barriers = cf.Barriers[1:]
-}
-
 func (cf *changeFeedState) ShouldRunDDL() *barrier {
 	if len(cf.Barriers) > 0 {
 		if cf.Barriers[0].BarrierTs == cf.CheckpointTs()+1 &&
 			cf.Barriers[0].BarrierType == DDLBarrier {
 
 			return cf.Barriers[0]
-		}
-
-		if cf.Barriers[0].BarrierTs <= cf.CheckpointTs() {
-			log.Panic("changeFeedState: Checkpoint run past barrier",
-				zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs()),
-				zap.Reflect("barriers", cf.Barriers))
 		}
 	}
 
@@ -151,8 +137,8 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 		case AddTableAction:
 			cf.TableTasks[tableAction.tableID] = &tableTask{
 				TableID:      tableAction.tableID,
-				CheckpointTs: cf.CheckpointTs() - 1,
-				ResolvedTs:   cf.CheckpointTs() - 1,
+				CheckpointTs: cf.CheckpointTs(),
+				ResolvedTs:   cf.CheckpointTs(),
 			}
 		case DropTableAction:
 			if _, ok := cf.TableTasks[tableAction.tableID]; !ok {
@@ -178,10 +164,6 @@ func (cf *changeFeedState) ResolvedTs() uint64 {
 
 	if len(cf.Barriers) > 0 && resolvedTs > cf.Barriers[0].BarrierTs-1 {
 		resolvedTs = cf.Barriers[0].BarrierTs - 1
-	}
-
-	if resolvedTs > cf.DDLResolvedTs {
-		resolvedTs = cf.DDLResolvedTs
 	}
 
 	if resolvedTs == 0 {

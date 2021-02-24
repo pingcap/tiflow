@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type schedulerTestSuite struct {
@@ -94,6 +95,7 @@ func readTaskStatus(c *check.C, tester *orchestrator.ReactorStateTester, capture
 }
 
 func (s *schedulerTestSuite) TestPutTaskAddRemove(c *check.C) {
+	defer testleak.AfterTest(c)()
 	scheduler, tester := setUp(c)
 	addCapture(c, tester, "capture-1")
 
@@ -187,6 +189,7 @@ func (s *schedulerTestSuite) TestPutTaskAddRemove(c *check.C) {
 }
 
 func (s *schedulerTestSuite) TestPutTaskRebalance(c *check.C) {
+	defer testleak.AfterTest(c)()
 	scheduler, tester := setUp(c)
 	addCapture(c, tester, "capture-1")
 
@@ -263,6 +266,7 @@ func (s *schedulerTestSuite) TestPutTaskRebalance(c *check.C) {
 }
 
 func (s *schedulerTestSuite) TestPutTaskAddAfterDelete(c *check.C) {
+	defer testleak.AfterTest(c)()
 	scheduler, tester := setUp(c)
 	addCapture(c, tester, "capture-1")
 	addCapture(c, tester, "capture-2")
@@ -331,6 +335,7 @@ func (s *schedulerTestSuite) TestPutTaskAddAfterDelete(c *check.C) {
 }
 
 func (s *schedulerTestSuite) TestPutTaskWithAffinity(c *check.C) {
+	defer testleak.AfterTest(c)()
 	scheduler, tester := setUp(c)
 	addCapture(c, tester, "capture-1")
 	addCapture(c, tester, "capture-2")
