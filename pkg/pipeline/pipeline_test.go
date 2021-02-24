@@ -403,3 +403,37 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 	errs := p.Wait()
 	c.Assert(len(errs), check.Equals, 0)
 }
+
+type panicNode struct {
+}
+
+func (e panicNode) Init(ctx NodeContext) error {
+	panic("panic in panicNode")
+}
+
+func (e panicNode) Receive(ctx NodeContext) error {
+	return nil
+}
+
+func (e panicNode) Destroy(ctx NodeContext) error {
+	return nil
+}
+
+func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
+	defer testleak.AfterTest(c)()
+	// why skip this test?
+	// this test is panic expected, but the panic is not happened at the main goroutine.
+	// so we can't recover the panic through the defer code block at the main goroutine.
+	// the c.ExpectFailure() is not warking cause the same reason.
+	c.Skip("this test should be panic")
+	defer func() {
+		panicInfo := recover().(string)
+		c.Assert(panicInfo, check.Equals, "panic in panicNode")
+	}()
+	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ctx, p := NewPipeline(ctx, -1)
+	p.AppendNode(ctx, "panic", panicNode{})
+	c.Assert(p.Wait(), check.HasLen, 0)
+}
