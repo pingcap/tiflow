@@ -466,6 +466,8 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 			return handleUnsignedInt64()
 		}
 		return col.Value.(int64), "long", nil
+	case mysql.TypeFloat:
+		return col.Value.(float64), "float", nil
 	default:
 		avroType, err := getAvroDataTypeFallback(col.Value)
 		if err != nil {
