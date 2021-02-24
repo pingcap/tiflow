@@ -386,13 +386,14 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 	defer w.statesLock.Unlock()
 	for _, state := range w.regionStates {
 		state.lock.RLock()
+		singleRegionInfo := state.sri
+		state.lock.RUnlock()
 		err := w.session.onRegionFail(ctx, regionErrorInfo{
-			singleRegionInfo: state.sri,
+			singleRegionInfo: singleRegionInfo,
 			err: &rpcCtxUnavailableErr{
-				verID: state.sri.verID,
+				verID: singleRegionInfo.verID,
 			},
 		})
-		state.lock.RUnlock()
 		if err != nil {
 			return err
 		}
