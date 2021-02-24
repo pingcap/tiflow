@@ -153,6 +153,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("start to listen processor task...")
 	if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
