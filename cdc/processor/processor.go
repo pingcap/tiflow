@@ -219,7 +219,9 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 
 	errCh := make(chan error, 16)
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		// there are some other objects need errCh, such as sink and sink manager
 		// but we can't ensure that all the producer of errCh are non-blocking
 		// It's very tricky that create a goroutine to receive the local errCh
@@ -250,7 +252,9 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 	}
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		p.sendError(p.mounter.Run(ctx))
 	}()
 
@@ -349,7 +353,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 		if opt.TableApplied() {
 			continue
 		}
-		localCheckpointTs := p.changefeed.TaskPosition.CheckPointTs
+		globalCheckpointTs := p.changefeed.Status.CheckpointTs
 		if opt.Delete {
 			table, exist := p.tables[tableID]
 			if !exist {
@@ -364,8 +368,8 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			}
 			switch opt.Status {
 			case model.OperDispatched:
-				if opt.BoundaryTs < localCheckpointTs {
-					log.Warn("the BoundaryTs of remove table operation is smaller than local checkpoint ts", zap.Uint64("localCheckpointTs", localCheckpointTs), zap.Any("operation", opt))
+				if opt.BoundaryTs < globalCheckpointTs {
+					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
 				}
 				table.AsyncStop(opt.BoundaryTs)
 				patchOperation(tableID, func(operation *model.TableOperation) error {
@@ -456,11 +460,15 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		p.sendError(ddlPuller.Run(ctx))
 	}()
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		var ddlRawKV *model.RawKVEntry
 		for {
 			select {
