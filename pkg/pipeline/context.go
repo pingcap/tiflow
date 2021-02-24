@@ -15,7 +15,7 @@ package pipeline
 
 import "github.com/pingcap/ticdc/pkg/context"
 
-// NodeContext contains some read-only parameters and provide control for the pipeline life cycle
+// NodeContext adds two functions from `coutext.Context` and created by pipeline
 type NodeContext interface {
 	context.Context
 

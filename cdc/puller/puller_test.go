@@ -192,7 +192,6 @@ func (s *pullerSuite) TestPullerRawKV(c *check.C) {
 	checkpointTs := uint64(996)
 	plr, cancel, wg, store := s.newPullerForTest(c, spans, checkpointTs)
 
-	// key not in expected region spans, will be ignored
 	plr.cli.Returns(&model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
 			OpType: model.OpTypePut,
@@ -209,7 +208,11 @@ func (s *pullerSuite) TestPullerRawKV(c *check.C) {
 			CRTs:   uint64(1003),
 		},
 	})
-	ev := <-plr.Output()
+	var ev *model.RawKVEntry
+	ev = <-plr.Output()
+	c.Assert(ev.OpType, check.Equals, model.OpTypePut)
+	c.Assert(ev.Key, check.DeepEquals, []byte("a"))
+	ev = <-plr.Output()
 	c.Assert(ev.OpType, check.Equals, model.OpTypePut)
 	c.Assert(ev.Key, check.DeepEquals, []byte("d"))
 

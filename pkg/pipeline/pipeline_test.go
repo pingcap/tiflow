@@ -16,6 +16,7 @@ package pipeline
 import (
 	stdCtx "context"
 	"testing"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -101,7 +102,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, p := NewPipeline(ctx)
+	ctx, p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
@@ -209,7 +210,7 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, p := NewPipeline(ctx)
+	ctx, p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &errorNode{c: c})
 	p.AppendNode(ctx, "check node", &checkNode{
@@ -289,7 +290,7 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, p := NewPipeline(ctx)
+	ctx, p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -317,4 +318,122 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
 	c.Assert(errs[2].Error(), check.Equals, "error node throw an error, index: 5")
 	c.Assert(errs[3].Error(), check.Equals, "error node throw an error, index: 6")
+}
+
+func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.WithCancel(ctx)
+	ctx, p := NewPipeline(ctx, -1)
+	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+		Row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "I am built by test function",
+				Table:  "CC1",
+			},
+		},
+	}))
+	c.Assert(err, check.IsNil)
+	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+		Row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "I am built by test function",
+				Table:  "DD2",
+			},
+		},
+	}))
+	c.Assert(err, check.IsNil)
+	p.AppendNode(ctx, "echo node", echoNode{})
+	// wait the echo node sent all messages to next node
+	time.Sleep(1 * time.Second)
+
+	p.AppendNode(ctx, "check node", &checkNode{
+		c: c,
+		expected: []*Message{
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "init function is called in echo node",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "I am built by test function",
+						Table:  "CC1",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "ECHO: I am built by test function",
+						Table:  "ECHO: CC1",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "I am built by test function",
+						Table:  "DD2",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "ECHO: I am built by test function",
+						Table:  "ECHO: DD2",
+					},
+				},
+			}),
+			PolymorphicEventMessage(&model.PolymorphicEvent{
+				Row: &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: "destory function is called in echo node",
+					},
+				},
+			}),
+		},
+	})
+
+	cancel()
+	errs := p.Wait()
+	c.Assert(len(errs), check.Equals, 0)
+}
+
+type panicNode struct {
+}
+
+func (e panicNode) Init(ctx NodeContext) error {
+	panic("panic in panicNode")
+}
+
+func (e panicNode) Receive(ctx NodeContext) error {
+	return nil
+}
+
+func (e panicNode) Destroy(ctx NodeContext) error {
+	return nil
+}
+
+func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
+	defer testleak.AfterTest(c)()
+	// why skip this test?
+	// this test is panic expected, but the panic is not happened at the main goroutine.
+	// so we can't recover the panic through the defer code block at the main goroutine.
+	// the c.ExpectFailure() is not warking cause the same reason.
+	c.Skip("this test should be panic")
+	defer func() {
+		panicInfo := recover().(string)
+		c.Assert(panicInfo, check.Equals, "panic in panicNode")
+	}()
+	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ctx, p := NewPipeline(ctx, -1)
+	p.AppendNode(ctx, "panic", panicNode{})
+	c.Assert(p.Wait(), check.HasLen, 0)
 }

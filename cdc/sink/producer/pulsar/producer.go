@@ -20,7 +20,9 @@ import (
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // NewProducer create a pulsar producer.
@@ -83,6 +85,7 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 		select {
 		case p.errCh <- cerror.WrapError(cerror.ErrPulsarSendMessage, err):
 		default:
+			log.Error("error channel is full", zap.Error(err))
 		}
 	}
 }
@@ -116,7 +119,7 @@ func (p *Producer) GetPartitionNum() int32 {
 func (p *Producer) Close() error {
 	err := p.producer.Flush()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+		return cerror.WrapError(cerror.ErrPulsarSendMessage, err)
 	}
 	p.producer.Close()
 	p.client.Close()

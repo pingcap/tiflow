@@ -161,6 +161,11 @@ error = '''
 this patch should be excluded from the current etcd txn
 '''
 
+["CDC:ErrEtcdSessionDone"]
+error = '''
+the etcd session is done
+'''
+
 ["CDC:ErrEtcdTryAgain"]
 error = '''
 the etcd txn should be aborted and retried immediately
@@ -616,6 +621,11 @@ error = '''
 server creates pd client failed
 '''
 
+["CDC:ErrServiceSafepointLost"]
+error = '''
+service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
+'''
+
 ["CDC:ErrSinkURIInvalid"]
 error = '''
 sink uri invalid
@@ -641,9 +651,19 @@ error = '''
 table %d not found in schema snapshot
 '''
 
+["CDC:ErrStartTsBeforeGC"]
+error = '''
+fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
+'''
+
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTableProcessorStoppedSafely"]
+error = '''
+table processor stopped safely
 '''
 
 ["CDC:ErrTaskPositionNotExists"]
@@ -694,6 +714,11 @@ unknown sort engine %s
 ["CDC:ErrUnmarshalFailed"]
 error = '''
 unmarshal failed
+'''
+
+["CDC:ErrUpdateServiceSafepointFailed"]
+error = '''
+updating service safepoint failed
 '''
 
 ["CDC:ErrVersionIncompatible"]
