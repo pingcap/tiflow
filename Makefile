@@ -42,8 +42,7 @@ FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
 RELEASE_VERSION := v5.0.0-master
-release_branch_regex := ^release-[0-9]\.[0-9].*$$
-ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
+ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
 	# If we are in release branch, use tag version.
 	RELEASE_VERSION := $(shell git describe --tags --dirty="-dev"))
 else ifneq ($(shell git status --porcelain),)
