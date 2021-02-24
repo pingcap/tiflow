@@ -302,10 +302,6 @@ func (p *processor) handleErrorCh(ctx context.Context) error {
 	default:
 		return nil
 	}
-	p.cancel()
-	if util.WaitTimeout(&p.wg, waitTableCloseTimeout) {
-		log.Warn("timeout when waiting for all the tables exit", zap.String("changefeedID", p.changefeed.ID))
-	}
 	cause := errors.Cause(err)
 	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 		log.Error("error on running processor",
@@ -730,6 +726,7 @@ func (p *processor) Close() error {
 		tbl.Cancel()
 	}
 	p.cancel()
+	p.wg.Wait()
 	// mark tables share the same context with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
