@@ -49,8 +49,6 @@ const (
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
-	waitTableCloseTimeout = 15 * time.Second
-
 	schemaStorageGCLag = time.Minute * 20
 )
 
