@@ -84,7 +84,7 @@ type processor struct {
 
 	ddlPuller       puller.Puller
 	ddlPullerCancel context.CancelFunc
-	schemaStorage   *entry.SchemaStorage
+	schemaStorage   entry.SchemaStorage
 
 	mounter entry.Mounter
 
@@ -749,7 +749,7 @@ func createSchemaStorage(
 	checkpointTs uint64,
 	filter *filter.Filter,
 	forceReplicate bool,
-) (*entry.SchemaStorage, error) {
+) (entry.SchemaStorage, error) {
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
