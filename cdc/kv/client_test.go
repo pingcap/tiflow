@@ -347,8 +347,9 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr)
 	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(1, "localhost:1")
@@ -434,8 +435,9 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	defer pdClient.Close() //nolint:errcheck
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr)
 	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(2, addr)
@@ -521,8 +523,9 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(1, addr1)
@@ -682,8 +685,9 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(1, addr1)
@@ -742,8 +746,9 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(1, addr1)
@@ -1139,8 +1144,9 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	regionID3 := uint64(3)
@@ -1240,8 +1246,9 @@ func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	regionID := uint64(3)
@@ -1329,6 +1336,7 @@ func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
+			log.Info("receive event", zap.Reflect("event", event), zap.Reflect("expected", expectedEv))
 			c.Assert(event, check.DeepEquals, expectedEv)
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
@@ -1392,8 +1400,9 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: gen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	regionID := uint64(3)
@@ -1488,8 +1497,9 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	cluster.AddStore(1, addr1)
@@ -1543,8 +1553,9 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	regionID := uint64(3)
@@ -2004,5 +2015,212 @@ func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
 			c.Errorf("expected event %v not received", expectedEv)
 		}
 	}
+	cancel()
+}
+
+func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
+
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+
+	eventsBeforeInit := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		// will be filtered out
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("ccc"),
+						Value:    []byte("key out of region range"),
+						StartTs:  105,
+						CommitTs: 115,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("aaaa"),
+						Value:    []byte("committed put event before init"),
+						StartTs:  105,
+						CommitTs: 115,
+					}},
+				},
+			},
+		},
+	}}
+	initialized := mockInitializedEvent(3 /*regionID */, currentRequestID())
+	eventsAfterInit := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		// will be filtered out
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("cccd"),
+						Value:   []byte("key out of region range"),
+						StartTs: 135,
+					}},
+				},
+			},
+		},
+		// will be filtered out
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("cccd"),
+						StartTs:  135,
+						CommitTs: 145,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:    cdcpb.Event_PREWRITE,
+						OpType:  cdcpb.Event_Row_PUT,
+						Key:     []byte("a-normal-put"),
+						Value:   []byte("normal put event"),
+						StartTs: 135,
+					}},
+				},
+			},
+		},
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMIT,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a-normal-put"),
+						StartTs:  135,
+						CommitTs: 145,
+					}},
+				},
+			},
+		},
+	}}
+	// batch resolved ts
+	eventResolvedBatch := &cdcpb.ChangeDataEvent{
+		ResolvedTs: &cdcpb.ResolvedTs{
+			Regions: []uint64{3},
+			Ts:      145,
+		},
+	}
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("aaaa"),
+				Value:    []byte("committed put event before init"),
+				StartTs:  105,
+				CRTs:     115,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("a-normal-put"),
+				Value:    []byte("normal put event"),
+				StartTs:  135,
+				CRTs:     145,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 145,
+			},
+			RegionID: 3,
+		},
+	}
+
+	ch1 <- eventsBeforeInit
+	ch1 <- initialized
+	ch1 <- eventsAfterInit
+	ch1 <- eventResolvedBatch
+
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+
 	cancel()
 }
