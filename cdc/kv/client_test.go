@@ -2225,9 +2225,8 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	cancel()
 }
 
-func (s *etcdSuite) TestSingleRegionInfoClone(c *check.C) {
+func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 	sri := newSingleRegionInfo(
 		tikv.RegionVerID{},
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
