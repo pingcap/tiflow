@@ -16,6 +16,7 @@ package codec
 import (
 	"bytes"
 	"encoding/binary"
+	"golang.org/x/text/encoding"
 	"strconv"
 
 	"github.com/linkedin/goavro/v2"
@@ -26,6 +27,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	tijson "github.com/pingcap/tidb/types/json"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // OperationType for row events type
@@ -52,9 +54,24 @@ const (
 	schemaKeyString = "string"
 )
 
+const  jdwSchema = `
+                  {"type":"record","name":"JdwData","namespace":"com.jd.bdp.jdw.avro",
+                   "fields":[{"name":"mid","type":"long"},
+                              {"name":"db","type":"string"},
+                              {"name":"sch","type":"string"},
+                              {"name":"tab","type":"string"},
+                              {"name":"opt","type":"string"},
+                              {"name":"ts","type":"long"},
+                              {"name":"err","type":["string","null"]},
+                              {"name":"src","type":[{"type":"map","values":["string","null"]},"null"]},
+                              {"name":"cur","type":[{"type":"map","values":["string","null"]},"null"]},
+                              {"name":"cus","type":[{"type":"map","values":["string","null"]},"null"]}]}
+               `
+
 // JdqEventBatchEncoder converts the events to binary Jdq data
 type JdqEventBatchEncoder struct {
 	resultBuf []*MQMessage
+	binaryEncode *encoding.Decoder
 }
 
 type jdqEncodeResult struct {
@@ -66,6 +83,7 @@ type jdqEncodeResult struct {
 func NewJdqEventBatchEncoder() EventBatchEncoder {
 	return &JdqEventBatchEncoder{
 		resultBuf: make([]*MQMessage, 0, 4096),
+		binaryEncode: charmap.ISO8859_1.NewDecoder(),
 	}
 }
 
@@ -74,7 +92,7 @@ func NewJdqEventBatchEncoder() EventBatchEncoder {
 func (a *JdqEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	mqMessage := NewMQMessage(nil, nil, e.CommitTs)
 	if e.IsDelete() || e.IsInsert() || e.IsUpdate() {
-		res, err := jdqEncode(e)
+		res, err := a.jdqEncode(e)
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: jdq encoding failed", zap.String("table", e.Table.String()))
 			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Jdq")
@@ -97,7 +115,7 @@ func (a *JdqEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (
 	keyStr := ""
 	pkeyCols := e.HandlePrimaryKeyColumns()
 	for _, key := range pkeyCols {
-		data, err := columnToJdqNativeData(key)
+		data, err := a.columnToJdqNativeData(key)
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: avro encoding primary key failed", zap.String("table", e.Table.String()))
 			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -181,7 +199,7 @@ func (a *JdqEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
-func jdqEncode(e *model.RowChangedEvent) (*jdqEncodeResult, error) {
+func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeResult, error) {
 	jdwSchema := `
                   {"type":"record","name":"JdwData","namespace":"com.jd.bdp.jdw.avro",
                    "fields":[{"name":"mid","type":"long"},
@@ -201,7 +219,7 @@ func jdqEncode(e *model.RowChangedEvent) (*jdqEncodeResult, error) {
 		return nil, errors.Annotate(err, "jdqEncode: Could not make goavro codec")
 	}
 
-	native, err := rowToJdqNativeData(e)
+	native, err := a.rowToJdqNativeData(e)
 	if err != nil {
 		return nil, errors.Annotate(err, "jdqEncode: converting to native failed")
 	}
@@ -217,7 +235,7 @@ func jdqEncode(e *model.RowChangedEvent) (*jdqEncodeResult, error) {
 	}, nil
 }
 
-func rowToJdqNativeData(e *model.RowChangedEvent) (interface{}, error) {
+func (a *JdqEventBatchEncoder) rowToJdqNativeData(e *model.RowChangedEvent) (interface{}, error) {
 	data := make(map[string]interface{})
 	data[schemaKeyMid] = int64(e.StartTs)
 	data[schemaKeyDb] = e.Table.GetSchema()
@@ -239,7 +257,7 @@ func rowToJdqNativeData(e *model.RowChangedEvent) (interface{}, error) {
 
 	cols := e.Columns
 	if e.IsInsert() {
-		colsMap, err := getColumnsNativeData(cols)
+		colsMap, err := a.getColumnsNativeData(cols)
 		if err != nil {
 			return nil, err
 		}
@@ -247,26 +265,26 @@ func rowToJdqNativeData(e *model.RowChangedEvent) (interface{}, error) {
 
 	} else if e.IsUpdate() {
 		preCols := e.PreColumns
-		preColsMap, err := getColumnsNativeData(preCols)
+		preColsMap, err := a.getColumnsNativeData(preCols)
 		if err != nil {
 			return nil, err
 		}
 		data[schemaKeySrc] = preColsMap
 
-		colsMap, err := getColumnsNativeData(cols)
+		colsMap, err := a.getColumnsNativeData(cols)
 		if err != nil {
 			return nil, err
 		}
 		data[schemaKeyCur] = colsMap
 
 	} else if e.IsDelete() {
-		colsMap, err := getColumnsNativeData(cols)
+		colsMap, err := a.getColumnsNativeData(cols)
 		if err != nil {
 			return nil, err
 		}
 		data[schemaKeySrc] = colsMap
 
-		keyColsMap, err := getKeyColumnsNativeData(cols)
+		keyColsMap, err := a.getKeyColumnsNativeData(cols)
 		if err != nil {
 			return nil, err
 		}
@@ -278,13 +296,13 @@ func rowToJdqNativeData(e *model.RowChangedEvent) (interface{}, error) {
 	return data, nil
 }
 
-func getColumnsNativeData(cols []*model.Column) (interface{}, error) {
+func (a *JdqEventBatchEncoder) getColumnsNativeData(cols []*model.Column) (interface{}, error) {
 	colsUnion := make(map[string]interface{}, len(cols))
 	for _, col := range cols {
 		if col == nil {
 			continue
 		}
-		data, err := columnToJdqNativeData(col)
+		data, err := a.columnToJdqNativeData(col)
 		if err != nil {
 			return nil, err
 		}
@@ -302,7 +320,7 @@ func getColumnsNativeData(cols []*model.Column) (interface{}, error) {
 	return colMap, nil
 }
 
-func getKeyColumnsNativeData(cols []*model.Column) (interface{}, error) {
+func (a *JdqEventBatchEncoder) getKeyColumnsNativeData(cols []*model.Column) (interface{}, error) {
 	var keyCols []*model.Column
 	for _, col := range cols {
 		if col.Flag.IsPrimaryKey() {
@@ -310,7 +328,7 @@ func getKeyColumnsNativeData(cols []*model.Column) (interface{}, error) {
 		}
 	}
 
-	colsMap, err := getColumnsNativeData(keyCols)
+	colsMap, err := a.getColumnsNativeData(keyCols)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +364,7 @@ func getJdqDataTypeFallback(v interface{}) (string, error) {
 	}
 }
 
-func columnToJdqNativeData(col *model.Column) (interface{}, error) {
+func (a *JdqEventBatchEncoder) columnToJdqNativeData(col *model.Column) (interface{}, error) {
 	if col.Value == nil {
 		return nil, nil
 	}
@@ -380,7 +398,12 @@ func columnToJdqNativeData(col *model.Column) (interface{}, error) {
 				return val, nil
 			case []byte:
 				// return ISO8859-1
-				return string(val), nil
+				decoded, err := a.binaryEncode.Bytes(val)
+				if err != nil {
+					log.Error("Jdq avro could not process binary type", zap.Reflect("col", col))
+					return nil, err
+				}
+				return string(decoded), nil
 
 			}
 		} else {
