@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -117,7 +118,14 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-	s.capture.processorManager.WriteDebugInfo(w)
+	if config.NewReplicaImpl {
+		s.capture.processorManager.WriteDebugInfo(w)
+	} else {
+		for _, p := range s.capture.processors {
+			p.writeDebugInfo(w)
+			fmt.Fprintf(w, "\n")
+		}
+	}
 
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
 	s.writeEtcdInfo(req.Context(), s.capture.etcdClient, w)

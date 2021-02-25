@@ -28,7 +28,7 @@ var _ = check.Suite(&processorSuite{})
 
 func (s *processorSuite) TestWriteDebugInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
-	p := &oldPorcessor{
+	p := &oldProcessor{
 		changefeedID: "test",
 		changefeed: model.ChangeFeedInfo{
 			SinkURI: "blackhole://",

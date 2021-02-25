@@ -51,7 +51,7 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 	// Create a task watcher
 	capture := &Capture{
 		etcdClient: kv.NewCDCEtcdClient(context.TODO(), client),
-		processors: make(map[string]*oldPorcessor),
+		processors: make(map[string]*oldProcessor),
 		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
@@ -80,7 +80,7 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 	// be embeded.
 	capture := &Capture{
 		etcdClient: kv.NewCDCEtcdClient(context.TODO(), s.c),
-		processors: make(map[string]*oldPorcessor),
+		processors: make(map[string]*oldProcessor),
 		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
