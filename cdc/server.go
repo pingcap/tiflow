@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -403,6 +404,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 // Close closes the server.
 func (s *Server) Close() {
 	if s.capture != nil {
+		if !config.NewReplicaImpl {
+			s.capture.Cleanup()
+		}
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
 		err := s.capture.Close(closeCtx)
 		if err != nil {

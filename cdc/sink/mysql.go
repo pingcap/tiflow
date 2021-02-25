@@ -149,6 +149,12 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			continue
 		}
 
+		if !config.NewReplicaImpl && s.cyclic != nil {
+			// Filter rows if it is origined from downstream.
+			skippedRowCount := cyclic.FilterAndReduceTxns(
+				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+			s.statistics.SubRowsCount(skippedRowCount)
+		}
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		for _, worker := range s.workers {
 			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
@@ -630,7 +636,6 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 				select {
 				case s.errCh <- err:
 				default:
-					log.Info("mysql sink receives redundant error", zap.Error(err))
 				}
 			}
 		}()
