@@ -106,6 +106,9 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
+	if config.NewReplicaImpl {
+		c.Skip("this case is designed for old processor")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

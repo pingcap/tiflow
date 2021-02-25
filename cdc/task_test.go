@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
@@ -78,6 +79,9 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 	// NewCapture can not be used because it requires to
 	// initialize the PD service witch does not support to
 	// be embeded.
+	if config.NewReplicaImpl {
+		c.Skip("this case is designed for old processor")
+	}
 	capture := &Capture{
 		etcdClient: kv.NewCDCEtcdClient(context.TODO(), s.c),
 		processors: make(map[string]*oldProcessor),
