@@ -125,7 +125,7 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage    *SchemaStorage
+	schemaStorage    SchemaStorage
 	rawRowChangedChs []chan *model.PolymorphicEvent
 	tz               *time.Location
 	workerNum        int
@@ -133,7 +133,7 @@ type mounterImpl struct {
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage, workerNum int, enableOldValue bool) Mounter {
+func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool) Mounter {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
