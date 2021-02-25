@@ -2241,6 +2241,8 @@ func (s *etcdSuite) TestSingleRegionInfoClone(c *check.C) {
 	c.Assert(sri2.rpcCtx, check.IsNil)
 }
 
+// TestResolveLockNoCandidate tests the resolved ts manager can work normally
+// when no region exceeds reslove lock interval, that is what candidate means.
 func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
