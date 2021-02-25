@@ -636,11 +636,17 @@ func (s *schemaSnapshot) CloneTables() map[model.TableID]model.TableName {
 
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
+	// GetSnapshot returns the snapshot which of ts is specified
 	GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error)
+	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schemaSnapshot
+	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
 	HandleDDLJob(job *timodel.Job) error
+	// AdvanceResolvedTs advances the resolved
 	AdvanceResolvedTs(ts uint64)
+	// ResolvedTs returns the resolved ts of the schema storage
 	ResolvedTs() uint64
+	// DoGC removes snaps which of ts less than this specified ts
 	DoGC(ts uint64)
 }
 

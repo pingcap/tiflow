@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 )
 
@@ -49,6 +50,7 @@ func newManager4Test() *Manager {
 }
 
 func (s *managerSuite) TestChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	m := newManager4Test()
 	state := &globalState{
@@ -91,6 +93,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 }
 
 func (s *managerSuite) TestDebugInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	m := newManager4Test()
 	state := &globalState{
@@ -120,24 +123,26 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 1)
 	done := make(chan struct{})
-	defer close(done)
 	go func() {
+		defer close(done)
 		for {
-			select {
-			case <-done:
-				return
-			default:
-			}
 			_, err := m.Tick(ctx, state)
+			if err != nil {
+				c.Assert(cerrors.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
+				return
+			}
 			c.Assert(err, check.IsNil)
 		}
 	}()
 	buf := bytes.NewBufferString("")
 	m.WriteDebugInfo(buf)
 	c.Assert(len(buf.String()), check.Greater, 0)
+	m.AsyncClose()
+	<-done
 }
 
 func (s *managerSuite) TestClose(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	m := newManager4Test()
 	state := &globalState{

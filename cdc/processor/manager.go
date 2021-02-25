@@ -33,15 +33,15 @@ import (
 type commandTp int
 
 const (
-	commandTpUnknow commandTp = iota
+	commandTpUnknow commandTp = iota //nolint:varcheck,deadcode
 	commandTpClose
 	commandTpWriteDebugInfo
 )
 
 type command struct {
-	tp   commandTp
-	load interface{}
-	done chan struct{}
+	tp      commandTp
+	payload interface{}
+	done    chan struct{}
 }
 
 // Manager is a manager of processor, which maintains the state and behavior of processors
@@ -76,6 +76,8 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 }
 
 // Tick implements the `orchestrator.State` interface
+// the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
+// the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*globalState)
 	if err := m.handleCommand(); err != nil {
@@ -90,13 +92,16 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 		}
 		processor, exist := m.processors[changefeedID]
 		if !exist {
+			if changefeedState.TaskStatus.AdminJobType.IsStopState() {
+				continue
+			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 			processor = m.newProcessor(m.pdCli, changefeedID, m.credential, m.captureInfo)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
 			m.closeProcessor(changefeedID)
-			if cerrors.ErrReactorFinished.Equal(err) {
+			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 				continue
 			}
 			return state, errors.Trace(err)
@@ -140,11 +145,12 @@ func (m *Manager) WriteDebugInfo(w io.Writer) {
 	}
 }
 
-func (m *Manager) sendCommand(tp commandTp, load interface{}) chan struct{} {
-	cmd := &command{tp: tp, load: load, done: make(chan struct{})}
+func (m *Manager) sendCommand(tp commandTp, payload interface{}) chan struct{} {
+	timeout := time.Second * 3
+	cmd := &command{tp: tp, payload: payload, done: make(chan struct{})}
 	select {
 	case m.commandQueue <- cmd:
-	default:
+	case <-time.After(timeout):
 		close(cmd.done)
 		log.Warn("the command queue is full, ignore this command", zap.Any("command", cmd))
 	}
@@ -166,7 +172,7 @@ func (m *Manager) handleCommand() error {
 		}
 		return cerrors.ErrReactorFinished
 	case commandTpWriteDebugInfo:
-		w := cmd.load.(io.Writer)
+		w := cmd.payload.(io.Writer)
 		m.writeDebugInfo(w)
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))

@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type processorSuite struct{}
@@ -76,7 +77,7 @@ func newProcessor4Test() *processor {
 func applyPatches(c *check.C, state *changefeedState) {
 	for _, patch := range state.pendingPatches {
 		key := &etcd.CDCKey{}
-		key.Parse(patch.Key.String())
+		c.Assert(key.Parse(patch.Key.String()), check.IsNil)
 		var value []byte
 		var err error
 		switch key.Tp {
@@ -195,7 +196,8 @@ func (m *mockSchemaStorage) DoGC(ts uint64) {
 	m.lastGcTs = ts
 }
 
-func (s *processorSuite) TestInitPosition(c *check.C) {
+func (s *processorSuite) TestCheckTablesNum(c *check.C) {
+	defer testleak.AfterTest(c)()
 	p := newProcessor4Test()
 	ctx := context.Background()
 	var err error
@@ -226,6 +228,7 @@ func (s *processorSuite) TestInitPosition(c *check.C) {
 }
 
 func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	p := newProcessor4Test()
 	var err error
@@ -336,10 +339,182 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 }
 
 func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
-	// TODO
+	defer testleak.AfterTest(c)()
+	ctx := context.Background()
+	p := newProcessor4Test()
+	var err error
+	// init tick
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	p.changefeed.Status.CheckpointTs = 90
+	p.changefeed.TaskPosition.ResolvedTs = 100
+
+	// no operation
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+
+	// add table, in processing
+	// in current implementation of owner, the startTs and BoundaryTs of add table operation should be always equaled.
+	p.changefeed.TaskStatus.AddTable(1, &model.TableReplicaInfo{StartTs: 60}, 60)
+	p.changefeed.TaskStatus.AddTable(2, &model.TableReplicaInfo{StartTs: 50}, 50)
+	p.changefeed.TaskStatus.AddTable(3, &model.TableReplicaInfo{StartTs: 40}, 40)
+	p.changefeed.TaskStatus.Tables[4] = &model.TableReplicaInfo{StartTs: 30}
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			1: {StartTs: 60},
+			2: {StartTs: 50},
+			3: {StartTs: 40},
+			4: {StartTs: 30},
+		},
+		Operation: map[int64]*model.TableOperation{
+			1: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+			2: {Delete: false, BoundaryTs: 50, Done: false, Status: model.OperProcessed},
+			3: {Delete: false, BoundaryTs: 40, Done: false, Status: model.OperProcessed},
+		},
+	})
+	c.Assert(p.tables, check.HasLen, 4)
+
+	// add table, not finished
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			1: {StartTs: 60},
+			2: {StartTs: 50},
+			3: {StartTs: 40},
+			4: {StartTs: 30},
+		},
+		Operation: map[int64]*model.TableOperation{
+			1: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+			2: {Delete: false, BoundaryTs: 50, Done: false, Status: model.OperProcessed},
+			3: {Delete: false, BoundaryTs: 40, Done: false, Status: model.OperProcessed},
+		},
+	})
+	c.Assert(p.tables, check.HasLen, 4)
+
+	// add table, finished
+	table1 := p.tables[1].(*mockTablePipeline)
+	table2 := p.tables[2].(*mockTablePipeline)
+	table3 := p.tables[3].(*mockTablePipeline)
+	table4 := p.tables[4].(*mockTablePipeline)
+	// table 1 and table 2 finished the add operation
+	table1.resolvedTs = 101
+	table2.resolvedTs = 101
+	// table 3 removed
+	p.changefeed.TaskStatus.RemoveTable(3, 60)
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			1: {StartTs: 60},
+			2: {StartTs: 50},
+			4: {StartTs: 30},
+		},
+		Operation: map[int64]*model.TableOperation{
+			1: {Delete: false, BoundaryTs: 60, Done: true, Status: model.OperFinished},
+			2: {Delete: false, BoundaryTs: 50, Done: true, Status: model.OperFinished},
+			3: {Delete: true, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+		},
+	})
+	c.Assert(p.tables, check.HasLen, 4)
+	c.Assert(table3.canceled, check.IsFalse)
+	c.Assert(table3.stopTs, check.Equals, uint64(60))
+
+	// finish remove table3
+	table3.status = pipeline.TableStatusStopped
+	table3.checkpointTs = 65
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			1: {StartTs: 60},
+			2: {StartTs: 50},
+			4: {StartTs: 30},
+		},
+		Operation: map[int64]*model.TableOperation{
+			1: {Delete: false, BoundaryTs: 60, Done: true, Status: model.OperFinished},
+			2: {Delete: false, BoundaryTs: 50, Done: true, Status: model.OperFinished},
+			3: {Delete: true, BoundaryTs: 65, Done: true, Status: model.OperFinished},
+		},
+	})
+	c.Assert(p.tables, check.HasLen, 3)
+	c.Assert(table3.canceled, check.IsTrue)
+
+	// clear finished operations
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			1: {StartTs: 60},
+			2: {StartTs: 50},
+			4: {StartTs: 30},
+		},
+		Operation: nil,
+	})
+	c.Assert(p.tables, check.HasLen, 3)
+
+	// remove table, in processing
+	p.changefeed.TaskStatus.RemoveTable(1, 120)
+	p.changefeed.TaskStatus.RemoveTable(4, 120)
+	delete(p.changefeed.TaskStatus.Tables, 2)
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{},
+		Operation: map[int64]*model.TableOperation{
+			1: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+			4: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+		},
+	})
+	c.Assert(table1.stopTs, check.Equals, uint64(120))
+	c.Assert(table4.stopTs, check.Equals, uint64(120))
+	c.Assert(table2.canceled, check.IsTrue)
+	c.Assert(p.tables, check.HasLen, 2)
+
+	// remove table, not finished
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{},
+		Operation: map[int64]*model.TableOperation{
+			1: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+			4: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+		},
+	})
+
+	// remove table, finished
+	table1.status = pipeline.TableStatusStopped
+	table1.checkpointTs = 121
+	table4.status = pipeline.TableStatusStopped
+	table4.checkpointTs = 122
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{},
+		Operation: map[int64]*model.TableOperation{
+			1: {Delete: true, BoundaryTs: 121, Done: true, Status: model.OperFinished},
+			4: {Delete: true, BoundaryTs: 122, Done: true, Status: model.OperFinished},
+		},
+	})
+	c.Assert(table1.canceled, check.IsTrue)
+	c.Assert(table4.canceled, check.IsTrue)
+	c.Assert(p.tables, check.HasLen, 0)
 }
 
 func (s *processorSuite) TestInitTable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	p := newProcessor4Test()
 	ctx := context.Background()
 	var err error
@@ -358,6 +533,7 @@ func (s *processorSuite) TestInitTable(c *check.C) {
 }
 
 func (s *processorSuite) TestProcessorError(c *check.C) {
+	defer testleak.AfterTest(c)()
 	p := newProcessor4Test()
 	ctx := context.Background()
 	var err error
@@ -396,6 +572,7 @@ func (s *processorSuite) TestProcessorError(c *check.C) {
 }
 
 func (s *processorSuite) TestProcessorExit(c *check.C) {
+	defer testleak.AfterTest(c)()
 	p := newProcessor4Test()
 	ctx := context.Background()
 	var err error
@@ -415,6 +592,7 @@ func (s *processorSuite) TestProcessorExit(c *check.C) {
 }
 
 func (s *processorSuite) TestProcessorClose(c *check.C) {
+	defer testleak.AfterTest(c)()
 	p := newProcessor4Test()
 	ctx := context.Background()
 	var err error
