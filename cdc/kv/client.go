@@ -68,6 +68,11 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
+
+	// hard code switch
+	// true: use kv client v2, which has a region worker for each stream
+	// false: use kv client v1, which runs a goroutine for every single region
+	enableKVClientV2 = false
 )
 
 type singleRegionInfo struct {
@@ -116,6 +121,12 @@ type regionFeedState struct {
 	requestID     uint64
 	regionEventCh chan *regionEvent
 	stopped       int32
+
+	lock           sync.RWMutex
+	initialized    bool
+	matcher        *matcher
+	startFeedTime  time.Time
+	lastResolvedTs uint64
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
@@ -125,6 +136,12 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 		regionEventCh: make(chan *regionEvent, 16),
 		stopped:       0,
 	}
+}
+
+func (s *regionFeedState) start() {
+	s.startFeedTime = time.Now()
+	s.lastResolvedTs = s.sri.ts
+	s.matcher = newMatcher()
 }
 
 func (s *regionFeedState) markStopped() {
@@ -461,8 +478,9 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock      *regionspan.RegionRangeLock
-	enableOldValue bool
+	rangeLock        *regionspan.RegionRangeLock
+	enableOldValue   bool
+	enableKVClientV2 bool
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -472,6 +490,9 @@ type eventFeedSession struct {
 
 	streams     map[string]cdcpb.ChangeData_EventFeedClient
 	streamsLock sync.RWMutex
+
+	workers     map[string]*regionWorker
+	workersLock sync.RWMutex
 }
 
 type rangeRequestTask struct {
@@ -502,6 +523,7 @@ func newEventFeedSession(
 		requestRangeCh:    make(chan rangeRequestTask, 16),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
+		enableKVClientV2:  enableKVClientV2,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
 		id:                id,
@@ -509,6 +531,7 @@ func newEventFeedSession(
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
+		workers:           make(map[string]*regionWorker),
 	}
 }
 
@@ -757,7 +780,10 @@ MainLoop:
 
 				limiter := s.client.getRegionLimiter(regionID)
 				g.Go(func() error {
-					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+					if !s.enableKVClientV2 {
+						return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+					}
+					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				})
 			}
 
