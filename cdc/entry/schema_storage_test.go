@@ -576,7 +576,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *check.C) {
 	err = storage.HandleDDLJob(job)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(storage.resolvedTs, check.Equals, uint64(140))
+	c.Assert(storage.(*schemaStorageImpl).resolvedTs, check.Equals, uint64(140))
 	snap, err := storage.GetSnapshot(ctx, 100)
 	c.Assert(err, check.IsNil)
 	_, exist := snap.SchemaByID(1)

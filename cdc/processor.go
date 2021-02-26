@@ -84,7 +84,7 @@ type processor struct {
 
 	ddlPuller       puller.Puller
 	ddlPullerCancel context.CancelFunc
-	schemaStorage   *entry.SchemaStorage
+	schemaStorage   entry.SchemaStorage
 
 	mounter entry.Mounter
 
@@ -749,7 +749,7 @@ func createSchemaStorage(
 	checkpointTs uint64,
 	filter *filter.Filter,
 	forceReplicate bool,
-) (*entry.SchemaStorage, error) {
+) (entry.SchemaStorage, error) {
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -818,7 +818,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			p.sendError(err)
 			return nil
 		}
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
+		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
+			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
+			enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
