@@ -140,6 +140,10 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 		changefeedID := k.ChangefeedID
 
 		if value == nil {
+			if s.TaskPositions[changefeedID] == nil {
+				return nil
+			}
+
 			log.Debug("Position deleted",
 				zap.String("captureID", captureID),
 				zap.String("changefeedID", changefeedID),
@@ -192,7 +196,6 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 			if len(s.TaskStatuses[changefeedID]) == 0 {
 				delete(s.TaskStatuses, changefeedID)
 			}
-
 			return nil
 		}
 
@@ -253,6 +256,7 @@ func (s *ownerReactorState) GetPatches() []*orchestrator.DataPatch {
 }
 
 // UpdateChangeFeedStatus updates the progress of the changefeed.
+// NOTE: 0 is NOT a valid value for either resolvedTs or checkpointTs.
 func (s *ownerReactorState) UpdateChangeFeedStatus(cfID model.ChangeFeedID, resolvedTs uint64, checkpointTs uint64) {
 	if resolvedTs == 0 || checkpointTs == 0 {
 		log.Panic("illegal changeFeedStatus",
@@ -343,6 +347,7 @@ func (s *ownerReactorState) DispatchTable(cfID model.ChangeFeedID, captureID mod
 
 // StartDeletingTable initiates a delete operation.
 // NOTE: callers need to guarantee that the table is running normally in the latest Etcd state snapshot.
+// `running normally` is defined as (1) having a valid TaskStatus in the given Capture, (2) NOT having a pending deletion.
 func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureID model.CaptureID, tableID model.TableID) {
 	captureTaskStatuses, ok := s.TaskStatuses[cfID]
 	if !ok {
@@ -615,6 +620,7 @@ func (s *ownerReactorState) GetCaptureTables(cfID model.ChangeFeedID, captureID 
 }
 
 // CleanUpChangeFeedErrorHistory does garbage collection to a changefeed's error history.
+// NOTE: cfID must be a valid changefeed ID, or otherwise the function would panic.
 func (s *ownerReactorState) CleanUpChangeFeedErrorHistory(cfID model.ChangeFeedID) {
 	_, ok := s.ChangeFeedInfos[cfID]
 	if !ok {

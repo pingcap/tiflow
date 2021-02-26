@@ -39,6 +39,9 @@ type barrierType = int
 const (
 	// DDLBarrier denotes a replication barrier caused by a DDL.
 	DDLBarrier = barrierType(iota)
+	// SyncPointBarrier denotes a barrier for snapshot replication.
+	// SyncPointBarrier
+	// TODO support snapshot replication.
 )
 
 type barrier struct {
@@ -86,7 +89,7 @@ func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
 func (cf *changeFeedState) AddDDLBarrier(barrierTs uint64) {
 	if len(cf.Barriers) > 0 && barrierTs < cf.Barriers[len(cf.Barriers)-1].BarrierTs {
 		log.Panic("changeFeedState: DDLBarrier too small",
-			zap.Uint64("last-barrier-ts", cf.Barriers[0].BarrierTs),
+			zap.Uint64("last-barrier-ts", cf.Barriers[len(cf.Barriers)-1].BarrierTs),
 			zap.Uint64("new-barrier-ts", barrierTs))
 	}
 
@@ -147,7 +150,7 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 
 			delete(cf.TableTasks, tableAction.tableID)
 		default:
-			log.Panic("changeFeedState: unknown action")
+			log.Panic("changeFeedState: unknown action", zap.String("action", tableAction.Action))
 		}
 	}
 }
@@ -211,7 +214,7 @@ func (cf *changeFeedState) SetTableCheckpointTs(tableID model.TableID, checkpoin
 
 	if tableTask.CheckpointTs > checkpointTs {
 		log.Panic("changeFeedState: table checkpoint regressed. Report a bug.",
-			zap.Int("tableID", int(tableID)),
+			zap.Int64("tableID", tableID),
 			zap.Uint64("oldCheckpointTs", tableTask.CheckpointTs),
 			zap.Uint64("checkpointTs", checkpointTs))
 	}
