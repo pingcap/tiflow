@@ -241,6 +241,36 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
+<<<<<<< HEAD
+=======
+func (worker *EtcdWorker) applyUpdates() error {
+	for _, update := range worker.pendingUpdates {
+		err := worker.state.Update(update.key, update.value, false)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	worker.pendingUpdates = worker.pendingUpdates[:0]
+	return nil
+}
+
+func logEtcdOps(ops []clientv3.Op, commited bool) {
+	if log.GetLevel() != zapcore.DebugLevel || len(ops) == 0 {
+		return
+	}
+	log.Debug("[etcd worker] ==========Update State to ETCD==========")
+	for _, op := range ops {
+		if op.IsDelete() {
+			log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+		} else {
+			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+		}
+	}
+	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+}
+
+>>>>>>> df69870... processor: switch on the new processor, refactor processor part five (#1187)
 func (worker *EtcdWorker) cleanUp() {
 	worker.rawState = nil
 	worker.revision = 0

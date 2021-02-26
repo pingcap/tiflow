@@ -154,7 +154,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			continue
 		}
 
-		if s.cyclic != nil {
+		if !config.NewReplicaImpl && s.cyclic != nil {
 			// Filter rows if it is origined from downstream.
 			skippedRowCount := cyclic.FilterAndReduceTxns(
 				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
