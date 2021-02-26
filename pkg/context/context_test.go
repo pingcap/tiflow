@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -35,17 +36,22 @@ func (s *contextSuite) TestVars(c *check.C) {
 	stdCtx := context.Background()
 	conf := config.GetDefaultReplicaConfig()
 	conf.Filter.Rules = []string{"hello.world"}
-	ctx := NewContext(stdCtx, &Vars{
-		Config: conf,
+	info := &model.ChangeFeedInfo{Config: conf}
+	ctx := NewContext(stdCtx, &GlobalVars{
+		CaptureInfo: &model.CaptureInfo{ID: "capture1"},
 	})
-	c.Assert(ctx.Vars().Config, check.DeepEquals, conf)
+	ctx = WithChangefeedVars(ctx, &ChangefeedVars{
+		Info: info,
+	})
+	c.Assert(ctx.ChangefeedVars().Info, check.DeepEquals, info)
+	c.Assert(ctx.GlobalVars().CaptureInfo.ID, check.Equals, "capture1")
 }
 
 func (s *contextSuite) TestStdCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
 	stdCtx, cancel := context.WithCancel(stdCtx)
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	cancel()
 	<-ctx.StdContext().Done()
 	<-ctx.Done()
@@ -54,7 +60,7 @@ func (s *contextSuite) TestStdCancel(c *check.C) {
 func (s *contextSuite) TestCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
 	cancel()
 	<-ctx.StdContext().Done()
@@ -65,7 +71,7 @@ func (s *contextSuite) TestCancelCascade(c *check.C) {
 	defer testleak.AfterTest(c)()
 	startTime := time.Now()
 	stdCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(1*time.Second))
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx1, _ := WithCancel(ctx)
 	ctx2, cancel2 := WithCancel(ctx)
 	cancel2()
@@ -82,7 +88,7 @@ func (s *contextSuite) TestCancelCascade(c *check.C) {
 func (s *contextSuite) TestThrow(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
 	ctx = WithErrorHandler(ctx, func(err error) {
 		c.Assert(err.Error(), check.Equals, "mock error")
@@ -96,7 +102,7 @@ func (s *contextSuite) TestThrow(c *check.C) {
 func (s *contextSuite) TestThrowCascade(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
 	var errNum1, errNum2 int
 	ctx = WithErrorHandler(ctx, func(err error) {

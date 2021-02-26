@@ -16,30 +16,48 @@ package context
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/security"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
-// Vars contains some vars which can be used anywhere in a pipeline
+// GlobalVars contains some vars which can be used anywhere in a pipeline
+// the lifecycle of vars in the GlobalVars shoule be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
-type Vars struct {
-	// TODO add more vars
-	CaptureAddr   string
-	PDClient      pd.Client
-	SchemaStorage entry.SchemaStorage
-	Config        *config.ReplicaConfig
+type GlobalVars struct {
+	PDClient    pd.Client
+	Credential  *security.Credential
+	KVStorage   tidbkv.Storage
+	CaptureInfo *model.CaptureInfo
+}
+
+// ChangefeedVars contains some vars which can be used anywhere in a pipeline
+// the lifecycle of vars in the ChangefeedVars shoule be aligned with the changefeed.
+// All field in Vars should be READ-ONLY and THREAD-SAFE
+type ChangefeedVars struct {
+	ID   model.ChangeFeedID
+	Info *model.ChangeFeedInfo
 }
 
 // Context contains Vars(), Done(), Throw(error) and StdContext() context.Context
 // Context is used to instead of standard context
 type Context interface {
 
-	// Vars return the `Vars` store by the root context created by `NewContext`
-	// Note that the `Vars` should be READ-ONLY and THREAD-SAFE
-	// The root node and all its children node share one pointer of `Vars`
-	// So any modification of `Vars` will cause all other family nodes to change.
-	Vars() *Vars
+	// GlobalVars return the `GlobalVars` store by the root context created by `NewContext`
+	// Note that the `GlobalVars` should be READ-ONLY and THREAD-SAFE
+	// The root node and all its children node share one pointer of `GlobalVars`
+	// So any modification of `GlobalVars` will cause all other family nodes to change.
+	GlobalVars() *GlobalVars
+
+	// ChangefeedVars return the `ChangefeedVars` store by the context created by `WithChangefeedVars`
+	// Note that the `ChangefeedVars` should be READ-ONLY and THREAD-SAFE
+	// The root node and all its children node share one pointer of `ChangefeedVars`
+	// So any modification of `ChangefeedVars` will cause all other family nodes to change.
+	// ChangefeedVars could be return nil when the `ChangefeedVars` is not set by `WithChangefeedVars`
+	ChangefeedVars() *ChangefeedVars
 
 	// Done return a channel which will be closed in the following cases:
 	// - the `cancel()` returned from `WithCancel` is called.
@@ -58,22 +76,43 @@ type Context interface {
 
 type rootContext struct {
 	Context
-	vars *Vars
+	globalVars *GlobalVars
 }
 
 // NewContext returns a new pipeline context
-func NewContext(stdCtx context.Context, vars *Vars) Context {
+func NewContext(stdCtx context.Context, globalVars *GlobalVars) Context {
 	ctx := &rootContext{
-		vars: vars,
+		globalVars: globalVars,
 	}
 	return withStdCancel(ctx, stdCtx)
 }
 
-func (ctx *rootContext) Vars() *Vars {
-	return ctx.vars
+func (ctx *rootContext) GlobalVars() *GlobalVars {
+	return ctx.globalVars
+}
+
+func (ctx *rootContext) ChangefeedVars() *ChangefeedVars {
+	return nil
 }
 
 func (ctx *rootContext) Throw(error) { /* do nothing */ }
+
+// WithChangefeedVars return a Context with the `ChangefeedVars`
+func WithChangefeedVars(ctx Context, changefeedVars *ChangefeedVars) Context {
+	return &changefeedVarsContext{
+		Context:        ctx,
+		changefeedVars: changefeedVars,
+	}
+}
+
+type changefeedVarsContext struct {
+	Context
+	changefeedVars *ChangefeedVars
+}
+
+func (ctx *changefeedVarsContext) ChangefeedVars() *ChangefeedVars {
+	return ctx.changefeedVars
+}
 
 type stdContext struct {
 	stdCtx context.Context
@@ -121,4 +160,55 @@ func (ctx *throwContext) Throw(err error) {
 	}
 	ctx.f(err)
 	ctx.Context.Throw(err)
+}
+
+// NewBackendContext4Test returns a new pipeline context for test
+func NewBackendContext4Test(withChangefeedVars bool) Context {
+	ctx := NewContext(context.Background(), &GlobalVars{
+		CaptureInfo: &model.CaptureInfo{
+			ID:            "capture-id-4-test",
+			AdvertiseAddr: "127.0.0.1:0000",
+		},
+	})
+	if withChangefeedVars {
+		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
+			ID: "changefeed-id-4-test",
+		})
+	}
+	return ctx
+}
+
+// ZapFieldCapture returns a zap field containing capture address
+// TODO: log redact for capture address
+func ZapFieldCapture(ctx Context) zap.Field {
+	return zap.String("capture", ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+}
+
+// ZapFieldChangefeed returns a zap field containing changefeed id
+func ZapFieldChangefeed(ctx Context) zap.Field {
+	return zap.String("changefeed", ctx.ChangefeedVars().ID)
+}
+
+type gauge interface {
+	WithLabelValues(lvs ...string) prometheus.Gauge
+}
+
+type counter interface {
+	WithLabelValues(lvs ...string) prometheus.Counter
+}
+
+// WithLabelValuesGauge return a Gauge with captureAddr and changefeedID labels
+func WithLabelValuesGauge(ctx Context, gauge gauge) prometheus.Gauge {
+	if ctx.ChangefeedVars() != nil {
+		return gauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	}
+	return gauge.WithLabelValues(ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+}
+
+// WithLabelValuesCounter return a Counter with captureAddr and changefeedID labels
+func WithLabelValuesCounter(ctx Context, counter counter) prometheus.Counter {
+	if ctx.ChangefeedVars() != nil {
+		return counter.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	}
+	return counter.WithLabelValues(ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 }

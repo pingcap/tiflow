@@ -28,19 +28,17 @@ import (
 )
 
 type sorterNode struct {
-	sortEngine model.SortEngine
-	sortDir    string
-	sorter     puller.EventSorter
-	tableName  string // quoted schema and table, used in metircs only
-	wg         errgroup.Group
-	cancel     context.CancelFunc
+	sorter puller.EventSorter
+
+	tableName string // quoted schema and table, used in metircs only
+
+	wg     errgroup.Group
+	cancel context.CancelFunc
 }
 
-func newSorterNode(sortEngine model.SortEngine, sortDir string, tableName string) pipeline.Node {
+func newSorterNode(tableName string) pipeline.Node {
 	return &sorterNode{
-		sortEngine: sortEngine,
-		sortDir:    sortDir,
-		tableName:  tableName,
+		tableName: tableName,
 	}
 }
 
@@ -48,14 +46,16 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	stdCtx, cancel := context.WithCancel(ctx.StdContext())
 	n.cancel = cancel
 	var sorter puller.EventSorter
-	switch n.sortEngine {
+	sortEngine := ctx.ChangefeedVars().Info.Engine
+	switch sortEngine {
 	case model.SortInMemory:
 		sorter = puller.NewEntrySorter()
 	case model.SortInFile, model.SortUnified:
-		err := util.IsDirAndWritable(n.sortDir)
+		sortDir := ctx.ChangefeedVars().Info.SortDir
+		err := util.IsDirAndWritable(sortDir)
 		if err != nil {
 			if os.IsNotExist(errors.Cause(err)) {
-				err = os.MkdirAll(n.sortDir, 0o755)
+				err = os.MkdirAll(sortDir, 0o755)
 				if err != nil {
 					return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 				}
@@ -64,14 +64,14 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			}
 		}
 
-		if n.sortEngine == model.SortInFile {
-			sorter = puller.NewFileSorter(n.sortDir)
+		if sortEngine == model.SortInFile {
+			sorter = puller.NewFileSorter(sortDir)
 		} else {
 			// Unified Sorter
-			sorter = psorter.NewUnifiedSorter(n.sortDir, n.tableName, ctx.Vars().CaptureAddr)
+			sorter = psorter.NewUnifiedSorter(sortDir, n.tableName, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 		}
 	default:
-		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
+		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
 	}
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))

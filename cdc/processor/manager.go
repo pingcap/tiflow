@@ -14,7 +14,7 @@
 package processor
 
 import (
-	"context"
+	stdContext "context"
 	"fmt"
 	"io"
 	"time"
@@ -23,10 +23,9 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/security"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -48,28 +47,18 @@ type command struct {
 type Manager struct {
 	processors map[model.ChangeFeedID]*processor
 
-	pdCli       pd.Client
-	credential  *security.Credential
-	captureInfo *model.CaptureInfo
+	gloablVars *context.GlobalVars
 
 	commandQueue chan *command
 
-	newProcessor func(
-		pdCli pd.Client,
-		changefeedID model.ChangeFeedID,
-		credential *security.Credential,
-		captureInfo *model.CaptureInfo,
-	) *processor
+	newProcessor func(context.Context) *processor
 }
 
 // NewManager creates a new processor manager
-func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *model.CaptureInfo) *Manager {
+func NewManager(ctx context.Context) *Manager {
 	return &Manager{
-		processors:  make(map[model.ChangeFeedID]*processor),
-		pdCli:       pdCli,
-		credential:  credential,
-		captureInfo: captureInfo,
-
+		gloablVars:   ctx.GlobalVars(),
+		processors:   make(map[model.ChangeFeedID]*processor),
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
 	}
@@ -78,11 +67,12 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
-func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (m *Manager) Tick(stdCtx stdContext.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*globalState)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
+	ctx := context.NewContext(stdCtx, m.gloablVars)
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active() {
@@ -90,13 +80,17 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 			m.closeProcessor(changefeedID)
 			continue
 		}
+		ctx := context.WithChangefeedVars(ctx, &context.ChangefeedVars{
+			ID:   changefeedID,
+			Info: changefeedState.Info,
+		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
 			if changefeedState.TaskStatus.AdminJobType.IsStopState() {
 				continue
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(m.pdCli, changefeedID, m.credential, m.captureInfo)
+			processor = m.newProcessor(ctx)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {

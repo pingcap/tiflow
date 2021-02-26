@@ -100,7 +100,7 @@ func (n *checkNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	ctx, p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
@@ -207,7 +207,7 @@ func (n *errorNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx, p := NewPipeline(ctx, -1)
@@ -287,7 +287,7 @@ func (n *throwNode) Destroy(ctx NodeContext) error {
 
 func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx, p := NewPipeline(ctx, -1)
@@ -322,7 +322,7 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 
 func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	ctx, p := NewPipeline(ctx, -1)
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -430,7 +430,7 @@ func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
 		panicInfo := recover().(string)
 		c.Assert(panicInfo, check.Equals, "panic in panicNode")
 	}()
-	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
+	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx, p := NewPipeline(ctx, -1)

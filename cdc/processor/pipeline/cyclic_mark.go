@@ -46,8 +46,8 @@ func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	n.localReplicaID = ctx.Vars().Config.Cyclic.ReplicaID
-	filterReplicaID := ctx.Vars().Config.Cyclic.FilterReplicaID
+	n.localReplicaID = ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID
+	filterReplicaID := ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
 	for _, rID := range filterReplicaID {
 		n.filterReplicaID[rID] = struct{}{}
