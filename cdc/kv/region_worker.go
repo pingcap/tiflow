@@ -33,6 +33,19 @@ import (
 	"golang.org/x/time/rate"
 )
 
+/*
+`regionWorker` maintains N regions, it runs in background for each gRPC stream,
+corresponding to one TiKV store. It receives `regionStatefulEvent` in a channel
+from gRPC stream receiving goroutine, processes event as soon as possible and
+sends `RegionFeedEvent` to output channel.
+Besides the `regionWorker` maintains a background lock resolver, the lock resolver
+maintains a resolved-ts based min heap to manager region resolved ts, so it doesn't
+need to iterate each region every time when resolving lock.
+Note: There exist two locks, one is lock for region states map, the other one is
+lock for each region state(each region state has one lock).
+`regionWorker` is single routine now, it will be extended to multiple goroutines
+for event processing to increase throughput.
+*/
 type regionWorker struct {
 	session        *eventFeedSession
 	limiter        *rate.Limiter
@@ -41,6 +54,22 @@ type regionWorker struct {
 	regionStates   map[uint64]*regionFeedState
 	statesLock     sync.RWMutex
 	enableOldValue bool
+	rtsManager     *resolvedTsManager
+	rtsUpdateCh    chan *regionResolvedTs
+}
+
+func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter) *regionWorker {
+	worker := &regionWorker{
+		session:        s,
+		limiter:        limiter,
+		inputCh:        make(chan *regionStatefulEvent, 1024),
+		outputCh:       s.eventCh,
+		regionStates:   make(map[uint64]*regionFeedState),
+		enableOldValue: s.enableOldValue,
+		rtsManager:     newResolvedTsManager(),
+		rtsUpdateCh:    make(chan *regionResolvedTs, 1024),
+	}
+	return worker
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
@@ -109,36 +138,59 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
+		case rtsUpdate := <-w.rtsUpdateCh:
+			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
 			if !w.session.isPullerInit.IsInitialized() {
 				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
 				continue
 			}
-			// TODO: add a better expired heap, so we don't need to iterate each region every time
-			w.statesLock.RLock()
 			version, err := w.session.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
-				w.statesLock.RUnlock()
 				continue
 			}
-			for regionID, state := range w.regionStates {
+			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
+			expired := make([]*regionResolvedTs, 0)
+			for w.rtsManager.Len() > 0 {
+				item := w.rtsManager.Pop()
+				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.resolvedTs))
+				// region does not reach resolve lock boundary, put it back
+				if sinceLastResolvedTs < resolveLockInterval {
+					w.rtsManager.Upsert(item)
+					break
+				}
+				expired = append(expired, item)
+			}
+			if len(expired) == 0 {
+				continue
+			}
+			maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
+			w.statesLock.RLock()
+			for _, rts := range expired {
+				state, ok := w.regionStates[rts.regionID]
+				if !ok || state.isStopped() {
+					// state is already deleted or stoppped, just continue,
+					// and don't need to push resolved ts back to heap.
+					continue
+				}
 				state.lock.RLock()
-				currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
+				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
-				if sinceLastResolvedTs > resolveLockInterval && state.initialized {
+				if sinceLastResolvedTs >= resolveLockInterval && state.initialized {
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.Uint64("regionID", regionID), zap.Stringer("span", state.sri.span),
+						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.sri.span),
 						zap.Duration("duration", sinceLastResolvedTs),
 						zap.Uint64("resolvedTs", state.lastResolvedTs))
-					maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
-					err = w.session.lockResolver.Resolve(ctx, regionID, maxVersion)
+					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
-						log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
 						state.lock.RUnlock()
 						continue
 					}
 				}
+				rts.resolvedTs = state.lastResolvedTs
+				w.rtsManager.Upsert(rts)
 				state.lock.RUnlock()
 			}
 			w.statesLock.RUnlock()
@@ -369,6 +421,12 @@ func (w *regionWorker) handleResolvedTs(
 		},
 	}
 	state.lastResolvedTs = resolvedTs
+	// Send resolved ts update in non blocking way, since we can re-query real
+	// resolved ts from region state even if resolved ts update is discarded.
+	select {
+	case w.rtsUpdateCh <- &regionResolvedTs{regionID: regionID, resolvedTs: resolvedTs}:
+	default:
+	}
 
 	select {
 	case w.outputCh <- revent:
@@ -386,7 +444,7 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 	defer w.statesLock.Unlock()
 	for _, state := range w.regionStates {
 		state.lock.RLock()
-		singleRegionInfo := state.sri
+		singleRegionInfo := state.sri.partialClone()
 		state.lock.RUnlock()
 		err := w.session.onRegionFail(ctx, regionErrorInfo{
 			singleRegionInfo: singleRegionInfo,
