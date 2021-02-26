@@ -32,7 +32,7 @@ type managerSuite struct{}
 var _ = check.Suite(&managerSuite{})
 
 func newManager4Test(ctx context.Context) *Manager {
-	m := NewManager(ctx)
+	m := NewManager(nil, nil, nil, ctx.GlobalVars().CaptureInfo)
 	m.newProcessor = func(ctx context.Context) *processor {
 		return newProcessor4Test(ctx)
 	}

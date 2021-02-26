@@ -73,7 +73,7 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(
-	ctx context.Context,
+	stdCtx context.Context,
 	pdEndpoints []string,
 	pdCli pd.Client,
 	credential *security.Credential,
@@ -93,7 +93,7 @@ func NewCapture(
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
 		TLS:         tlsConfig,
-		Context:     ctx,
+		Context:     stdCtx,
 		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
@@ -119,14 +119,18 @@ func NewCapture(
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	elec := concurrency.NewElection(sess, kv.CaptureOwnerKey)
-	cli := kv.NewCDCEtcdClient(ctx, etcdCli)
+	cli := kv.NewCDCEtcdClient(stdCtx, etcdCli)
 	id := uuid.New().String()
 	info := &model.CaptureInfo{
 		ID:            id,
 		AdvertiseAddr: advertiseAddr,
 	}
-	processorManager := processor.NewManager(pdCli, credential, info)
-	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(ctx))
+	kvStorage, err := util.KVStorageFromCtx(stdCtx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	processorManager := processor.NewManager(pdCli, credential, kvStorage, info)
+	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(stdCtx))
 
 	c = &Capture{
 		processors:       make(map[string]*oldProcessor),

@@ -26,6 +26,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/security"
+	tidbkv "github.com/pingcap/tidb/kv"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -55,9 +58,17 @@ type Manager struct {
 }
 
 // NewManager creates a new processor manager
-func NewManager(ctx context.Context) *Manager {
+func NewManager(pdClient pd.Client,
+	credential *security.Credential,
+	kvStorage tidbkv.Storage,
+	captureInfo *model.CaptureInfo) *Manager {
 	return &Manager{
-		gloablVars:   ctx.GlobalVars(),
+		gloablVars: &context.GlobalVars{
+			PDClient:    pdClient,
+			Credential:  credential,
+			KVStorage:   kvStorage,
+			CaptureInfo: captureInfo,
+		},
 		processors:   make(map[model.ChangeFeedID]*processor),
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
