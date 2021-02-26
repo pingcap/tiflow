@@ -88,6 +88,7 @@ func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) {
 		Tp:        pipeline.CommandTypeStopAtTs,
 		StoppedTs: targetTs,
 	}))
+	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}

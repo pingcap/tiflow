@@ -2224,3 +2224,100 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 
 	cancel()
 }
+
+func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	sri := newSingleRegionInfo(
+		tikv.RegionVerID{},
+		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+		1000, &tikv.RPCContext{})
+	sri2 := sri.partialClone()
+	sri2.ts = 2000
+	sri2.span.End[0] = 'b'
+	c.Assert(sri.ts, check.Equals, uint64(1000))
+	c.Assert(sri.span.String(), check.Equals, "[61, 63)")
+	c.Assert(sri2.ts, check.Equals, uint64(2000))
+	c.Assert(sri2.span.String(), check.Equals, "[61, 62)")
+	c.Assert(sri2.rpcCtx, check.IsNil)
+}
+
+// TestResolveLockNoCandidate tests the resolved ts manager can work normally
+// when no region exceeds reslove lock interval, that is what candidate means.
+func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	storeID := uint64(1)
+	peerID := uint64(4)
+	cluster.AddStore(storeID, addr1)
+	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
+
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	initialized := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized
+
+	var wg2 sync.WaitGroup
+	wg2.Add(1)
+	go func() {
+		defer wg2.Done()
+		for i := 0; i < 6; i++ {
+			physical, logical, err := pdClient.GetTS(ctx)
+			c.Assert(err, check.IsNil)
+			tso := oracle.ComposeTS(physical, logical)
+			resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+				{
+					RegionId:  regionID,
+					RequestId: currentRequestID(),
+					Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: tso},
+				},
+			}}
+			ch1 <- resolved
+			select {
+			case event := <-eventCh:
+				c.Assert(event.Resolved, check.NotNil)
+			case <-time.After(time.Second):
+				c.Error("resovled event not received")
+			}
+			// will sleep 6s totally, to ensure resolve lock fired once
+			time.Sleep(time.Second)
+		}
+	}()
+
+	wg2.Wait()
+	cancel()
+}

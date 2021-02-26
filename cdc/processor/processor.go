@@ -360,6 +360,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 				})
 			case model.OperProcessed:
 				if table.Status() != tablepipeline.TableStatusStopped {
+					log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
 				patchOperation(tableID, func(operation *model.TableOperation) error {
