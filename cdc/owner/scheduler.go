@@ -26,8 +26,17 @@ import (
 
 // scheduler is designed to abstract away the complexities associated with the Etcd data model.
 type scheduler interface {
+	// PutTasks is used to pass ALL the tables that need replicating to the scheduler.
+	// It should be safe to be called repeatedly with the same argument, as long as the argument correctly
+	// represents the current tables.
+	// USE ONLY after IsReady() returns true.
 	PutTasks(tables map[model.TableID]*tableTask)
+	// SetAffinity sets a table's affinity to a capture.
+	// Affinities record a binding (often temporary) of tables to captures, and it is a useful mechanism to
+	// implement manual table migration.
 	SetAffinity(tableID model.TableID, captureID model.CaptureID, ttl int)
+	// IsReady returns true if and only if the scheduler is ready to perform operations.
+	// IsReady always returns the same value within a EtcdWorker tick.
 	IsReady() bool
 }
 
@@ -149,6 +158,10 @@ func (s *schedulerImpl) cleanUpOperations() []model.TableID {
 			if operation.Status == model.OperFinished {
 				s.ownerState.CleanOperation(s.cfID, captureID, tableID)
 			} else {
+				// Only those tables that are being deleted are added to the pendingList,
+				// because while it is unsafe to try to dispatch a table in the process of deleting,
+				// it is safe to try to delete a table immediately after it being dispatched.
+				// In summary, being run by two capture is dangerous, but not being run at all is safe.
 				if operation.Delete {
 					pendingList = append(pendingList, tableID)
 				}
@@ -280,6 +293,7 @@ func (s *schedulerImpl) getMinWorkloadCapture() model.CaptureID {
 	return minCapture
 }
 
+// cleanUpStaleCaptureStatus cleans up TaskStatus and TaskPosition for captures that have just gone offline.
 func (s *schedulerImpl) cleanUpStaleCaptureStatus() bool {
 	if _, ok := s.ownerState.TaskStatuses[s.cfID]; !ok {
 		return false
