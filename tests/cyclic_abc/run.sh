@@ -90,21 +90,21 @@ function run() {
         --cert-allowed-cn "client" # The common name of client.pem
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
+        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?safe-mode=false" \
         --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --cyclic-replica-id 1 \
         --cyclic-filter-replica-ids 2 \
         --cyclic-sync-ddl true
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${TLS_TIDB_HOST}:${TLS_TIDB_PORT}/?ssl-ca=${TLS_DIR}/ca.pem&ssl-cert=${TLS_DIR}/server.pem?ssl-key=${TLS_DIR}/server-key.pem" \
+        --sink-uri="mysql://root@${TLS_TIDB_HOST}:${TLS_TIDB_PORT}/?safe-mode=false&ssl-ca=${TLS_DIR}/ca.pem&ssl-cert=${TLS_DIR}/server.pem?ssl-key=${TLS_DIR}/server-key.pem" \
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 3 \
         --cyclic-sync-ddl true
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
+        --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/?safe-mode=false" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
         --changefeed-id "tls-changefeed" \
         --ca=$TLS_DIR/ca.pem \

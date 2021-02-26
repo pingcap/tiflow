@@ -76,6 +76,7 @@ install:
 	go install ./...
 
 unit_test: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -84,6 +85,7 @@ unit_test: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 leak_test: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
 	$(GOTEST) -count=1 --tags leak $(PACKAGES) || { $(FAILPOINT_DISABLE); exit 1; }
