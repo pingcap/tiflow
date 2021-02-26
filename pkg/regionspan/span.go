@@ -54,6 +54,14 @@ func (s ComparableSpan) Hack() ComparableSpan {
 	return s
 }
 
+// Clone clones a ComparableSpan
+func (s ComparableSpan) Clone() ComparableSpan {
+	return ComparableSpan{
+		Start: append(make([]byte, 0, len(s.Start)), s.Start...),
+		End:   append(make([]byte, 0, len(s.End)), s.End...),
+	}
+}
+
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s Span) Hack() Span {
 	s.Start, s.End = hackSpan(s.Start, s.End)
