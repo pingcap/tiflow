@@ -137,3 +137,16 @@ func (s *spanSuite) TestSpanHack(c *check.C) {
 		c.Assert(tc.input.Hack(), check.DeepEquals, tc.expect)
 	}
 }
+
+func (s *spanSuite) TestSpanClone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	sp := ComparableSpan{
+		Start: []byte{1},
+		End:   []byte{2},
+	}
+	sp2 := sp.Clone()
+	c.Assert(sp2.String(), check.Equals, "[01, 02)")
+	sp2.End[0] = 9
+	c.Assert(sp.String(), check.Equals, "[01, 02)")
+	c.Assert(sp2.String(), check.Equals, "[01, 09)")
+}

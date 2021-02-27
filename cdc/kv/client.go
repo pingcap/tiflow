@@ -72,7 +72,7 @@ const (
 	// hard code switch
 	// true: use kv client v2, which has a region worker for each stream
 	// false: use kv client v1, which runs a goroutine for every single region
-	enableKVClientV2 = false
+	enableKVClientV2 = true
 )
 
 type singleRegionInfo struct {
@@ -104,6 +104,17 @@ func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan,
 		ts:     ts,
 		rpcCtx: rpcCtx,
 	}
+}
+
+// partialClone clones part fields of singleRegionInfo, this is used when error
+// happens, kv client needs to recover region request from singleRegionInfo
+func (s *singleRegionInfo) partialClone() singleRegionInfo {
+	sri := singleRegionInfo{
+		verID: s.verID,
+		span:  s.span.Clone(),
+		ts:    s.ts,
+	}
+	return sri
 }
 
 type regionErrorInfo struct {
