@@ -27,7 +27,7 @@ type Vars struct {
 	// TODO add more vars
 	CaptureAddr   string
 	PDClient      pd.Client
-	SchemaStorage *entry.SchemaStorage
+	SchemaStorage entry.SchemaStorage
 	Config        *config.ReplicaConfig
 }
 
