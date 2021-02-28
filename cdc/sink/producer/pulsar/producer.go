@@ -91,6 +91,7 @@ func (p *Producer) SendMessage(ctx context.Context, message *codec.MQMessage, pa
 		Payload:    message.Value,
 		Key:        string(message.Key),
 		Properties: createProperties(message, partition),
+		EventTime:  message.PhysicalTime(),
 	}, p.errors)
 	return nil
 }
@@ -112,6 +113,7 @@ func (p *Producer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMe
 			Payload:    message.Value,
 			Key:        string(message.Key),
 			Properties: createProperties(message, int32(partition)),
+			EventTime:  message.PhysicalTime(),
 		})
 		if err != nil {
 			return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())

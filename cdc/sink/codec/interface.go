@@ -15,6 +15,7 @@ package codec
 
 import (
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -64,6 +65,14 @@ type MQMessage struct {
 // Length returns the expected size of the Kafka message
 func (m *MQMessage) Length() int {
 	return len(m.Key) + len(m.Value)
+}
+
+const physicalShiftBits = 18
+
+// PhysicalTime returns physical time part of Ts in time.Time
+func (m *MQMessage) PhysicalTime() time.Time {
+	ms := int64(m.Ts >> physicalShiftBits)
+	return time.Unix(ms/1e3, (ms%1e3)*1e6)
 }
 
 func newDDLMQMessage(proto Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
