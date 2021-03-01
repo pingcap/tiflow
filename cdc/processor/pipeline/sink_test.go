@@ -155,7 +155,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}}), nil))
-	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
+	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue, check.Commentf("error: %#v", err))
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(7))
 }
