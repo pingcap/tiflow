@@ -161,6 +161,11 @@ error = '''
 this patch should be excluded from the current etcd txn
 '''
 
+["CDC:ErrEtcdSessionDone"]
+error = '''
+the etcd session is done
+'''
+
 ["CDC:ErrEtcdTryAgain"]
 error = '''
 the etcd txn should be aborted and retried immediately
@@ -654,6 +659,11 @@ fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTableProcessorStoppedSafely"]
+error = '''
+table processor stopped safely
 '''
 
 ["CDC:ErrTaskPositionNotExists"]
