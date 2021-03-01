@@ -17,7 +17,6 @@ import (
 	stdContext "context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/context"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -98,9 +96,6 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 					metricTableResolvedTsGauge.Set(float64(oracle.ExtractPhysical(rawKV.CRTs)))
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				if pEvent.CRTs == 0 {
-					log.Debug("LEOPPRO: found out why the cpt is 0", zap.Reflect("e", pEvent))
-				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
 			}
 		}

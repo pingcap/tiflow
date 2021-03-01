@@ -75,9 +75,6 @@ type sinkNode struct {
 }
 
 func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts) *sinkNode {
-	if startTs == 0 {
-		log.Debug("LEOPPRO: found out why the cpt is 0")
-	}
 	return &sinkNode{
 		sink:         sink,
 		status:       TableStatusInitializing,
@@ -186,9 +183,6 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
-			if msg.PolymorphicEvent.CRTs == 0 {
-				log.Debug("LEOPPRO: found out why the cpt is 0")
-			}
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return errors.Trace(err)
 			}
