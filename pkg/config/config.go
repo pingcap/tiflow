@@ -26,7 +26,7 @@ import (
 
 // NewReplicaImpl is true if we using new processor
 // new owner should be also switched on after it implemented
-const NewReplicaImpl = true
+const NewReplicaImpl = false
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
