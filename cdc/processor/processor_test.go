@@ -163,7 +163,7 @@ func (m *mockTablePipeline) Cancel() {
 	m.canceled = true
 }
 
-func (m *mockTablePipeline) Wait() []error {
+func (m *mockTablePipeline) Wait() {
 	panic("not implemented") // TODO: Implement
 }
 

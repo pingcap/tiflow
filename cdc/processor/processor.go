@@ -650,6 +650,15 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 		SchemaStorage: p.schemaStorage,
 		Config:        p.changefeed.Info.Config,
 	})
+	cdcCtx = cdccontext.WithErrorHandler(cdcCtx, func(err error) error {
+		if cerror.ErrTableProcessorStoppedSafely.Equal(errors.Cause(err)) ||
+			errors.Cause(errors.Cause(err)) == context.Canceled {
+			return nil
+		}
+		p.sendError(err)
+		return nil
+	})
+
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -668,7 +677,7 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 	}
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 
-	_, table := tablepipeline.NewTablePipeline(
+	table := tablepipeline.NewTablePipeline(
 		cdcCtx,
 		p.changefeed.ID,
 		p.credential,
@@ -686,12 +695,7 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 	p.wg.Add(1)
 	p.metricSyncTableNumGauge.Inc()
 	go func() {
-		for _, err := range table.Wait() {
-			if cerror.ErrTableProcessorStoppedSafely.Equal(err) || errors.Cause(err) == context.Canceled {
-				continue
-			}
-			p.sendError(err)
-		}
+		table.Wait()
 		p.wg.Done()
 		p.metricSyncTableNumGauge.Dec()
 		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
