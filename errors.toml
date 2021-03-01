@@ -491,6 +491,11 @@ error = '''
 etcd watch returns error
 '''
 
+["CDC:ErrOwnerInconsistentStates"]
+error = '''
+owner encountered inconsistent state. report a bug if this happens frequently. %s
+'''
+
 ["CDC:ErrOwnerSortDir"]
 error = '''
 owner sort dir

@@ -52,8 +52,8 @@ const (
 )
 
 const (
-	// errorHistoryGCInterval represents how long we keep error record in changefeed info
-	errorHistoryGCInterval = time.Minute * 10
+	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
+	ErrorHistoryGCInterval = time.Minute * 10
 
 	// errorHistoryCheckInterval represents time window for failure check
 	errorHistoryCheckInterval = time.Minute * 2
@@ -202,7 +202,7 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryGCInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
 	})
 	if i == len(info.ErrorHis) {
 		info.ErrorHis = info.ErrorHis[:]
