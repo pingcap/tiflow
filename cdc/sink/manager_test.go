@@ -184,7 +184,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	go func() {
 		defer wg.Done()
 		// add three table and then remote one table
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 100; i++ {
 			if i%4 != 3 {
 				// add table
 				table := manager.CreateTableSink(model.TableID(i), maxResolvedTs+1)
@@ -202,7 +202,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				tableSinks = tableSinks[1:]
 				closeChs = closeChs[1:]
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
 		atomic.StoreUint64(&maxResolvedTs, ExitSignal)
 	}()
