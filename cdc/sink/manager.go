@@ -45,15 +45,35 @@ type Manager struct {
 	checkpointTs model.Ts
 	tableSinks   map[model.TableID]*tableSink
 	tableSinksMu sync.Mutex
+	minEmittedTs model.Ts
+
+	flushMu sync.Mutex
 }
 
 // NewManager creates a new Sink manager
 func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) *Manager {
-	return &Manager{
+	m := &Manager{
 		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs),
 		checkpointTs: checkpointTs,
 		tableSinks:   make(map[model.TableID]*tableSink),
 	}
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			ts := m.calcMinEmittedTs()
+			if ts < m.minEmittedTs {
+				panic("minEmittedTs")
+			}
+			atomic.StoreUint64(&m.minEmittedTs, ts)
+		}
+	}()
+	return m
 }
 
 // CreateTableSink creates a table sink
@@ -78,7 +98,7 @@ func (m *Manager) Close() error {
 	return m.backendSink.Close()
 }
 
-func (m *Manager) getMinEmittedTs() model.Ts {
+func (m *Manager) calcMinEmittedTs() model.Ts {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	if len(m.tableSinks) == 0 {
@@ -95,8 +115,9 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
-	minEmittedTs := m.getMinEmittedTs()
-	log.Info("LEOPPRO min ts", zap.Uint64("", minEmittedTs))
+	m.flushMu.Lock()
+	defer m.flushMu.Unlock()
+	minEmittedTs := atomic.LoadUint64(&m.minEmittedTs)
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
 		return m.getCheckpointTs(), errors.Trace(err)
@@ -186,7 +207,7 @@ func newBufferSink(ctx context.Context, backendSink Sink, errCh chan error, chec
 		buffer: make(chan struct {
 			rows       []*model.RowChangedEvent
 			resolvedTs model.Ts
-		}, 10),
+		}, defaultBufferChanSize),
 		checkpointTs: checkpointTs,
 	}
 	go sink.run(ctx, errCh)
