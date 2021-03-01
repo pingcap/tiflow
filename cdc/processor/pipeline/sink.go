@@ -183,10 +183,6 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
-			resolvedTs := msg.PolymorphicEvent.CRTs
-			if resolvedTs == 0 {
-				return nil
-			}
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return errors.Trace(err)
 			}

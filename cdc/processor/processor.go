@@ -552,17 +552,25 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 // handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
-	for _, table := range p.tables {
+	if minResolvedTs == 0 {
+		log.Debug("LEOPPRO: found out why the cpt is 0")
+	}
+	for id, table := range p.tables {
 		ts := table.ResolvedTs()
+		if ts == 0 {
+			log.Debug("LEOPPRO: found out why the cpt is 0", zap.Int64("tid", id))
+		}
 		if ts < minResolvedTs {
 			minResolvedTs = ts
 		}
 	}
 
 	minCheckpointTs := minResolvedTs
-	for _, table := range p.tables {
+	for id, table := range p.tables {
 		ts := table.CheckpointTs()
-
+		if ts == 0 {
+			log.Debug("LEOPPRO: found out why the cpt is 0", zap.Int64("tid", id))
+		}
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
 		}
