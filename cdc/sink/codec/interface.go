@@ -68,8 +68,6 @@ func (m *MQMessage) Length() int {
 	return len(m.Key) + len(m.Value)
 }
 
-const physicalShiftBits = 18
-
 // PhysicalTime returns physical time part of Ts in time.Time
 func (m *MQMessage) PhysicalTime() time.Time {
 	return oracle.GetTimeFromTS(m.Ts)
