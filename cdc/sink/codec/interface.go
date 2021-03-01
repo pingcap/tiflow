@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -71,8 +72,7 @@ const physicalShiftBits = 18
 
 // PhysicalTime returns physical time part of Ts in time.Time
 func (m *MQMessage) PhysicalTime() time.Time {
-	ms := int64(m.Ts >> physicalShiftBits)
-	return time.Unix(ms/1e3, (ms%1e3)*1e6)
+	return oracle.GetTimeFromTS(m.Ts)
 }
 
 func newDDLMQMessage(proto Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
