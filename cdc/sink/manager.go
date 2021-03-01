@@ -66,11 +66,7 @@ func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpo
 				return
 			case <-ticker.C:
 			}
-			ts := m.calcMinEmittedTs()
-			if ts < m.minEmittedTs {
-				panic("minEmittedTs")
-			}
-			atomic.StoreUint64(&m.minEmittedTs, ts)
+			atomic.StoreUint64(&m.minEmittedTs, m.calcMinEmittedTs())
 		}
 	}()
 	return m
