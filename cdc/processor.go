@@ -60,7 +60,7 @@ const (
 	schemaStorageGCLag = time.Minute * 20
 )
 
-type processor struct {
+type oldProcessor struct {
 	id           string
 	captureInfo  model.CaptureInfo
 	changefeedID string
@@ -154,7 +154,7 @@ func newProcessor(
 	checkpointTs uint64,
 	errCh chan error,
 	flushCheckpointInterval time.Duration,
-) (*processor, error) {
+) (*oldProcessor, error) {
 	etcdCli := session.Client()
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
@@ -185,7 +185,7 @@ func newProcessor(
 		return nil, err
 	}
 
-	p := &processor{
+	p := &oldProcessor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
 		captureInfo:   captureInfo,
@@ -240,7 +240,7 @@ func newProcessor(
 	return p, nil
 }
 
-func (p *processor) Run(ctx context.Context) {
+func (p *oldProcessor) Run(ctx context.Context) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	ddlPullerCtx, ddlPullerCancel :=
@@ -279,7 +279,7 @@ func (p *processor) Run(ctx context.Context) {
 }
 
 // wait blocks until all routines in processor are returned
-func (p *processor) wait() {
+func (p *oldProcessor) wait() {
 	err := p.wg.Wait()
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("processor wait error",
@@ -291,7 +291,7 @@ func (p *processor) wait() {
 	}
 }
 
-func (p *processor) writeDebugInfo(w io.Writer) {
+func (p *oldProcessor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "changefeedID:\n\t%s\ninfo:\n\t%s\nstatus:\n\t%+v\nposition:\n\t%s\n",
 		p.changefeedID, p.changefeed.String(), p.status, p.position.String())
 
@@ -308,7 +308,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
-func (p *processor) positionWorker(ctx context.Context) error {
+func (p *oldProcessor) positionWorker(ctx context.Context) error {
 	lastFlushTime := time.Now()
 	retryFlushTaskStatusAndPosition := func() error {
 		t0Update := time.Now()
@@ -421,7 +421,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) ddlPullWorker(ctx context.Context) error {
+func (p *oldProcessor) ddlPullWorker(ctx context.Context) error {
 	ddlRawKVCh := puller.SortOutput(ctx, p.ddlPuller.Output())
 	var ddlRawKV *model.RawKVEntry
 	for {
@@ -451,7 +451,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) workloadWorker(ctx context.Context) error {
+func (p *oldProcessor) workloadWorker(ctx context.Context) error {
 	t := time.NewTicker(10 * time.Second)
 	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID, nil)
 	if err != nil {
@@ -479,7 +479,7 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) flushTaskPosition(ctx context.Context) error {
+func (p *oldProcessor) flushTaskPosition(ctx context.Context) error {
 	failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
 		time.Sleep(1 * time.Second)
 	})
@@ -504,7 +504,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 // If local cached task status is outdated (caused by new table scheduling),
 // update it to latest value, and force update task position, since add new
 // tables may cause checkpoint ts fallback in processor.
-func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
+func (p *oldProcessor) flushTaskStatusAndPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
@@ -556,7 +556,7 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 	return p.flushTaskPosition(ctx)
 }
 
-func (p *processor) removeTable(tableID int64) {
+func (p *oldProcessor) removeTable(tableID int64) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
@@ -578,7 +578,7 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
+func (p *oldProcessor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
 	for tableID, opt := range status.Operation {
 		if opt.TableProcessed() {
 			continue
@@ -657,7 +657,7 @@ done:
 }
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
-func (p *processor) globalStatusWorker(ctx context.Context) error {
+func (p *oldProcessor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started", util.ZapFieldChangefeed(ctx))
 
 	var (
@@ -754,7 +754,7 @@ func createSchemaStorage(
 	return entry.NewSchemaStorage(meta, checkpointTs, filter, forceReplicate)
 }
 
-func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
+func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
@@ -906,7 +906,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
-func (p *processor) sorterConsume(
+func (p *oldProcessor) sorterConsume(
 	ctx context.Context,
 	tableID int64,
 	tableName string,
@@ -1108,7 +1108,7 @@ func (p *processor) sorterConsume(
 
 // pullerConsume receives RawKVEntry from a given puller and sends to sorter
 // for data sorting and mounter for data encode
-func (p *processor) pullerConsume(
+func (p *oldProcessor) pullerConsume(
 	ctx context.Context,
 	plr puller.Puller,
 	sorter puller.EventSorter,
@@ -1130,7 +1130,7 @@ func (p *processor) pullerConsume(
 	}
 }
 
-func (p *processor) stop(ctx context.Context) error {
+func (p *oldProcessor) stop(ctx context.Context) error {
 	log.Info("stop processor", zap.String("id", p.id), zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeedID))
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
@@ -1158,7 +1158,7 @@ func (p *processor) stop(ctx context.Context) error {
 	return p.sinkManager.Close()
 }
 
-func (p *processor) isStopped() bool {
+func (p *oldProcessor) isStopped() bool {
 	return atomic.LoadInt32(&p.stopped) == 1
 }
 
@@ -1175,7 +1175,7 @@ func runProcessor(
 	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
 	flushCheckpointInterval time.Duration,
-) (*processor, error) {
+) (*oldProcessor, error) {
 	opts := make(map[string]string, len(info.Opts)+2)
 	for k, v := range info.Opts {
 		opts[k] = v
@@ -1249,7 +1249,7 @@ func runProcessor(
 	return processor, nil
 }
 
-func (p *processor) sendError(err error) {
+func (p *oldProcessor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:

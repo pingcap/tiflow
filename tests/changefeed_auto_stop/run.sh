@@ -8,25 +8,19 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-function check_changefeed_is_stopped() {
+function check_changefeed_state() {
     endpoints=$1
     changefeedid=$2
-    position=$(ETCDCTL_API=3 etcdctl --endpoints=$endpoints get /tidb/cdc/task/position --prefix)
-    if [[ $position != "" ]]; then
-        exit 1
-    fi
-    status=$(ETCDCTL_API=3 etcdctl --endpoints=$endpoints get /tidb/cdc/task/status --prefix)
-    if [[ $status != "" ]]; then
-        exit 1
-    fi
-    changefeed_info=$(ETCDCTL_API=3 etcdctl --endpoints=$endpoints get /tidb/cdc/changefeed/info/${changefeedid}|tail -n 1)
-    if [[ ! $changefeed_info == *"message\":\"processor sync resolved injected error"* ]]; then
-        echo "changefeed is not marked as failed: $changefeed_info"
+    expected=$3
+    output=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$endpoints 2>&1)
+    state=$(echo $output | grep -oE "\"state\": \"[a-z]+\""|tr -d '" '|awk -F':' '{print $(NF)}')
+    if [ "$state" != "$expected" ]; then
+        echo "unexpected state $output, expected $expected"
         exit 1
     fi
 }
 
-export -f check_changefeed_is_stopped
+export -f check_changefeed_state
 
 function run() {
     DB_COUNT=4
@@ -43,7 +37,8 @@ function run() {
     done
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedError=1*return(true);github.com/pingcap/ticdc/cdc/ProcessorUpdatePositionDelaying=return(true)'
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedError=1*return(true);github.com/pingcap/ticdc/cdc/ProcessorUpdatePositionDelaying=return(true)' # old processor
+    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorSyncResolvedError=1*return(true);github.com/pingcap/ticdc/cdc/processor/ProcessorUpdatePositionDelaying=sleep(1000)' # new processor
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "2" --addr "127.0.0.1:8302" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     export GO_FAILPOINTS=''
 
@@ -57,7 +52,7 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 
-    ensure 10 check_changefeed_is_stopped ${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid}
+    ensure 10 check_changefeed_state  ${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "stopped"
 
     cdc cli changefeed resume --changefeed-id=${changefeedid} --pd="http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     for i in $(seq $DB_COUNT); do
