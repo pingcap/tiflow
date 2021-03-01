@@ -26,7 +26,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/processor"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	pd "github.com/tikv/pd/client"
@@ -55,7 +58,9 @@ type Capture struct {
 	pdCli      pd.Client
 	credential *security.Credential
 
-	processors map[string]*processor
+	processorManager *processor.Manager
+
+	processors map[string]*oldProcessor
 	procLock   sync.Mutex
 
 	info *model.CaptureInfo
@@ -64,7 +69,8 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	opts *processorOpts
+	opts   *processorOpts
+	closed chan struct{}
 }
 
 // NewCapture returns a new Capture instance
@@ -122,17 +128,20 @@ func NewCapture(
 		AdvertiseAddr: advertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
+	processorManager := processor.NewManager(pdCli, credential, info)
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(ctx))
 
 	c = &Capture{
-		processors: make(map[string]*processor),
-		etcdClient: cli,
-		credential: credential,
-		session:    sess,
-		election:   elec,
-		info:       info,
-		opts:       opts,
-		pdCli:      pdCli,
+		processors:       make(map[string]*oldProcessor),
+		etcdClient:       cli,
+		credential:       credential,
+		session:          sess,
+		election:         elec,
+		info:             info,
+		opts:             opts,
+		pdCli:            pdCli,
+		processorManager: processorManager,
+		closed:           make(chan struct{}),
 	}
 
 	return
@@ -143,56 +152,85 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	// TODO: we'd better to add some wait mechanism to ensure no routine is blocked
 	defer cancel()
+	defer close(c.closed)
 	err = c.register(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
-		Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
-		ChannelSize: 128,
-	})
-	log.Info("waiting for tasks", zap.String("capture-id", c.info.ID))
-	var ev *TaskEvent
-	wch := taskWatcher.Watch(ctx)
-	for {
-		// Return error when the session is done unexpectedly, it means the
-		// server does not send heartbeats in time, or network interrupted
-		// In this case, the state of the capture is undermined, the task may
-		// have or have not been rebalanced, the owner may be or not be held,
-		// so we must cancel context to let all sub routines exit.
-		select {
-		case <-c.session.Done():
-			if ctx.Err() != context.Canceled {
-				log.Info("capture session done, capture suicide itself", zap.String("capture-id", c.info.ID))
+	if config.NewReplicaImpl {
+		sessionCli := c.session.Client()
+		etcdWorker, err := orchestrator.NewEtcdWorker(kv.NewCDCEtcdClient(ctx, sessionCli).Client, kv.EtcdKeyBase, c.processorManager, processor.NewGlobalState(c.info.ID))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Info("start to listen processor task...")
+		if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond); err != nil {
+			// We check ttl of lease instead of check `session.Done`, because
+			// `session.Done` is only notified when etcd client establish a
+			// new keepalive request, there could be a time window as long as
+			// 1/3 of session ttl that `session.Done` can't be triggered even
+			// the lease is already revoked.
+			if cerror.ErrEtcdSessionDone.Equal(err) {
 				return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 			}
-		case ev = <-wch:
-			if ev == nil {
-				return nil
+			lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
+			if inErr != nil {
+				return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
 			}
-			if ev.Err != nil {
-				return errors.Trace(ev.Err)
+			if lease.TTL == int64(-1) {
+				log.Warn("handle task event failed because session is disconnected", zap.Error(err))
+				return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 			}
-			failpoint.Inject("captureHandleTaskDelay", nil)
-			if err := c.handleTaskEvent(ctx, ev); err != nil {
-				// We check ttl of lease instead of check `session.Done`, because
-				// `session.Done` is only notified when etcd client establish a
-				// new keepalive request, there could be a time window as long as
-				// 1/3 of session ttl that `session.Done` can't be triggered even
-				// the lease is already revoked.
-				lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
-				if inErr != nil {
-					return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
-				}
-				if lease.TTL == int64(-1) {
-					log.Warn("handle task event failed because session is disconnected", zap.Error(err))
+			return errors.Trace(err)
+		}
+	} else {
+		taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
+			Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
+			ChannelSize: 128,
+		})
+		log.Info("waiting for tasks", zap.String("capture-id", c.info.ID))
+		var ev *TaskEvent
+		wch := taskWatcher.Watch(ctx)
+		for {
+			// Return error when the session is done unexpectedly, it means the
+			// server does not send heartbeats in time, or network interrupted
+			// In this case, the state of the capture is undermined, the task may
+			// have or have not been rebalanced, the owner may be or not be held,
+			// so we must cancel context to let all sub routines exit.
+			select {
+			case <-c.session.Done():
+				if ctx.Err() != context.Canceled {
+					log.Info("capture session done, capture suicide itself", zap.String("capture-id", c.info.ID))
 					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 				}
-				return errors.Trace(err)
+			case ev = <-wch:
+				if ev == nil {
+					return nil
+				}
+				if ev.Err != nil {
+					return errors.Trace(ev.Err)
+				}
+				failpoint.Inject("captureHandleTaskDelay", nil)
+				if err := c.handleTaskEvent(ctx, ev); err != nil {
+					// We check ttl of lease instead of check `session.Done`, because
+					// `session.Done` is only notified when etcd client establish a
+					// new keepalive request, there could be a time window as long as
+					// 1/3 of session ttl that `session.Done` can't be triggered even
+					// the lease is already revoked.
+					lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
+					if inErr != nil {
+						return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
+					}
+					if lease.TTL == int64(-1) {
+						log.Warn("handle task event failed because session is disconnected", zap.Error(err))
+						return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+					}
+					return errors.Trace(err)
+				}
 			}
 		}
 	}
+	return nil
 }
 
 // Campaign to be an owner
@@ -223,6 +261,13 @@ func (c *Capture) Cleanup() {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
+	if config.NewReplicaImpl {
+		c.processorManager.AsyncClose()
+		select {
+		case <-c.closed:
+		case <-ctx.Done():
+		}
+	}
 	return errors.Trace(c.etcdClient.DeleteCaptureInfo(ctx, c.info.ID))
 }
 
@@ -247,7 +292,7 @@ func (c *Capture) handleTaskEvent(ctx context.Context, ev *TaskEvent) error {
 	return nil
 }
 
-func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error) {
+func (c *Capture) assignTask(ctx context.Context, task *Task) (*oldProcessor, error) {
 	cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
 	if err != nil {
 		log.Error("get change feed info failed",
