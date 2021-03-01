@@ -105,9 +105,10 @@ func newProcessor(ctx context.Context) *processor {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
+	p.changefeed = state
 	ctx = context.WithChangefeedVars(ctx, &context.ChangefeedVars{
-		ID:   p.changefeed.ID,
-		Info: p.changefeed.Info,
+		ID:   state.ID,
+		Info: state.Info,
 	})
 	_, err := p.tick(ctx, state)
 	p.firstTick = false
@@ -146,7 +147,6 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 }
 
 func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState orchestrator.ReactorState, err error) {
-	p.changefeed = state
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}

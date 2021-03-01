@@ -370,9 +370,13 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
+	kvStorage, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, s.opts.advertiseAddr, procOpts)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, kvStorage, s.opts.advertiseAddr, procOpts)
 	if err != nil {
 		return err
 	}

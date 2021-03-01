@@ -80,7 +80,7 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, "127.0.0.1:12034",
+		&security.Credential{}, nil, "127.0.0.1:12034",
 		&processorOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 
@@ -113,7 +113,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, "127.0.0.1:12034",
+		&security.Credential{}, nil, "127.0.0.1:12034",
 		&processorOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 

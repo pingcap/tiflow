@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -77,6 +78,7 @@ func NewCapture(
 	pdEndpoints []string,
 	pdCli pd.Client,
 	credential *security.Credential,
+	kvStorage tidbkv.Storage,
 	advertiseAddr string,
 	opts *processorOpts,
 ) (c *Capture, err error) {
@@ -124,10 +126,6 @@ func NewCapture(
 	info := &model.CaptureInfo{
 		ID:            id,
 		AdvertiseAddr: advertiseAddr,
-	}
-	kvStorage, err := util.KVStorageFromCtx(stdCtx)
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 	processorManager := processor.NewManager(pdCli, credential, kvStorage, info)
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(stdCtx))

@@ -629,7 +629,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	sampleCF.sink = sink
 
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+		&security.Credential{}, nil, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
@@ -931,7 +931,7 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
+		&security.Credential{}, nil, "127.0.0.1:12034", &processorOpts{})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
@@ -989,7 +989,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, addr, &processorOpts{})
+		&security.Credential{}, nil, addr, &processorOpts{})
 	c.Assert(err, check.IsNil)
 	err = s.client.PutCaptureInfo(ctx, capture.info, capture.session.Lease())
 	c.Assert(err, check.IsNil)
@@ -1073,7 +1073,7 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, addr, &processorOpts{})
+		&security.Credential{}, nil, addr, &processorOpts{})
 	c.Assert(err, check.IsNil)
 	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
 		DefaultCDCGCSafePointTTL, time.Millisecond*200)
