@@ -579,8 +579,8 @@ func (p *processor) handlePosition() error {
 	p.metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 
-	if minResolvedTs > p.changefeed.TaskPosition.ResolvedTs ||
-		minCheckpointTs > p.changefeed.TaskPosition.CheckPointTs {
+	if minResolvedTs != p.changefeed.TaskPosition.ResolvedTs ||
+		minCheckpointTs != p.changefeed.TaskPosition.CheckPointTs {
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 			position.CheckPointTs = minCheckpointTs
