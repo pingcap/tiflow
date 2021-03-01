@@ -18,12 +18,14 @@ import (
 	"os"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -85,6 +87,9 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			case msg := <-sorter.Output():
 				if msg == nil {
 					continue
+				}
+				if msg.CRTs == 0 {
+					log.Debug("LEOPPRO: found out why the cpt is 0", zap.Reflect("e", msg))
 				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 			}
