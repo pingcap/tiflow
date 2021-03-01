@@ -96,6 +96,7 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	minEmittedTs := m.getMinEmittedTs()
+	log.Info("LEOPPRO min ts", zap.Uint64("", minEmittedTs))
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
 		return m.getCheckpointTs(), errors.Trace(err)
@@ -185,7 +186,7 @@ func newBufferSink(ctx context.Context, backendSink Sink, errCh chan error, chec
 		buffer: make(chan struct {
 			rows       []*model.RowChangedEvent
 			resolvedTs model.Ts
-		}, defaultBufferChanSize),
+		}, 10),
 		checkpointTs: checkpointTs,
 	}
 	go sink.run(ctx, errCh)

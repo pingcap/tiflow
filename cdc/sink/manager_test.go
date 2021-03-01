@@ -48,9 +48,9 @@ func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
-	for _, row := range rows {
-		log.Info("rows in check sink", zap.Reflect("row", row))
-	}
+	// for _, row := range rows {
+	// 	// log.Info("rows in check sink", zap.Reflect("row", row))
+	// }
 	c.rows = append(c.rows, rows...)
 	return nil
 }
@@ -142,7 +142,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
 	defer manager.Close()
-	goroutineNum := 10
+	goroutineNum := 1
 	var wg sync.WaitGroup
 	const ExitSignal = uint64(math.MaxUint64)
 
@@ -174,6 +174,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				})
 				c.Assert(err, check.IsNil)
 			}
+			// log.Info("LEOPPRO resolvedts in table sink,flush", zap.Int64("index", index), zap.Uint64("rts", resolvedTs))
 			_, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
 			c.Assert(err, check.IsNil)
 			lastResolvedTs = resolvedTs
@@ -196,11 +197,11 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				go runTableSink(int64(i), table, maxResolvedTs, close)
 			} else {
 				// remove table
-				table := tableSinks[0]
-				close(closeChs[0])
-				c.Assert(table.Close(), check.IsNil)
-				tableSinks = tableSinks[1:]
-				closeChs = closeChs[1:]
+				// table := tableSinks[0]
+				// close(closeChs[0])
+				// c.Assert(table.Close(), check.IsNil)
+				// tableSinks = tableSinks[1:]
+				// closeChs = closeChs[1:]
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
