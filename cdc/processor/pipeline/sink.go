@@ -94,7 +94,22 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	return nil
 }
 
-func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) error {
+func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
+	defer func() {
+		if err != nil {
+			n.status.store(TableStatusStopped)
+			return
+		}
+		if n.checkpointTs >= n.targetTs {
+			n.status.store(TableStatusStopped)
+			err = n.sink.Close()
+			if err != nil {
+				err = errors.Trace(err)
+				return
+			}
+			err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+		}
+	}()
 	if resolvedTs > n.barrierTs {
 		resolvedTs = n.barrierTs
 	}
@@ -115,13 +130,6 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) erro
 		return nil
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
-	if checkpointTs >= n.targetTs {
-		n.status.store(TableStatusStopped)
-		if err := n.sink.Close(); err != nil {
-			return errors.Trace(err)
-		}
-		return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
-	}
 	return nil
 }
 

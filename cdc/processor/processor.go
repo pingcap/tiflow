@@ -372,6 +372,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 				})
 			case model.OperProcessed:
 				if table.Status() != tablepipeline.TableStatusStopped {
+					log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
 				patchOperation(tableID, func(operation *model.TableOperation) error {
@@ -579,6 +580,7 @@ func (p *processor) handlePosition() error {
 	p.metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 
+	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
 	if minResolvedTs != p.changefeed.TaskPosition.ResolvedTs ||
 		minCheckpointTs != p.changefeed.TaskPosition.CheckPointTs {
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
