@@ -11,17 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package replication
+package owner
 
 import (
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/replication/mock"
+	"github.com/pingcap/ticdc/cdc/owner/mock"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	kv2 "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -33,7 +33,7 @@ type ownerTestHarness struct {
 	server    *embed.Etcd
 	newClient func() *etcd.Client
 
-	kvStore kv2.Storage
+	kvStore tidbkv.Storage
 
 	pdClient     pd.Client
 	bootstrapper changeFeedBootstrapper

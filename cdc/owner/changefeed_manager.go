@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package replication
+package owner
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	_ "github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
 )
 
