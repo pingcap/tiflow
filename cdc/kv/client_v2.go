@@ -205,6 +205,11 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	for {
 		cevent, err := stream.Recv()
 
+		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
+			if op.(string) == "error" {
+				worker.inputCh <- nil
+			}
+		})
 		failpoint.Inject("kvClientStreamRecvError", func() {
 			err = errors.New("injected stream recv error")
 		})
