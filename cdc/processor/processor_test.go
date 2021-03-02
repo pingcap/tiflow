@@ -53,9 +53,11 @@ func newProcessor4Test() *processor {
 	}
 	p.createTablePipeline = func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
-			tableID: tableID,
-			name:    fmt.Sprintf("`test`.`table%d`", tableID),
-			status:  pipeline.TableStatusRunning,
+			tableID:      tableID,
+			name:         fmt.Sprintf("`test`.`table%d`", tableID),
+			status:       pipeline.TableStatusRunning,
+			resolvedTs:   replicaInfo.StartTs,
+			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	}
 	p.changefeed = newChangeFeedState(changefeedID, p.captureInfo.ID)
@@ -668,4 +670,47 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	c.Assert(p.changefeed.Workload, check.IsNil)
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
+}
+
+func (s *processorSuite) TestPositionDeleted(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := context.Background()
+	p := newProcessor4Test()
+	p.changefeed.TaskStatus.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
+	p.changefeed.TaskStatus.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
+	var err error
+	// init tick
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	p.schemaStorage.AdvanceResolvedTs(200)
+
+	// cal position
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
+		CheckPointTs: 30,
+		ResolvedTs:   30,
+	})
+
+	// some other delete the task position
+	p.changefeed.TaskPosition = nil
+	// position created again
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
+		CheckPointTs: 0,
+		ResolvedTs:   0,
+	})
+
+	// cal position
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
+		CheckPointTs: 30,
+		ResolvedTs:   30,
+	})
 }
