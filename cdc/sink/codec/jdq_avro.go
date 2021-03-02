@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	tijson "github.com/pingcap/tidb/types/json"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding/charmap"
 )
@@ -108,7 +107,7 @@ func (a *JdqEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (
 	} else {
 		// log.Warn("AppendRowChangedEvent: don't deal with it", zap.String("table", e.Table.String()))
 		// return EncoderNoOperation, nil
-		panic("AppendRowChangedEvent: row events error!!!")
+		log.Panic("AppendRowChangedEvent: row events error!!!", zap.String("table", e.Table.String()))
 	}
 
 	// message key: primary keys, separated by space
@@ -117,8 +116,8 @@ func (a *JdqEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (
 	for _, key := range pkeyCols {
 		data, err := a.columnToJdqNativeData(key)
 		if err != nil {
-			log.Warn("AppendRowChangedEvent: avro encoding primary key failed", zap.String("table", e.Table.String()))
-			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+			log.Warn("AppendRowChangedEvent: deal with primary key failed", zap.String("table", e.Table.String()))
+			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not change primary key to native data")
 		}
 		if data == nil {
 			continue
@@ -420,7 +419,7 @@ func (a *JdqEventBatchEncoder) columnToJdqNativeData(col *model.Column) (interfa
 		// return col.Value.(int64), nil
 		return handleUnsignedInt64()
 	case mysql.TypeJSON:
-		return col.Value.(tijson.BinaryJSON).String(), nil
+		return col.Value.(string), nil
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), nil
 	case mysql.TypeEnum:
