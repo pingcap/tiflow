@@ -51,8 +51,9 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(20)
-	for j := 0; j < 10; j++ {
+	concurrency := 20
+	wg.Add(concurrency * 2)
+	for j := 0; j < concurrency; j++ {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 10000; i++ {
@@ -66,7 +67,7 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 			}
 		}()
 	}
-	for j := 0; j < 10; j++ {
+	for j := 0; j < concurrency; j++ {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 10000; i++ {
@@ -94,8 +95,8 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 		totalResolvedTs += s.lastResolvedTs
 	}
 	// 100 regions, initial resolved ts 1000;
-	// 2000 * resolved ts forward, increased by 10 each time, 10 routines
-	c.Assert(totalResolvedTs, check.Equals, uint64(100*1000+2000*10*10))
+	// 2000 * resolved ts forward, increased by 10 each time, routine number is `concurrency`.
+	c.Assert(totalResolvedTs, check.Equals, uint64(100*1000+2000*10*concurrency))
 }
 
 func (s *regionWorkerSuite) TestRegionStateManagerBucket(c *check.C) {
