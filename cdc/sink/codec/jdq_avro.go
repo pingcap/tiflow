@@ -16,8 +16,9 @@ package codec
 import (
 	"bytes"
 	"encoding/binary"
-	"golang.org/x/text/encoding"
 	"strconv"
+
+	"golang.org/x/text/encoding"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
@@ -53,23 +54,9 @@ const (
 	schemaKeyString = "string"
 )
 
-const  jdwSchema = `
-                  {"type":"record","name":"JdwData","namespace":"com.jd.bdp.jdw.avro",
-                   "fields":[{"name":"mid","type":"long"},
-                              {"name":"db","type":"string"},
-                              {"name":"sch","type":"string"},
-                              {"name":"tab","type":"string"},
-                              {"name":"opt","type":"string"},
-                              {"name":"ts","type":"long"},
-                              {"name":"err","type":["string","null"]},
-                              {"name":"src","type":[{"type":"map","values":["string","null"]},"null"]},
-                              {"name":"cur","type":[{"type":"map","values":["string","null"]},"null"]},
-                              {"name":"cus","type":[{"type":"map","values":["string","null"]},"null"]}]}
-               `
-
 // JdqEventBatchEncoder converts the events to binary Jdq data
 type JdqEventBatchEncoder struct {
-	resultBuf []*MQMessage
+	resultBuf    []*MQMessage
 	binaryEncode *encoding.Decoder
 }
 
@@ -81,7 +68,7 @@ type jdqEncodeResult struct {
 // NewJdqEventBatchEncoder creates an JdqEventBatchEncoder
 func NewJdqEventBatchEncoder() EventBatchEncoder {
 	return &JdqEventBatchEncoder{
-		resultBuf: make([]*MQMessage, 0, 4096),
+		resultBuf:    make([]*MQMessage, 0, 4096),
 		binaryEncode: charmap.ISO8859_1.NewDecoder(),
 	}
 }
@@ -456,12 +443,12 @@ func (a *JdqEventBatchEncoder) columnToJdqNativeData(col *model.Column) (interfa
 	}
 }
 
-const jdqMagicByte = uint8(0)
+// const jdqMagicByte = uint8(0)
 
 func (r *jdqEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	// data := []interface{}{jdqMagicByte, int32(r.registryID), r.data}
-	data := []interface{}{jdqMagicByte, r.data}
+	data := []interface{}{r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {

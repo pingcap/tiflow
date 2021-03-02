@@ -15,10 +15,10 @@ package codec
 
 import (
 	"context"
-	"golang.org/x/text/encoding/charmap"
-	"time"
-    "testing"
 	"fmt"
+	"time"
+
+	"golang.org/x/text/encoding/charmap"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
@@ -42,7 +42,7 @@ var _ = check.Suite(&jdqEventBatchEncoderSuite{})
 
 func (s *jdqEventBatchEncoderSuite) SetUpSuite(c *check.C) {
 	s.encoder = &JdqEventBatchEncoder{
-		resultBuf:          make([]*MQMessage, 0, 4096),
+		resultBuf:    make([]*MQMessage, 0, 4096),
 		binaryEncode: charmap.ISO8859_1.NewDecoder(),
 	}
 }
@@ -75,7 +75,7 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 	}
 	testjson := `{"vpcId": "vpc-8enbtnk7bc","userpin": "umNsb3VkdGVzdwxy"}`
 	cols := []*model.Column{
-		{Name: "id", Value: int64(1), Type: mysql.TypeLong, Flag: model.HandleKeyFlag|model.PrimaryKeyFlag,},
+		{Name: "id", Value: int64(1), Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
@@ -93,14 +93,13 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 		{Name: "myenum", Value: int64(1), Type: mysql.TypeEnum},
 		{Name: "myset", Value: int64(2), Type: mysql.TypeSet},
 		{Name: "mybit", Value: int64(8), Type: mysql.TypeBit},
-
 	}
 
 	e := &model.RowChangedEvent{
-		StartTs: 123456888,
+		StartTs:  123456888,
 		CommitTs: 123456999,
-		Table: table,
-		Columns: cols,
+		Table:    table,
+		Columns:  cols,
 	}
 
 	r, err := s.encoder.jdqEncode(e)
@@ -135,16 +134,16 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEnvelope(c *check.C) {
 	c.Check(err, check.IsNil)
 
 	res := jdqEncodeResult{
-		data:       bin,
+		data: bin,
 	}
 
 	evlp, err := res.toEnvelope()
 	c.Check(err, check.IsNil)
 
-	c.Assert(evlp[0], check.Equals, jdqMagicByte)
-	//c.Assert(evlp[1:5], check.BytesEquals, []byte{0, 0, 0, 7})
+	// c.Assert(evlp[0], check.Equals, jdqMagicByte)
+	// c.Assert(evlp[1:5], check.BytesEquals, []byte{0, 0, 0, 7})
 
-	parsed, _, err := avroCodec.NativeFromBinary(evlp[1:])
+	parsed, _, err := avroCodec.NativeFromBinary(evlp[0:])
 	c.Assert(err, check.IsNil)
 	c.Assert(parsed, check.NotNil)
 
@@ -158,14 +157,14 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncode(c *check.C) {
 	defer testleak.AfterTest(c)()
 	myjson := `{"vpcId": "vpc-8enbtnk7bc","values": {"annotations": {"userpin": "umNsb3VkdGVzdwxy"}}}`
 	testCaseUpdate := &model.RowChangedEvent{
-		StartTs: 417318403368277260,
+		StartTs:  417318403368277260,
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "test",
 			Table:  "person",
 		},
 		Columns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag|model.PrimaryKeyFlag, Value: int64(9)},
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: int64(9)},
 			{Name: "uuid", Type: mysql.TypeVarchar, Flag: model.PrimaryKeyFlag, Value: "wxy009human"},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 			{Name: "tiny", Type: mysql.TypeTiny, Value: int64(255)},
@@ -234,4 +233,4 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncode(c *check.C) {
 	log.Info("TestJdqEncode done!")
 }
 
-//func Test(t *testing.T) { check.TestingT(t) }
+// func Test(t *testing.T) { check.TestingT(t) }
