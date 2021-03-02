@@ -17,7 +17,6 @@ import (
 	"context"
 	"os"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -26,11 +25,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-func TestSuite(t *testing.T) { check.TestingT(t) }
-
 type backendPoolSuite struct{}
 
-var _ = check.Suite(&backendPoolSuite{})
+var _ = check.SerialSuites(&backendPoolSuite{})
 
 func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	defer testleak.AfterTest(c)()

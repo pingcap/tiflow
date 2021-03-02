@@ -61,10 +61,12 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	}()
 
 	lastOutputTs := uint64(0)
+	lastOutputResolvedTs := uint64(0)
 	var lastEvent *model.PolymorphicEvent
 	var lastTask *flushTask
 
 	sendResolvedEvent := func(ts uint64) error {
+		lastOutputResolvedTs = ts
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -231,6 +233,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						zap.Uint64("last-ts", lastOutputTs),
 						zap.Int("sort-heap-len", sortHeap.Len()))
 				}
+
+				if event.CRTs <= lastOutputResolvedTs {
+					log.Panic("unified sorter: output ts smaller than resolved ts, bug?", zap.Uint64("minResolvedTs", minResolvedTs),
+						zap.Uint64("lastOutputResolvedTs", lastOutputResolvedTs), zap.Uint64("event-crts", event.CRTs))
+				}
 				lastOutputTs = event.CRTs
 				lastEvent = event
 				lastTask = task
@@ -326,9 +333,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		return nil
 	}
 
-	resolveTicker := time.NewTicker(1 * time.Second)
-	defer resolveTicker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -362,11 +366,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				if err != nil {
 					return errors.Trace(err)
 				}
-			}
-		case <-resolveTicker.C:
-			err := sendResolvedEvent(minResolvedTs)
-			if err != nil {
-				return errors.Trace(err)
 			}
 		}
 	}
