@@ -142,7 +142,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
 	defer manager.Close()
-	goroutineNum := 10
+	goroutineNum := 100
 	var wg sync.WaitGroup
 	const ExitSignal = uint64(math.MaxUint64)
 
@@ -184,10 +184,10 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	go func() {
 		defer wg.Done()
 		// add three table and then remote one table
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 200; i++ {
 			if i%4 != 3 {
 				// add table
-				table := manager.CreateTableSink(model.TableID(i), maxResolvedTs+1)
+				table := manager.CreateTableSink(model.TableID(i), maxResolvedTs)
 				close := make(chan struct{})
 				tableSinks = append(tableSinks, table)
 				closeChs = append(closeChs, close)
@@ -202,7 +202,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				tableSinks = tableSinks[1:]
 				closeChs = closeChs[1:]
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
 		atomic.StoreUint64(&maxResolvedTs, ExitSignal)
 	}()
