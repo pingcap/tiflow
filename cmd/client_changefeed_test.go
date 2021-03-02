@@ -33,6 +33,7 @@ func (s *clientChangefeedSuite) TestVerifyChangefeedParams(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := &cobra.Command{}
+	changefeedConfigVariables(cmd)
 
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
@@ -52,7 +53,7 @@ enable-old-value = false
 	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil, nil)
 	c.Assert(err, check.NotNil)
 
-	sinkURI = "blackhole:///?protocol=maxwell"
+	sinkURI = "blackhole:///"
 	info, err = verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil, []*model.CaptureInfo{{Version: "4.0.0"}})
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsFalse)
