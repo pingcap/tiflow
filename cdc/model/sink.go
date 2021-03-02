@@ -28,8 +28,8 @@ import (
 type MqMessageType int
 
 const (
-	// MqMessageTypeUnknow is unknown type of message key
-	MqMessageTypeUnknow MqMessageType = iota
+	// MqMessageTypeUnknown is unknown type of message key
+	MqMessageTypeUnknown MqMessageType = iota
 	// MqMessageTypeRow is row type of message key
 	MqMessageTypeRow
 	// MqMessageTypeDDL is ddl type of message key
