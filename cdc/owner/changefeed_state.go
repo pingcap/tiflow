@@ -105,6 +105,14 @@ func (cf *changeFeedState) AddDDLBarrier(barrierTs uint64) {
 	})
 }
 
+func (cf *changeFeedState) PopDDLBarrier() {
+	if len(cf.Barriers) == 0 {
+		log.Panic("changeFeedState: no DDL barrier to pop")
+	}
+
+	cf.Barriers = cf.Barriers[1:]
+}
+
 func (cf *changeFeedState) ShouldRunDDL() *barrier {
 	if len(cf.Barriers) > 0 {
 		if cf.Barriers[0].BarrierTs == cf.CheckpointTs()+1 &&
