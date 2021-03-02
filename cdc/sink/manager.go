@@ -21,13 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 const (
@@ -45,7 +43,6 @@ type Manager struct {
 	checkpointTs model.Ts
 	tableSinks   map[model.TableID]*tableSink
 	tableSinksMu sync.Mutex
-	minEmittedTs model.Ts
 
 	flushMu sync.Mutex
 }
