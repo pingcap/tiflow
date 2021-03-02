@@ -15,6 +15,7 @@ package replication
 
 import (
 	"context"
+
 	"github.com/pingcap/ticdc/pkg/security"
 
 	"github.com/pingcap/errors"
@@ -56,7 +57,6 @@ func (c *changeFeedBootstrapperImpl) bootstrapChangeFeed(
 	cfID model.ChangeFeedID,
 	cfInfo *model.ChangeFeedInfo,
 	startTs uint64) (changeFeedRunner, error) {
-
 	log.Info("Bootstrapping changefeed", zap.Stringer("info", cfInfo),
 		zap.String("changefeed", cfID), zap.Uint64("checkpoint ts", startTs))
 

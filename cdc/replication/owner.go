@@ -88,7 +88,7 @@ func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureI
 }
 
 type ownerReactor struct {
-	state *ownerReactorState
+	state             *ownerReactorState
 	changeFeedManager changeFeedManager
 	changeFeedRunners map[model.ChangeFeedID]changeFeedRunner
 
@@ -137,8 +137,8 @@ func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (n
 		if err != nil {
 			log.Warn("error running changeFeed owner", zap.Error(err))
 			err := o.changeFeedManager.AddAdminJob(ctx, model.AdminJob{
-				CfID:  cfID,
-				Type:  model.AdminStop,
+				CfID: cfID,
+				Type: model.AdminStop,
 				Error: &model.RunningError{
 					Addr:    util.CaptureAddrFromCtx(ctx),
 					Code:    "CDC-owner-1001",
@@ -165,7 +165,6 @@ func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (n
 func (o *ownerReactor) doUpdateGCSafePoint(ctx context.Context) error {
 	gcSafePoint := o.changeFeedManager.GetGCSafePointUpperBound()
 	actual, err := o.gcManager.updateGCSafePoint(ctx, gcSafePoint)
-
 	if err != nil {
 		return errors.Trace(err)
 	}

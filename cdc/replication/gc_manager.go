@@ -30,8 +30,8 @@ const (
 )
 
 type gcManager struct {
-	pdClient        pd.Client
-	ttl             int64
+	pdClient pd.Client
+	ttl      int64
 
 	lastFlushedTime time.Time
 	lastSafePointTs uint64
@@ -39,8 +39,8 @@ type gcManager struct {
 
 func newGCManager(pdClient pd.Client, ttl int64) *gcManager {
 	return &gcManager{
-		pdClient:        pdClient,
-		ttl:             ttl,
+		pdClient: pdClient,
+		ttl:      ttl,
 	}
 }
 
@@ -53,7 +53,7 @@ func (m *gcManager) updateGCSafePoint(ctx context.Context, safePointTs uint64) (
 				zap.Uint64("safePointTs", safePointTs),
 				zap.Error(err))
 
-			if time.Since(startTime) < time.Duration(m.ttl) * time.Second {
+			if time.Since(startTime) < time.Duration(m.ttl)*time.Second {
 				actual = m.lastSafePointTs
 				err = nil
 				return

@@ -20,7 +20,7 @@ import (
 
 // MergeCommutativePatches merges patches to the same key as one.
 // Since the order of applications is not guaranteed, please only use with commutative patches.
-func MergeCommutativePatches(patches[] *DataPatch) []*DataPatch {
+func MergeCommutativePatches(patches []*DataPatch) []*DataPatch {
 	patchesByKey := make(map[util.EtcdKey][]*DataPatch)
 	for _, patch := range patches {
 		key := patch.Key

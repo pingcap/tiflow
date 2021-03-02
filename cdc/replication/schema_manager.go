@@ -109,7 +109,7 @@ func (m *schemaManager) ApplyDDL(job *timodel.Job) ([]tableAction, error) {
 	}
 
 	var (
-		startTableIDs []model.TableID
+		startTableIDs  []model.TableID
 		removeTableIDs []model.TableID
 	)
 

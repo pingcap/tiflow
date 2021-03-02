@@ -121,7 +121,7 @@ func (s *schedulerImpl) PutTasks(tables map[model.TableID]*tableTask) {
 
 			replicaInfo := model.TableReplicaInfo{
 				StartTs:     task.CheckpointTs + 1,
-				MarkTableID: 0,  // TODO support cyclic replication
+				MarkTableID: 0, // TODO support cyclic replication
 			}
 
 			log.Info("Dispatching table",
@@ -252,7 +252,7 @@ func (s *schedulerImpl) triggerRebalance() {
 		// Use rand.Perm as a randomization source for choosing victims uniformly.
 		randPerm := rand.Perm(len(captureTables))
 
-		for i := 0; i < len(captureTables) - upperLimitPerCapture; i++ {
+		for i := 0; i < len(captureTables)-upperLimitPerCapture; i++ {
 			victimIdx := randPerm[i]
 			victimTableID := captureTables[victimIdx]
 

@@ -17,8 +17,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/pingcap/ticdc/cdc/replication"
-	"github.com/pingcap/ticdc/pkg/etcd"
 	"net"
 	"net/http"
 	"strings"
@@ -29,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -173,7 +172,7 @@ type ServerOption func(*options)
 type Server struct {
 	opts         options
 	capture      *Capture
-	owner        *replication.Owner
+	owner        *Owner
 	ownerLock    sync.RWMutex
 	statusServer *http.Server
 	pdClient     pd.Client
@@ -264,7 +263,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
-func (s *Server) setOwner(owner *replication.Owner) {
+func (s *Server) setOwner(owner *Owner) {
 	s.ownerLock.Lock()
 	defer s.ownerLock.Unlock()
 	s.owner = owner
@@ -297,14 +296,14 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 		captureID := s.capture.info.ID
 		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := replication.NewOwner(etcd.Wrap(s.capture.session.Client(), map[string]prometheus.Counter{}), s.pdClient, s.opts.credential)
+		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
 		}
 
 		s.setOwner(owner)
-		if err := owner.Run(ctx); err != nil {
+		if err := owner.Run(ctx, ownerRunInterval); err != nil {
 			if errors.Cause(err) == context.Canceled {
 				log.Info("owner exited", zap.String("capture-id", captureID))
 				select {
@@ -405,6 +404,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 // Close closes the server.
 func (s *Server) Close() {
 	if s.capture != nil {
+		if !config.NewReplicaImpl {
+			s.capture.Cleanup()
+		}
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
 		err := s.capture.Close(closeCtx)
 		if err != nil {

@@ -15,6 +15,7 @@ package replication
 
 import (
 	"context"
+
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
@@ -44,8 +45,8 @@ type changeFeedRunnerImpl struct {
 	cfID   model.ChangeFeedID
 	config *config.ReplicaConfig
 
-	sink       sink.Sink
-	sinkErrCh  <-chan error
+	sink      sink.Sink
+	sinkErrCh <-chan error
 
 	ddlHandler ddlHandler
 	ddlCancel  func()

@@ -66,8 +66,12 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 	}, nil
 }
 
+const etcdRequestProgressDuration = 2 * time.Second
+
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
+// If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
+// And the specified etcd session is nil-safty.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration) error {
 	defer worker.cleanUp()
 
@@ -83,15 +87,18 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	defer ticker.Stop()
 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
-	var pendingPatches []*DataPatch
-	var exiting bool
-	var sessionDone <-chan struct{}
+	var (
+		pendingPatches []*DataPatch
+		exiting        bool
+		sessionDone    <-chan struct{}
+	)
 	if session != nil {
 		sessionDone = session.Done()
 	} else {
 		// should never be closed
 		sessionDone = make(chan struct{})
 	}
+	lastReceivedEventTime := time.Now()
 
 	for {
 		var response clientv3.WatchResponse
@@ -99,15 +106,21 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-sessionDone:
-			return cerrors.ErrEtcdSessionDone
+			return cerrors.ErrEtcdSessionDone.GenWithStackByArgs()
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
+			if time.Since(lastReceivedEventTime) > etcdRequestProgressDuration {
+				if err := worker.client.RequestProgress(ctx); err != nil {
+					log.Warn("failed to request progress for etcd watcher", zap.Error(err))
+				}
+			}
 		case response = <-watchCh:
 			// In this select case, we receive new events from Etcd, and call handleEvent if appropriate.
 
 			if err := response.Err(); err != nil {
 				return errors.Trace(err)
 			}
+			lastReceivedEventTime = time.Now()
 
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
@@ -117,7 +130,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
-				break
+				continue
 			}
 
 			for _, event := range response.Events {
@@ -147,7 +160,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				return nil
 			}
 			if worker.revision < worker.barrierRev {
-				log.Debug("barrierRev not reached", zap.Int64("curRev", worker.revision), zap.Int64("barrierRev", worker.barrierRev))
 				// We hold off notifying the Reactor because barrierRev has not been reached.
 				// This usually happens when a committed write Txn has not been received by Watch.
 				continue
@@ -159,7 +171,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			}
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			if err != nil {
-				if errors.Cause(err) != cerrors.ErrReactorFinished {
+				if !cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 					return errors.Trace(err)
 				}
 				// normal exit
@@ -180,7 +192,11 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 
 	switch event.Type {
 	case mvccpb.PUT:
-		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = event.Kv.Value
+		value := event.Kv.Value
+		if value == nil {
+			value = []byte{}
+		}
+		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = value
 	case mvccpb.DELETE:
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
@@ -207,19 +223,48 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 	return nil
 }
 
-func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
-	cmpSet := make(map[util.EtcdKey]clientv3.Cmp)
-	opSet := make(map[util.EtcdKey]clientv3.Op)
-
-	// tmpRawState cache the changed values which are uncommitted to etcd.
-	tmpRawState := make(map[util.EtcdKey][]byte)
+func mergePatch(patches []*DataPatch) []*DataPatch {
+	patchMap := make(map[util.EtcdKey][]*DataPatch)
 	for _, patch := range patches {
-		// check the tmpRawState to get the newest uncommitted value if exists
-		old, ok := tmpRawState[patch.Key]
-		if !ok {
-			// get the committed value
-			old, ok = worker.rawState[patch.Key]
-		}
+		patchMap[patch.Key] = append(patchMap[patch.Key], patch)
+	}
+	result := make([]*DataPatch, 0, len(patchMap))
+	for key, patches := range patchMap {
+		patches := patches
+		result = append(result, &DataPatch{
+			Key: key,
+			Fun: func(old []byte) ([]byte, error) {
+				for _, patch := range patches {
+					newValue, err := patch.Fun(old)
+					if err != nil {
+						if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
+							continue
+						}
+						return nil, err
+					}
+					old = newValue
+				}
+				return old, nil
+			},
+		})
+	}
+	return result
+}
+
+func etcdValueEqual(left, right []byte) bool {
+	if len(left) == 0 && len(right) == 0 {
+		return (left == nil && right == nil) || (left != nil && right != nil)
+	}
+	return bytes.Equal(left, right)
+}
+
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
+	patches = mergePatch(patches)
+	cmps := make([]clientv3.Cmp, 0, len(patches))
+	ops := make([]clientv3.Op, 0, len(patches))
+
+	for _, patch := range patches {
+		old, ok := worker.rawState[patch.Key]
 
 		value, err := patch.Fun(old)
 		if err != nil {
@@ -229,22 +274,18 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			return errors.Trace(err)
 		}
 
-		// if there are multiple patches with the same key, we should keep the compare of the first patch
-		if _, cmpExist := cmpSet[patch.Key]; !cmpExist {
-			// make sure someone else has not updated the key after the last snapshot
-			var cmp clientv3.Cmp
-			// if ok is false, it means that the key of this patch is not exist in a committed state
-			// and also not exist in the uncommitted value cache(tmpRawState)
-			if ok {
-				cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
-			} else {
-				// this compare is equivalent to `patch.Key` is not exist
-				cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "=", 0)
-			}
-			cmpSet[patch.Key] = cmp
+		// make sure someone else has not updated the key after the last snapshot
+		var cmp clientv3.Cmp
+		// if ok is false, it means that the key of this patch is not exist in a committed state
+		if ok {
+			cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
+		} else {
+			// this compare is equivalent to `patch.Key` is not exist
+			cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "=", 0)
 		}
+		cmps = append(cmps, cmp)
 
-		if bytes.Equal(old, value) {
+		if etcdValueEqual(old, value) {
 			// Ignore patches that produce a new value that is the same as the old value.
 			continue
 		}
@@ -255,33 +296,19 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 		} else {
 			op = clientv3.OpDelete(patch.Key.String())
 		}
-		// if there are multiple patches with the same key, we should keep the value of the last patch
-		opSet[patch.Key] = op
-		tmpRawState[patch.Key] = value
-	}
-	cmps := make([]clientv3.Cmp, 0, len(cmpSet))
-	ops := make([]clientv3.Op, 0, len(opSet))
-	for _, cmp := range cmpSet {
-		cmps = append(cmps, cmp)
-	}
-	for _, op := range opSet {
 		ops = append(ops, op)
 	}
-
-	if len(ops) == 0 {
-		return nil
-	}
-
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	//logEtcdOps(ops, resp.Succeeded)
+	logEtcdOps(ops, resp.Succeeded)
 	if resp.Succeeded {
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil
 	}
+
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
@@ -298,18 +325,18 @@ func (worker *EtcdWorker) applyUpdates() error {
 }
 
 func logEtcdOps(ops []clientv3.Op, commited bool) {
-	if log.GetLevel() != zapcore.DebugLevel {
+	if log.GetLevel() != zapcore.DebugLevel || len(ops) == 0 {
 		return
 	}
+	log.Debug("[etcd worker] ==========Update State to ETCD==========")
 	for _, op := range ops {
-		log.Debug("[etcd worker] ==========Update State to ETCD==========")
 		if op.IsDelete() {
 			log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
 		} else {
 			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
 		}
-		log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
 	}
+	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
 }
 
 func (worker *EtcdWorker) cleanUp() {

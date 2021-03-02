@@ -15,8 +15,9 @@ package replication
 
 import (
 	"context"
-	"github.com/pingcap/log"
 	"sync"
+
+	"github.com/pingcap/log"
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
@@ -37,9 +38,9 @@ type ddlHandler interface {
 }
 
 type ddlHandlerImpl struct {
-	puller     puller.Puller
+	puller puller.Puller
 
-	mu sync.Mutex
+	mu         sync.Mutex
 	resolvedTS uint64
 	lastDDLTs  uint64 // TODO remove
 	ddlJobs    []*timodel.Job
@@ -58,7 +59,7 @@ func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Cr
 		false)
 
 	return &ddlHandlerImpl{
-		puller: plr,
+		puller:     plr,
 		resolvedTS: startTs - 1,
 	}
 }
@@ -128,4 +129,3 @@ func (h *ddlHandlerImpl) PullDDL() (uint64, []*timodel.Job, error) {
 	h.ddlJobs = nil
 	return h.resolvedTS, result, nil
 }
-

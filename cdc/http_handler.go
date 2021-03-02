@@ -236,32 +236,32 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 
 	panic("unimplemented")
 	/*
-	cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
-	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		writeInternalServerError(w, err)
-		return
-	}
-	feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
-	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		writeInternalServerError(w, err)
-		return
-	}
+		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
+		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+			writeInternalServerError(w, err)
+			return
+		}
+		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+			writeInternalServerError(w, err)
+			return
+		}
 
 
-	resp := &ChangefeedResp{
-		FeedState: string(feedState),
-	}
-	if cf != nil {
-		resp.RunningError = cf.info.Error
-	} else if feedInfo != nil {
-		resp.RunningError = feedInfo.Error
-	}
-	if status != nil {
-		resp.TSO = status.CheckpointTs
-		tm := oracle.GetTimeFromTS(status.CheckpointTs)
-		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
-	}
-	writeData(w, resp)
+		resp := &ChangefeedResp{
+			FeedState: string(feedState),
+		}
+		if cf != nil {
+			resp.RunningError = cf.info.Error
+		} else if feedInfo != nil {
+			resp.RunningError = feedInfo.Error
+		}
+		if status != nil {
+			resp.TSO = status.CheckpointTs
+			tm := oracle.GetTimeFromTS(status.CheckpointTs)
+			resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
+		}
+		writeData(w, resp)
 	*/
 }
 

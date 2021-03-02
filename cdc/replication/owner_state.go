@@ -14,10 +14,10 @@
 package replication
 
 import (
+	"encoding/json"
 	"sort"
 	"time"
 
-	"encoding/json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -39,7 +39,7 @@ type ownerReactorState struct {
 
 	patches                []*orchestrator.DataPatch
 	tableToCaptureMapCache map[model.ChangeFeedID]map[model.TableID]model.CaptureID
-	newCaptureHandler      func (captureID model.CaptureID)
+	newCaptureHandler      func(captureID model.CaptureID)
 
 	isInitialized bool
 }
@@ -72,10 +72,10 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, isInit bool) 
 
 	switch k.Tp {
 	/*
-	case etcd.CDCKeyTypeOwner:
-		log.Warn("Owner key is modified unexpectedly", zap.ByteString("owner", value))
-		return cerrors.ErrOwnerChangedUnexpectedly.GenWithStackByArgs()
-	 */
+		case etcd.CDCKeyTypeOwner:
+			log.Warn("Owner key is modified unexpectedly", zap.ByteString("owner", value))
+			return cerrors.ErrOwnerChangedUnexpectedly.GenWithStackByArgs()
+	*/
 	case etcd.CDCKeyTypeCapture:
 		captureID := k.CaptureID
 
@@ -461,7 +461,6 @@ func (s *ownerReactorState) AlterChangeFeedRuntimeState(
 	state model.FeedState,
 	cfErr *model.RunningError,
 	errTs int64) {
-
 	_, ok := s.ChangeFeedInfos[cfID]
 	if !ok {
 		log.Panic("owner bug: changeFeedInfo not found", zap.String("cfID", cfID))
@@ -699,6 +698,6 @@ func (s *ownerReactorState) CaptureExists(captureID model.CaptureID) bool {
 	return ok
 }
 
-func (s *ownerReactorState) SetNewCaptureHandler(handler func (id model.CaptureID)) {
+func (s *ownerReactorState) SetNewCaptureHandler(handler func(id model.CaptureID)) {
 	s.newCaptureHandler = handler
 }

@@ -33,7 +33,6 @@ import (
 	cdccontext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -50,21 +49,19 @@ const (
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
-	waitTableCloseTimeout = 15 * time.Second
-
 	schemaStorageGCLag = time.Minute * 20
 )
 
 type processor struct {
 	changefeed *changefeedState
 
-	tables map[model.TableID]*tablepipeline.TablePipeline
+	tables map[model.TableID]tablepipeline.TablePipeline
 
 	pdCli         pd.Client
 	limitter      *puller.BlurResourceLimitter
 	credential    *security.Credential
 	captureInfo   *model.CaptureInfo
-	schemaStorage *entry.SchemaStorage
+	schemaStorage entry.SchemaStorage
 	filter        *filter.Filter
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
@@ -73,6 +70,9 @@ type processor struct {
 	errCh     chan error
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+
+	lazyInit            func(ctx context.Context) error
+	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
 	metricResolvedTsGauge       prometheus.Gauge
 	metricResolvedTsLagGauge    prometheus.Gauge
@@ -89,12 +89,12 @@ func newProcessor(
 	credential *security.Credential,
 	captureInfo *model.CaptureInfo,
 ) *processor {
-	return &processor{
+	p := &processor{
 		pdCli:       pdCli,
 		credential:  credential,
 		captureInfo: captureInfo,
 		limitter:    puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
-		tables:      make(map[model.TableID]*tablepipeline.TablePipeline),
+		tables:      make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:       make(chan error, 1),
 		firstTick:   true,
 
@@ -105,42 +105,49 @@ func newProcessor(
 		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
 		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr),
 	}
+	p.createTablePipeline = p.createTablePipelineImpl
+	p.lazyInit = p.lazyInitImpl
+	return p
 }
 
+// Tick implements the `orchestrator.State` interface
+// the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
+// The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
-	log.Debug("Processor tick")
-	if _, err := p.tick(ctx, state); err != nil {
-		cause := errors.Cause(err)
-		if cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) && cerror.ErrReactorFinished.NotEqual(cause) {
-			p.metricProcessorErrorCounter.Inc()
-			// record error information in etcd
-			var code string
-			if terror, ok := err.(*errors.Error); ok {
-				code = string(terror.RFCCode())
-			} else {
-				code = string(cerror.ErrProcessorUnknown.RFCCode())
-			}
-			state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
-				if position == nil {
-					position = &model.TaskPosition{}
-				}
-				position.Error = &model.RunningError{
-					Addr:    p.captureInfo.AdvertiseAddr,
-					Code:    code,
-					Message: err.Error(),
-				}
-				return position, nil
-			})
-			log.Error("run processor failed",
-				zap.String("changefeed", p.changefeed.ID),
-				zap.String("capture-id", p.captureInfo.ID),
-				util.ZapFieldCapture(ctx),
-				zap.Error(err))
-		}
-		return state, cerrors.ErrReactorFinished
-	}
+	_, err := p.tick(ctx, state)
 	p.firstTick = false
-	return state, nil
+	if err == nil {
+		return state, nil
+	}
+	cause := errors.Cause(err)
+	if cause == context.Canceled || cerror.ErrAdminStopProcessor.Equal(cause) || cerror.ErrReactorFinished.Equal(cause) {
+		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
+	}
+	p.metricProcessorErrorCounter.Inc()
+	// record error information in etcd
+	var code string
+	if terror, ok := err.(*errors.Error); ok {
+		code = string(terror.RFCCode())
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+		if position == nil {
+			position = &model.TaskPosition{}
+		}
+		position.Error = &model.RunningError{
+			Addr:    p.captureInfo.AdvertiseAddr,
+			Code:    code,
+			Message: err.Error(),
+		}
+		return position, nil
+	})
+	log.Error("run processor failed",
+		zap.String("changefeed", p.changefeed.ID),
+		zap.String("capture-id", p.captureInfo.ID),
+		util.ZapFieldCapture(ctx),
+		zap.Error(err))
+	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
 func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState orchestrator.ReactorState, err error) {
@@ -160,7 +167,7 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := p.initTables(ctx); err != nil {
+	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if err := p.handlePosition(); err != nil {
@@ -178,27 +185,30 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 	return p.changefeed, nil
 }
 
+// initPosition create a new task position, and put it into the etcd state.
+// task position maybe be not exist only when the processor is running first time.
 func (p *processor) initPosition() bool {
-	if p.changefeed.TaskPosition == nil {
-		if !p.firstTick {
-			log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
-		}
-		checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
-			if position == nil {
-				return &model.TaskPosition{
-					CheckPointTs: checkpointTs,
-					ResolvedTs:   checkpointTs,
-				}, nil
-			}
-			return position, nil
-		})
-		return true
+	if p.changefeed.TaskPosition != nil {
+		return false
 	}
-	return false
+	if !p.firstTick {
+		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
+	}
+	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+		if position == nil {
+			return &model.TaskPosition{
+				CheckPointTs: checkpointTs,
+				ResolvedTs:   checkpointTs,
+			}, nil
+		}
+		return position, nil
+	})
+	return true
 }
 
-func (p *processor) lazyInit(ctx context.Context) error {
+// lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
+func (p *processor) lazyInitImpl(ctx context.Context) error {
 	if !p.firstTick {
 		return nil
 	}
@@ -207,7 +217,9 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	ctx = util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 
 	errCh := make(chan error, 16)
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		// there are some other objects need errCh, such as sink and sink manager
 		// but we can't ensure that all the producer of errCh are non-blocking
 		// It's very tricky that create a goroutine to receive the local errCh
@@ -238,7 +250,9 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	}
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		p.sendError(p.mounter.Run(ctx))
 	}()
 
@@ -278,16 +292,13 @@ func (p *processor) lazyInit(ctx context.Context) error {
 	return nil
 }
 
+// handleErrorCh listen the error channel and throw the error if it is not expected.
 func (p *processor) handleErrorCh(ctx context.Context) error {
 	var err error
 	select {
 	case err = <-p.errCh:
 	default:
 		return nil
-	}
-	p.cancel()
-	if util.WaitTimeout(&p.wg, waitTableCloseTimeout) {
-		log.Warn("timeout when waiting for all the tables exit", zap.String("changefeedID", p.changefeed.ID))
 	}
 	cause := errors.Cause(err)
 	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
@@ -304,9 +315,10 @@ func (p *processor) handleErrorCh(ctx context.Context) error {
 		zap.String("changefeed", p.changefeed.ID),
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("captureAddr", p.captureInfo.AdvertiseAddr))
-	return cerrors.ErrReactorFinished
+	return cerror.ErrReactorFinished
 }
 
+// handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
 func (p *processor) handleTableOperation(ctx context.Context) error {
 	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
@@ -323,60 +335,61 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
-	removeTable := func(tableID model.TableID) {
+	// TODO: 👇👇 remove this six lines after the new owner is implemented, applied operation should be removed by owner
+	if !p.changefeed.TaskStatus.SomeOperationsUnapplied() && len(p.changefeed.TaskStatus.Operation) != 0 {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
-			if status.Tables == nil {
-				log.Panic("Tables not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-			}
-			delete(status.Tables, tableID)
+			status.Operation = nil
 			return status, nil
 		})
 	}
+	// 👆👆 remove this six lines
 	for tableID, opt := range p.changefeed.TaskStatus.Operation {
 		if opt.TableApplied() {
 			continue
 		}
-		localCheckpointTs := p.changefeed.TaskPosition.CheckPointTs
+		globalCheckpointTs := p.changefeed.Status.CheckpointTs
 		if opt.Delete {
-			if opt.BoundaryTs <= localCheckpointTs {
-				table, exist := p.tables[tableID]
-				if !exist {
-					log.Warn("table which will be deleted is not found",
-						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperFinished
-						operation.Done = true
-						return nil
-					})
-					removeTable(tableID)
+			table, exist := p.tables[tableID]
+			if !exist {
+				log.Warn("table which will be deleted is not found",
+					util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+				patchOperation(tableID, func(operation *model.TableOperation) error {
+					operation.Status = model.OperFinished
+					operation.Done = true
+					return nil
+				})
+				continue
+			}
+			switch opt.Status {
+			case model.OperDispatched:
+				if opt.BoundaryTs < globalCheckpointTs {
+					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
+				}
+				table.AsyncStop(opt.BoundaryTs)
+				patchOperation(tableID, func(operation *model.TableOperation) error {
+					operation.Status = model.OperProcessed
+					return nil
+				})
+			case model.OperProcessed:
+				if table.Status() != tablepipeline.TableStatusStopped {
+					log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
-				switch opt.Status {
-				case model.OperDispatched:
-					table.AsyncStop(opt.BoundaryTs)
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperProcessed
-						return nil
-					})
-				case model.OperProcessed:
-					if table.Status() == tablepipeline.TableStatusStopped {
-						patchOperation(tableID, func(operation *model.TableOperation) error {
-							operation.BoundaryTs = table.CheckpointTs()
-							operation.Status = model.OperFinished
-							operation.Done = true
-							return nil
-						})
-						removeTable(tableID)
-					}
-					table.Cancel()
-					delete(p.tables, tableID)
-					log.Debug("Operation done signal received",
-						util.ZapFieldChangefeed(ctx),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("operation", opt))
-				default:
-					log.Panic("unreachable")
-				}
+				patchOperation(tableID, func(operation *model.TableOperation) error {
+					operation.BoundaryTs = table.CheckpointTs()
+					operation.Status = model.OperFinished
+					operation.Done = true
+					return nil
+				})
+				// TODO: check if the goroutines created by table pipeline is actually exited. (call tablepipeline.Wait())
+				table.Cancel()
+				delete(p.tables, tableID)
+				log.Debug("Operation done signal received",
+					util.ZapFieldChangefeed(ctx),
+					zap.Int64("tableID", tableID),
+					zap.Reflect("operation", opt))
+			default:
+				log.Panic("unreachable")
 			}
 		} else {
 			switch opt.Status {
@@ -387,6 +400,9 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 				}
 				if p.changefeed.Info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
+				}
+				if replicaInfo.StartTs != opt.BoundaryTs {
+					log.Warn("the startTs and BoundaryTs of add table operation should be always equaled", zap.Any("replicaInfo", replicaInfo))
 				}
 				err := p.addTable(ctx, tableID, replicaInfo)
 				if err != nil {
@@ -423,7 +439,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 	return nil
 }
 
-func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.SchemaStorage, error) {
+func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.SchemaStorage, error) {
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -439,11 +455,15 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		p.sendError(ddlPuller.Run(ctx))
 	}()
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
+	p.wg.Add(1)
 	go func() {
+		defer p.wg.Done()
 		var ddlRawKV *model.RawKVEntry
 		for {
 			select {
@@ -467,7 +487,6 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 			if job == nil {
 				continue
 			}
-			log.Debug("Processor DDL received", zap.Reflect("job", job))
 			if err := schemaStorage.HandleDDLJob(job); err != nil {
 				p.sendError(errors.Trace(err))
 				return
@@ -478,14 +497,24 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (*entry.Sch
 }
 
 func (p *processor) sendError(err error) {
+	if err == nil {
+		return
+	}
 	select {
 	case p.errCh <- err:
 	default:
-		log.Error("processor receives redundant error", zap.Error(err), zap.Stack("stack"))
+		log.Error("processor receives redundant error", zap.Error(err))
 	}
 }
 
-func (p *processor) initTables(ctx context.Context) error {
+// checkTablesNum if the number of table pipelines is equal to the number of TaskStatus in etcd state.
+// if the table number is not right, create or remove the odd tables.
+func (p *processor) checkTablesNum(ctx context.Context) error {
+	if len(p.tables) == len(p.changefeed.TaskStatus.Tables) {
+		return nil
+	}
+	// check if a table should be listen but not
+	// this only could be happened in the first tick.
 	for tableID, replicaInfo := range p.changefeed.TaskStatus.Tables {
 		if _, exist := p.tables[tableID]; exist {
 			continue
@@ -495,16 +524,32 @@ func (p *processor) initTables(ctx context.Context) error {
 			continue
 		}
 		if !p.firstTick {
-			log.Warn("The table was left out", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+			log.Warn("the table should be listen but not, already listen the table again, please report a bug", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 		}
 		err := p.addTable(ctx, tableID, replicaInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
+	// check if a table should be removed but still exist
+	// this shouldn't be happened in any time.
+	for tableID, tablePipeline := range p.tables {
+		if _, exist := p.changefeed.TaskStatus.Tables[tableID]; exist {
+			continue
+		}
+		opt := p.changefeed.TaskStatus.Operation
+		if opt != nil && opt[tableID] != nil && opt[tableID].Delete {
+			// table will be removed by normal logic
+			continue
+		}
+		tablePipeline.Cancel()
+		delete(p.tables, tableID)
+		log.Warn("the table was forcibly deleted, this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", p.changefeed.TaskStatus))
+	}
 	return nil
 }
 
+// handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition() error {
 	minResolvedTs := p.schemaStorage.ResolvedTs()
 	for _, table := range p.tables {
@@ -517,7 +562,6 @@ func (p *processor) handlePosition() error {
 	minCheckpointTs := minResolvedTs
 	for _, table := range p.tables {
 		ts := table.CheckpointTs()
-
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
 		}
@@ -535,8 +579,9 @@ func (p *processor) handlePosition() error {
 	p.metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 
-	if minResolvedTs > p.changefeed.TaskPosition.ResolvedTs ||
-		minCheckpointTs > p.changefeed.TaskPosition.CheckPointTs {
+	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
+	if minResolvedTs != p.changefeed.TaskPosition.ResolvedTs ||
+		minCheckpointTs != p.changefeed.TaskPosition.CheckPointTs {
 		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 			position.CheckPointTs = minCheckpointTs
@@ -547,6 +592,7 @@ func (p *processor) handlePosition() error {
 	return nil
 }
 
+// handleWorkload calculates the workload of all tables
 func (p *processor) handleWorkload() error {
 	p.changefeed.PatchTaskWorkload(func(_ model.TaskWorkload) (model.TaskWorkload, error) {
 		workload := make(model.TaskWorkload, len(p.tables))
@@ -558,6 +604,7 @@ func (p *processor) handleWorkload() error {
 	return nil
 }
 
+// pushResolvedTs2Table sends global resolved ts to all the table pipelines.
 func (p *processor) pushResolvedTs2Table() error {
 	resolvedTs := p.changefeed.Status.ResolvedTs
 	for _, table := range p.tables {
@@ -566,6 +613,7 @@ func (p *processor) pushResolvedTs2Table() error {
 	return nil
 }
 
+// addTable creates a new table pipeline and adds it to the `p.tables`
 func (p *processor) addTable(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if table, ok := p.tables[tableID]; ok {
 		if table.Status() == tablepipeline.TableStatusStopped {
@@ -579,7 +627,6 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 	}
 
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
-	globalResolvedTs := p.changefeed.Status.ResolvedTs
 
 	if replicaInfo.StartTs < globalCheckpointTs {
 		log.Warn("addTable: startTs < checkpoint",
@@ -588,16 +635,24 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 			zap.Uint64("checkpoint", globalCheckpointTs),
 			zap.Uint64("startTs", replicaInfo.StartTs))
 	}
+	table, err := p.createTablePipeline(ctx, tableID, replicaInfo)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	p.tables[tableID] = table
+	return nil
+}
 
+func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 	cdcCtx := cdccontext.NewContext(ctx, &cdccontext.Vars{
-		CaptureAddr:   "TODO: CaptureAddr",
+		CaptureAddr:   p.captureInfo.AdvertiseAddr,
 		PDClient:      p.pdCli,
 		SchemaStorage: p.schemaStorage,
 		Config:        p.changefeed.Info.Config,
 	})
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	var tableName string
 	err = retry.Run(time.Millisecond*5, 3, func() error {
@@ -642,20 +697,19 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
 			util.ZapFieldChangefeed(ctx),
 			zap.String("name", table.Name()),
-			zap.Any("replicaInfo", replicaInfo),
-			zap.Uint64("globalResolvedTs", globalResolvedTs))
+			zap.Any("replicaInfo", replicaInfo))
 	}()
 
 	log.Debug("Add table pipeline", zap.Int64("tableID", tableID),
 		util.ZapFieldChangefeed(ctx),
 		zap.String("name", table.Name()),
 		zap.Any("replicaInfo", replicaInfo),
-		zap.Uint64("globalResolvedTs", globalResolvedTs))
+		zap.Uint64("globalResolvedTs", p.changefeed.Status.ResolvedTs))
 
-	p.tables[tableID] = table
-	return nil
+	return table, nil
 }
 
+// doGCSchemaStorage trigger the schema storage GC
 func (p *processor) doGCSchemaStorage() error {
 	// Delay GC to accommodate pullers starting from a startTs that's too small
 	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
@@ -671,6 +725,7 @@ func (p *processor) Close() error {
 		tbl.Cancel()
 	}
 	p.cancel()
+	p.wg.Wait()
 	// mark tables share the same context with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
@@ -695,8 +750,10 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
-
-	return p.sinkManager.Close()
+	if p.sinkManager != nil {
+		return p.sinkManager.Close()
+	}
+	return nil
 }
 
 // WriteDebugInfo write the debug info to Writer
