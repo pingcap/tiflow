@@ -49,12 +49,11 @@ type Manager struct {
 
 // NewManager creates a new Sink manager
 func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) *Manager {
-	m := &Manager{
+	return &Manager{
 		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs),
 		checkpointTs: checkpointTs,
 		tableSinks:   make(map[model.TableID]*tableSink),
 	}
-	return m
 }
 
 // CreateTableSink creates a table sink
