@@ -325,7 +325,7 @@ func (worker *EtcdWorker) applyUpdates() error {
 }
 
 func logEtcdOps(ops []clientv3.Op, commited bool) {
-	if log.GetLevel() != zapcore.DebugLevel {
+	if log.GetLevel() != zapcore.DebugLevel || len(ops) == 0 {
 		return
 	}
 	log.Debug("[etcd worker] ==========Update State to ETCD==========")
