@@ -57,18 +57,6 @@ func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpo
 		checkpointTs: checkpointTs,
 		tableSinks:   make(map[model.TableID]*tableSink),
 	}
-	go func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-			atomic.StoreUint64(&m.minEmittedTs, m.calcMinEmittedTs())
-		}
-	}()
 	return m
 }
 
@@ -94,7 +82,7 @@ func (m *Manager) Close() error {
 	return m.backendSink.Close()
 }
 
-func (m *Manager) calcMinEmittedTs() model.Ts {
+func (m *Manager) getMinEmittedTs() model.Ts {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	if len(m.tableSinks) == 0 {
@@ -113,7 +101,7 @@ func (m *Manager) calcMinEmittedTs() model.Ts {
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	m.flushMu.Lock()
 	defer m.flushMu.Unlock()
-	minEmittedTs := atomic.LoadUint64(&m.minEmittedTs)
+	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
 		return m.getCheckpointTs(), errors.Trace(err)
