@@ -51,35 +51,39 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 10000; i++ {
-			idx := rand.Intn(regionCount)
-			regionID := regionIDs[idx]
-			s, ok := rsm.getState(regionID)
-			c.Assert(ok, check.IsTrue)
-			s.lock.RLock()
-			c.Assert(s.requestID, check.Equals, uint64(idx+1))
-			s.lock.RUnlock()
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 10000; i++ {
-			// simulate write less than read
-			if i%5 != 0 {
-				continue
+	wg.Add(20)
+	for j := 0; j < 10; j++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				idx := rand.Intn(regionCount)
+				regionID := regionIDs[idx]
+				s, ok := rsm.getState(regionID)
+				c.Assert(ok, check.IsTrue)
+				s.lock.RLock()
+				c.Assert(s.requestID, check.Equals, uint64(idx+1))
+				s.lock.RUnlock()
 			}
-			regionID := regionIDs[rand.Intn(regionCount)]
-			s, ok := rsm.getState(regionID)
-			c.Assert(ok, check.IsTrue)
-			s.lock.Lock()
-			s.lastResolvedTs += 10
-			s.lock.Unlock()
-			rsm.setState(regionID, s)
-		}
-	}()
+		}()
+	}
+	for j := 0; j < 10; j++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				// simulate write less than read
+				if i%5 != 0 {
+					continue
+				}
+				regionID := regionIDs[rand.Intn(regionCount)]
+				s, ok := rsm.getState(regionID)
+				c.Assert(ok, check.IsTrue)
+				s.lock.Lock()
+				s.lastResolvedTs += 10
+				s.lock.Unlock()
+				rsm.setState(regionID, s)
+			}
+		}()
+	}
 	wg.Wait()
 
 	totalResolvedTs := uint64(0)
@@ -90,8 +94,8 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 		totalResolvedTs += s.lastResolvedTs
 	}
 	// 100 regions, initial resolved ts 1000;
-	// 2000 * resolved ts forward, increased by 10 each time.
-	c.Assert(totalResolvedTs, check.Equals, uint64(100*1000+2000*10))
+	// 2000 * resolved ts forward, increased by 10 each time, 10 routines
+	c.Assert(totalResolvedTs, check.Equals, uint64(100*1000+2000*10*10))
 }
 
 func (s *regionWorkerSuite) TestRegionStateManagerBucket(c *check.C) {
