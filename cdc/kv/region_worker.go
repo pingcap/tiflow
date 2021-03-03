@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"time"
 
@@ -33,6 +34,55 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	minRegionStateBucket = 4
+	maxRegionStateBucket = 16
+)
+
+// regionStateManager provides the get/put way like a sync.Map, and it is divided
+// into several buckets to reduce lock contention
+type regionStateManager struct {
+	bucket int
+	states []*sync.Map
+}
+
+func newRegionStateManager(bucket int) *regionStateManager {
+	if bucket <= 0 {
+		bucket = runtime.NumCPU()
+		if bucket > maxRegionStateBucket {
+			bucket = maxRegionStateBucket
+		}
+		if bucket < minRegionStateBucket {
+			bucket = minRegionStateBucket
+		}
+	}
+	rsm := &regionStateManager{
+		bucket: bucket,
+		states: make([]*sync.Map, bucket),
+	}
+	for i := range rsm.states {
+		rsm.states[i] = new(sync.Map)
+	}
+	return rsm
+}
+
+func (rsm *regionStateManager) getBucket(regionID uint64) int {
+	return int(regionID) % rsm.bucket
+}
+
+func (rsm *regionStateManager) getState(regionID uint64) (*regionFeedState, bool) {
+	bucket := rsm.getBucket(regionID)
+	if val, ok := rsm.states[bucket].Load(regionID); ok {
+		return val.(*regionFeedState), true
+	}
+	return nil, false
+}
+
+func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState) {
+	bucket := rsm.getBucket(regionID)
+	rsm.states[bucket].Store(regionID, state)
+}
+
 /*
 `regionWorker` maintains N regions, it runs in background for each gRPC stream,
 corresponding to one TiKV store. It receives `regionStatefulEvent` in a channel
@@ -47,15 +97,18 @@ lock for each region state(each region state has one lock).
 for event processing to increase throughput.
 */
 type regionWorker struct {
-	session        *eventFeedSession
-	limiter        *rate.Limiter
-	inputCh        chan *regionStatefulEvent
-	outputCh       chan<- *model.RegionFeedEvent
-	regionStates   map[uint64]*regionFeedState
-	statesLock     sync.RWMutex
+	session *eventFeedSession
+	limiter *rate.Limiter
+
+	inputCh  chan *regionStatefulEvent
+	outputCh chan<- *model.RegionFeedEvent
+
+	statesManager *regionStateManager
+
+	rtsManager  *resolvedTsManager
+	rtsUpdateCh chan *regionResolvedTs
+
 	enableOldValue bool
-	rtsManager     *resolvedTsManager
-	rtsUpdateCh    chan *regionResolvedTs
 }
 
 func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter) *regionWorker {
@@ -64,25 +117,20 @@ func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter) *regionWorker {
 		limiter:        limiter,
 		inputCh:        make(chan *regionStatefulEvent, 1024),
 		outputCh:       s.eventCh,
-		regionStates:   make(map[uint64]*regionFeedState),
-		enableOldValue: s.enableOldValue,
+		statesManager:  newRegionStateManager(-1),
 		rtsManager:     newResolvedTsManager(),
 		rtsUpdateCh:    make(chan *regionResolvedTs, 1024),
+		enableOldValue: s.enableOldValue,
 	}
 	return worker
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
-	w.statesLock.RLock()
-	defer w.statesLock.RUnlock()
-	state, ok := w.regionStates[regionID]
-	return state, ok
+	return w.statesManager.getState(regionID)
 }
 
 func (w *regionWorker) setRegionState(regionID uint64, state *regionFeedState) {
-	w.statesLock.Lock()
-	defer w.statesLock.Unlock()
-	w.regionStates[regionID] = state
+	w.statesManager.setState(regionID, state)
 }
 
 func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, state *regionFeedState) error {
@@ -170,9 +218,8 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				continue
 			}
 			maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
-			w.statesLock.RLock()
 			for _, rts := range expired {
-				state, ok := w.regionStates[rts.regionID]
+				state, ok := w.getRegionState(rts.regionID)
 				if !ok || state.isStopped() {
 					// state is already deleted or stoppped, just continue,
 					// and don't need to push resolved ts back to heap.
@@ -197,7 +244,6 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				w.rtsManager.Upsert(rts)
 				state.lock.RUnlock()
 			}
-			w.statesLock.RUnlock()
 		}
 	}
 }
@@ -444,27 +490,27 @@ func (w *regionWorker) handleResolvedTs(
 // evictAllRegions is used when gRPC stream meets error and re-establish, notify
 // all existing regions to re-establish
 func (w *regionWorker) evictAllRegions(ctx context.Context) error {
-	w.statesLock.Lock()
-	defer w.statesLock.Unlock()
-	for _, state := range w.regionStates {
-		state.lock.Lock()
-		// if state is marked as stopped, it must have been or would be processed by `onRegionFail`
-		if state.isStopped() {
+	var err error
+	for _, states := range w.statesManager.states {
+		states.Range(func(_, value interface{}) bool {
+			state := value.(*regionFeedState)
+			state.lock.Lock()
+			// if state is marked as stopped, it must have been or would be processed by `onRegionFail`
+			if state.isStopped() {
+				state.lock.Unlock()
+				return true
+			}
+			state.markStopped()
+			singleRegionInfo := state.sri.partialClone()
 			state.lock.Unlock()
-			continue
-		}
-		state.markStopped()
-		singleRegionInfo := state.sri.partialClone()
-		state.lock.Unlock()
-		err := w.session.onRegionFail(ctx, regionErrorInfo{
-			singleRegionInfo: singleRegionInfo,
-			err: &rpcCtxUnavailableErr{
-				verID: singleRegionInfo.verID,
-			},
+			err = w.session.onRegionFail(ctx, regionErrorInfo{
+				singleRegionInfo: singleRegionInfo,
+				err: &rpcCtxUnavailableErr{
+					verID: singleRegionInfo.verID,
+				},
+			})
+			return err == nil
 		})
-		if err != nil {
-			return err
-		}
 	}
-	return nil
+	return err
 }
