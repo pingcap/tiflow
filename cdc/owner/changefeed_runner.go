@@ -228,7 +228,7 @@ func (c *changeFeedRunnerImpl) handleDDL(ctx context.Context, job *ddlJobWithPre
 	executed := false
 	if !c.config.Cyclic.IsEnabled() || c.config.Cyclic.SyncDDL {
 		failpoint.Inject("InjectChangefeedDDLError", func() {
-			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
+			failpoint.Return(nil, cerror.ErrExecDDLFailed.GenWithStackByArgs())
 		})
 
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)

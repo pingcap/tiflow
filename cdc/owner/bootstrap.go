@@ -67,11 +67,11 @@ func (c *changeFeedBootstrapperImpl) bootstrapChangeFeed(
 	}
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
-		failpoint.Return(nil, nil, cerror.ErrStartTsBeforeGC.GenWithStackByArgs(startTs-300, startTs))
+		failpoint.Return(nil, cerror.ErrStartTsBeforeGC.GenWithStackByArgs(startTs-300, startTs))
 	})
 
 	failpoint.Inject("NewChangefeedRetryError", func() {
-		failpoint.Return(nil, nil, errors.New("failpoint injected retriable error"))
+		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
 	})
 
 	kvStore, err := util.KVStorageFromCtx(ctx)
