@@ -16,6 +16,7 @@ package sorter
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/util"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -166,9 +167,11 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	}
 
 	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
+	tableID, tableName := util.TableIDFromCtx(ctx)
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
-		zap.String("table", tableNameFromCtx(ctx)))
+		zap.Int64("table-id", tableID),
+		zap.String("table-name", tableName))
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {

@@ -185,7 +185,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			} else {
 				pendingSet[task] = nextEvent
 				if nextEvent.CRTs < minResolvedTs {
-					log.Panic("remaining event CRTs too small", zap.Uint64("next-ts", nextEvent.CRTs), zap.Uint64("minResolvedTs", minResolvedTs))
+					log.Panic("remaining event CRTs too small",
+						zap.Uint64("next-ts", nextEvent.CRTs),
+						zap.Uint64("minResolvedTs", minResolvedTs))
 				}
 			}
 			return nil
@@ -193,8 +195,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		failpoint.Inject("sorterDebug", func() {
 			if sortHeap.Len() > 0 {
+				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: start merging",
-					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
 					zap.Uint64("minResolvedTs", minResolvedTs))
 			}
 		})
@@ -333,6 +337,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		return nil
 	}
 
+	resolveTicker := time.NewTicker(1 * time.Second)
+	defer resolveTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -366,6 +373,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				if err != nil {
 					return errors.Trace(err)
 				}
+			}
+		case <-resolveTicker.C:
+			err := sendResolvedEvent(minResolvedTs)
+			if err != nil {
+				return errors.Trace(err)
 			}
 		}
 	}

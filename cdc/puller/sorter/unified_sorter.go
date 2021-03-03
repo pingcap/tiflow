@@ -28,18 +28,31 @@ import (
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
-	inputCh   chan *model.PolymorphicEvent
-	outputCh  chan *model.PolymorphicEvent
-	dir       string
-	pool      *backEndPool
-	tableName string // used only for debugging and tracing
+	inputCh     chan *model.PolymorphicEvent
+	outputCh    chan *model.PolymorphicEvent
+	dir         string
+	pool        *backEndPool
+	metricsInfo *metricsInfo
+}
+
+type metricsInfo struct {
+	changeFeedID model.ChangeFeedID
+	tableName    string
+	tableID      model.TableID
+	captureAddr  string
 }
 
 type ctxKey struct {
 }
 
 // NewUnifiedSorter creates a new UnifiedSorter
-func NewUnifiedSorter(dir string, tableName string, captureAddr string) *UnifiedSorter {
+func NewUnifiedSorter(
+	dir string,
+	changeFeedID model.ChangeFeedID,
+	tableName string,
+	tableID model.TableID,
+	captureAddr string) *UnifiedSorter {
+
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -49,11 +62,16 @@ func NewUnifiedSorter(dir string, tableName string, captureAddr string) *Unified
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:   make(chan *model.PolymorphicEvent, 128000),
-		outputCh:  make(chan *model.PolymorphicEvent, 128000),
-		dir:       dir,
-		pool:      pool,
-		tableName: tableName,
+		inputCh:  make(chan *model.PolymorphicEvent, 128000),
+		outputCh: make(chan *model.PolymorphicEvent, 128000),
+		dir:      dir,
+		pool:     pool,
+		metricsInfo: &metricsInfo{
+			changeFeedID: changeFeedID,
+			tableName:    tableName,
+			tableID:      tableID,
+			captureAddr:  captureAddr,
+		},
 	}
 }
 
@@ -78,12 +96,15 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
-	valueCtx := context.WithValue(ctx, ctxKey{}, s)
+	ctx = context.WithValue(ctx, ctxKey{}, s)
+	ctx = util.PutCaptureAddrInCtx(ctx, s.metricsInfo.captureAddr)
+	ctx = util.PutChangefeedIDInCtx(ctx, s.metricsInfo.changeFeedID)
+	ctx = util.PutTableInfoInCtx(ctx, s.metricsInfo.tableID, s.metricsInfo.tableName)
 
 	sorterConfig := config.GetSorterConfig()
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
-	errg, subctx := errgroup.WithContext(valueCtx)
+	errg, subctx := errgroup.WithContext(ctx)
 	heapSorterCollectCh := make(chan *flushTask, 4096)
 	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
 	defer mergerCleanUp(heapSorterCollectCh)
@@ -210,10 +231,3 @@ func RunWorkerPool(ctx context.Context) error {
 	return errors.Trace(errg.Wait())
 }
 
-// tableNameFromCtx is used for retrieving the table's name from a context within the Unified Sorter
-func tableNameFromCtx(ctx context.Context) string {
-	if sorter, ok := ctx.Value(ctxKey{}).(*UnifiedSorter); ok {
-		return sorter.tableName
-	}
-	return ""
-}
