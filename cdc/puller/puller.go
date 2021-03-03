@@ -167,19 +167,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		for {
 			select {
 			case e := <-eventCh:
+				// Note: puller will process anything received from event channel.
+				// If one key is not expected in given region, it must be filtered
+				// out before sending to puller.
 				if e.Val != nil {
 					metricEventCounterKv.Inc()
-					val := e.Val
-					// if a region with kv range [a, z)
-					// and we only want the get [b, c) from this region,
-					// tikv will return all key events in the region although we specified [b, c) int the request.
-					// we can make tikv only return the events about the keys in the specified range.
-					comparableKey := regionspan.ToComparableKey(val.Key)
-					if !regionspan.KeyInSpans(comparableKey, p.spans) {
-						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Stringer("span", p.spans))
-						continue
-					}
-
 					if err := p.buffer.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}

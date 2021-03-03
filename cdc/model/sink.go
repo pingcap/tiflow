@@ -28,8 +28,8 @@ import (
 type MqMessageType int
 
 const (
-	// MqMessageTypeUnknow is unknown type of message key
-	MqMessageTypeUnknow MqMessageType = iota
+	// MqMessageTypeUnknown is unknown type of message key
+	MqMessageTypeUnknown MqMessageType = iota
 	// MqMessageTypeRow is row type of message key
 	MqMessageTypeRow
 	// MqMessageTypeDDL is ddl type of message key
@@ -224,12 +224,13 @@ type RowChangedEvent struct {
 
 	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
+	ReplicaID    uint64    `json:"replica-id"`
 	Columns      []*Column `json:"columns"`
 	PreColumns   []*Column `json:"pre-columns"`
-	IndexColumns [][]int
+	IndexColumns [][]int   `json:"-"`
 
 	// approximate size of this event, calculate by tikv proto bytes size
-	ApproximateSize int64
+	ApproximateSize int64 `json:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
@@ -324,6 +325,7 @@ type Column struct {
 	Type  byte           `json:"type"`
 	Flag  ColumnFlagType `json:"flag"`
 	Value interface{}    `json:"value"`
+	Str   *string        `json:"-"`
 }
 
 // ColumnValueString returns the string representation of the column value

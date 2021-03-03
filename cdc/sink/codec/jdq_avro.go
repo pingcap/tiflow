@@ -76,7 +76,7 @@ func NewJdqEventBatchEncoder() EventBatchEncoder {
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *JdqEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	mqMessage := NewMQMessage(nil, nil, e.CommitTs)
+	mqMessage := NewMQMessage(ProtocolJdqAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
 	if e.IsDelete() || e.IsInsert() || e.IsUpdate() {
 		res, err := a.jdqEncode(e)
 		if err != nil {
@@ -410,9 +410,9 @@ func (a *JdqEventBatchEncoder) columnToJdqNativeData(col *model.Column) (interfa
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), nil
 	case mysql.TypeEnum:
-		return handleUnsignedInt64()
+		return *col.Str, nil
 	case mysql.TypeSet:
-		return handleUnsignedInt64()
+		return *col.Str, nil
 	case mysql.TypeBit:
 		return handleUnsignedInt64()
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:

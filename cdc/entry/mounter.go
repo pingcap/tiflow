@@ -131,7 +131,7 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage    *SchemaStorage
+	schemaStorage    SchemaStorage
 	rawRowChangedChs []chan *model.PolymorphicEvent
 	tz               *time.Location
 	workerNum        int
@@ -139,7 +139,7 @@ type mounterImpl struct {
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage, workerNum int, enableOldValue bool) Mounter {
+func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool) Mounter {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
@@ -195,8 +195,8 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 			return errors.Trace(err)
 		}
 		pEvent.Row = rowEvent
-		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
+		pEvent.RawKV.OldValue = nil
 		pEvent.PrepareFinished()
 		metricMountDuration.Observe(time.Since(startTime).Seconds())
 	}
@@ -435,6 +435,19 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			Value: colValue,
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
+
+		if exist {
+			var name string
+			switch colInfo.Tp {
+			case mysql.TypeEnum:
+				name = colDatums.GetMysqlEnum().Name
+			case mysql.TypeSet:
+				name = colDatums.GetMysqlSet().Name
+			default:
+				continue
+			}
+			cols[tableInfo.RowColumnsOffset[colInfo.ID]].Str = &name
+		}
 	}
 	return cols, nil
 }
@@ -534,6 +547,16 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			Value: value,
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
+		var name string
+		switch colInfo.Tp {
+		case mysql.TypeEnum:
+			name = idx.IndexValue[i].GetMysqlEnum().Name
+		case mysql.TypeSet:
+			name = idx.IndexValue[i].GetMysqlSet().Name
+		default:
+			continue
+		}
+		preCols[tableInfo.RowColumnsOffset[colInfo.ID]].Str = &name
 	}
 	var intRowID int64
 	if idx.RecordID != nil && idx.RecordID.IsInt() {
@@ -625,4 +648,13 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 
 	d := table.GetZeroValue(col)
 	return d.GetValue()
+}
+
+// DecodeTableID decodes the raw key to a table ID
+func DecodeTableID(key []byte) (model.TableID, error) {
+	_, physicalTableID, err := decodeTableID(key)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return physicalTableID, nil
 }
