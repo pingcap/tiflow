@@ -15,8 +15,10 @@ package kv
 
 import (
 	"context"
+	"reflect"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -27,11 +29,21 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/workerpool"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
+)
+
+var (
+	regionWorkerPool workerpool.WorkerPool
+	workerPoolOnce   sync.Once
+	// TODO: unified channel buffer mechanism
+	regionWorkerInputChanSize = 128000
+	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
+	regionWorkerHighWatermark = int(float64(regionWorkerInputChanSize) * 0.7)
 )
 
 const (
@@ -83,6 +95,21 @@ func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState)
 	rsm.states[bucket].Store(regionID, state)
 }
 
+type regionWorkerMetrics struct {
+	// kv events related metrics
+	metricEventSize                   prometheus.Observer
+	metricPullEventInitializedCounter prometheus.Counter
+	metricPullEventPrewriteCounter    prometheus.Counter
+	metricPullEventCommitCounter      prometheus.Counter
+	metricPullEventCommittedCounter   prometheus.Counter
+	metricPullEventRollbackCounter    prometheus.Counter
+	metricSendEventResolvedCounter    prometheus.Counter
+	metricSendEventCommitCounter      prometheus.Counter
+	metricSendEventCommittedCounter   prometheus.Counter
+
+	// TODO: add region runtime related metrics
+}
+
 /*
 `regionWorker` maintains N regions, it runs in background for each gRPC stream,
 corresponding to one TiKV store. It receives `regionStatefulEvent` in a channel
@@ -102,11 +129,16 @@ type regionWorker struct {
 
 	inputCh  chan *regionStatefulEvent
 	outputCh chan<- *model.RegionFeedEvent
+	errorCh  chan error
 
+	// event handlers in region worker
+	handles []workerpool.EventHandle
+	// how many workers in worker pool will be used for this region worker
+	concurrent    int
 	statesManager *regionStateManager
-
-	rtsManager  *resolvedTsManager
-	rtsUpdateCh chan *regionResolvedTs
+	rtsManager    *resolvedTsManager
+	rtsUpdateCh   chan *regionResolvedTs
+	metrics       *regionWorkerMetrics
 
 	enableOldValue bool
 	storeAddr      string
@@ -116,15 +148,36 @@ func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *r
 	worker := &regionWorker{
 		session:        s,
 		limiter:        limiter,
-		inputCh:        make(chan *regionStatefulEvent, 1024),
+		inputCh:        make(chan *regionStatefulEvent, regionWorkerInputChanSize),
 		outputCh:       s.eventCh,
+		errorCh:        make(chan error, 1),
 		statesManager:  newRegionStateManager(-1),
 		rtsManager:     newResolvedTsManager(),
 		rtsUpdateCh:    make(chan *regionResolvedTs, 1024),
 		enableOldValue: s.enableOldValue,
 		storeAddr:      addr,
+		// TODO: make this configurable after config file is available in cdc server
+		concurrent: 8,
 	}
 	return worker
+}
+
+func (w *regionWorker) initMetrics(ctx context.Context) {
+	captureAddr := util.CaptureAddrFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+
+	metrics := &regionWorkerMetrics{}
+	metrics.metricEventSize = eventSize.WithLabelValues(captureAddr)
+	metrics.metricPullEventInitializedCounter = pullEventCounter.WithLabelValues(cdcpb.Event_INITIALIZED.String(), captureAddr, changefeedID)
+	metrics.metricPullEventCommittedCounter = pullEventCounter.WithLabelValues(cdcpb.Event_COMMITTED.String(), captureAddr, changefeedID)
+	metrics.metricPullEventCommitCounter = pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureAddr, changefeedID)
+	metrics.metricPullEventPrewriteCounter = pullEventCounter.WithLabelValues(cdcpb.Event_PREWRITE.String(), captureAddr, changefeedID)
+	metrics.metricPullEventRollbackCounter = pullEventCounter.WithLabelValues(cdcpb.Event_ROLLBACK.String(), captureAddr, changefeedID)
+	metrics.metricSendEventResolvedCounter = sendEventCounter.WithLabelValues("native-resolved", captureAddr, changefeedID)
+	metrics.metricSendEventCommitCounter = sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
+	metrics.metricSendEventCommittedCounter = sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
+
+	w.metrics = metrics
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
@@ -258,82 +311,204 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 	}
 }
 
-func (w *regionWorker) eventHandler(ctx context.Context) error {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricEventSize := eventSize.WithLabelValues(captureAddr)
-	metricPullEventInitializedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_INITIALIZED.String(), captureAddr, changefeedID)
-	metricPullEventCommittedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMITTED.String(), captureAddr, changefeedID)
-	metricPullEventCommitCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureAddr, changefeedID)
-	metricPullEventPrewriteCounter := pullEventCounter.WithLabelValues(cdcpb.Event_PREWRITE.String(), captureAddr, changefeedID)
-	metricPullEventRollbackCounter := pullEventCounter.WithLabelValues(cdcpb.Event_ROLLBACK.String(), captureAddr, changefeedID)
-	metricSendEventResolvedCounter := sendEventCounter.WithLabelValues("native-resolved", captureAddr, changefeedID)
-	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
-	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
-
+func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) error {
+	if event.finishedCounter != nil {
+		atomic.AddInt32(event.finishedCounter, -1)
+		return nil
+	}
 	var err error
-	for {
+	event.state.lock.Lock()
+	if event.changeEvent != nil {
+		w.metrics.metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
+		switch x := event.changeEvent.Event.(type) {
+		case *cdcpb.Event_Entries_:
+			err = w.handleEventEntry(ctx, x, event.state)
+			if err != nil {
+				err = w.handleSingleRegionError(ctx, err, event.state)
+			}
+		case *cdcpb.Event_Admin_:
+			log.Info("receive admin event", zap.Stringer("event", event.changeEvent))
+		case *cdcpb.Event_Error:
+			err = w.handleSingleRegionError(
+				ctx,
+				cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error}),
+				event.state,
+			)
+		case *cdcpb.Event_ResolvedTs:
+			if err = w.handleResolvedTs(ctx, x.ResolvedTs, event.state); err != nil {
+				err = w.handleSingleRegionError(ctx, err, event.state)
+			}
+		}
+	}
+
+	if event.resolvedTs != nil {
+		if err = w.handleResolvedTs(ctx, event.resolvedTs.Ts, event.state); err != nil {
+			err = w.handleSingleRegionError(ctx, err, event.state)
+		}
+	}
+	event.state.lock.Unlock()
+	return err
+}
+
+func (w *regionWorker) initPoolHandles(ctx context.Context, handleCount int) {
+	handles := make([]workerpool.EventHandle, 0, handleCount)
+	for i := 0; i < handleCount; i++ {
+		poolHandle := regionWorkerPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
+			event := eventI.(*regionStatefulEvent)
+			return w.processEvent(ctx, event)
+		}).OnExit(func(err error) {
+			w.onHandleExit(err)
+		})
+		handles = append(handles, poolHandle)
+	}
+	w.handles = handles
+}
+
+func (w *regionWorker) onHandleExit(err error) {
+	select {
+	case w.errorCh <- err:
+	default:
+	}
+}
+
+func (w *regionWorker) eventHandler(ctx context.Context) error {
+	preprocess := func(event *regionStatefulEvent, ok bool) (
+		exitEventHandler bool,
+		skipEvent bool,
+		err error,
+	) {
+		// event == nil means the region worker should exit and re-establish
+		// all existing regions.
+		if !ok || event == nil {
+			log.Info("region worker closed by error")
+			exitEventHandler = true
+			err = w.evictAllRegions(ctx)
+			return
+		}
+		if event.state.isStopped() {
+			skipEvent = true
+		}
+		return
+	}
+	pollEvent := func() (event *regionStatefulEvent, ok bool, err error) {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case event, ok := <-w.inputCh:
-			// event == nil means the region worker should exit and re-establish
-			// all existing regions.
-			if !ok || event == nil {
-				log.Info("region worker closed by error")
-				return w.evictAllRegions(ctx)
-			}
-			if event.state.isStopped() {
-				continue
-			}
-			event.state.lock.Lock()
-			if event.changeEvent != nil {
-				metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
-				switch x := event.changeEvent.Event.(type) {
-				case *cdcpb.Event_Entries_:
-					err = w.handleEventEntry(
-						ctx, x, event.state,
-						metricPullEventInitializedCounter,
-						metricPullEventPrewriteCounter,
-						metricPullEventCommitCounter,
-						metricPullEventCommittedCounter,
-						metricPullEventRollbackCounter,
-						metricSendEventCommitCounter,
-						metricSendEventCommittedCounter,
-					)
-					if err != nil {
-						err = w.handleSingleRegionError(ctx, err, event.state)
-					}
-				case *cdcpb.Event_Admin_:
-					log.Info("receive admin event", zap.Stringer("event", event.changeEvent))
-				case *cdcpb.Event_Error:
-					err = w.handleSingleRegionError(
-						ctx,
-						cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error}),
-						event.state,
-					)
-				case *cdcpb.Event_ResolvedTs:
-					if err = w.handleResolvedTs(ctx, x.ResolvedTs, event.state, metricSendEventResolvedCounter); err != nil {
-						err = w.handleSingleRegionError(ctx, err, event.state)
-					}
-				}
-			}
-
-			if event.resolvedTs != nil {
-				if err = w.handleResolvedTs(ctx, event.resolvedTs.Ts, event.state, metricSendEventResolvedCounter); err != nil {
-					err = w.handleSingleRegionError(ctx, err, event.state)
-				}
-			}
-			event.state.lock.Unlock()
+			err = errors.Trace(ctx.Err())
+		case err = <-w.errorCh:
+		case event, ok = <-w.inputCh:
+		}
+		return
+	}
+	for {
+		event, ok, err := pollEvent()
+		if err != nil {
+			return err
+		}
+		exitEventHandler, skipEvent, err := preprocess(event, ok)
+		if exitEventHandler {
+			return err
+		}
+		if skipEvent {
+			continue
+		}
+		// We measure whether the current worker is busy based on the input
+		// channel size. If the buffered event count is larger than the high
+		// watermark, we send events to worker pool to increase processing
+		// throughput. Otherwise we process event in local region worker to
+		// ensure low processing latency.
+		if len(w.inputCh) < regionWorkerHighWatermark {
+			err = w.processEvent(ctx, event)
 			if err != nil {
 				return err
+			}
+		} else {
+			err = w.handles[int(event.regionID)%w.concurrent].AddEvent(ctx, event)
+			if err != nil {
+				return err
+			}
+			// TODO: add events in batch
+			for len(w.inputCh) >= regionWorkerLowWatermark {
+				event, ok, err = pollEvent()
+				if err != nil {
+					return err
+				}
+				exitEventHandler, skipEvent, err := preprocess(event, ok)
+				if exitEventHandler {
+					return err
+				}
+				if skipEvent {
+					continue
+				}
+				err = w.handles[int(event.regionID)%w.concurrent].AddEvent(ctx, event)
+				if err != nil {
+					return err
+				}
+			}
+			// Principle: events from the same region must be processed linearly.
+			//
+			// When buffered events exceed high watermark, we start to use worker
+			// pool to improve throughtput, and we need a mechanism to quit worker
+			// pool when buffered events are less than low watermark, which means
+			// we should have a way to know whether events sent to the worker pool
+			// are all processed.
+			// Send a dummy event to each worker pool handler, after each of these
+			// events are processed, we can ensure all events sent to worker pool
+			// from this region worker are processed.
+			counter := int32(len(w.handles))
+			for _, handle := range w.handles {
+				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCounter: &counter})
+				if err != nil {
+					return err
+				}
+			}
+		checkEventsProcessed:
+			for {
+				select {
+				case <-ctx.Done():
+					return errors.Trace(ctx.Err())
+				case err = <-w.errorCh:
+					return err
+				case <-time.After(50 * time.Millisecond):
+					if atomic.LoadInt32(&counter) == 0 {
+						break checkEventsProcessed
+					}
+				}
 			}
 		}
 	}
 }
 
+func (w *regionWorker) collectWorkpoolError(ctx context.Context) error {
+	cases := make([]reflect.SelectCase, 0, len(w.handles)+1)
+	cases = append(cases, reflect.SelectCase{
+		Dir:  reflect.SelectRecv,
+		Chan: reflect.ValueOf(ctx.Done()),
+	})
+	for _, handle := range w.handles {
+		cases = append(cases, reflect.SelectCase{
+			Dir:  reflect.SelectRecv,
+			Chan: reflect.ValueOf(handle.ErrCh()),
+		})
+	}
+	idx, value, ok := reflect.Select(cases)
+	if idx == 0 {
+		return ctx.Err()
+	}
+	if !ok {
+		return nil
+	}
+	return value.Interface().(error)
+}
+
 func (w *regionWorker) run(ctx context.Context) error {
+	defer func() {
+		for _, h := range w.handles {
+			h.Unregister()
+		}
+	}()
 	wg, ctx := errgroup.WithContext(ctx)
+	w.initMetrics(ctx)
+	w.initPoolHandles(ctx, w.concurrent)
 	wg.Go(func() error {
 		err := w.resolveLock(ctx)
 		if errors.Cause(err) == errReconnect {
@@ -355,6 +530,9 @@ func (w *regionWorker) run(ctx context.Context) error {
 	wg.Go(func() error {
 		return w.eventHandler(ctx)
 	})
+	wg.Go(func() error {
+		return w.collectWorkpoolError(ctx)
+	})
 	return wg.Wait()
 }
 
@@ -362,13 +540,6 @@ func (w *regionWorker) handleEventEntry(
 	ctx context.Context,
 	x *cdcpb.Event_Entries_,
 	state *regionFeedState,
-	metricPullEventInitializedCounter prometheus.Counter,
-	metricPullEventPrewriteCounter prometheus.Counter,
-	metricPullEventCommitCounter prometheus.Counter,
-	metricPullEventCommittedCounter prometheus.Counter,
-	metricPullEventRollbackCounter prometheus.Counter,
-	metricSendEventCommitCounter prometheus.Counter,
-	metricSendEventCommittedCounter prometheus.Counter,
 ) error {
 	regionID := state.sri.verID.GetID()
 	for _, entry := range x.Entries.GetEntries() {
@@ -388,7 +559,7 @@ func (w *regionWorker) handleEventEntry(
 					zap.Duration("timeCost", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
-			metricPullEventInitializedCounter.Inc()
+			w.metrics.metricPullEventInitializedCounter.Inc()
 			state.initialized = true
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
@@ -398,13 +569,13 @@ func (w *regionWorker) handleEventEntry(
 				}
 				select {
 				case w.outputCh <- revent:
-					metricSendEventCommitCounter.Inc()
+					w.metrics.metricSendEventCommitCounter.Inc()
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
 				}
 			}
 		case cdcpb.Event_COMMITTED:
-			metricPullEventCommittedCounter.Inc()
+			w.metrics.metricPullEventCommittedCounter.Inc()
 			revent, err := assembleRowEvent(regionID, entry, w.enableOldValue)
 			if err != nil {
 				return errors.Trace(err)
@@ -420,15 +591,15 @@ func (w *regionWorker) handleEventEntry(
 			}
 			select {
 			case w.outputCh <- revent:
-				metricSendEventCommittedCounter.Inc()
+				w.metrics.metricSendEventCommittedCounter.Inc()
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			}
 		case cdcpb.Event_PREWRITE:
-			metricPullEventPrewriteCounter.Inc()
+			w.metrics.metricPullEventPrewriteCounter.Inc()
 			state.matcher.putPrewriteRow(entry)
 		case cdcpb.Event_COMMIT:
-			metricPullEventCommitCounter.Inc()
+			w.metrics.metricPullEventCommitCounter.Inc()
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
 					zap.String("Event Type", "COMMIT"),
@@ -453,12 +624,12 @@ func (w *regionWorker) handleEventEntry(
 
 			select {
 			case w.outputCh <- revent:
-				metricSendEventCommitCounter.Inc()
+				w.metrics.metricSendEventCommitCounter.Inc()
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			}
 		case cdcpb.Event_ROLLBACK:
-			metricPullEventRollbackCounter.Inc()
+			w.metrics.metricPullEventRollbackCounter.Inc()
 			state.matcher.rollbackRow(entry)
 		}
 	}
@@ -469,7 +640,6 @@ func (w *regionWorker) handleResolvedTs(
 	ctx context.Context,
 	resolvedTs uint64,
 	state *regionFeedState,
-	metricSendEventResolvedCounter prometheus.Counter,
 ) error {
 	if !state.initialized {
 		return nil
@@ -501,7 +671,7 @@ func (w *regionWorker) handleResolvedTs(
 
 	select {
 	case w.outputCh <- revent:
-		metricSendEventResolvedCounter.Inc()
+		w.metrics.metricSendEventResolvedCounter.Inc()
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	}
@@ -537,4 +707,31 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 		})
 	}
 	return err
+}
+
+// InitWorkerPool initializs workerpool once, the workerpool must be initialized
+// before any kv event is received.
+func InitWorkerPool() {
+	if !enableKVClientV2 {
+		return
+	}
+	// TODO: make the pool size configurable after config file is available in cdc server
+	workerPoolOnce.Do(func() {
+		size := runtime.NumCPU() * 2
+		regionWorkerPool = workerpool.NewDefaultWorkerPool(size)
+	})
+}
+
+// RunWorkerPool runs the worker pool used by the region worker in kv client v2
+// It must be running before region worker starts to work
+func RunWorkerPool(ctx context.Context) error {
+	if !enableKVClientV2 {
+		return nil
+	}
+	InitWorkerPool()
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return errors.Trace(regionWorkerPool.Run(ctx))
+	})
+	return errg.Wait()
 }
