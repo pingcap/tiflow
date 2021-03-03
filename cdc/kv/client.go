@@ -68,12 +68,12 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
-
-	// hard code switch
-	// true: use kv client v2, which has a region worker for each stream
-	// false: use kv client v1, which runs a goroutine for every single region
-	enableKVClientV2 = true
 )
+
+// hard code switch
+// true: use kv client v2, which has a region worker for each stream
+// false: use kv client v1, which runs a goroutine for every single region
+var enableKVClientV2 = true
 
 type singleRegionInfo struct {
 	verID  tikv.RegionVerID

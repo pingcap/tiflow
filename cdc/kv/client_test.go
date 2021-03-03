@@ -36,11 +36,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -182,27 +180,6 @@ func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 	}
 }
 
-func mockInitializedEvent(regionID, requestID uint64) *cdcpb.ChangeDataEvent {
-	initialized := &cdcpb.ChangeDataEvent{
-		Events: []*cdcpb.Event{
-			{
-				RegionId:  regionID,
-				RequestId: requestID,
-				Event: &cdcpb.Event_Entries_{
-					Entries: &cdcpb.Event_Entries{
-						Entries: []*cdcpb.Event_Row{
-							{
-								Type: cdcpb.Event_INITIALIZED,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	return initialized
-}
-
 type mockChangeDataService struct {
 	c           *check.C
 	ch          chan *cdcpb.ChangeDataEvent
@@ -295,26 +272,6 @@ func newMockServiceSpecificAddr(
 		wg.Done()
 	}()
 	return
-}
-
-type mockPDClient struct {
-	pd.Client
-	versionGen func() string
-}
-
-var _ pd.Client = &mockPDClient{}
-
-func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
-	s, err := m.Client.GetStore(ctx, storeID)
-	if err != nil {
-		return nil, err
-	}
-	s.Version = m.versionGen()
-	return s, nil
-}
-
-var defaultVersionGen = func() string {
-	return version.MinTiKVVersion.String()
 }
 
 // waitRequestID waits request ID larger than the given allocated ID
