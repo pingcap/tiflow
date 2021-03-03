@@ -325,6 +325,7 @@ type Column struct {
 	Type  byte           `json:"type"`
 	Flag  ColumnFlagType `json:"flag"`
 	Value interface{}    `json:"value"`
+	Str   *string        `json:"-"`
 }
 
 // ColumnValueString returns the string representation of the column value

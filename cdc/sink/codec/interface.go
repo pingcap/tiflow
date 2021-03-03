@@ -159,6 +159,8 @@ func (p *Protocol) FromString(protocol string) {
 		*p = ProtocolMaxwell
 	case "canal-json":
 		*p = ProtocolCanalJSON
+	case "jdq-avro":
+		*p = ProtocolJdqAvro
 	default:
 		*p = ProtocolDefault
 		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))

@@ -74,6 +74,7 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 		Table:  "test1",
 	}
 	testjson := `{"vpcId": "vpc-8enbtnk7bc","userpin": "umNsb3VkdGVzdwxy"}`
+	str := "test"
 	cols := []*model.Column{
 		{Name: "id", Value: int64(1), Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
@@ -90,9 +91,9 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 		{Name: "myjson", Value: testjson, Type: mysql.TypeJSON},
 		{Name: "myblob", Value: []byte("您好！"), Type: mysql.TypeBlob},
 		{Name: "mybinary", Value: []byte("二进制数据！"), Type: mysql.TypeVarString, Flag: model.BinaryFlag},
-		{Name: "myenum", Value: int64(1), Type: mysql.TypeEnum},
-		{Name: "myset", Value: int64(2), Type: mysql.TypeSet},
-		{Name: "mybit", Value: int64(8), Type: mysql.TypeBit},
+		{Name: "myenum", Value: int64(1), Type: mysql.TypeEnum, Str: &str},
+		{Name: "myset", Value: int64(2), Type: mysql.TypeSet, Str: &str},
+		{Name: "mybit", Value: uint64(8), Type: mysql.TypeBit},
 	}
 
 	e := &model.RowChangedEvent{
@@ -156,6 +157,7 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEnvelope(c *check.C) {
 func (s *jdqEventBatchEncoderSuite) TestJdqEncode(c *check.C) {
 	defer testleak.AfterTest(c)()
 	myjson := `{"vpcId": "vpc-8enbtnk7bc","values": {"annotations": {"userpin": "umNsb3VkdGVzdwxy"}}}`
+	str := "test"
 	testCaseUpdate := &model.RowChangedEvent{
 		StartTs:  417318403368277260,
 		CommitTs: 417318403368288260,
@@ -183,9 +185,9 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncode(c *check.C) {
 			{Name: "myjson", Value: myjson, Type: mysql.TypeJSON},
 			{Name: "myblob", Value: []byte("您好！"), Type: mysql.TypeBlob},
 			{Name: "mybinary", Value: []byte("二进制数据！"), Type: mysql.TypeVarString, Flag: model.BinaryFlag},
-			{Name: "myenum", Value: int64(1), Type: mysql.TypeEnum},
-			{Name: "myset", Value: int64(2), Type: mysql.TypeSet},
-			{Name: "mybit", Value: int64(8), Type: mysql.TypeBit},
+			{Name: "myenum", Value: int64(1), Type: mysql.TypeEnum, Str: &str},
+			{Name: "myset", Value: int64(2), Type: mysql.TypeSet, Str: &str},
+			{Name: "mybit", Value: uint64(8), Type: mysql.TypeBit},
 		},
 	}
 

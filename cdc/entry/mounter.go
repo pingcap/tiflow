@@ -435,6 +435,19 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			Value: colValue,
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
+
+		if exist {
+			var name string
+			switch colInfo.Tp {
+			case mysql.TypeEnum:
+				name = colDatums.GetMysqlEnum().Name
+			case mysql.TypeSet:
+				name = colDatums.GetMysqlSet().Name
+			default:
+				continue
+			}
+			cols[tableInfo.RowColumnsOffset[colInfo.ID]].Str = &name
+		}
 	}
 	return cols, nil
 }
@@ -534,6 +547,16 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			Value: value,
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
+		var name string
+		switch colInfo.Tp {
+		case mysql.TypeEnum:
+			name = idx.IndexValue[i].GetMysqlEnum().Name
+		case mysql.TypeSet:
+			name = idx.IndexValue[i].GetMysqlSet().Name
+		default:
+			continue
+		}
+		preCols[tableInfo.RowColumnsOffset[colInfo.ID]].Str = &name
 	}
 	var intRowID int64
 	if idx.RecordID != nil && idx.RecordID.IsInt() {
