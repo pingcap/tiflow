@@ -139,7 +139,9 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}()
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	if err != nil {
 		b.Error(err)
 	}
@@ -250,7 +252,9 @@ func prepareBench(b *testing.B, regionNum int) (
 		server1.Stop()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	if err != nil {
 		b.Error(err)
 	}
