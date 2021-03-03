@@ -78,7 +78,11 @@ func main() {
 
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
-		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir, fmt.Sprintf("test-%d", i), "0.0.0.0:0")
+		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir,
+			"test-cf",
+			fmt.Sprintf("test-%d", i),
+			model.TableID(i),
+			"0.0.0.0:0")
 		finalI := i
 
 		// run sorter

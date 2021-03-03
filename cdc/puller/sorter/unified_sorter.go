@@ -52,7 +52,6 @@ func NewUnifiedSorter(
 	tableName string,
 	tableID model.TableID,
 	captureAddr string) *UnifiedSorter {
-
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -230,4 +229,3 @@ func RunWorkerPool(ctx context.Context) error {
 
 	return errors.Trace(errg.Wait())
 }
-

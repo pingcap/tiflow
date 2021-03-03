@@ -51,7 +51,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	defer func() {
 		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
 		// clean up resources
+		// TODO add deadline
 		for task := range pendingSet {
+			err := <-task.finished
+			_ = printError(err)
+
 			if task.reader != nil {
 				_ = printError(task.reader.resetAndClose())
 				task.reader = nil
@@ -85,13 +89,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		defer func() {
 			// clean up
+			// TODO add deadline
 			for task := range workingSet {
-				select {
-				case <-ctx.Done():
-					break
-				case err := <-task.finished:
-					_ = printError(err)
-				}
+				err := <-task.finished
+				_ = printError(err)
 
 				if task.reader != nil {
 					err := task.reader.resetAndClose()
@@ -205,6 +206,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		counter := 0
 		for sortHeap.Len() > 0 {
+			failpoint.Inject("sorterMergeDelay", func() {
+				log.Debug("sorterMergeDelay")
+			})
+
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
 			event := item.entry
@@ -301,8 +306,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 			failpoint.Inject("sorterDebug", func() {
 				if counter%10 == 0 {
+					tableID, tableName := util.TableIDFromCtx(ctx)
 					log.Debug("Merging progress",
-						zap.String("table", tableNameFromCtx(ctx)),
+						zap.Int64("table-id", tableID),
+						zap.String("table-name", tableName),
 						zap.Int("counter", counter))
 				}
 			})
@@ -319,8 +326,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		failpoint.Inject("sorterDebug", func() {
 			if counter > 0 {
+				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: merging ended",
-					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
 					zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
 			}
 		})
@@ -346,8 +355,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return ctx.Err()
 		case task := <-in:
 			if task == nil {
+				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Info("Merger input channel closed, exiting",
-					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
 					zap.Uint64("max-output", minResolvedTs))
 				return nil
 			}

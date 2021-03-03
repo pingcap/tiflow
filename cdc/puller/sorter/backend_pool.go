@@ -16,7 +16,6 @@ package sorter
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/util"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
@@ -37,7 +38,7 @@ import (
 )
 
 const (
-	backgroundJobInterval = time.Second * 5
+	backgroundJobInterval = time.Second * 15
 )
 
 var (
@@ -108,11 +109,11 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
 				// Increase GC frequency to avoid unnecessary OOMs
 				debug.SetGCPercent(10)
-				if memPressure > 95 {
+				if memPressure > 80 {
 					runtime.GC()
 				}
 			} else {
-				debug.SetGCPercent(100)
+				debug.SetGCPercent(50)
 			}
 
 			// garbage collect temporary files in batches
