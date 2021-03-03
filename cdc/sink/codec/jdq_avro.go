@@ -257,20 +257,21 @@ func (a *JdqEventBatchEncoder) rowToJdqNativeData(e *model.RowChangedEvent) (int
 		}
 		data[schemaKeySrc] = preColsMap
 
-		colsMap, err := a.getColumnsNativeData(cols)
+		colsMap, err := a.getUpdateColumnsNativeData(preCols, cols)
 		if err != nil {
 			return nil, err
 		}
 		data[schemaKeyCur] = colsMap
 
 	} else if e.IsDelete() {
-		colsMap, err := a.getColumnsNativeData(cols)
+		preCols := e.PreColumns
+		colsMap, err := a.getColumnsNativeData(preCols)
 		if err != nil {
 			return nil, err
 		}
 		data[schemaKeySrc] = colsMap
 
-		keyColsMap, err := a.getKeyColumnsNativeData(cols)
+		keyColsMap, err := a.getKeyColumnsNativeData(preCols)
 		if err != nil {
 			return nil, err
 		}
@@ -304,6 +305,34 @@ func (a *JdqEventBatchEncoder) getColumnsNativeData(cols []*model.Column) (inter
 	colMap := make(map[string]interface{}, 1)
 	colMap[schemaKeyMap] = colsUnion
 	return colMap, nil
+}
+
+func (a *JdqEventBatchEncoder) getUpdateColumnsNativeData(oldCols []*model.Column, newCols []*model.Column) (interface{}, error) {
+	tmpMap := make(map[string]*model.Column, 1)
+	for _, col := range oldCols {
+		if col.Flag.IsPrimaryKey() {
+			tmpMap[col.Name] = col
+		}
+	}
+
+	for _, col := range newCols {
+		if col.Flag.IsPrimaryKey() {
+			tmpMap[col.Name] = nil
+		}
+	}
+
+	for _, v := range tmpMap {
+		if v != nil {
+			newCols = append(newCols, v)
+		}
+	}
+
+	colsMap, err := a.getColumnsNativeData(newCols)
+	if err != nil {
+		return nil, err
+	}
+
+	return colsMap, nil
 }
 
 func (a *JdqEventBatchEncoder) getKeyColumnsNativeData(cols []*model.Column) (interface{}, error) {

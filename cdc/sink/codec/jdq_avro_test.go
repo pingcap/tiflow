@@ -74,9 +74,12 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 		Table:  "test1",
 	}
 	testjson := `{"vpcId": "vpc-8enbtnk7bc","userpin": "umNsb3VkdGVzdwxy"}`
+
+	// 1. Insert testing
 	str := "test"
 	cols := []*model.Column{
 		{Name: "id", Value: int64(1), Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
+		{Name: "mykey", Value: int64(100), Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
@@ -96,14 +99,14 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 		{Name: "mybit", Value: uint64(8), Type: mysql.TypeBit},
 	}
 
-	e := &model.RowChangedEvent{
+	insert := &model.RowChangedEvent{
 		StartTs:  123456888,
 		CommitTs: 123456999,
 		Table:    table,
 		Columns:  cols,
 	}
 
-	r, err := s.encoder.jdqEncode(e)
+	r, err := s.encoder.jdqEncode(insert)
 	c.Assert(err, check.IsNil)
 
 	res, _, err := avroCodec.NativeFromBinary(r.data)
@@ -112,7 +115,62 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 
 	txt, err := avroCodec.TextualFromNative(nil, res)
 	c.Check(err, check.IsNil)
-	log.Info("TestJdqEncodeOnly", zap.ByteString("result", txt))
+
+	log.Info("TestJdqEncodeOnly, insert testing")
+	log.Info("testing result", zap.ByteString("result", txt))
+
+	// 2. Delete testing
+	delete := &model.RowChangedEvent{
+		StartTs:    123456888,
+		CommitTs:   123456999,
+		Table:      table,
+		PreColumns: cols,
+	}
+
+	r, err = s.encoder.jdqEncode(delete)
+	c.Assert(err, check.IsNil)
+
+	res, _, err = avroCodec.NativeFromBinary(r.data)
+	c.Check(err, check.IsNil)
+	c.Check(res, check.NotNil)
+
+	txt, err = avroCodec.TextualFromNative(nil, res)
+	c.Check(err, check.IsNil)
+	log.Info("TestJdqEncodeOnly, delete testing")
+	log.Info("testing result", zap.ByteString("result", txt))
+
+	// 3. Update testing
+	updateCols := []*model.Column{
+		{Name: "mykey", Value: int64(101), Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag},
+		{Name: "myint", Value: int64(20), Type: mysql.TypeLong},
+		{Name: "mybool", Value: int64(0), Type: mysql.TypeTiny},
+		{Name: "myfloat", Value: float32(5.14), Type: mysql.TypeFloat},
+		{Name: "mydouble", Value: float64(5.141592666), Type: mysql.TypeDouble},
+		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+		{Name: "mydatetime", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeDatetime},
+		{Name: "mytime", Value: "18:51:04.123456", Type: mysql.TypeDuration},
+	}
+
+	update := &model.RowChangedEvent{
+		StartTs:    123456888,
+		CommitTs:   123456999,
+		Table:      table,
+		PreColumns: cols,
+		Columns:    updateCols,
+	}
+
+	r, err = s.encoder.jdqEncode(update)
+	c.Assert(err, check.IsNil)
+
+	res, _, err = avroCodec.NativeFromBinary(r.data)
+	c.Check(err, check.IsNil)
+	c.Check(res, check.NotNil)
+
+	txt, err = avroCodec.TextualFromNative(nil, res)
+	c.Check(err, check.IsNil)
+
+	log.Info("TestJdqEncodeOnly, update testing")
+	log.Info("testing result", zap.ByteString("result", txt))
 }
 
 func (s *jdqEventBatchEncoderSuite) TestJdqEnvelope(c *check.C) {
