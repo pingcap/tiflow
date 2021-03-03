@@ -71,20 +71,23 @@ func (s *changeFeedStateTestSuite) TestBasics(c *check.C) {
 
 	cfState.AddDDLBarrier(2500)
 	cfState.SetDDLResolvedTs(3000)
+	cfState.CalcResolvedTsAndCheckpointTs()
 	c.Assert(cfState.ShouldRunDDL(), check.IsNil)
-	c.Assert(cfState.ResolvedTs(), check.Equals, uint64(2000))
-	c.Assert(cfState.CheckpointTs(), check.Equals, uint64(2000))
+	c.Assert(cfState.ResolvedTs, check.Equals, uint64(2000))
+	c.Assert(cfState.CheckpointTs, check.Equals, uint64(2000))
 
 	cfState.SetTableResolvedTs(1, 2500)
 	cfState.SetTableCheckpointTs(1, 2500)
+	cfState.CalcResolvedTsAndCheckpointTs()
 	c.Assert(cfState.ShouldRunDDL(), check.IsNil)
-	c.Assert(cfState.ResolvedTs(), check.Equals, uint64(2000))
-	c.Assert(cfState.CheckpointTs(), check.Equals, uint64(2000))
+	c.Assert(cfState.ResolvedTs, check.Equals, uint64(2000))
+	c.Assert(cfState.CheckpointTs, check.Equals, uint64(2000))
 
 	cfState.SetTableResolvedTs(2, 2500)
 	cfState.SetTableCheckpointTs(2, 2500)
-	c.Assert(cfState.ResolvedTs(), check.Equals, uint64(2499))
-	c.Assert(cfState.CheckpointTs(), check.Equals, uint64(2499))
+	cfState.CalcResolvedTsAndCheckpointTs()
+	c.Assert(cfState.ResolvedTs, check.Equals, uint64(2499))
+	c.Assert(cfState.CheckpointTs, check.Equals, uint64(2499))
 	c.Assert(cfState.ShouldRunDDL(), check.DeepEquals, &barrier{
 		BarrierType: DDLBarrier,
 		BarrierTs:   2500,
@@ -104,8 +107,9 @@ func (s *changeFeedStateTestSuite) TestBasics(c *check.C) {
 		ResolvedTs:   2499,
 	}
 	scheduler.AssertCalled(c, "PutTasks", tasks)
-	c.Assert(cfState.CheckpointTs(), check.Equals, uint64(2499))
-	c.Assert(cfState.ResolvedTs(), check.Equals, uint64(2499))
+	cfState.CalcResolvedTsAndCheckpointTs()
+	c.Assert(cfState.CheckpointTs, check.Equals, uint64(2499))
+	c.Assert(cfState.ResolvedTs, check.Equals, uint64(2499))
 
 	cfState.AddDDLBarrier(3500)
 	cfState.SetDDLResolvedTs(4000)
@@ -115,8 +119,9 @@ func (s *changeFeedStateTestSuite) TestBasics(c *check.C) {
 	cfState.SetTableCheckpointTs(2, 2600)
 	cfState.SetTableResolvedTs(3, 3000)
 	cfState.SetTableCheckpointTs(3, 2600)
-	c.Assert(cfState.CheckpointTs(), check.Equals, uint64(2600))
-	c.Assert(cfState.ResolvedTs(), check.Equals, uint64(3000))
+	cfState.CalcResolvedTsAndCheckpointTs()
+	c.Assert(cfState.CheckpointTs, check.Equals, uint64(2600))
+	c.Assert(cfState.ResolvedTs, check.Equals, uint64(3000))
 
 	cfState.SetTableResolvedTs(1, 4000)
 	cfState.SetTableCheckpointTs(1, 3499)
@@ -124,8 +129,9 @@ func (s *changeFeedStateTestSuite) TestBasics(c *check.C) {
 	cfState.SetTableCheckpointTs(2, 3499)
 	cfState.SetTableResolvedTs(3, 4000)
 	cfState.SetTableCheckpointTs(3, 3499)
-	c.Assert(cfState.ResolvedTs(), check.Equals, uint64(3499))
-	c.Assert(cfState.CheckpointTs(), check.Equals, uint64(3499))
+	cfState.CalcResolvedTsAndCheckpointTs()
+	c.Assert(cfState.ResolvedTs, check.Equals, uint64(3499))
+	c.Assert(cfState.CheckpointTs, check.Equals, uint64(3499))
 	c.Assert(cfState.ShouldRunDDL(), check.DeepEquals, &barrier{
 		BarrierType: DDLBarrier,
 		BarrierTs:   3500,
@@ -192,6 +198,7 @@ func (s *changeFeedStateTestSuite) TestPanicCases(c *check.C) {
 	cfState.SetTableCheckpointTs(1, 4999)
 	cfState.SetTableResolvedTs(2, 4999)
 	cfState.SetTableCheckpointTs(2, 4999)
+	cfState.CalcResolvedTsAndCheckpointTs()
 	c.Assert(cfState.ShouldRunDDL(), check.DeepEquals, &barrier{
 		BarrierType: DDLBarrier,
 		BarrierTs:   5000,

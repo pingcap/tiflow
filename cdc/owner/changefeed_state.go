@@ -25,6 +25,9 @@ type changeFeedState struct {
 	DDLResolvedTs uint64
 	Barriers      []*barrier
 
+	CheckpointTs uint64
+	ResolvedTs   uint64
+
 	scheduler scheduler
 }
 
@@ -115,7 +118,7 @@ func (cf *changeFeedState) PopDDLBarrier() {
 
 func (cf *changeFeedState) ShouldRunDDL() *barrier {
 	if len(cf.Barriers) > 0 {
-		if cf.Barriers[0].BarrierTs == cf.CheckpointTs()+1 &&
+		if cf.Barriers[0].BarrierTs == cf.CheckpointTs+1 &&
 			cf.Barriers[0].BarrierType == DDLBarrier {
 
 			return cf.Barriers[0]
@@ -126,9 +129,9 @@ func (cf *changeFeedState) ShouldRunDDL() *barrier {
 }
 
 func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
-	if cf.CheckpointTs() != result.FinishTs-1 {
+	if cf.CheckpointTs != result.FinishTs-1 {
 		log.Panic("changeFeedState: Unexpected checkpoint when DDL is done",
-			zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs()),
+			zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs),
 			zap.Reflect("ddl-result", result))
 	}
 
@@ -148,8 +151,8 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 		case AddTableAction:
 			cf.TableTasks[tableAction.tableID] = &tableTask{
 				TableID:      tableAction.tableID,
-				CheckpointTs: cf.CheckpointTs(),
-				ResolvedTs:   cf.CheckpointTs(),
+				CheckpointTs: cf.CheckpointTs,
+				ResolvedTs:   cf.CheckpointTs,
 			}
 		case DropTableAction:
 			if _, ok := cf.TableTasks[tableAction.tableID]; !ok {
@@ -163,8 +166,13 @@ func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
 	}
 }
 
+func (cf *changeFeedState) CalcResolvedTsAndCheckpointTs() {
+	cf.ResolvedTs = cf.calcResolvedTs()
+	cf.CheckpointTs = cf.calcCheckpointTs()
+}
+
 // TODO test-case: returned value is not zero
-func (cf *changeFeedState) ResolvedTs() uint64 {
+func (cf *changeFeedState) calcResolvedTs() uint64 {
 	resolvedTs := cf.DDLResolvedTs
 
 	for _, table := range cf.TableTasks {
@@ -184,7 +192,7 @@ func (cf *changeFeedState) ResolvedTs() uint64 {
 }
 
 // TODO test-case: returned value is not zero
-func (cf *changeFeedState) CheckpointTs() uint64 {
+func (cf *changeFeedState) calcCheckpointTs() uint64 {
 	checkpointTs := cf.DDLResolvedTs
 
 	for _, table := range cf.TableTasks {

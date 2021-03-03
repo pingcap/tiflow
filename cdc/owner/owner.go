@@ -15,12 +15,15 @@ package owner
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -56,6 +59,9 @@ func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.
 }
 
 func (o *Owner) Run(ctx context.Context) error {
+	failpoint.Inject("owner-run-with-error", func() {
+		failpoint.Return(errors.New("owner run with injected error"))
+	})
 	// TODO pass session here
 	err := o.etcdWorker.Run(ctx, nil, o.tickInterval)
 	if err != nil {
@@ -87,12 +93,18 @@ func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureI
 	// TODO
 }
 
+func (o *Owner) AsyncStop() {
+	o.reactor.AsyncStop()
+}
+
 type ownerReactor struct {
 	state             *ownerReactorState
 	changeFeedManager changeFeedManager
 	changeFeedRunners map[model.ChangeFeedID]changeFeedRunner
 
 	gcManager *gcManager
+
+	close int32
 }
 
 func newOwnerReactor(state *ownerReactorState, cfManager changeFeedManager, gcManager *gcManager) *ownerReactor {
@@ -105,6 +117,9 @@ func newOwnerReactor(state *ownerReactorState, cfManager changeFeedManager, gcMa
 }
 
 func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	if atomic.LoadInt32(&o.close) != 0 {
+		return nil, cerror.ErrReactorFinished.GenWithStackByArgs()
+	}
 	cfOps, err := o.changeFeedManager.GetChangeFeedOperations(ctx)
 	if err != nil {
 		// TODO graceful exit
@@ -178,4 +193,8 @@ func (o *ownerReactor) doUpdateGCSafePoint(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (o *ownerReactor) AsyncStop() {
+	atomic.StoreInt32(&o.close, 1)
 }

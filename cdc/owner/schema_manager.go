@@ -152,7 +152,8 @@ func (m *schemaManager) ApplyDDL(job *timodel.Job) ([]tableAction, error) {
 	return tableActions, nil
 }
 
-func (m *schemaManager) AllPartitions() []model.TableID {
+// AllPhysicalTables returns the table IDs of all tables and partition tables.
+func (m *schemaManager) AllPhysicalTables() []model.TableID {
 	var allPartitions []model.TableID
 
 	for _, tableIDs := range m.schemas {

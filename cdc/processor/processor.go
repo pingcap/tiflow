@@ -335,14 +335,6 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
-	// TODO: 👇👇 remove this six lines after the new owner is implemented, applied operation should be removed by owner
-	if !p.changefeed.TaskStatus.SomeOperationsUnapplied() && len(p.changefeed.TaskStatus.Operation) != 0 {
-		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
-			status.Operation = nil
-			return status, nil
-		})
-	}
-	// 👆👆 remove this six lines
 	for tableID, opt := range p.changefeed.TaskStatus.Operation {
 		if opt.TableApplied() {
 			continue
@@ -380,6 +372,24 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 					operation.Status = model.OperFinished
 					operation.Done = true
 					return nil
+				})
+
+				p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
+					if status.Tables == nil {
+						log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
+					}
+					delete(status.Tables, tableID)
+					if status.Operation == nil {
+						log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
+					}
+					operation := status.Operation[tableID]
+					if opt == nil {
+						log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
+					}
+					operation.BoundaryTs = table.CheckpointTs()
+					operation.Status = model.OperFinished
+					operation.Done = true
+					return status, nil
 				})
 				// TODO: check if the goroutines created by table pipeline is actually exited. (call tablepipeline.Wait())
 				table.Cancel()
@@ -475,7 +485,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 			if ddlRawKV == nil {
 				continue
 			}
-			failpoint.Inject("processorDDLResolved", nil)
+			failpoint.Eval(_curpkg_("processorDDLResolved"))
 			if ddlRawKV.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			}
@@ -520,6 +530,7 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 			continue
 		}
 		opt := p.changefeed.TaskStatus.Operation
+		// TODO(leoppro): check if the operation is a undone add operation
 		if opt != nil && opt[tableID] != nil {
 			continue
 		}
@@ -727,7 +738,7 @@ func (p *processor) Close() error {
 	p.cancel()
 	p.wg.Wait()
 	// mark tables share the same context with its original table, don't need to cancel
-	failpoint.Inject("processorStopDelay", nil)
+	failpoint.Eval(_curpkg_("processorStopDelay"))
 	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 		if position == nil {
 			return nil, nil

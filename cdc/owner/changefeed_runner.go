@@ -120,11 +120,11 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, startTs uint64) e
 
 	// We call an unpartitioned table a partition too for simplicity
 	existingPartitions := c.ownerState.GetTableToCaptureMap(c.cfID)
-	allPartitions := c.schemaManager.AllPartitions()
+	allPhysicalTables := c.schemaManager.AllPhysicalTables()
 
 	initTableTasks := make(map[model.TableID]*tableTask)
 
-	for _, tableID := range allPartitions {
+	for _, tableID := range allPhysicalTables {
 		tableTask := &tableTask{
 			TableID:      tableID,
 			CheckpointTs: startTs - 1,
@@ -189,6 +189,9 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 		c.preFilterDDL()
 	}
 	c.changeFeedState.SetDDLResolvedTs(ddlResolvedTs)
+	c.changeFeedState.CalcResolvedTsAndCheckpointTs()
+
+	log.Info("LEOPPRO show barrier", zap.Any("barriers", c.changeFeedState.Barriers))
 
 	// Run DDL
 	if barrier := c.changeFeedState.ShouldRunDDL(); barrier != nil {
@@ -206,9 +209,9 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 		c.preFilterDDL()
 	}
 
-	resolvedTs := c.changeFeedState.ResolvedTs()
-	checkpointTs := c.changeFeedState.CheckpointTs()
-	log.Info("Updating changeFeed", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
+	resolvedTs := c.changeFeedState.ResolvedTs
+	checkpointTs := c.changeFeedState.CheckpointTs
+	log.Debug("Updating changeFeed", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	c.ownerState.UpdateChangeFeedStatus(c.cfID, resolvedTs, checkpointTs)
 
 	c.changeFeedState.SyncTasks()

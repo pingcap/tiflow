@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -97,6 +98,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 
 			if s.newCaptureHandler != nil {
 				// Notify about the capture-added event
+				failpoint.Inject("sleep-before-watch-capture", nil)
 				s.newCaptureHandler(captureID)
 			}
 		}
@@ -362,6 +364,9 @@ func (s *ownerReactorState) StartDeletingTable(cfID model.ChangeFeedID, captureI
 	patch := &orchestrator.DataPatch{
 		Key: util.NewEtcdKey(kv.GetEtcdKeyTaskStatus(cfID, captureID)),
 		Fun: func(old []byte) ([]byte, error) {
+			failpoint.Inject("OwnerRemoveTableError", func() {
+				failpoint.Return(nil, errors.New("failpoint injected error"))
+			})
 			if len(old) == 0 {
 				return nil, cerrors.
 					ErrOwnerInconsistentStates.
