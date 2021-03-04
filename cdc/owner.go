@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -1048,6 +1049,13 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			err = o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			if config.NewReplicaImpl {
+				// remove all positions because the old positions may be include an error
+				err = o.etcdClient.RemoveAllTaskPositions(ctx, job.CfID)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 		// TODO: we need a better admin job workflow. Supposing uses create

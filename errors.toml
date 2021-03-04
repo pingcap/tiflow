@@ -161,6 +161,11 @@ error = '''
 this patch should be excluded from the current etcd txn
 '''
 
+["CDC:ErrEtcdSessionDone"]
+error = '''
+the etcd session is done
+'''
+
 ["CDC:ErrEtcdTryAgain"]
 error = '''
 the etcd txn should be aborted and retried immediately
@@ -484,6 +489,11 @@ changefeed %s not found in owner cache
 ["CDC:ErrOwnerEtcdWatch"]
 error = '''
 etcd watch returns error
+'''
+
+["CDC:ErrOwnerInconsistentStates"]
+error = '''
+owner encountered inconsistent state. report a bug if this happens frequently. %s
 '''
 
 ["CDC:ErrOwnerSortDir"]

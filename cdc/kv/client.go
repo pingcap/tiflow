@@ -63,14 +63,23 @@ const (
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
+
+	// TiCDC always interacts with region leader, every time something goes wrong,
+	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
+	// don't need to force reload region any more.
+	regionScheduleReload = false
 )
 
+// hard code switch
+// true: use kv client v2, which has a region worker for each stream
+// false: use kv client v1, which runs a goroutine for every single region
+var enableKVClientV2 = true
+
 type singleRegionInfo struct {
-	verID        tikv.RegionVerID
-	span         regionspan.ComparableSpan
-	ts           uint64
-	failStoreIDs map[uint64]struct{}
-	rpcCtx       *tikv.RPCContext
+	verID  tikv.RegionVerID
+	span   regionspan.ComparableSpan
+	ts     uint64
+	rpcCtx *tikv.RPCContext
 }
 
 var (
@@ -90,12 +99,22 @@ var (
 
 func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
 	return singleRegionInfo{
-		verID:        verID,
-		span:         span,
-		ts:           ts,
-		failStoreIDs: make(map[uint64]struct{}),
-		rpcCtx:       rpcCtx,
+		verID:  verID,
+		span:   span,
+		ts:     ts,
+		rpcCtx: rpcCtx,
 	}
+}
+
+// partialClone clones part fields of singleRegionInfo, this is used when error
+// happens, kv client needs to recover region request from singleRegionInfo
+func (s *singleRegionInfo) partialClone() singleRegionInfo {
+	sri := singleRegionInfo{
+		verID: s.verID,
+		span:  s.span.Clone(),
+		ts:    s.ts,
+	}
+	return sri
 }
 
 type regionErrorInfo struct {
@@ -113,6 +132,12 @@ type regionFeedState struct {
 	requestID     uint64
 	regionEventCh chan *regionEvent
 	stopped       int32
+
+	lock           sync.RWMutex
+	initialized    bool
+	matcher        *matcher
+	startFeedTime  time.Time
+	lastResolvedTs uint64
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
@@ -122,6 +147,12 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 		regionEventCh: make(chan *regionEvent, 16),
 		stopped:       0,
 	}
+}
+
+func (s *regionFeedState) start() {
+	s.startFeedTime = time.Now()
+	s.lastResolvedTs = s.sri.ts
+	s.matcher = newMatcher()
 }
 
 func (s *regionFeedState) markStopped() {
@@ -458,8 +489,9 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock      *regionspan.RegionRangeLock
-	enableOldValue bool
+	rangeLock        *regionspan.RegionRangeLock
+	enableOldValue   bool
+	enableKVClientV2 bool
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -469,6 +501,9 @@ type eventFeedSession struct {
 
 	streams     map[string]cdcpb.ChangeData_EventFeedClient
 	streamsLock sync.RWMutex
+
+	workers     map[string]*regionWorker
+	workersLock sync.RWMutex
 }
 
 type rangeRequestTask struct {
@@ -499,6 +534,7 @@ func newEventFeedSession(
 		requestRangeCh:    make(chan rangeRequestTask, 16),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
+		enableKVClientV2:  enableKVClientV2,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
 		id:                id,
@@ -506,6 +542,7 @@ func newEventFeedSession(
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
+		workers:           make(map[string]*regionWorker),
 	}
 }
 
@@ -745,7 +782,7 @@ MainLoop:
 						time.Sleep(delay)
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
+					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
 					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
 					pendingRegions.take(requestID)
 					continue
@@ -754,7 +791,10 @@ MainLoop:
 
 				limiter := s.client.getRegionLimiter(regionID)
 				g.Go(func() error {
-					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+					if !s.enableKVClientV2 {
+						return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+					}
+					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				})
 			}
 
@@ -811,17 +851,6 @@ MainLoop:
 			break
 		}
 	}
-}
-
-func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext) (need bool) {
-	failStoreIDs[getStoreID(rpcCtx)] = struct{}{}
-	need = len(failStoreIDs) == len(rpcCtx.Meta.GetPeers())
-	if need {
-		for k := range failStoreIDs {
-			delete(failStoreIDs, k)
-		}
-	}
-	return
 }
 
 // partialRegionFeed establishes a EventFeed to the region specified by regionInfo.
@@ -1020,7 +1049,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		if errInfo.rpcCtx.Meta != nil {
-			s.regionCache.OnSendFail(bo, errInfo.rpcCtx, needReloadRegion(errInfo.failStoreIDs, errInfo.rpcCtx), err)
+			s.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
 		}
 	}
 
@@ -1387,6 +1416,15 @@ func (s *eventFeedSession) singleEventFeed(
 			switch x := event.changeEvent.Event.(type) {
 			case *cdcpb.Event_Entries_:
 				for _, entry := range x.Entries.GetEntries() {
+					// if a region with kv range [a, z)
+					// and we only want the get [b, c) from this region,
+					// tikv will return all key events in the region although we specified [b, c) int the request.
+					// we can make tikv only return the events about the keys in the specified range.
+					comparableKey := regionspan.ToComparableKey(entry.GetKey())
+					// key for initialized event is nil
+					if !regionspan.KeyInSpan(comparableKey, span) && entry.Type != cdcpb.Event_INITIALIZED {
+						continue
+					}
 					switch entry.Type {
 					case cdcpb.Event_INITIALIZED:
 						if time.Since(startFeedTime) > 20*time.Second {

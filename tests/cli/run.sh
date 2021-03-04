@@ -175,7 +175,7 @@ EOF
     curl -X POST -d '"warn"' http://127.0.0.1:8300/admin/log
     sleep 3
     # make sure TiCDC does not panic
-    check_changefeed_state $uuid "normal"
+    curl http://127.0.0.1:8300/status
 
     cleanup_process $CDC_BINARY
 }
