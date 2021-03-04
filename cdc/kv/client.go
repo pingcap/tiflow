@@ -72,7 +72,8 @@ const (
 	// hard code switch
 	// true: use kv client v2, which has a region worker for each stream
 	// false: use kv client v1, which runs a goroutine for every single region
-	enableKVClientV2 = true
+	// kv client v2 is disabled for GA testing. TODO enable kv client v2
+	enableKVClientV2 = false
 )
 
 type singleRegionInfo struct {
