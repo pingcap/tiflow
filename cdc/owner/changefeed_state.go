@@ -14,20 +14,22 @@
 package owner
 
 import (
+	"math"
+
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
 )
 
 // changeFeedState is part of the replication model that implements the control logic of a changeFeed
 type changeFeedState struct {
-	TableTasks    map[model.TableID]*tableTask
-	DDLResolvedTs uint64
-	Barriers      []*barrier
+	TableTasks map[model.TableID]*tableTask
 
 	CheckpointTs uint64
 	ResolvedTs   uint64
 
+	barriers  *barriers
 	scheduler scheduler
 }
 
@@ -41,15 +43,65 @@ type barrierType = int
 
 const (
 	// DDLBarrier denotes a replication barrier caused by a DDL.
-	DDLBarrier = barrierType(iota)
+	DDLJobBarrier barrierType = iota
+	DDLResolvedTs
 	// SyncPointBarrier denotes a barrier for snapshot replication.
-	// SyncPointBarrier
+	SyncPointBarrier
 	// TODO support snapshot replication.
 )
 
 type barrier struct {
-	BarrierType barrierType
-	BarrierTs   uint64
+	tp    barrierType
+	index uint64
+}
+type barriers struct {
+	inner map[barrier]model.Ts
+	dirty bool
+	min   barrier
+}
+
+func newBarriers() *barriers {
+	return &barriers{
+		inner: make(map[barrier]model.Ts),
+		dirty: true,
+	}
+}
+
+func (b *barriers) Update(tp barrierType, index uint64, barrierTs model.Ts) {
+	if !b.dirty && barrierTs < b.inner[b.min] {
+		b.dirty = true
+	}
+	b.inner[barrier{tp: tp, index: index}] = barrierTs
+}
+
+func (b *barriers) Min() (tp barrierType, index uint64, barrierTs model.Ts) {
+	if !b.dirty {
+		return b.min.tp, b.min.index, b.inner[b.min]
+	}
+	tp, index, minTs := b.calcMin()
+	b.min = barrier{tp: tp, index: index}
+	b.dirty = false
+	return tp, index, minTs
+}
+
+func (b *barriers) calcMin() (tp barrierType, index uint64, barrierTs model.Ts) {
+	if len(b.inner) == 0 {
+		log.Panic("there are no barrier in owner, please report a bug")
+	}
+	barrierTs = uint64(math.MaxUint64)
+	for br, ts := range b.inner {
+		if ts <= barrierTs {
+			tp = br.tp
+			index = br.index
+			barrierTs = ts
+		}
+	}
+	return
+}
+
+func (b *barriers) Remove(tp barrierType, index uint64) {
+	delete(b.inner, barrier{tp: tp, index: index})
+	b.dirty = true
 }
 
 type ddlResultAction = string
@@ -72,11 +124,13 @@ type tableAction struct {
 }
 
 func newChangeFeedState(initTableTasks map[model.TableID]*tableTask, ddlStartTs uint64, scheduler scheduler) *changeFeedState {
-	return &changeFeedState{
-		TableTasks:    initTableTasks,
-		DDLResolvedTs: ddlStartTs,
-		scheduler:     scheduler,
+	cf := &changeFeedState{
+		TableTasks: initTableTasks,
+		barriers:   newBarriers(),
+		scheduler:  scheduler,
 	}
+	cf.SetDDLResolvedTs(ddlStartTs)
+	return cf
 }
 
 func (cf *changeFeedState) SyncTasks() {
@@ -86,67 +140,28 @@ func (cf *changeFeedState) SyncTasks() {
 }
 
 func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
-	cf.DDLResolvedTs = ddlResolvedTs
+	cf.barriers.Update(DDLResolvedTs, 0, ddlResolvedTs)
 }
 
-func (cf *changeFeedState) AddDDLBarrier(barrierTs uint64) {
-	if len(cf.Barriers) > 0 && barrierTs < cf.Barriers[len(cf.Barriers)-1].BarrierTs {
-		log.Panic("changeFeedState: DDLBarrier too small",
-			zap.Uint64("last-barrier-ts", cf.Barriers[len(cf.Barriers)-1].BarrierTs),
-			zap.Uint64("new-barrier-ts", barrierTs))
-	}
-
-	if barrierTs < cf.DDLResolvedTs {
-		log.Panic("changeFeedState: DDLBarrier too small",
-			zap.Uint64("cur-ddl-resolved-ts", cf.DDLResolvedTs),
-			zap.Uint64("new-barrier-ts", barrierTs))
-	}
-
-	cf.Barriers = append(cf.Barriers, &barrier{
-		BarrierType: DDLBarrier,
-		BarrierTs:   barrierTs,
-	})
+func (cf *changeFeedState) AddDDLBarrier(job *timodel.Job) {
+	cf.barriers.Update(DDLJobBarrier, uint64(job.ID), job.BinlogInfo.FinishedTS-1)
 }
 
-func (cf *changeFeedState) PopDDLBarrier() {
-	if len(cf.Barriers) == 0 {
-		log.Panic("changeFeedState: no DDL barrier to pop")
+func (cf *changeFeedState) BlockingByBarrier() (blocked bool, tp barrierType, index uint64, barrierTs model.Ts) {
+	blocked = false
+	tp, index, barrierTs = cf.barriers.Min()
+	if barrierTs == cf.CheckpointTs {
+		blocked = true
 	}
-
-	cf.Barriers = cf.Barriers[1:]
+	return
 }
 
-func (cf *changeFeedState) ShouldRunDDL() *barrier {
-	if len(cf.Barriers) > 0 {
-		if cf.Barriers[0].BarrierTs == cf.CheckpointTs+1 &&
-			cf.Barriers[0].BarrierType == DDLBarrier {
-
-			return cf.Barriers[0]
-		}
-	}
-
-	return nil
+func (cf *changeFeedState) ClearBarrier(tp barrierType, index uint64) {
+	cf.barriers.Remove(tp, index)
 }
 
-func (cf *changeFeedState) MarkDDLDone(result ddlResult) {
-	if cf.CheckpointTs != result.FinishTs-1 {
-		log.Panic("changeFeedState: Unexpected checkpoint when DDL is done",
-			zap.Uint64("cur-checkpoint-ts", cf.CheckpointTs),
-			zap.Reflect("ddl-result", result))
-	}
-
-	if len(cf.Barriers) == 0 ||
-		cf.Barriers[0].BarrierType != DDLBarrier ||
-		cf.Barriers[0].BarrierTs != result.FinishTs {
-
-		log.Panic("changeFeedState: no DDL barrier found",
-			zap.Reflect("barriers", cf.Barriers),
-			zap.Reflect("ddl-result", result))
-	}
-
-	cf.Barriers = cf.Barriers[1:]
-
-	for _, tableAction := range result.Actions {
+func (cf *changeFeedState) ApplyTableActions(actions []tableAction) {
+	for _, tableAction := range actions {
 		switch tableAction.Action {
 		case AddTableAction:
 			cf.TableTasks[tableAction.tableID] = &tableTask{
@@ -173,16 +188,13 @@ func (cf *changeFeedState) CalcResolvedTsAndCheckpointTs() {
 
 // TODO test-case: returned value is not zero
 func (cf *changeFeedState) calcResolvedTs() uint64 {
-	resolvedTs := cf.DDLResolvedTs
+	_, _, ts := cf.barriers.Min()
+	resolvedTs := ts
 
 	for _, table := range cf.TableTasks {
 		if resolvedTs > table.ResolvedTs {
 			resolvedTs = table.ResolvedTs
 		}
-	}
-
-	if len(cf.Barriers) > 0 && resolvedTs > cf.Barriers[0].BarrierTs-1 {
-		resolvedTs = cf.Barriers[0].BarrierTs - 1
 	}
 
 	if resolvedTs == 0 {
@@ -193,16 +205,13 @@ func (cf *changeFeedState) calcResolvedTs() uint64 {
 
 // TODO test-case: returned value is not zero
 func (cf *changeFeedState) calcCheckpointTs() uint64 {
-	checkpointTs := cf.DDLResolvedTs
+	_, _, ts := cf.barriers.Min()
+	checkpointTs := ts
 
 	for _, table := range cf.TableTasks {
 		if checkpointTs > table.CheckpointTs {
 			checkpointTs = table.CheckpointTs
 		}
-	}
-
-	if len(cf.Barriers) > 0 && checkpointTs > cf.Barriers[0].BarrierTs-1 {
-		checkpointTs = cf.Barriers[0].BarrierTs - 1
 	}
 
 	if checkpointTs == 0 {

@@ -485,7 +485,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 			if ddlRawKV == nil {
 				continue
 			}
-			failpoint.Eval(_curpkg_("processorDDLResolved"))
+			failpoint.Inject("processorDDLResolved", nil)
 			if ddlRawKV.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			}
@@ -738,7 +738,7 @@ func (p *processor) Close() error {
 	p.cancel()
 	p.wg.Wait()
 	// mark tables share the same context with its original table, don't need to cancel
-	failpoint.Eval(_curpkg_("processorStopDelay"))
+	failpoint.Inject("processorStopDelay", nil)
 	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 		if position == nil {
 			return nil, nil

@@ -29,6 +29,11 @@ type schemaManager struct {
 	schemas        map[model.SchemaID]map[model.TableID]struct{}
 	partitions     map[model.TableID][]model.TableID
 	schemaSnapshot *entry.SingleSchemaSnapshot
+
+	filter *filter.Filter
+	config *config.ReplicaConfig
+
+	pendingDDLJob []*timodel.Job
 }
 
 type ddlJobWithPreTableInfo struct {
@@ -36,25 +41,26 @@ type ddlJobWithPreTableInfo struct {
 	preTableInfo *model.TableInfo
 }
 
-func newSchemaManager(schemaSnapshot *entry.SingleSchemaSnapshot, filter *filter.Filter, cyclicConfig *config.CyclicConfig) *schemaManager {
+func newSchemaManager(schemaSnapshot *entry.SingleSchemaSnapshot, filter *filter.Filter, config *config.ReplicaConfig) *schemaManager {
 	ret := &schemaManager{
 		schemas:        make(map[model.SchemaID]map[model.TableID]struct{}),
 		partitions:     make(map[model.TableID][]int64),
 		schemaSnapshot: schemaSnapshot,
+		filter:         filter,
+		config:         config,
 	}
 
-	for tid, table := range schemaSnapshot.CloneTables() {
-		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
-			continue
+	for tid := range schemaSnapshot.CloneTables() {
+		tblInfo, exist := schemaSnapshot.TableByID(tid)
+		if !exist {
+			log.Panic("table not found for table ID", zap.Int64("tid", tid))
 		}
-		if cyclicConfig.IsEnabled() && mark.IsMarkTable(table.Schema, table.Table) {
-			// skip the mark table if cyclic is enabled
-			continue
+		schema, exist := schemaSnapshot.SchemaByTableID(tid)
+		if !exist {
+			log.Panic("schema not found for table", zap.Int64("tid", tid))
 		}
-
-		schema, ok := schemaSnapshot.SchemaByTableID(tid)
-		if !ok {
-			log.Warn("schema not found for table", zap.Int64("tid", tid))
+		if ret.shouldIgnoreTable(tblInfo) {
+			continue
 		}
 
 		schemaID := schema.ID
@@ -63,12 +69,6 @@ func newSchemaManager(schemaSnapshot *entry.SingleSchemaSnapshot, filter *filter
 		}
 
 		ret.schemas[schemaID][tid] = struct{}{}
-
-		tblInfo, ok := schemaSnapshot.TableByID(tid)
-		if !ok {
-			log.Warn("table not found for table ID", zap.Int64("tid", tid))
-			continue
-		}
 
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			delete(ret.partitions, tid)
@@ -97,21 +97,87 @@ func (m *schemaManager) PreprocessDDL(job *ddlJobWithPreTableInfo) error {
 	return nil
 }
 
-func (m *schemaManager) ApplyDDL(job *timodel.Job) ([]tableAction, error) {
+func (m *schemaManager) SinkTableInfos() []*model.SimpleTableInfo {
+	var sinkTableInfos []*model.SimpleTableInfo
+
+	for _, tableIDs := range m.schemas {
+		for tableID := range tableIDs {
+			tblInfo, ok := m.schemaSnapshot.TableByID(tableID)
+			if !ok {
+				log.Panic("table not found for table ID", zap.Int64("tid", tableID))
+				continue
+			}
+
+			// TODO separate function for initializing SimpleTableInfo
+			sinkTableInfo := new(model.SimpleTableInfo)
+			sinkTableInfo.TableID = tableID
+			sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
+			for i, colInfo := range tblInfo.Cols() {
+				sinkTableInfo.ColumnInfo[i] = new(model.ColumnInfo)
+				sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+			}
+			sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
+		}
+	}
+
+	return sinkTableInfos
+}
+
+// AllPhysicalTables returns the table IDs of all tables and partition tables.
+func (m *schemaManager) AllPhysicalTables() []model.TableID {
+	var allPartitions []model.TableID
+
+	for _, tableIDs := range m.schemas {
+		for tableID := range tableIDs {
+			if partitions, ok := m.partitions[tableID]; ok {
+				allPartitions = append(allPartitions, partitions...)
+			} else {
+				allPartitions = append(allPartitions, tableID)
+			}
+		}
+	}
+
+	return allPartitions
+}
+
+func (m *schemaManager) AppendDDLJob(job ...*timodel.Job) {
+	m.pendingDDLJob = append(m.pendingDDLJob, job...)
+}
+
+func (m *schemaManager) TopDDLJobToExec() (*timodel.Job, error) {
+	for len(m.pendingDDLJob) > 0 {
+		job := m.pendingDDLJob[0]
+		if !m.shouldIgnoreDDL(job) {
+
+			return job, nil
+		}
+		err := m.schemaSnapshot.HandleDDL(job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		m.pendingDDLJob = m.pendingDDLJob[1:]
+	}
+	return nil, nil
+}
+
+func (m *schemaManager) MarkDDLExecuted() ([]tableAction, error) {
+	// check len > 0
+	job := m.pendingDDLJob[0]
 	log.Info("apply job", zap.Stringer("job", job),
 		zap.String("schema", job.SchemaName),
 		zap.String("query", job.Query),
 		zap.Uint64("ts", job.BinlogInfo.FinishedTS))
 
-	err := m.schemaSnapshot.HandleDDL(job)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	var (
 		startTableIDs  []model.TableID
 		removeTableIDs []model.TableID
 	)
+
+	err := m.schemaSnapshot.HandleDDL(job)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	m.pendingDDLJob = m.pendingDDLJob[1:]
 
 	switch job.Type {
 	case timodel.ActionCreateSchema:
@@ -130,7 +196,7 @@ func (m *schemaManager) ApplyDDL(job *timodel.Job) ([]tableAction, error) {
 	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
 		startTableIDs, removeTableIDs = m.updatePartitions(job.TableID)
 	default:
-		log.Info("ignore unknown job type", zap.Stringer("job", job))
+		log.Debug("ignore the job type which is no table action", zap.Stringer("job", job))
 	}
 
 	var tableActions []tableAction
@@ -152,21 +218,64 @@ func (m *schemaManager) ApplyDDL(job *timodel.Job) ([]tableAction, error) {
 	return tableActions, nil
 }
 
-// AllPhysicalTables returns the table IDs of all tables and partition tables.
-func (m *schemaManager) AllPhysicalTables() []model.TableID {
-	var allPartitions []model.TableID
+func (m *schemaManager) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, error) {
+	ddlEvent := new(model.DDLEvent)
+	preTableInfo, err := m.schemaSnapshot.PreTableInfo(job)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	err = m.schemaSnapshot.FillSchemaName(job)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	ddlEvent.FromJob(job, preTableInfo)
+	return ddlEvent, nil
+}
 
-	for _, tableIDs := range m.schemas {
-		for tableID := range tableIDs {
-			if partitions, ok := m.partitions[tableID]; ok {
-				allPartitions = append(allPartitions, partitions...)
-			} else {
-				allPartitions = append(allPartitions, tableID)
-			}
-		}
+func (m *schemaManager) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
+	schemaName := tableInfo.TableName.Schema
+	tableName := tableInfo.TableName.Table
+	if m.filter.ShouldIgnoreTable(schemaName, tableName) {
+		return true
+	}
+	if m.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
+		// skip the mark table if cyclic is enabled
+		return true
+	}
+	if !tableInfo.IsEligible(m.config.ForceReplicate) {
+		log.Warn("skip ineligible table", zap.Int64("tid", tableInfo.ID), zap.Stringer("table", tableInfo.TableName))
+		return true
+	}
+	return false
+}
+
+func (m *schemaManager) shouldIgnoreDDL(job *timodel.Job) bool {
+	if m.filter.ShouldDiscardDDL(job.Type) {
+		return true
+	}
+	if job.BinlogInfo == nil || job.BinlogInfo.TableInfo == nil {
+		return false
 	}
 
-	return allPartitions
+	postTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName,
+		job.BinlogInfo.FinishedTS,
+		job.BinlogInfo.TableInfo)
+
+	if job.Type == timodel.ActionRenameTable {
+		tableInfo, ok := m.schemaSnapshot.TableByID(job.TableID)
+		if !ok {
+			log.Panic("preFilterDDL: tableID not found", zap.Stringer("job", job))
+		}
+
+		if m.shouldIgnoreTable(tableInfo) && m.shouldIgnoreTable(postTableInfo) {
+			return true
+		}
+	} else {
+		if m.shouldIgnoreTable(postTableInfo) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *schemaManager) addSchema(schemaID model.SchemaID) {

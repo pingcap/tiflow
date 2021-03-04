@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -56,8 +55,6 @@ type changeFeedRunnerImpl struct {
 
 	ownerState      *ownerReactorState
 	changeFeedState *changeFeedState
-
-	ddlJobQueue []*ddlJobWithPreTableInfo
 }
 
 func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, startTs uint64) error {
@@ -87,39 +84,12 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, startTs uint64) e
 		return errors.Trace(err)
 	}
 
-	c.schemaManager = newSchemaManager(schemaSnap, filter, c.config.Cyclic)
+	c.schemaManager = newSchemaManager(schemaSnap, filter, c.config)
 
-	sinkTableInfos := make([]*model.SimpleTableInfo, 0, len(schemaSnap.CloneTables()))
-	for tid, table := range schemaSnap.CloneTables() {
-		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
-			continue
-		}
-		if c.config.Cyclic.IsEnabled() && mark.IsMarkTable(table.Schema, table.Table) {
-			// skip the mark table if cyclic is enabled
-			continue
-		}
-
-		tblInfo, ok := schemaSnap.TableByID(tid)
-		if !ok {
-			log.Warn("table not found for table ID", zap.Int64("tid", tid))
-			continue
-		}
-
-		// TODO separate function for initializing SimpleTableInfo
-		sinkTableInfo := new(model.SimpleTableInfo)
-		sinkTableInfo.TableID = tid
-		sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
-
-		for i, colInfo := range tblInfo.Cols() {
-			sinkTableInfo.ColumnInfo[i] = new(model.ColumnInfo)
-			sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
-		}
-
-		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
-	}
+	c.sink.Initialize(ctx, c.schemaManager.SinkTableInfos())
 
 	// We call an unpartitioned table a partition too for simplicity
-	existingPartitions := c.ownerState.GetTableToCaptureMap(c.cfID)
+	existingPhysicalTables := c.ownerState.GetTableToCaptureMap(c.cfID)
 	allPhysicalTables := c.schemaManager.AllPhysicalTables()
 
 	initTableTasks := make(map[model.TableID]*tableTask)
@@ -131,7 +101,7 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, startTs uint64) e
 			ResolvedTs:   startTs - 1,
 		}
 
-		if _, ok := existingPartitions[tableID]; ok {
+		if _, ok := existingPhysicalTables[tableID]; ok {
 			// The table is currently being replicated by a processor
 			progress := c.ownerState.GetTableProgress(c.cfID, tableID)
 			if progress != nil {
@@ -182,31 +152,44 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 
 	for _, job := range newDDLJobs {
 		log.Debug("new DDL job received", zap.Reflect("job", job))
-		c.ddlJobQueue = append(c.ddlJobQueue, &ddlJobWithPreTableInfo{job, nil})
-		c.changeFeedState.AddDDLBarrier(job.BinlogInfo.FinishedTS)
 	}
-	if len(newDDLJobs) > 0 {
-		c.preFilterDDL()
-	}
+	c.schemaManager.AppendDDLJob(newDDLJobs...)
 	c.changeFeedState.SetDDLResolvedTs(ddlResolvedTs)
+	jobToExec, err := c.schemaManager.TopDDLJobToExec()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if jobToExec != nil {
+		log.Info("LEOPPRO add barrier", zap.Reflect("job", jobToExec))
+		c.changeFeedState.AddDDLBarrier(jobToExec)
+	}
+
 	c.changeFeedState.CalcResolvedTsAndCheckpointTs()
 
-	log.Info("LEOPPRO show barrier", zap.Any("barriers", c.changeFeedState.Barriers))
-
-	// Run DDL
-	if barrier := c.changeFeedState.ShouldRunDDL(); barrier != nil {
-		tableActions, err := c.handleDDL(ctx, c.ddlJobQueue[0])
-		if err != nil {
-			return errors.Trace(err)
+	log.Info("LEOPPRO show barrier", zap.Any("barriers", c.changeFeedState.barriers.inner))
+	blocked, barrierType, barrierIndex, barrierTs := c.changeFeedState.BlockingByBarrier()
+	if blocked {
+		switch barrierType {
+		case DDLJobBarrier:
+			if barrierIndex != uint64(jobToExec.ID) {
+				log.Panic("LEOPPRO", zap.Any("barrierType", barrierType), zap.Any("barrierIndex", barrierIndex), zap.Any("barrierTs", barrierTs), zap.Any("job", jobToExec))
+			}
+			err := c.execDDL(ctx, jobToExec)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			tableActions, err := c.schemaManager.MarkDDLExecuted()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			c.changeFeedState.ApplyTableActions(tableActions)
+			c.changeFeedState.ClearBarrier(barrierType, barrierIndex)
+		case SyncPointBarrier:
+			//todo
+			panic("not implemented")
+		case DDLResolvedTs:
+			// just go to next tick
 		}
-
-		c.changeFeedState.MarkDDLDone(ddlResult{
-			FinishTs: c.ddlJobQueue[0].BinlogInfo.FinishedTS,
-			Actions:  tableActions,
-		})
-
-		c.ddlJobQueue = append([]*ddlJobWithPreTableInfo{}, c.ddlJobQueue[1:]...)
-		c.preFilterDDL()
 	}
 
 	resolvedTs := c.changeFeedState.ResolvedTs
@@ -218,24 +201,20 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (c *changeFeedRunnerImpl) handleDDL(ctx context.Context, job *ddlJobWithPreTableInfo) ([]tableAction, error) {
-	ddlEvent := new(model.DDLEvent)
-
-	actions, err := c.schemaManager.ApplyDDL(job.Job)
+func (c *changeFeedRunnerImpl) execDDL(ctx context.Context, job *timodel.Job) error {
+	ddlEvent, err := c.schemaManager.BuildDDLEvent(job)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
-
-	ddlEvent.FromJob(job.Job, job.preTableInfo)
 
 	executed := false
 	if !c.config.Cyclic.IsEnabled() || c.config.Cyclic.SyncDDL {
 		failpoint.Inject("InjectChangefeedDDLError", func() {
-			failpoint.Return(nil, cerror.ErrExecDDLFailed.GenWithStackByArgs())
+			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
 		})
 
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
-		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+		err := c.sink.EmitDDLEvent(ctx, ddlEvent)
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
@@ -244,7 +223,7 @@ func (c *changeFeedRunnerImpl) handleDDL(ctx context.Context, job *ddlJobWithPre
 					zap.String("ChangeFeedID", c.cfID),
 					zap.Error(err),
 					zap.Reflect("ddlJob", job))
-				return nil, cerror.ErrExecDDLFailed.GenWithStackByArgs()
+				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			}
 		} else {
 			executed = true
@@ -256,55 +235,7 @@ func (c *changeFeedRunnerImpl) handleDDL(ctx context.Context, job *ddlJobWithPre
 	} else {
 		log.Info("Execute DDL ignored", zap.String("changefeed", c.cfID), zap.Reflect("ddlJob", job))
 	}
-
-	return actions, nil
-}
-
-// TODO (Sprint 2) rewrite this part so that it uses a stateless DDL filter
-func (c *changeFeedRunnerImpl) preFilterDDL() {
-	shouldIgnoreTable := func(schemaName string, tableName string) bool {
-		if c.filter.ShouldIgnoreTable(schemaName, tableName) {
-			return true
-		}
-		if c.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
-			return true
-		}
-		return false
-	}
-
-	for len(c.ddlJobQueue) > 0 {
-		nextJobCandidate := c.ddlJobQueue[0]
-
-		if nextJobCandidate.BinlogInfo == nil || nextJobCandidate.BinlogInfo.TableInfo == nil {
-			break
-		}
-
-		schemaName := nextJobCandidate.SchemaName
-		postTableName := nextJobCandidate.BinlogInfo.TableInfo.Name.String()
-
-		if nextJobCandidate.Type == timodel.ActionRenameTable {
-			tableInfo, ok := c.schemaManager.schemaSnapshot.TableByID(nextJobCandidate.TableID)
-			if !ok {
-				log.Panic("preFilterDDL: tableID not found", zap.Stringer("job", nextJobCandidate.Job))
-			}
-
-			preTableName := tableInfo.TableName.Table
-
-			if shouldIgnoreTable(schemaName, preTableName) && shouldIgnoreTable(schemaName, postTableName) {
-				goto ignoreDDL
-			}
-		} else {
-			if shouldIgnoreTable(schemaName, postTableName) {
-				goto ignoreDDL
-			}
-		}
-		// DDL is not ignored
-		break
-	ignoreDDL:
-		c.ddlJobQueue = c.ddlJobQueue[1:]
-		c.changeFeedState.PopDDLBarrier()
-		continue
-	}
+	return nil
 }
 
 func (c *changeFeedRunnerImpl) SetOwnerState(state *ownerReactorState) {
