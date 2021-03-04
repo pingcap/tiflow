@@ -139,13 +139,13 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 }
 
 // TiCDCClusterVersion is the version of TiCDC cluster
-type TiCDCClusterVersion int
+type TiCDCClusterVersion string
 
 // ticdc cluster version
 const (
-	TiCDCClusterVersionUnknown TiCDCClusterVersion = iota
-	TiCDCClusterVersion4_0
-	TiCDCClusterVersion5_0
+	TiCDCClusterVersionUnknown TiCDCClusterVersion = "Unknown"
+	TiCDCClusterVersion4_0                         = "4.0.X"
+	TiCDCClusterVersion5_0                         = "5.0.X"
 )
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
