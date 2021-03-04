@@ -15,12 +15,14 @@ package producer
 
 import (
 	"context"
+
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
 // Producer is a interface of mq producer
 type Producer interface {
-	SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error
-	SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error
+	SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error
+	SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error
 	Flush(ctx context.Context) error
 	GetPartitionNum() int32
 	Close() error

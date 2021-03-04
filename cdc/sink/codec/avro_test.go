@@ -85,7 +85,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
-		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
+		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 	})

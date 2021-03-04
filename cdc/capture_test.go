@@ -106,6 +106,9 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
+	if config.NewReplicaImpl {
+		c.Skip("this case is designed for old processor")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -125,7 +128,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 		ctx context.Context, _ pd.Client, _ *security.Credential,
 		session *concurrency.Session, info model.ChangeFeedInfo, changefeedID string,
 		captureInfo model.CaptureInfo, checkpointTs uint64, flushCheckpointInterval time.Duration,
-	) (*processor, error) {
+	) (*oldProcessor, error) {
 		runProcessorCount++
 		etcdCli := kv.NewCDCEtcdClient(ctx, session.Client())
 		_, _, err := etcdCli.GetTaskStatus(ctx, changefeedID, captureInfo.ID)

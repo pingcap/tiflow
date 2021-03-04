@@ -103,7 +103,7 @@ def tests(sink_type, node_label) {
                                     dirname=`dirname \$log`
                                     basename=`basename \$log`
                                     mkdir -p "log\$dirname"
-                                    tar zcvf "log\${log%%.*}.tgz" -C "\$dirname" "\$basename"
+                                    tar zcvf "log\${log}.tgz" -C "\$dirname" "\$basename"
                                 done
                             """
                             archiveArtifacts artifacts: "log/tmp/tidb_cdc_test/**/*.tgz", caseSensitive: false
