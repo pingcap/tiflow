@@ -30,8 +30,6 @@ type Option struct {
 	producerOptions *pulsar.ProducerOptions
 }
 
-const route = "$route"
-
 func parseSinkOptions(u *url.URL) (opt *Option, err error) {
 	switch u.Scheme {
 	case "pulsar", "pulsar+ssl":
@@ -49,12 +47,6 @@ func parseSinkOptions(u *url.URL) (opt *Option, err error) {
 	opt = &Option{
 		clientOptions:   c,
 		producerOptions: p,
-	}
-
-	p.MessageRouter = func(message *pulsar.ProducerMessage, metadata pulsar.TopicMetadata) int {
-		partition, _ := strconv.Atoi(message.Properties[route])
-		delete(message.Properties, route)
-		return partition
 	}
 	return
 }
@@ -97,6 +89,7 @@ func parseProducerOptions(u *url.URL) (opt *pulsar.ProducerOptions, err error) {
 		BatchingMaxPublishDelay: vs.Duration("batchingMaxPublishDelay"),
 		BatchingMaxMessages:     uint(vs.Int("tlsAllowInsecureConnection")),
 		Properties:              vs.SubPathKV("properties"),
+		MessageRouter:           messageRouter,
 	}
 	hashingScheme := vs.Str("hashingScheme")
 	switch hashingScheme {

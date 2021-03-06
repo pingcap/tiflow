@@ -15,6 +15,7 @@ package pulsar
 
 import (
 	"context"
+	"encoding/binary"
 	"net/url"
 	"strconv"
 
@@ -71,8 +72,24 @@ type Producer struct {
 	partitions int
 }
 
-func createProperties(message *codec.MQMessage, partition int32) map[string]string {
-	properties := map[string]string{route: strconv.Itoa(int(partition))}
+func messageRouter(message *pulsar.ProducerMessage, metadata pulsar.TopicMetadata) int {
+	orderingKey := message.OrderingKey
+	message.OrderingKey = ""
+	return decodePartition(orderingKey)
+}
+
+func encodePartition(partition int) string {
+	bits := make([]byte, 4)
+	binary.LittleEndian.PutUint32(bits, uint32(partition))
+	return string(bits)
+}
+
+func decodePartition(bits string) int {
+	return int(binary.LittleEndian.Uint32([]byte(bits)))
+}
+
+func createProperties(message *codec.MQMessage) map[string]string {
+	properties := make(map[string]string)
 	properties["ts"] = strconv.FormatUint(message.Ts, 10)
 	properties["type"] = strconv.Itoa(int(message.Type))
 	properties["protocol"] = strconv.Itoa(int(message.Protocol))
@@ -87,11 +104,15 @@ func createProperties(message *codec.MQMessage, partition int32) map[string]stri
 
 // SendMessage send key-value msg to target partition.
 func (p *Producer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+	if partition < 0 || partition >= int32(p.partitions) {
+		return cerror.ErrPulsarInvalidPartitionNum
+	}
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
-		Payload:    message.Value,
-		Key:        string(message.Key),
-		Properties: createProperties(message, partition),
-		EventTime:  message.PhysicalTime(),
+		Payload:     message.Value,
+		Key:         string(message.Key),
+		Properties:  createProperties(message),
+		OrderingKey: encodePartition(int(partition)),
+		EventTime:   message.PhysicalTime(),
 	}, p.errors)
 	return nil
 }
@@ -110,10 +131,11 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 func (p *Producer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
 	for partition := 0; partition < p.partitions; partition++ {
 		_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
-			Payload:    message.Value,
-			Key:        string(message.Key),
-			Properties: createProperties(message, int32(partition)),
-			EventTime:  message.PhysicalTime(),
+			Payload:     message.Value,
+			Key:         string(message.Key),
+			Properties:  createProperties(message),
+			OrderingKey: encodePartition(partition),
+			EventTime:   message.PhysicalTime(),
 		})
 		if err != nil {
 			return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())

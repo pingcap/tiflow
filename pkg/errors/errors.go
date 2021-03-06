@@ -77,6 +77,7 @@ var (
 	ErrKafkaInvalidVersion       = errors.Normalize("invalid kafka version", errors.RFCCodeText("CDC:ErrKafkaInvalidVersion"))
 	ErrPulsarNewProducer         = errors.Normalize("new pulsar producer", errors.RFCCodeText("CDC:ErrPulsarNewProducer"))
 	ErrPulsarSendMessage         = errors.Normalize("pulsar send message failed", errors.RFCCodeText("CDC:ErrPulsarSendMessage"))
+	ErrPulsarInvalidPartitionNum = errors.Normalize("invalid partition num %d", errors.RFCCodeText("CDC:ErrPulsarInvalidPartitionNum"))
 	ErrFileSinkCreateDir         = errors.Normalize("file sink create dir", errors.RFCCodeText("CDC:ErrFileSinkCreateDir"))
 	ErrFileSinkFileOp            = errors.Normalize("file sink file operation", errors.RFCCodeText("CDC:ErrFileSinkFileOp"))
 	ErrFileSinkMetaAlreadyExists = errors.Normalize("file sink meta file already exists", errors.RFCCodeText("CDC:ErrFileSinkMetaAlreadyExists"))
