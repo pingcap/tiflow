@@ -15,12 +15,14 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"strconv"
 
+	"github.com/linkedin/goavro/v2"
+
 	"golang.org/x/text/encoding"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
@@ -29,6 +31,8 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding/charmap"
 )
+
+const isTest = true
 
 // OperationType for row events type
 type OperationType string
@@ -56,21 +60,33 @@ const (
 
 // JdqEventBatchEncoder converts the events to binary Jdq data
 type JdqEventBatchEncoder struct {
-	resultBuf    []*MQMessage
-	binaryEncode *encoding.Decoder
+	valueSchemaManager *AvroSchemaManager
+	resultBuf          []*MQMessage
+	binaryEncode       *encoding.Decoder
 }
 
 type jdqEncodeResult struct {
-	data []byte
-	// registryID int
+	data       []byte
+	registryID int
 }
 
 // NewJdqEventBatchEncoder creates an JdqEventBatchEncoder
 func NewJdqEventBatchEncoder() EventBatchEncoder {
 	return &JdqEventBatchEncoder{
-		resultBuf:    make([]*MQMessage, 0, 4096),
-		binaryEncode: charmap.ISO8859_1.NewDecoder(),
+		valueSchemaManager: nil,
+		resultBuf:          make([]*MQMessage, 0, 4096),
+		binaryEncode:       charmap.ISO8859_1.NewDecoder(),
 	}
+}
+
+// SetValueSchemaManager sets the value schema manager for an Avro encoder
+func (a *JdqEventBatchEncoder) SetValueSchemaManager(manager *AvroSchemaManager) {
+	a.valueSchemaManager = manager
+}
+
+// GetValueSchemaManager gets the value schema manager for an Avro encoder
+func (a *JdqEventBatchEncoder) GetValueSchemaManager() *AvroSchemaManager {
+	return a.valueSchemaManager
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -199,10 +215,24 @@ func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeRe
                               {"name":"cur","type":[{"type":"map","values":["string","null"]},"null"]},
                               {"name":"cus","type":[{"type":"map","values":["string","null"]},"null"]}]}
                   `
+	var codec *goavro.Codec
+	var registryID int
+	var err error
+	if isTest {
+		schemaGen := func() (string, error) {
+			return jdwSchema, nil
+		}
 
-	codec, err := goavro.NewCodec(jdwSchema)
-	if err != nil {
-		return nil, errors.Annotate(err, "jdqEncode: Could not make goavro codec")
+		// TODO pass ctx from the upper function. Need to modify the EventBatchEncoder interface.
+		codec, registryID, err = a.valueSchemaManager.GetCachedOrRegister(context.Background(), *(e.Table), e.TableInfoVersion, schemaGen)
+		if err != nil {
+			return nil, errors.Annotate(err, "AvroEventBatchEncoder: get-or-register failed")
+		}
+	} else {
+		codec, err = goavro.NewCodec(jdwSchema)
+		if err != nil {
+			return nil, errors.Annotate(err, "jdqEncode: Could not make goavro codec")
+		}
 	}
 
 	native, err := a.rowToJdqNativeData(e)
@@ -217,7 +247,8 @@ func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeRe
 	}
 
 	return &jdqEncodeResult{
-		data: bin,
+		data:       bin,
+		registryID: registryID,
 	}, nil
 }
 
@@ -472,12 +503,16 @@ func (a *JdqEventBatchEncoder) columnToJdqNativeData(col *model.Column) (interfa
 	}
 }
 
-// const jdqMagicByte = uint8(0)
+const jdqMagicByte = uint8(0)
 
 func (r *jdqEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	// data := []interface{}{jdqMagicByte, int32(r.registryID), r.data}
-	data := []interface{}{r.data}
+	var data []interface{}
+	if isTest {
+		data = []interface{}{jdqMagicByte, int32(r.registryID), r.data}
+	} else {
+		data = []interface{}{r.data}
+	}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
