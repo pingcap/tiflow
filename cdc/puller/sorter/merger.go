@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 )
 
@@ -80,8 +79,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return nil
 		}
 	}
-
-	limiter := ratelimit.New(5000)
 
 	onMinResolvedTsUpdate := func() error {
 		metricSorterMergerStartTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
@@ -252,8 +249,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				lastOutputTs = event.CRTs
 				lastEvent = event
 				lastTask = task
-				// limit the output rate
-				limiter.Take()
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
