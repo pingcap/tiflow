@@ -765,13 +765,13 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 				},
 			},
 			{
-				ID:       2,
+				ID:       3,
 				SchemaID: 1,
 				Type:     timodel.ActionCreateTable,
 				State:    timodel.JobStateSynced,
 				Query:    "create table t2 (id int primary key)",
 				BinlogInfo: &timodel.HistoryInfo{
-					SchemaVersion: 2,
+					SchemaVersion: 3,
 					DBInfo: &timodel.DBInfo{
 						ID:   1,
 						Name: timodel.NewCIStr("test"),
@@ -787,14 +787,14 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 				},
 			},
 			{
-				ID:       2,
+				ID:       4,
 				SchemaID: 1,
 				TableID:  49,
 				Type:     timodel.ActionDropTable,
 				State:    timodel.JobStateSynced,
 				Query:    "drop table t2",
 				BinlogInfo: &timodel.HistoryInfo{
-					SchemaVersion: 3,
+					SchemaVersion: 4,
 					DBInfo: &timodel.DBInfo{
 						ID:   1,
 						Name: timodel.NewCIStr("test"),
@@ -806,14 +806,14 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 				},
 			},
 			{
-				ID:       2,
+				ID:       5,
 				SchemaID: 1,
 				TableID:  47,
 				Type:     timodel.ActionTruncateTable,
 				State:    timodel.JobStateSynced,
 				Query:    "truncate table t1",
 				BinlogInfo: &timodel.HistoryInfo{
-					SchemaVersion: 4,
+					SchemaVersion: 5,
 					DBInfo: &timodel.DBInfo{
 						ID:   1,
 						Name: timodel.NewCIStr("test"),
@@ -829,14 +829,14 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 				},
 			},
 			{
-				ID:       2,
+				ID:       6,
 				SchemaID: 1,
 				TableID:  51,
 				Type:     timodel.ActionDropTable,
 				State:    timodel.JobStateSynced,
 				Query:    "drop table t1",
 				BinlogInfo: &timodel.HistoryInfo{
-					SchemaVersion: 5,
+					SchemaVersion: 6,
 					DBInfo: &timodel.DBInfo{
 						ID:   1,
 						Name: timodel.NewCIStr("test"),
@@ -848,7 +848,65 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 				},
 			},
 			{
-				ID:       2,
+				ID:       7,
+				SchemaID: 1,
+				Type:     timodel.ActionCreateTable,
+				State:    timodel.JobStateSynced,
+				Query:    "create table t3 (id int not null)",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 7,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:         53,
+						Name:       timodel.NewCIStr("t3"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.NotNullFlag}, State: timodel.StatePublic},
+						},
+					},
+				},
+			},
+			{
+				ID:       8,
+				State:    timodel.JobStateSynced,
+				SchemaID: 1,
+				TableID:  53,
+				Type:     timodel.ActionAddIndex,
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 8,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:         53,
+						Name:       timodel.NewCIStr("t3"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.NotNullFlag | mysql.UniqueKeyFlag}, State: timodel.StatePublic},
+						},
+						Indices: []*timodel.IndexInfo{
+							{
+								Name:  timodel.NewCIStr("uniq_id"),
+								Table: timodel.NewCIStr("t3"),
+								Columns: []*timodel.IndexColumn{
+									{
+										Name:   timodel.NewCIStr("id"),
+										Offset: 0,
+									},
+								},
+								Unique: true,
+								State:  timodel.StatePublic,
+							},
+						},
+					},
+				},
+			},
+			{
+				ID:       9,
 				SchemaID: 1,
 				Type:     timodel.ActionDropSchema,
 				State:    timodel.JobStateSynced,
@@ -870,6 +928,8 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{1: {47: struct{}{}}},
 			{1: {51: struct{}{}}},
 			{1: make(tableIDMap)},
+			{1: make(tableIDMap)},
+			{1: {53: struct{}{}}},
 			{},
 		}
 
@@ -880,6 +940,8 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{47: {Schema: "test", Table: "t1"}},
 			{51: {Schema: "test", Table: "t1"}},
 			{},
+			{},
+			{53: {Schema: "test", Table: "t3"}},
 			{},
 		}
 	)
