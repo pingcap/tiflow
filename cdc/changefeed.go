@@ -107,7 +107,8 @@ type changeFeed struct {
 	ddlExecutedTs uint64
 
 	schemas map[model.SchemaID]tableIDMap
-	tables  map[model.TableID]model.TableName
+	// tables store eligible tables only
+	tables map[model.TableID]model.TableName
 	// value of partitions is the slice of partitions ID.
 	partitions         map[model.TableID][]int64
 	orphanTables       map[model.TableID]model.Ts
@@ -617,6 +618,16 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
 			c.updatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
+		case timodel.ActionAddIndex, timodel.ActionModifyColumn:
+			// add index or modify column could make a table transforms from ineligible to eligible.
+			tableID := job.BinlogInfo.TableInfo.ID
+			if c.schema.IsTableReEligible(tableID) {
+				table, exist := c.schema.TableByID(tableID)
+				if !exist {
+					return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(tableID)
+				}
+				c.addTable(table, job.BinlogInfo.FinishedTS)
+			}
 		}
 		return nil
 	}()

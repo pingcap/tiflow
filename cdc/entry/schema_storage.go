@@ -48,6 +48,7 @@ type schemaSnapshot struct {
 
 	truncateTableID   map[int64]struct{}
 	ineligibleTableID map[int64]struct{}
+	reEligibleTableID map[int64]struct{}
 
 	currentTs uint64
 
@@ -115,6 +116,7 @@ func newEmptySchemaSnapshot(explicitTables bool) *schemaSnapshot {
 		tableInSchema:     make(map[int64][]int64),
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
+		reEligibleTableID: make(map[int64]struct{}),
 
 		explicitTables: explicitTables,
 	}
@@ -201,6 +203,12 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 		ineligibleTableID = append(ineligibleTableID, id)
 	}
 	logger("[SchemaSnap] IneligibleTableIDs", zap.Int64s("ids", ineligibleTableID))
+
+	reEligibleTableID := make([]int64, 0, len(s.reEligibleTableID))
+	for id := range s.reEligibleTableID {
+		reEligibleTableID = append(reEligibleTableID, id)
+	}
+	logger("[SchemaSnap] ReEligibleTableIDs", zap.Int64s("ids", reEligibleTableID))
 }
 
 // Clone clones Storage
@@ -256,6 +264,12 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 		ineligibleTableID[k] = v
 	}
 	clone.ineligibleTableID = ineligibleTableID
+
+	reEligibleTableID := make(map[int64]struct{}, len(s.reEligibleTableID))
+	for k, v := range s.reEligibleTableID {
+		reEligibleTableID[k] = v
+	}
+	clone.reEligibleTableID = reEligibleTableID
 
 	return &clone
 }
@@ -337,6 +351,16 @@ func (s *schemaSnapshot) IsTruncateTableID(id int64) bool {
 // IsIneligibleTableID returns true if the table is ineligible
 func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 	_, ok := s.ineligibleTableID[id]
+	return ok
+}
+
+// IsTableReEligible returns true if the table changes from ineligible to eligible.
+// Note if returns true, the record of this table is unset after this function.
+func (s *schemaSnapshot) IsTableReEligible(id int64) bool {
+	_, ok := s.reEligibleTableID[id]
+	if ok {
+		delete(s.reEligibleTableID, id)
+	}
 	return ok
 }
 
@@ -513,6 +537,13 @@ func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 	return nil
 }
 
+func (s *schemaSnapshot) markTableReEligible(tableOrPartitionID int64, name string) {
+	log.Warn("table or partition becomes eligible to replicate",
+		zap.String("name", name), zap.Int64("id", tableOrPartitionID))
+	delete(s.ineligibleTableID, tableOrPartitionID)
+	s.reEligibleTableID[tableOrPartitionID] = struct{}{}
+}
+
 // ReplaceTable replace the table by new tableInfo
 func (s *schemaSnapshot) replaceTable(table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
@@ -523,12 +554,16 @@ func (s *schemaSnapshot) replaceTable(table *model.TableInfo) error {
 	if !table.IsEligible(s.explicitTables) {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
+	} else if _, ok := s.ineligibleTableID[table.ID]; ok {
+		s.markTableReEligible(table.ID, table.Name.O)
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			s.partitionTable[partition.ID] = table
 			if !table.IsEligible(s.explicitTables) {
 				s.ineligibleTableID[partition.ID] = struct{}{}
+			} else if _, ok := s.ineligibleTableID[partition.ID]; ok {
+				s.markTableReEligible(partition.ID, partition.Name.O)
 			}
 		}
 	}

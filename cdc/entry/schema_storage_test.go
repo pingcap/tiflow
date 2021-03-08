@@ -136,8 +136,8 @@ func (*schemaSuite) TestTable(c *check.C) {
 				Length: 10,
 			},
 		},
-		Unique:  true,
-		Primary: true,
+		Unique:  false,
+		Primary: false,
 		State:   timodel.StatePublic,
 	}
 	// table info
@@ -780,6 +780,60 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 
 	c.Assert(len(snap3.tables)-len(snap1.tables), check.Equals, 5)
 	c.Assert(snap3.ineligibleTableID, check.HasLen, 0)
+}
+
+func (t *schemaSuite) TestEligibleTablesChange(c *check.C) {
+	defer testleak.AfterTest(c)()
+	store, err := mockstore.NewMockStore()
+	c.Assert(err, check.IsNil)
+	defer store.Close() //nolint:errcheck
+
+	session.SetSchemaLease(0)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	c.Assert(err, check.IsNil)
+	defer domain.Close()
+	domain.SetStatsUpdating(true)
+	tk := testkit.NewTestKit(c, store)
+	tk.MustExec("create database test2")
+	tk.MustExec("create table test2.eligible_t1 (id int, unique uniq_id(id))")
+	tk.MustExec("create table test2.eligible_t2 (id int not null)")
+	ver, err := store.CurrentVersion()
+	c.Assert(err, check.IsNil)
+	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+	c.Assert(err, check.IsNil)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* explicitTables */)
+	c.Assert(err, check.IsNil)
+
+	tableIDs := make([]int64, 0, 2)
+	for _, table := range snap.tables {
+		if table.Name.O == "eligible_t1" || table.Name.O == "eligible_t2" {
+			tableIDs = append(tableIDs, table.ID)
+		}
+	}
+	for _, tableID := range tableIDs {
+		c.Assert(snap.IsIneligibleTableID(tableID), check.IsTrue)
+	}
+	jobs1, err := getAllHistoryDDLJob(store)
+	c.Assert(err, check.IsNil)
+	tk.MustExec("alter table test2.eligible_t1 modify column id int not null")
+	tk.MustExec("alter table test2.eligible_t2 add unique uniq_id(id)")
+	jobs2, err := getAllHistoryDDLJob(store)
+	c.Assert(err, check.IsNil)
+	// Subtraction of jobs2 and jobs1 contains above two DDL jobs.
+	// Verify these two DDLs can make table changes from ineligible to eligible
+	for i := len(jobs1); i < len(jobs2); i++ {
+		err = snap.handleDDL(jobs2[i])
+		c.Assert(err, check.IsNil)
+	}
+	for _, tableID := range tableIDs {
+		c.Assert(snap.IsIneligibleTableID(tableID), check.IsFalse)
+	}
+	c.Assert(len(snap.reEligibleTableID), check.Equals, 2)
+	for _, tableID := range tableIDs {
+		c.Assert(snap.IsTableReEligible(tableID), check.IsTrue)
+	}
+	c.Assert(len(snap.reEligibleTableID), check.Equals, 0)
 }
 
 /*
