@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -105,7 +106,7 @@ func (ec *eventChecker) stop() {
 // CreateStorage creates a tikv Storage instance.
 func CreateStorage(pdAddr string) (storage kv.Storage, err error) {
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", pdAddr)
-	err = store.Register("tikv", tikv.Driver{})
+	err = store.Register("tikv", driver.TiKVDriver{})
 	if err != nil && !strings.Contains(err.Error(), "already registered") {
 		return
 	}

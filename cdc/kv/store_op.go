@@ -28,6 +28,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
@@ -114,7 +115,7 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 	}
 
 	// Ignore error if it is already registered.
-	_ = store.Register("tikv", tikv.Driver{})
+	_ = store.Register("tikv", driver.TiKVDriver{})
 
 	if credential.CAPath != "" {
 		conf := tidbconfig.GetGlobalConfig()
