@@ -85,7 +85,7 @@ func initCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
 	}
-	log.Info("init log", zap.String("file", logFile), zap.String("level", logCfg.Level))
+	log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,

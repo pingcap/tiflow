@@ -242,7 +242,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 
 	cfg := config.GetDefaultReplicaConfig()
 	if len(configFile) > 0 {
-		if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
+		if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -592,7 +592,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 
 				cfg := config.GetDefaultReplicaConfig()
 				if len(configFile) > 0 {
-					if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
+					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
 						return err
 					}
 				}

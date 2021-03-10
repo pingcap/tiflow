@@ -13,8 +13,6 @@
 
 package config
 
-import "sync"
-
 // SorterConfig represents sorter config for a changefeed
 type SorterConfig struct {
 	// number of concurrent heap sorts
@@ -27,23 +25,4 @@ type SorterConfig struct {
 	MaxMemoryConsumption uint64 `toml:"max-memory-consumption" json:"max-memory-consumption"`
 	// the size of workerpool
 	NumWorkerPoolGoroutine int `toml:"num-workerpool-goroutine" json:"num-workerpool-goroutine"`
-}
-
-var (
-	sorterConfig *SorterConfig
-	mu           sync.Mutex
-)
-
-// GetSorterConfig returns the process-local sorter config
-func GetSorterConfig() *SorterConfig {
-	mu.Lock()
-	defer mu.Unlock()
-	return sorterConfig
-}
-
-// SetSorterConfig sets the process-local sorter config
-func SetSorterConfig(config *SorterConfig) {
-	mu.Lock()
-	defer mu.Unlock()
-	sorterConfig = config
 }
