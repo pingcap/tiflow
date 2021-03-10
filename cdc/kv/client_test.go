@@ -2278,3 +2278,80 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	wg2.Wait()
 	cancel()
 }
+
+// TestFailRegionReentrant tests one region could be failover multiple times,
+// kv client must avoid duplicated `onRegionFail` call for the same region.
+// In this test
+// 1. An `unknownErr` is sent to kv client first to trigger `handleSingleRegionError` in region worker.
+// 2. We delay the kv client to re-create a new region request by 500ms via failpoint.
+// 3. Before new region request is fired, simulate kv client `stream.Recv` returns an error, the stream
+//    handler will signal region worker to exit, which will evict all active region states then.
+func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientRegionReentrantError", "1*return(\"ok\")->1*return(\"error\")")
+	c.Assert(err, check.IsNil)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientRegionReentrantErrorDelay", "sleep(500)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvErrorDelay")
+	}()
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	unknownErr := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Error{
+				Error: &cdcpb.Error{},
+			},
+		},
+	}}
+	ch1 <- unknownErr
+	// use a fake event to trigger one more stream.Recv
+	initialized := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized
+	// since re-establish new region request is delayed by `kvClientRegionReentrantErrorDelay`
+	// there will be reentrant region failover, the kv client should not panic.
+	time.Sleep(time.Second)
+	cancel()
+}
