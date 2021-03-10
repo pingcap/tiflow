@@ -354,16 +354,21 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 	clusterID := pd.GetClusterID(ctx)
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
-	store, ok := kvStorage.(TiKVStorage)
-	if !ok {
-		store = newStorageWithCurVersionCache(store, kvStorage.UUID())
+	var store TiKVStorage
+	if kvStorage != nil {
+		// wrap to TiKVStorage if need.
+		if s, ok := kvStorage.(TiKVStorage); ok {
+			store = s
+		} else {
+			store = newStorageWithCurVersionCache(store, kvStorage.UUID())
+		}
 	}
 
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
-		credential:  credential,
 		kvStorage:   store,
+		credential:  credential,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
