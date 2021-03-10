@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -86,7 +87,7 @@ func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.V
 
 	if time.Now().After(entry.lastUpdated.Add(storageVersionCacheUpdateInterval)) {
 		var ver tidbkv.Version
-		ver, err = s.CurrentVersion()
+		ver, err = s.CurrentVersion(oracle.GlobalTxnScope)
 		if err != nil {
 			return
 		}

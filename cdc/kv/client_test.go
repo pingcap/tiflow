@@ -352,7 +352,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	cluster.ChangeLeader(3, 5)
 
-	ts, err := kvStorage.CurrentVersion()
+	ts, err := kvStorage.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
 	ch2 <- makeEvent(ts.Ver)
 	var event *model.RegionFeedEvent
