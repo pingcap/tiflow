@@ -35,6 +35,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// TiKVStorage is the tikv storage interface used by CDC.
+type TiKVStorage interface {
+	tikv.Storage
+	GetCachedCurrentVersion() (version tidbkv.Version, err error)
+}
+
 const (
 	storageVersionCacheUpdateInterval = time.Second * 2
 )
@@ -56,7 +62,7 @@ var (
 	curVersionCacheMu sync.Mutex
 )
 
-func newStorageWithCurVersionCache(storage tikv.Storage, cacheKey string) tikv.Storage {
+func newStorageWithCurVersionCache(storage tikv.Storage, cacheKey string) TiKVStorage {
 	curVersionCacheMu.Lock()
 	defer curVersionCacheMu.Unlock()
 
@@ -109,10 +115,10 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 }
 
 // CreateTiStore creates a new tikv storage client
-func CreateTiStore(urls string, credential *security.Credential) (kv.Storage, tikv.Storage, error) {
+func CreateTiStore(urls string, credential *security.Credential) (kv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	// Ignore error if it is already registered.
@@ -129,9 +135,7 @@ func CreateTiStore(urls string, credential *security.Credential) (kv.Storage, ti
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)
 	if err != nil {
-		return nil, nil, cerror.WrapError(cerror.ErrNewStore, err)
+		return nil, cerror.WrapError(cerror.ErrNewStore, err)
 	}
-
-	tikvStore := newStorageWithCurVersionCache(tiStore.(tikv.Storage), tiPath)
-	return tiStore, tikvStore, nil
+	return tiStore, nil
 }

@@ -193,7 +193,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
 				continue
 			}
-			version, err := w.session.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
+			version, err := w.session.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue

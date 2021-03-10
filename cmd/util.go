@@ -227,7 +227,7 @@ func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
 }
 
 func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	kvStore, _, err := kv.CreateTiStore(cliPdAddr, credential)
+	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
 	}
