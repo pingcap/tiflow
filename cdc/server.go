@@ -243,7 +243,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
+	kvStore, _, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
 	if err != nil {
 		return errors.Trace(err)
 	}

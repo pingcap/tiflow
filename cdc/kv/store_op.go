@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/ticdc/pkg/security"
 	tidbconfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/kv"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
@@ -55,7 +56,7 @@ var (
 	curVersionCacheMu sync.Mutex
 )
 
-func newStorageWithCurVersionCache(storage tidbkv.Storage, cacheKey string) tidbkv.Storage {
+func newStorageWithCurVersionCache(storage tikv.Storage, cacheKey string) tikv.Storage {
 	curVersionCacheMu.Lock()
 	defer curVersionCacheMu.Unlock()
 
@@ -67,7 +68,7 @@ func newStorageWithCurVersionCache(storage tidbkv.Storage, cacheKey string) tidb
 	}
 
 	return &StorageWithCurVersionCache{
-		Storage:  storage.(tikv.Storage),
+		Storage:  storage,
 		cacheKey: cacheKey,
 	}
 }
@@ -108,10 +109,10 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 }
 
 // CreateTiStore creates a new tikv storage client
-func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
+func CreateTiStore(urls string, credential *security.Credential) (kv.Storage, tikv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	// Ignore error if it is already registered.
@@ -128,9 +129,9 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrNewStore, err)
+		return nil, nil, cerror.WrapError(cerror.ErrNewStore, err)
 	}
 
-	tiStore = newStorageWithCurVersionCache(tiStore, tiPath)
-	return tiStore, nil
+	tikvStore := newStorageWithCurVersionCache(tiStore.(tikv.Storage), tiPath)
+	return tiStore, tikvStore, nil
 }
