@@ -360,7 +360,7 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 		if s, ok := kvStorage.(TiKVStorage); ok {
 			store = s
 		} else {
-			store = newStorageWithCurVersionCache(store, kvStorage.UUID())
+			store = newStorageWithCurVersionCache(kvStorage, kvStorage.UUID())
 		}
 	}
 
