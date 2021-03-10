@@ -144,6 +144,10 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", state.sri.ts),
 		zap.String("error", err.Error()))
+	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
+	if state.isStopped() {
+		return nil
+	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
 	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
@@ -490,9 +494,15 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 	for _, states := range w.statesManager.states {
 		states.Range(func(_, value interface{}) bool {
 			state := value.(*regionFeedState)
-			state.lock.RLock()
+			state.lock.Lock()
+			// if state is marked as stopped, it must have been or would be processed by `onRegionFail`
+			if state.isStopped() {
+				state.lock.Unlock()
+				return true
+			}
+			state.markStopped()
 			singleRegionInfo := state.sri.partialClone()
-			state.lock.RUnlock()
+			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
 				err: &rpcCtxUnavailableErr{

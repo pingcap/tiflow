@@ -1058,6 +1058,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	}
 
+	failpoint.Inject("kvClientRegionReentrantErrorDelay", nil)
 	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 	return nil
 }
