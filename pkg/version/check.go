@@ -144,8 +144,8 @@ type TiCDCClusterVersion string
 // ticdc cluster version
 const (
 	TiCDCClusterVersionUnknown TiCDCClusterVersion = "Unknown"
-	TiCDCClusterVersion4_0                         = "4.0.X"
-	TiCDCClusterVersion5_0                         = "5.0.X"
+	TiCDCClusterVersion4_0     TiCDCClusterVersion = "4.0.X"
+	TiCDCClusterVersion5_0     TiCDCClusterVersion = "5.0.X"
 )
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
