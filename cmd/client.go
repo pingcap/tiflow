@@ -149,9 +149,10 @@ func newCliCommand() *cobra.Command {
 			}
 
 			pdEndpoints := strings.Split(cliPdAddr, ",")
-
 			logConfig := etcdlogutil.DefaultZapLoggerConfig
 			logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+
+			logHTTPProxies()
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Context:     defaultContext,
 				Endpoints:   pdEndpoints,

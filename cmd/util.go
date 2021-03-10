@@ -25,6 +25,8 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -310,4 +312,22 @@ func strictDecodeFile(path, component string, cfg interface{}) error {
 	}
 
 	return errors.Trace(err)
+}
+
+// logHTTPProxies logs HTTP proxy relative environment variables.
+func logHTTPProxies() {
+	proxyCfg := httpproxy.FromEnvironment()
+	fields := make([]zap.Field, 0, 3)
+	if proxyCfg.HTTPProxy != "" {
+		fields = append(fields, zap.String("http_proxy", proxyCfg.HTTPProxy))
+	}
+	if proxyCfg.HTTPSProxy != "" {
+		fields = append(fields, zap.String("https_proxy", proxyCfg.HTTPSProxy))
+	}
+	if proxyCfg.NoProxy != "" {
+		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
+	}
+	if len(fields) > 0 {
+		log.Info("using proxy config", fields...)
+	}
 }
