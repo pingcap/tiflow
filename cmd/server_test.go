@@ -37,6 +37,7 @@ func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
 }
 
 func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
 	// test default flag values
 	cmd := new(cobra.Command)
 	initServerCmd(cmd)
