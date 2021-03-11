@@ -40,7 +40,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	// test default flag values
 	cmd := new(cobra.Command)
 	initServerCmd(cmd)
-	cmd.ParseFlags([]string{})
+	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
 	cfg, err := loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	defcfg := config.GetDefaultServerConfig()
@@ -51,28 +51,28 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	// test empty PD address
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
-	cmd.ParseFlags([]string{"--pd="})
-	cfg, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--pd="}), check.IsNil)
+	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.ErrorMatches, ".*empty PD address.*")
 
 	// test invalid PD address
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
-	cmd.ParseFlags([]string{"--pd=aa"})
-	cfg, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--pd=aa"}), check.IsNil)
+	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.ErrorMatches, ".*PD endpoint scheme should be http.*")
 
 	// test undefined flag
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
-	cmd.ParseFlags([]string{"--PD="})
-	cfg, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--PD="}), check.ErrorMatches, ".*unknown flag: --PD.*")
+	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 
 	// test flags without config file
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
-	cmd.ParseFlags([]string{
+	c.Assert(cmd.ParseFlags([]string{
 		"--addr", "127.5.5.1:8833",
 		"--advertise-addr", "127.5.5.1:7777",
 		"--log-file", "/root/cdc.log",
@@ -89,7 +89,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		"--sorter-max-memory-percentage", "70",
 		"--sorter-num-concurrent-worker", "80",
 		"--sorter-num-workerpool-goroutine", "90",
-	})
+	}), check.IsNil)
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
@@ -142,7 +142,7 @@ num-workerpool-goroutine = 5
 	c.Assert(err, check.IsNil)
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
-	cmd.ParseFlags([]string{"--config", configPath})
+	c.Assert(cmd.ParseFlags([]string{"--config", configPath}), check.IsNil)
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
@@ -175,7 +175,7 @@ cert-allowed-cn = ["dd","ee"]
 	c.Assert(err, check.IsNil)
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
-	cmd.ParseFlags([]string{
+	c.Assert(cmd.ParseFlags([]string{
 		"--addr", "127.5.5.1:8833",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
@@ -189,7 +189,7 @@ cert-allowed-cn = ["dd","ee"]
 		"--sorter-max-memory-percentage", "70",
 		"--sorter-num-concurrent-worker", "80",
 		"--config", configPath,
-	})
+	}), check.IsNil)
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{

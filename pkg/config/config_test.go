@@ -69,7 +69,8 @@ func (s *replicaConfigSuite) TestOutDated(c *check.C) {
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, Dispatcher: "r1"},
 		{Matcher: []string{"a.c"}, Dispatcher: "r2"},
-		{Matcher: []string{"a.d"}, Dispatcher: "r2"}}
+		{Matcher: []string{"a.d"}, Dispatcher: "r2"},
+	}
 	c.Assert(conf2, check.DeepEquals, conf)
 }
 

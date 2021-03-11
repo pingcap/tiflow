@@ -270,9 +270,10 @@ func StoreGlobalServerConfig(config *ServerConfig) {
 	globalServerConfig.Store(config)
 }
 
+// TomlDuration is a duration with a custom json decoder and toml decoder
 type TomlDuration time.Duration
 
-//
+// UnmarshalText is the toml decoder
 func (d *TomlDuration) UnmarshalText(text []byte) error {
 	stdDuration, err := time.ParseDuration(string(text))
 	if err != nil {
@@ -282,6 +283,7 @@ func (d *TomlDuration) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// UnmarshalJSON is the json decoder
 func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 	var stdDuration time.Duration
 	if err := json.Unmarshal(b, &stdDuration); err != nil {
