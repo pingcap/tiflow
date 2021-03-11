@@ -195,6 +195,10 @@ tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \
 	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
+tools/bin/grpc-dump: tools/check/go.mod
+	cd tools/check; test -e ../bin/grpc-dump || \
+	$(GO) build -o ../bin/grpc-dump github.com/bradleyjkemp/grpc-tools/grpc-dump
+
 failpoint-enable: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 
