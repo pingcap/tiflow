@@ -101,7 +101,7 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 	return col
 }
 
-func formatColumnVal(colName string, c column, action string) column {
+func formatColumnVal(colName string, c column, action string, data []byte) column {
 	switch c.Type {
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,
 		mysql.TypeLongBlob, mysql.TypeBlob:
@@ -109,7 +109,7 @@ func formatColumnVal(colName string, c column, action string) column {
 			var err error
 			c.Value, err = base64.StdEncoding.DecodeString(s)
 			if err != nil {
-				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.String("name", colName), zap.String("action", action), zap.Error(err))
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.String("name", colName), zap.String("action", action), zap.ByteString("d", data), zap.Error(err))
 			}
 		}
 	case mysql.TypeBit:
@@ -162,13 +162,13 @@ func (m *mqMessageRow) Decode(data []byte) error {
 		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 	for colName, column := range m.Update {
-		m.Update[colName] = formatColumnVal(colName, column, "u")
+		m.Update[colName] = formatColumnVal(colName, column, "u", data)
 	}
 	for colName, column := range m.Delete {
-		m.Delete[colName] = formatColumnVal(colName, column, "d")
+		m.Delete[colName] = formatColumnVal(colName, column, "d", data)
 	}
 	for colName, column := range m.PreColumns {
-		m.PreColumns[colName] = formatColumnVal(colName, column, "p")
+		m.PreColumns[colName] = formatColumnVal(colName, column, "p", data)
 	}
 	return nil
 }
