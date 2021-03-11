@@ -16,6 +16,7 @@ package cmd
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -55,28 +56,32 @@ func patchTiDBConf() {
 func init() {
 	patchTiDBConf()
 	rootCmd.AddCommand(serverCmd)
+	initServerCmd(serverCmd)
+}
+
+func initServerCmd(cmd *cobra.Command) {
 	defaultServerConfig := config.GetDefaultServerConfig()
-	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
-	serverCmd.Flags().StringVar(&serverConfig.Addr, "addr", defaultServerConfig.Addr, "Set the listening address")
-	serverCmd.Flags().StringVar(&serverConfig.AdvertiseAddr, "advertise-addr", defaultServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
-	serverCmd.Flags().StringVar(&serverConfig.TZ, "tz", defaultServerConfig.TZ, "Specify time zone of TiCDC cluster")
-	serverCmd.Flags().Int64Var(&serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
-	serverCmd.Flags().StringVar(&serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
-	serverCmd.Flags().StringVar(&serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
-	serverCmd.Flags().DurationVar(&serverConfig.OwnerFlushInterval, "owner-flush-interval", defaultServerConfig.OwnerFlushInterval, "owner flushes changefeed status interval")
-	serverCmd.Flags().DurationVar(&serverConfig.ProcessorFlushInterval, "processor-flush-interval", defaultServerConfig.ProcessorFlushInterval, "processor flushes task status interval")
+	cmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
+	cmd.Flags().StringVar(&serverConfig.Addr, "addr", defaultServerConfig.Addr, "Set the listening address")
+	cmd.Flags().StringVar(&serverConfig.AdvertiseAddr, "advertise-addr", defaultServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
+	cmd.Flags().StringVar(&serverConfig.TZ, "tz", defaultServerConfig.TZ, "Specify time zone of TiCDC cluster")
+	cmd.Flags().Int64Var(&serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
+	cmd.Flags().StringVar(&serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
+	cmd.Flags().StringVar(&serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
+	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
 
-	serverCmd.Flags().IntVar(&serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", defaultServerConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
-	serverCmd.Flags().IntVar(&serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", defaultServerConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
-	serverCmd.Flags().Uint64Var(&serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", defaultServerConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
+	cmd.Flags().IntVar(&serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", defaultServerConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
+	cmd.Flags().IntVar(&serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", defaultServerConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
+	cmd.Flags().Uint64Var(&serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", defaultServerConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
 	// 80 is safe on most systems.
-	serverCmd.Flags().IntVar(&serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", defaultServerConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
+	cmd.Flags().IntVar(&serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", defaultServerConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
 	// We use 8GB as a safe default before we support local configuration file.
-	serverCmd.Flags().Uint64Var(&serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", defaultServerConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
+	cmd.Flags().Uint64Var(&serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", defaultServerConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
 
-	addSecurityFlags(serverCmd.Flags(), true /* isServer */)
+	addSecurityFlags(cmd.Flags(), true /* isServer */)
 
-	serverCmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
+	cmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
@@ -159,8 +164,10 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.CertPath = serverConfig.Security.CertPath
 		case "key":
 			conf.Security.KeyPath = serverConfig.Security.KeyPath
-		case "allowedCertCN":
+		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
+		case "pd", "config":
+			// do nothing
 		default:
 			log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
 		}

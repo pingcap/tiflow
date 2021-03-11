@@ -162,7 +162,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 		captureID := s.capture.info.ID
 		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := NewOwner(ctx, s.pdClient, conf.Security, s.capture.session, conf.GcTTL, conf.OwnerFlushInterval)
+		owner, err := NewOwner(ctx, s.pdClient, conf.Security, s.capture.session, conf.GcTTL, time.Duration(conf.OwnerFlushInterval))
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -237,7 +237,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	conf := config.GetGlobalServerConfig()
 
-	procOpts := &processorOpts{flushCheckpointInterval: conf.ProcessorFlushInterval}
+	procOpts := &processorOpts{flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval)}
 	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, procOpts)
 	if err != nil {
 		return err

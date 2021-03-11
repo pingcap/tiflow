@@ -145,8 +145,8 @@ var defaultServerConfig = &ServerConfig{
 	LogLevel:               "info",
 	GcTTL:                  24 * 60 * 60, // 24H
 	TZ:                     "System",
-	OwnerFlushInterval:     200 * time.Millisecond,
-	ProcessorFlushInterval: 100 * time.Millisecond,
+	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
+	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
 		ChunkSizeLimit:         1024 * 1024 * 1024, // 1GB
@@ -168,8 +168,8 @@ type ServerConfig struct {
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
 
-	OwnerFlushInterval     time.Duration `toml:"owner-flush-interval" json:"owner-flush-interval"`
-	ProcessorFlushInterval time.Duration `toml:"processor-flush-interval" json:"processor-flush-interval"`
+	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
+	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
 	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
 	Security *SecurityConfig `toml:"security" json:"security"`
@@ -268,4 +268,25 @@ func GetGlobalServerConfig() *ServerConfig {
 // StoreGlobalServerConfig stores a new config to the globalServerConfig. It mostly uses in the test to avoid some data races.
 func StoreGlobalServerConfig(config *ServerConfig) {
 	globalServerConfig.Store(config)
+}
+
+type TomlDuration time.Duration
+
+//
+func (d *TomlDuration) UnmarshalText(text []byte) error {
+	stdDuration, err := time.ParseDuration(string(text))
+	if err != nil {
+		return err
+	}
+	*d = TomlDuration(stdDuration)
+	return nil
+}
+
+func (d *TomlDuration) UnmarshalJSON(b []byte) error {
+	var stdDuration time.Duration
+	if err := json.Unmarshal(b, &stdDuration); err != nil {
+		return err
+	}
+	*d = TomlDuration(stdDuration)
+	return nil
 }

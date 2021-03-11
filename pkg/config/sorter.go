@@ -16,11 +16,11 @@ package config
 // SorterConfig represents sorter config for a changefeed
 type SorterConfig struct {
 	// number of concurrent heap sorts
-	NumConcurrentWorker int `toml:"num-concurrent-workers" json:"num-concurrent-workers"`
+	NumConcurrentWorker int `toml:"num-concurrent-worker" json:"num-concurrent-worker"`
 	// maximum size for a heap
 	ChunkSizeLimit uint64 `toml:"chunk-size-limit" json:"chunk-size-limit"`
 	// the maximum memory use percentage that allows in-memory sorting
-	MaxMemoryPressure int `toml:"max-memory-pressure" json:"max-memory-pressure"`
+	MaxMemoryPressure int `toml:"max-memory-percentage" json:"max-memory-percentage"`
 	// the maximum memory consumption allowed for in-memory sorting
 	MaxMemoryConsumption uint64 `toml:"max-memory-consumption" json:"max-memory-consumption"`
 	// the size of workerpool

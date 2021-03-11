@@ -100,7 +100,7 @@ polling-time = 5
 	})
 }
 
-func (s *decodeFileSuite) TestAndWriteExampleTOML(c *check.C) {
+func (s *decodeFileSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	content := `
 # 指定配置文件中涉及的库名、表名是否为大小写敏感的
@@ -183,6 +183,80 @@ sync-ddl = true
 		FilterReplicaID: []uint64{2, 3},
 		SyncDDL:         true,
 	})
+}
+
+func (s *decodeFileSuite) TestAndWriteExampleServerTOML(c *check.C) {
+	defer testleak.AfterTest(c)()
+	content := `
+# TiCDC Server 监听的地址，默认：127.0.0.1:8300
+# the listening address of TiCDC server, default: 127.0.0.1:8300
+addr = "127.0.0.1:8300"
+
+# 用于客户端建立连接的对外公开的地址，这个地址会被注册到 PD, 默认：和 addr 相同
+# the advertise listening address for client communication, this address will be registered to the PD, default: same with the addr item
+advertise-addr = "127.0.0.1:8300"
+
+# 日志文件路径
+# log file path
+log-file = "/tmp/ticdc/ticdc.log"
+
+# 日志级别 (debug|info|warn|error) 默认："info"
+# log level (debug|info|warn|error) default: "info"
+log-level = "info"
+
+# CDC GC safepoint TTL，以秒为单位，默认：86400(24H)
+# CDC GC safepoint TTL duration, specified in seconds, default: 86400(24H)
+# gc-ttl = 86400
+
+# TiCDC 集群的时区，默认： "System"
+# the time zone of TiCDC cluster, default: "System"
+# tz = "System"
+
+# Owner 刷新 changefeed 状态的频率，默认：200ms
+# owner flushes changefeed status interval, default: 200ms
+# owner-flush-interval = "200ms"
+
+# Processor 刷新任务状态的频率，默认100ms
+# processor flushes task status interval, default: 100ms
+# processor-flush-interval = "100ms"
+
+[sorter]
+# 排序器的堆尺寸，默认：1073741824(1GB)
+# size of heaps for sorting, default: 1073741824(1GB)
+# chunk-size-limit = 1073741824
+
+# 内存排序器可以占用的最大内存空间，默认：8589934592(8GB)
+# maximum memory consumption of in-memory sort, default: 8589934592(8GB)
+# max-memory-consumption = 8589934592
+
+# 强制使用磁盘排序器的系统内存占用阈值，默认：80
+# system memory usage threshold for forcing in-disk sort, default: 80
+# max-memory-percentage = 80
+
+# 排序器并发数，默认：4
+# sorter concurrency level, default: 4
+# num-concurrent-worker = 4
+
+# 排序器线程池数量，默认：16
+# sorter workerpool size, default: 16
+# num-workerpool-goroutine = 16
+
+[security]
+# ca-path = ""
+# cert-path = ""
+# key-path = ""
+# cert-allowed-cn = ["cn1","cn2"]
+`
+	err := ioutil.WriteFile("ticdc.toml", []byte(content), 0o644)
+	c.Assert(err, check.IsNil)
+
+	cfg := config.GetDefaultServerConfig()
+	err = strictDecodeFile("ticdc.toml", "cdc", &cfg)
+	c.Assert(err, check.IsNil)
+	defcfg := config.GetDefaultServerConfig()
+	defcfg.AdvertiseAddr = "127.0.0.1:8300"
+	defcfg.LogFile = "/tmp/ticdc/ticdc.log"
+	c.Assert(cfg, check.DeepEquals, defcfg)
 }
 
 func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
