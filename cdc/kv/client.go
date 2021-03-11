@@ -1371,15 +1371,18 @@ func (s *eventFeedSession) singleEventFeed(
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
 			}
-			if !s.isPullerInit.IsInitialized() {
-				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
-				continue
-			}
+
 			sinceLastEvent := time.Since(lastReceivedEventTime)
 			if sinceLastEvent > resolveLockInterval {
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
+
+			if !s.isPullerInit.IsInitialized() {
+				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
+				continue
+			}
+
 			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
