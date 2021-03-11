@@ -316,6 +316,13 @@ func strictDecodeFile(path, component string, cfg interface{}) error {
 
 // logHTTPProxies logs HTTP proxy relative environment variables.
 func logHTTPProxies() {
+	fields := proxyFields()
+	if len(fields) > 0 {
+		log.Info("using proxy config", fields...)
+	}
+}
+
+func proxyFields() []zap.Field {
 	proxyCfg := httpproxy.FromEnvironment()
 	fields := make([]zap.Field, 0, 3)
 	if proxyCfg.HTTPProxy != "" {
@@ -327,7 +334,5 @@ func logHTTPProxies() {
 	if proxyCfg.NoProxy != "" {
 		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
 	}
-	if len(fields) > 0 {
-		log.Info("using proxy config", fields...)
-	}
+	return fields
 }
