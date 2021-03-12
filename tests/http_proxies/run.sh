@@ -10,8 +10,8 @@ TEST_HOST_LIST=(UP_TIDB_HOST UP_PD_HOST_{1..3} UP_TIKV_HOST_{1..3})
 
 function start_proxy() {
     echo "dumpling grpc packet to $WORK_DIR/packets.dump..."
-    WORK_DIR=$WORK_DIR tools/bin/grpc-dump --port=8080 2>$WORK_DIR/grpc-dump.log 1>$WORK_DIR/packets.dump &
-    pid=$!
+    WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=8080 2>$WORK_DIR/grpc-dump.log 1>$WORK_DIR/packets.dump &
+    proxy_pid=$!
 }
 
 function prepare() {
@@ -32,16 +32,14 @@ function prepare() {
     stop_tidb_cluster
     start_tidb_cluster --workdir $WORK_DIR
 
-    # firstly, let's build grpc-dump...
-    make tools/bin/grpc-dump
     start_proxy
 
 
     cd $WORK_DIR
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
-    export http_proxy=http://127.0.0.1:8080 \
-        https_proxy=http://127.0.0.1:8080
+    export http_proxy=http://127.0.0.1:8080
+    export https_proxy=http://127.0.0.1:8080
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     SINK_URI="blackhole:///"
@@ -49,21 +47,23 @@ function prepare() {
 }
 
 function check() {
-    services=$(cat $WORK_DIR/packets.dump | jq '.service' | sort | uniq)
+
+    services=$(cat $WORK_DIR/packets.dump | xargs -L1 basename | sort | uniq)
     service_type_count=$(echo $services | awk '{i+=NF}END{print(i)}' )
+    echo "captured services: "
+    echo $services
     # at least two types: 
     #   "pdpb.PD"
     #   "tikvpb.TiKV"
     if ! [ $service_type_count -ge 2 ] ; then
-        echo "services didn't match expected, it is:"
-        echo $services
+        echo "services didn't match expected."
         echo "[total count]: $service_type_count (expected >= 2)"
         exit 1
     fi
 }
 
 trap "stop_tidb_cluster" EXIT
-trap "killall grpc-dump" EXIT
+trap "kill $proxy_pid" EXIT
 
 prepare
 check
