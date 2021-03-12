@@ -24,11 +24,11 @@ log-level = "info"
 # tz = "System"
 
 # Owner 刷新 changefeed 状态的频率，默认：200ms
-# owner flushes changefeed status interval, default: 200ms
+# the interval at which the owner flushes changefeed status, default: 200ms
 # owner-flush-interval = "200ms"
 
 # Processor 刷新任务状态的频率，默认100ms
-# processor flushes task status interval, default: 100ms
+# the interval at which the processor flushes task status, default: 100ms
 # processor-flush-interval = "100ms"
 
 [sorter]
