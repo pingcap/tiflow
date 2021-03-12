@@ -189,12 +189,9 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
 			return nil
 		}
-		// TODO remove after testing
-		/*
 		if err := n.emitEvent(ctx, event); err != nil {
 			return errors.Trace(err)
 		}
-		 */
 	case pipeline.MessageTypeTick:
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return errors.Trace(err)

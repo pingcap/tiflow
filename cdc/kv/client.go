@@ -72,8 +72,7 @@ const (
 	// hard code switch
 	// true: use kv client v2, which has a region worker for each stream
 	// false: use kv client v1, which runs a goroutine for every single region
-	// kv client v2 is disabled for GA testing. TODO enable kv client v2
-	enableKVClientV2 = false
+	enableKVClientV2 = true
 )
 
 type singleRegionInfo struct {
@@ -1371,18 +1370,15 @@ func (s *eventFeedSession) singleEventFeed(
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
 			}
-
+			if !s.isPullerInit.IsInitialized() {
+				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
+				continue
+			}
 			sinceLastEvent := time.Since(lastReceivedEventTime)
 			if sinceLastEvent > resolveLockInterval {
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-
-			if !s.isPullerInit.IsInitialized() {
-				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
-				continue
-			}
-
 			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
