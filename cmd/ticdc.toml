@@ -44,11 +44,11 @@ log-level = "info"
 # system memory usage threshold for forcing in-disk sort, default: 80
 # max-memory-percentage = 80
 
-# 排序器并发数，默认：4
-# sorter concurrency level, default: 4
+# 排序器单表并发度，默认：4
+# sorter concurrency level in single table, default: 4
 # num-concurrent-worker = 4
 
-# 排序器线程池数量，默认：16
+# 排序器线程池大小，默认：16
 # sorter workerpool size, default: 16
 # num-workerpool-goroutine = 16
 
