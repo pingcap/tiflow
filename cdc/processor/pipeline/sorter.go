@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
@@ -73,6 +74,9 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
 	}
+	failpoint.Inject("ProcessorAddTableError", func() {
+		failpoint.Return(errors.New("processor add table injected error"))
+	})
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))
 		return nil
