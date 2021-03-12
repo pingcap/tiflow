@@ -23,35 +23,6 @@ log-level = "info"
 # the time zone of TiCDC cluster, default: "System"
 # tz = "System"
 
-# Owner 刷新 changefeed 状态的频率，默认：200ms
-# the interval at which the owner flushes changefeed status, default: 200ms
-# owner-flush-interval = "200ms"
-
-# Processor 刷新任务状态的频率，默认100ms
-# the interval at which the processor flushes task status, default: 100ms
-# processor-flush-interval = "100ms"
-
-[sorter]
-# 排序器的堆尺寸，默认：1073741824(1GB)
-# size of heaps for sorting, default: 1073741824(1GB)
-# chunk-size-limit = 1073741824
-
-# 内存排序器可以占用的最大内存空间，默认：8589934592(8GB)
-# maximum memory consumption of in-memory sort, default: 8589934592(8GB)
-# max-memory-consumption = 8589934592
-
-# 强制使用磁盘排序器的系统内存占用阈值，默认：80
-# system memory usage threshold for forcing in-disk sort, default: 80
-# max-memory-percentage = 80
-
-# 排序器单表并发度，默认：4
-# sorter concurrency level in single table, default: 4
-# num-concurrent-worker = 4
-
-# 排序器线程池大小，默认：16
-# sorter workerpool size, default: 16
-# num-workerpool-goroutine = 16
-
 [security]
 # ca-path = ""
 # cert-path = ""
