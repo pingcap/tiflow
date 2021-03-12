@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/net/http/httpproxy"
 
@@ -41,6 +42,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -55,6 +57,8 @@ var (
 )
 
 var errOwnerNotFound = liberrors.New("owner not found")
+
+var tsGapWarnning int64 = 86400 * 1000 // 1 day in milliseconds
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
@@ -335,4 +339,30 @@ func proxyFields() []zap.Field {
 		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
 	}
 	return fields
+}
+
+func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64) error {
+	if noConfirm {
+		return nil
+	}
+	currentPhysical, _, err := pdCli.GetTS(ctx)
+	if err != nil {
+		return err
+	}
+	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
+	if tsGap > tsGapWarnning {
+		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
+			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
+			time.Duration(tsGap)*time.Millisecond,
+		)
+		var yOrN string
+		_, err := fmt.Scan(&yOrN)
+		if err != nil {
+			return err
+		}
+		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+			return errors.NewNoStackError("abort changefeed create or resume")
+		}
+	}
+	return nil
 }
