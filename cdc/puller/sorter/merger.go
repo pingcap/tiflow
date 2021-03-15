@@ -91,10 +91,15 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		defer func() {
 			// clean up
-			// TODO add deadline
+			cleanUpCtx, cancel := context.WithTimeout(context.TODO(), 2*time.Second)
+			defer cancel()
 			for task := range workingSet {
-				err := <-task.finished
-				_ = printError(err)
+				select {
+				case <-cleanUpCtx.Done():
+					break
+				case err := <-task.finished:
+					_ = printError(err)
+				}
 
 				if task.reader != nil {
 					err := task.reader.resetAndClose()

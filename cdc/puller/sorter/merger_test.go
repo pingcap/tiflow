@@ -241,7 +241,7 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// enable the failpoint to simulate delays
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay", "sleep(1)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay", "sleep(5)")
 	c.Assert(err, check.IsNil)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay")
@@ -262,7 +262,7 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 
 	totalCount := 0
 	builder := newMockFlushTaskBuilder()
-	task1 := builder.generateRowChanges(1000, 1000000, 8192).addResolved(1000001).build()
+	task1 := builder.generateRowChanges(1000, 1000000, 1024).addResolved(1000001).build()
 	totalCount += builder.totalCount
 
 	wg.Go(func() error {
