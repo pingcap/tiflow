@@ -24,6 +24,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/pkg/tempurl"
@@ -151,5 +152,63 @@ func (s *checkSuite) TestReleaseSemver(c *check.C) {
 	for _, cs := range cases {
 		ReleaseVersion = cs.releaseVersion
 		c.Assert(ReleaseSemver(), check.Equals, cs.releaseSemver, check.Commentf("%v", cs))
+	}
+}
+
+func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		captureInfos []*model.CaptureInfo
+		expected     TiCDCClusterVersion
+	}{
+		{
+			captureInfos: []*model.CaptureInfo{},
+			expected:     TiCDCClusterVersionUnknown,
+		},
+		{
+			captureInfos: []*model.CaptureInfo{
+				{ID: "capture1", Version: ""},
+				{ID: "capture2", Version: ""},
+				{ID: "capture3", Version: ""},
+			},
+			expected: TiCDCClusterVersion4_0,
+		},
+		{
+			captureInfos: []*model.CaptureInfo{
+				{ID: "capture1", Version: "5.0.1"},
+				{ID: "capture2", Version: "4.0.7"},
+				{ID: "capture3", Version: "5.0.0-rc"},
+			},
+			expected: TiCDCClusterVersion4_0,
+		},
+		{
+			captureInfos: []*model.CaptureInfo{
+				{ID: "capture1", Version: "5.0.0-rc"},
+			},
+			expected: TiCDCClusterVersion5_0,
+		},
+		{
+			captureInfos: []*model.CaptureInfo{
+				{ID: "capture1", Version: "5.0.0"},
+			},
+			expected: TiCDCClusterVersion5_0,
+		},
+		{
+			captureInfos: []*model.CaptureInfo{
+				{ID: "capture1", Version: "4.1.0"},
+			},
+			expected: TiCDCClusterVersion4_0,
+		},
+		{
+			captureInfos: []*model.CaptureInfo{
+				{ID: "capture1", Version: "4.0.10"},
+			},
+			expected: TiCDCClusterVersion4_0,
+		},
+	}
+	for _, tc := range testCases {
+		ver, err := GetTiCDCClusterVersion(tc.captureInfos)
+		c.Assert(err, check.IsNil)
+		c.Assert(ver, check.Equals, tc.expected)
 	}
 }
