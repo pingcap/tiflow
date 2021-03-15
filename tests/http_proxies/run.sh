@@ -8,9 +8,10 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 TEST_HOST_LIST=(UP_TIDB_HOST UP_PD_HOST_{1..3} UP_TIKV_HOST_{1..3})
 
+proxy_pid=""
 function start_proxy() {
     echo "dumpling grpc packet to $WORK_DIR/packets.dump..."
-    WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=8080 2>$WORK_DIR/grpc-dump.log 1>$WORK_DIR/packets.dump &
+    WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=8080 1>$WORK_DIR/packets.dump &
     proxy_pid=$!
 }
 
@@ -33,7 +34,7 @@ function prepare() {
     start_tidb_cluster --workdir $WORK_DIR
 
     start_proxy
-
+    echo started proxy at $proxy_pid
 
     cd $WORK_DIR
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
@@ -63,7 +64,7 @@ function check() {
 }
 
 trap "stop_tidb_cluster" EXIT
-trap "kill $proxy_pid" EXIT
+trap "kill \"$proxy_pid\"" EXIT
 
 prepare
 check
