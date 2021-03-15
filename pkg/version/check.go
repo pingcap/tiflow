@@ -22,6 +22,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/pingcap/ticdc/cdc/model"
+
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
@@ -134,4 +136,41 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		}
 	}
 	return nil
+}
+
+// TiCDCClusterVersion is the version of TiCDC cluster
+type TiCDCClusterVersion string
+
+// ticdc cluster version
+const (
+	TiCDCClusterVersionUnknown TiCDCClusterVersion = "Unknown"
+	TiCDCClusterVersion4_0     TiCDCClusterVersion = "4.0.X"
+	TiCDCClusterVersion5_0     TiCDCClusterVersion = "5.0.X"
+)
+
+// GetTiCDCClusterVersion returns the version of ticdc cluster
+func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVersion, error) {
+	if len(captureInfos) == 0 {
+		return TiCDCClusterVersionUnknown, nil
+	}
+	var minVer *semver.Version
+	for _, captureInfo := range captureInfos {
+		var ver *semver.Version
+		var err error
+		if captureInfo.Version != "" {
+			ver, err = semver.NewVersion(removeVAndHash(captureInfo.Version))
+		} else {
+			ver = semver.New("4.0.1")
+		}
+		if err != nil {
+			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
+		}
+		if minVer == nil || ver.Compare(*minVer) < 0 {
+			minVer = ver
+		}
+	}
+	if minVer.Major < 5 {
+		return TiCDCClusterVersion4_0, nil
+	}
+	return TiCDCClusterVersion5_0, nil
 }

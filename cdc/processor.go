@@ -857,6 +857,10 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
 			return nil
 		}
+		failpoint.Inject("ProcessorAddTableError", func() {
+			p.sendError(errors.New("processor add table injected error"))
+			failpoint.Return(nil)
+		})
 		go func() {
 			err := sorter.Run(ctx)
 			if errors.Cause(err) != context.Canceled {

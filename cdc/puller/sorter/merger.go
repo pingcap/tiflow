@@ -70,6 +70,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 	sendResolvedEvent := func(ts uint64) error {
 		lastOutputResolvedTs = ts
+		if ts == 0 {
+			return nil
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
