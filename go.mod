@@ -43,7 +43,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/kvproto v0.0.0-20210223121704-3cd2fc5fad22
 	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
-	github.com/pingcap/parser v0.0.0-20210303061548-f6776f61e268
+	github.com/pingcap/parser v0.0.0-20210310110710-c7333a4927e6
 	github.com/pingcap/tidb v1.1.0-beta.0.20210311075454-bc572f3b195d
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
@@ -70,3 +70,5 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+replace github.com/pingcap/tidb => github.com/lysu/tidb v1.1.0-beta.0.20210315025716-13b962a765d6
