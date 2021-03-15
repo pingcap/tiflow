@@ -15,6 +15,10 @@ function start_proxy() {
     proxy_pid=$!
 }
 
+function stop_proxy() {
+    kill "$proxy_pid" || true
+}
+
 function prepare() {
     for host in ${TEST_HOST_LIST[@]}; do
         echo "$host $(printenv $host)"
@@ -48,11 +52,10 @@ function prepare() {
 }
 
 function check() {
-
-    services=$(cat $WORK_DIR/packets.dump | xargs -L1 basename | sort | uniq)
-    service_type_count=$(echo $services | awk '{i+=NF}END{print(i)}' )
+    services=($(cat $WORK_DIR/packets.dump | xargs -L1 dirname | sort | uniq))
+    service_type_count=${#services[@]}
     echo "captured services: "
-    echo $services
+    echo ${services[@]}
     # at least two types: 
     #   "pdpb.PD"
     #   "tikvpb.TiKV"
@@ -63,8 +66,7 @@ function check() {
     fi
 }
 
-trap "stop_tidb_cluster" EXIT
-trap "kill \"$proxy_pid\"" EXIT
+trap "stop_tidb_cluster && stop_proxy" EXIT
 
 prepare
 check
