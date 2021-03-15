@@ -14,15 +14,19 @@
 package cmd
 
 import (
+	"context"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-
-	"github.com/pingcap/check"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/spf13/cobra"
+	pd "github.com/tikv/pd/client"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -152,4 +156,65 @@ func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
 	err = strictDecodeFile(path, "cdc", &cfg)
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.ErrorMatches, ".*unknown config.*")
+}
+
+type mockPDClient struct {
+	pd.Client
+	ts uint64
+}
+
+func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return oracle.ExtractPhysical(m.ts), 0, nil
+}
+
+type commonUtilSuite struct{}
+
+var _ = check.Suite(&commonUtilSuite{})
+
+func (s *commonUtilSuite) TestConfirmLargeDataGap(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := context.Background()
+	currentTs := uint64(423482306736160769) // 2021-03-11 17:59:57.547
+	startTs := uint64(423450030227042420)   // 2021-03-10 07:47:52.435
+	pdCli = &mockPDClient{ts: currentTs}
+	cmd := &cobra.Command{}
+
+	// check start ts more than 1 day before current ts, and type N when confirming
+	dir := c.MkDir()
+	path := filepath.Join(dir, "confirm.txt")
+	err := ioutil.WriteFile(path, []byte("n"), 0o644)
+	c.Assert(err, check.IsNil)
+	f, err := os.Open(path)
+	c.Assert(err, check.IsNil)
+	stdin := os.Stdin
+	os.Stdin = f
+	defer func() {
+		os.Stdin = stdin
+	}()
+	err = confirmLargeDataGap(ctx, cmd, startTs)
+	c.Assert(err, check.ErrorMatches, "abort changefeed create or resume")
+
+	// check no confirm works
+	originNoConfirm := noConfirm
+	noConfirm = true
+	defer func() {
+		noConfirm = originNoConfirm
+	}()
+	err = confirmLargeDataGap(ctx, cmd, startTs)
+	c.Assert(err, check.IsNil)
+	noConfirm = false
+
+	// check start ts more than 1 day before current ts, and type Y when confirming
+	err = ioutil.WriteFile(path, []byte("Y"), 0o644)
+	c.Assert(err, check.IsNil)
+	f, err = os.Open(path)
+	c.Assert(err, check.IsNil)
+	os.Stdin = f
+	err = confirmLargeDataGap(ctx, cmd, startTs)
+	c.Assert(err, check.IsNil)
+
+	// check start ts does not exceed threshold
+	pdCli = &mockPDClient{ts: startTs}
+	err = confirmLargeDataGap(ctx, cmd, startTs)
+	c.Assert(err, check.IsNil)
 }
