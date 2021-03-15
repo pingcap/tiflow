@@ -54,17 +54,6 @@ if [ -z "$test_case" ]; then
 fi
 set -eu
 
-# FIXME: hostname in macOS doesn't support -I option.
-lan_addrs=($(hostname -I))
-lan_addr=${lan_addrs[0]-"127.0.0.1"}
-export UP_TIDB_HOST=$lan_addr \
-    UP_PD_HOST_1=$lan_addr    \
-    UP_PD_HOST_2=$lan_addr    \
-    UP_PD_HOST_3=$lan_addr    \
-    UP_TIKV_HOST_1=$lan_addr  \
-    UP_TIKV_HOST_2=$lan_addr  \
-    UP_TIKV_HOST_3=$lan_addr
-
 if [ "$test_case" == "*" ]; then
     for script in $CUR/*/run.sh; do
         test_name="$(basename "$(dirname "$script")")"

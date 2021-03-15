@@ -7,6 +7,17 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 TEST_HOST_LIST=(UP_TIDB_HOST UP_PD_HOST_{1..3} UP_TIKV_HOST_{1..3})
+# FIXME: hostname in macOS doesn't support -I option.
+lan_addrs=($(hostname -I))
+lan_addr=${lan_addrs[0]-"127.0.0.1"}
+export UP_TIDB_HOST=$lan_addr \
+    UP_PD_HOST_1=$lan_addr    \
+    UP_PD_HOST_2=$lan_addr    \
+    UP_PD_HOST_3=$lan_addr    \
+    UP_TIKV_HOST_1=$lan_addr  \
+    UP_TIKV_HOST_2=$lan_addr  \
+    UP_TIKV_HOST_3=$lan_addr
+
 
 proxy_pid=""
 function start_proxy() {
