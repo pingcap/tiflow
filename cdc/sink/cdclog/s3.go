@@ -228,7 +228,7 @@ func (s *s3Sink) readLogMeta(ctx context.Context) (*logMeta, error) {
 		return nil, nil
 	}
 
-	fileData, err := s.storage.Read(ctx, logMetaFile)
+	fileData, err := s.storage.ReadFile(ctx, logMetaFile)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 	}
