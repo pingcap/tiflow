@@ -41,7 +41,15 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-RELEASE_VERSION ?= $(shell git describe --tags --dirty="-dev")
+RELEASE_VERSION := v5.0.0-master
+ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
+	# If we are in release branch, use tag version.
+	RELEASE_VERSION := $(shell git describe --tags --dirty="-dirty")
+else ifneq ($(shell git status --porcelain),)
+	# Add -dirty if the working tree is dirty for non release branch.
+	RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+endif
+
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -61,6 +69,11 @@ test: unit_test
 
 build: cdc
 
+build-failpoint: 
+	$(FAILPOINT_ENABLE)
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
+	$(FAILPOINT_DISABLE)
+
 cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
 
@@ -71,6 +84,7 @@ install:
 	go install ./...
 
 unit_test: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -79,6 +93,7 @@ unit_test: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 leak_test: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
 	$(GOTEST) -count=1 --tags leak $(PACKAGES) || { $(FAILPOINT_DISABLE); exit 1; }

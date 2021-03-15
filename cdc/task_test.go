@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
@@ -51,7 +52,7 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 	// Create a task watcher
 	capture := &Capture{
 		etcdClient: kv.NewCDCEtcdClient(context.TODO(), client),
-		processors: make(map[string]*processor),
+		processors: make(map[string]*oldProcessor),
 		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
@@ -78,9 +79,12 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 	// NewCapture can not be used because it requires to
 	// initialize the PD service witch does not support to
 	// be embeded.
+	if config.NewReplicaImpl {
+		c.Skip("this case is designed for old processor")
+	}
 	capture := &Capture{
 		etcdClient: kv.NewCDCEtcdClient(context.TODO(), s.c),
-		processors: make(map[string]*processor),
+		processors: make(map[string]*oldProcessor),
 		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)

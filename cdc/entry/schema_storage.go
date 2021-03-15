@@ -635,7 +635,22 @@ func (s *schemaSnapshot) CloneTables() map[model.TableID]model.TableName {
 }
 
 // SchemaStorage stores the schema information with multi-version
-type SchemaStorage struct {
+type SchemaStorage interface {
+	// GetSnapshot returns the snapshot which of ts is specified
+	GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error)
+	// GetLastSnapshot returns the last snapshot
+	GetLastSnapshot() *schemaSnapshot
+	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
+	HandleDDLJob(job *timodel.Job) error
+	// AdvanceResolvedTs advances the resolved
+	AdvanceResolvedTs(ts uint64)
+	// ResolvedTs returns the resolved ts of the schema storage
+	ResolvedTs() uint64
+	// DoGC removes snaps which of ts less than this specified ts
+	DoGC(ts uint64)
+}
+
+type schemaStorageImpl struct {
 	snaps      []*schemaSnapshot
 	snapsMu    sync.RWMutex
 	gcTs       uint64
@@ -646,7 +661,7 @@ type SchemaStorage struct {
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool) (*SchemaStorage, error) {
+func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool) (SchemaStorage, error) {
 	var snap *schemaSnapshot
 	var err error
 	if meta == nil {
@@ -657,7 +672,7 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schema := &SchemaStorage{
+	schema := &schemaStorageImpl{
 		snaps:          []*schemaSnapshot{snap},
 		resolvedTs:     startTs,
 		filter:         filter,
@@ -666,7 +681,7 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, 
 	return schema, nil
 }
 
-func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
+func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
 		return nil, cerror.ErrSchemaStorageGCed.GenWithStackByArgs(ts, gcTs)
@@ -687,7 +702,7 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 }
 
 // GetSnapshot returns the snapshot which of ts is specified
-func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
+func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
 
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
@@ -720,14 +735,14 @@ func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnap
 }
 
 // GetLastSnapshot returns the last snapshot
-func (s *SchemaStorage) GetLastSnapshot() *schemaSnapshot {
+func (s *schemaStorageImpl) GetLastSnapshot() *schemaSnapshot {
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
 	return s.snaps[len(s.snaps)-1]
 }
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
-func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
+func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
@@ -754,7 +769,7 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 }
 
 // AdvanceResolvedTs advances the resolved
-func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
+func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
 	var swapped bool
 	for !swapped {
 		oldResolvedTs := atomic.LoadUint64(&s.resolvedTs)
@@ -765,8 +780,13 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	}
 }
 
+// ResolvedTs returns the resolved ts of the schema storage
+func (s *schemaStorageImpl) ResolvedTs() uint64 {
+	return atomic.LoadUint64(&s.resolvedTs)
+}
+
 // DoGC removes snaps which of ts less than this specified ts
-func (s *SchemaStorage) DoGC(ts uint64) {
+func (s *schemaStorageImpl) DoGC(ts uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var startIdx int
@@ -795,7 +815,7 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func (s *SchemaStorage) skipJob(job *timodel.Job) bool {
+func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 		return true

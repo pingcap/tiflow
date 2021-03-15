@@ -32,7 +32,30 @@ import (
 )
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
-type TablePipeline struct {
+type TablePipeline interface {
+	// ID returns the ID of source table and mark table
+	ID() (tableID, markTableID int64)
+	// Name returns the quoted schema and table name
+	Name() string
+	// ResolvedTs returns the resolved ts in this table pipeline
+	ResolvedTs() model.Ts
+	// CheckpointTs returns the checkpoint ts in this table pipeline
+	CheckpointTs() model.Ts
+	// UpdateBarrierTs updates the barrier ts in this table pipeline
+	UpdateBarrierTs(ts model.Ts)
+	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
+	AsyncStop(targetTs model.Ts)
+	// Workload returns the workload of this table
+	Workload() model.WorkloadInfo
+	// Status returns the status of this table pipeline
+	Status() TableStatus
+	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
+	Cancel()
+	// Wait waits for all node destroyed and returns errors
+	Wait() []error
+}
+
+type tablePipelineImpl struct {
 	p *pipeline.Pipeline
 
 	tableID     int64
@@ -44,17 +67,17 @@ type TablePipeline struct {
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
-func (t *TablePipeline) ResolvedTs() model.Ts {
+func (t *tablePipelineImpl) ResolvedTs() model.Ts {
 	return t.sinkNode.ResolvedTs()
 }
 
 // CheckpointTs returns the checkpoint ts in this table pipeline
-func (t *TablePipeline) CheckpointTs() model.Ts {
+func (t *tablePipelineImpl) CheckpointTs() model.Ts {
 	return t.sinkNode.CheckpointTs()
 }
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
-func (t *TablePipeline) UpdateBarrierTs(ts model.Ts) {
+func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
 	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
@@ -62,11 +85,12 @@ func (t *TablePipeline) UpdateBarrierTs(ts model.Ts) {
 }
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-func (t *TablePipeline) AsyncStop(targetTs model.Ts) {
+func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) {
 	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
 		Tp:        pipeline.CommandTypeStopAtTs,
 		StoppedTs: targetTs,
 	}))
+	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
@@ -75,34 +99,34 @@ func (t *TablePipeline) AsyncStop(targetTs model.Ts) {
 var workload = model.WorkloadInfo{Workload: 1}
 
 // Workload returns the workload of this table
-func (t *TablePipeline) Workload() model.WorkloadInfo {
+func (t *tablePipelineImpl) Workload() model.WorkloadInfo {
 	// TODO(leoppro) calculate the workload of this table
 	// We temporarily set the value to constant 1
 	return workload
 }
 
 // Status returns the status of this table pipeline
-func (t *TablePipeline) Status() TableStatus {
+func (t *tablePipelineImpl) Status() TableStatus {
 	return t.sinkNode.Status()
 }
 
 // ID returns the ID of source table and mark table
-func (t *TablePipeline) ID() (tableID, markTableID int64) {
+func (t *tablePipelineImpl) ID() (tableID, markTableID int64) {
 	return t.tableID, t.markTableID
 }
 
 // Name returns the quoted schema and table name
-func (t *TablePipeline) Name() string {
+func (t *tablePipelineImpl) Name() string {
 	return t.tableName
 }
 
 // Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
-func (t *TablePipeline) Cancel() {
+func (t *tablePipelineImpl) Cancel() {
 	t.cancel()
 }
 
 // Wait waits for all node destroyed and returns errors
-func (t *TablePipeline) Wait() []error {
+func (t *tablePipelineImpl) Wait() []error {
 	return t.p.Wait()
 }
 
@@ -110,6 +134,7 @@ func (t *TablePipeline) Wait() []error {
 // TODO(leoppro): the parameters in this function are too much, try to move some parameters into ctx.Vars().
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
 func NewTablePipeline(ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	limitter *puller.BlurResourceLimitter,
@@ -120,9 +145,9 @@ func NewTablePipeline(ctx context.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
-	targetTs model.Ts) (context.Context, *TablePipeline) {
+	targetTs model.Ts) (context.Context, TablePipeline) {
 	ctx, cancel := context.WithCancel(ctx)
-	tablePipeline := &TablePipeline{
+	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
@@ -130,9 +155,13 @@ func NewTablePipeline(ctx context.Context,
 	}
 
 	ctx, p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
-	p.AppendNode(ctx, "puller", newPullerNode(credential, kvStorage, limitter, tableID, replicaInfo, tableName))
+	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
+	config := ctx.Vars().Config
+	if config.Cyclic != nil && config.Cyclic.IsEnabled() {
+		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
+	}
 	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs)
 	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
 	tablePipeline.p = p

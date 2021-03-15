@@ -132,12 +132,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	return checkpointTs, nil
 }
 
-func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
-	receiver, err := s.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		log.Error("flush row changed events routine starts failed", zap.Error(err))
-		return
-	}
+func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -154,7 +149,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			continue
 		}
 
-		if s.cyclic != nil {
+		if !config.NewReplicaImpl && s.cyclic != nil {
 			// Filter rows if it is origined from downstream.
 			skippedRowCount := cyclic.FilterAndReduceTxns(
 				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
@@ -616,7 +611,11 @@ func newMySQLSink(
 		return nil, err
 	}
 
-	go sink.flushRowChangedEvents(ctx)
+	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	go sink.flushRowChangedEvents(ctx, receiver)
 
 	return sink, nil
 }

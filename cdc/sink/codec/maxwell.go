@@ -268,7 +268,7 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 		return nil, errors.Trace(err)
 	}
 
-	return NewMQMessage(key, value, e.CommitTs), nil
+	return newDDLMQMessage(ProtocolMaxwell, key, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -277,7 +277,7 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 
-	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+	ret := NewMQMessage(ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
 	d.Reset()
 	return []*MQMessage{ret}
 }

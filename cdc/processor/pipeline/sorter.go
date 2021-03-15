@@ -14,9 +14,11 @@
 package pipeline
 
 import (
+	"context"
 	"os"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
@@ -32,6 +34,7 @@ type sorterNode struct {
 	sorter     puller.EventSorter
 	tableName  string // quoted schema and table, used in metircs only
 	wg         errgroup.Group
+	cancel     context.CancelFunc
 }
 
 func newSorterNode(sortEngine model.SortEngine, sortDir string, tableName string) pipeline.Node {
@@ -43,6 +46,8 @@ func newSorterNode(sortEngine model.SortEngine, sortDir string, tableName string
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
+	stdCtx, cancel := context.WithCancel(ctx.StdContext())
+	n.cancel = cancel
 	var sorter puller.EventSorter
 	switch n.sortEngine {
 	case model.SortInMemory:
@@ -69,16 +74,22 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
 	}
+	failpoint.Inject("ProcessorAddTableError", func() {
+		failpoint.Return(errors.New("processor add table injected error"))
+	})
 	n.wg.Go(func() error {
-		ctx.Throw(errors.Trace(sorter.Run(ctx.StdContext())))
+		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))
 		return nil
 	})
 	n.wg.Go(func() error {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-stdCtx.Done():
 				return nil
 			case msg := <-sorter.Output():
+				if msg == nil {
+					continue
+				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 			}
 		}
@@ -100,5 +111,6 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
+	n.cancel()
 	return n.wg.Wait()
 }

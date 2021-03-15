@@ -88,6 +88,8 @@ var _ = check.Suite(&outputSuite{})
 func (s *outputSuite) TestStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
+
+	// test stop at targetTs
 	node := newSinkNode(&mockSink{}, 0, 10)
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
@@ -108,10 +110,12 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.Status(), check.Equals, TableStatusRunning)
 
 	err := node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 10, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}}), nil))
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 15, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}}), nil))
 	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
+	c.Assert(node.CheckpointTs(), check.Equals, uint64(10))
 
+	// test the stop at ts command
 	node = newSinkNode(&mockSink{}, 0, 10)
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
@@ -131,6 +135,29 @@ func (s *outputSuite) TestStatus(c *check.C) {
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}}), nil))
 	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
+	c.Assert(node.CheckpointTs(), check.Equals, uint64(6))
+
+	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
+	node = newSinkNode(&mockSink{}, 0, 10)
+	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
+	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
+
+	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(20), nil)), check.IsNil)
+	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
+
+	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}}), nil)), check.IsNil)
+	c.Assert(node.Status(), check.Equals, TableStatusRunning)
+
+	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
+		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil)), check.IsNil)
+	c.Assert(node.Status(), check.Equals, TableStatusRunning)
+
+	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
+		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}}), nil))
+	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
+	c.Assert(node.Status(), check.Equals, TableStatusStopped)
+	c.Assert(node.CheckpointTs(), check.Equals, uint64(7))
 }
 
 func (s *outputSuite) TestManyTs(c *check.C) {
