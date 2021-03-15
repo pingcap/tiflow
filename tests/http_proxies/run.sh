@@ -11,7 +11,7 @@ TEST_HOST_LIST=(UP_TIDB_HOST UP_PD_HOST_{1..3} UP_TIKV_HOST_{1..3})
 proxy_pid=""
 function start_proxy() {
     echo "dumpling grpc packet to $WORK_DIR/packets.dump..."
-    GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=8080 1>$WORK_DIR/packets.dump &
+    GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=8080 >$WORK_DIR/packets.dump &
     proxy_pid=$!
 }
 
@@ -69,6 +69,7 @@ function check() {
 trap "stop_tidb_cluster && stop_proxy" EXIT
 
 prepare
+sleep 5
 check
 
 check_logs $WORK_DIR
