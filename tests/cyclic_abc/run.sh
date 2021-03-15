@@ -20,6 +20,14 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR
     start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
 
+    echo " \
+[security] \
+ ca-path = \"$TLS_DIR/ca.pem\" \
+ cert-path = \"$TLS_DIR/server.pem\" \
+ key-path = \"$TLS_DIR/server-key.pem\" \
+ cert-allowed-cn = [\"fake_cn\"] \
+" > $WORK_DIR\server.toml
+
     cd $WORK_DIR
 
     # create table in all cluters.
@@ -86,7 +94,7 @@ function run() {
         --logsuffix "_${TEST_NAME}_tls" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
         --addr "127.0.0.1:8302" \
-        --tlsdir $TLS_DIR \
+        --conf $WORK_DIR\server.toml \
         --cert-allowed-cn "client" # The common name of client.pem
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
