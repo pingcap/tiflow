@@ -8,7 +8,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.27.2
 	github.com/apache/pulsar-client-go v0.1.1
-	github.com/bradleyjkemp/grpc-tools v0.2.6
+	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/coreos/go-semver v0.3.0
@@ -17,7 +17,7 @@ require (
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/mock v1.4.3 // indirect
-	github.com/golang/protobuf v1.4.2
+	github.com/golang/protobuf v1.3.4
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.4
