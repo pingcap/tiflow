@@ -3,7 +3,7 @@ create database `autorandom_test`;
 use `autorandom_test`;
 
 CREATE TABLE table_a (
-	id BIGINT AUTO_RANDOM,
+	id BIGINT PRIMARY KEY CLUSTERED AUTO_RANDOM,
 	data int,
 	PRIMARY KEY(id)
 );
