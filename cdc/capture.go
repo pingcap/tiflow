@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/version"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -124,6 +126,7 @@ func NewCapture(
 	info := &model.CaptureInfo{
 		ID:            id,
 		AdvertiseAddr: advertiseAddr,
+		Version:       version.ReleaseVersion,
 	}
 	processorManager := processor.NewManager(pdCli, credential, info)
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(ctx))
