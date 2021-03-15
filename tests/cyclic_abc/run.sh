@@ -94,7 +94,7 @@ function run() {
         --logsuffix "_${TEST_NAME}_tls" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
         --addr "127.0.0.1:8302" \
-        --conf $WORK_DIR\server.toml \
+        --config "$WORK_DIR/server.toml" \
         --cert-allowed-cn "client" # The common name of client.pem
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
