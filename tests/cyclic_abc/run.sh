@@ -21,12 +21,12 @@ function run() {
     start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
 
     echo " \
-[security] \
- ca-path = \"$TLS_DIR/ca.pem\" \
- cert-path = \"$TLS_DIR/server.pem\" \
- key-path = \"$TLS_DIR/server-key.pem\" \
- cert-allowed-cn = [\"fake_cn\"] \
-" > $WORK_DIR\server.toml
+[security] 
+ ca-path = \"$TLS_DIR/ca.pem\" 
+ cert-path = \"$TLS_DIR/server.pem\" 
+ key-path = \"$TLS_DIR/server-key.pem\" 
+ cert-allowed-cn = [\"fake_cn\"] 
+" > $WORK_DIR/server.toml
 
     cd $WORK_DIR
 
