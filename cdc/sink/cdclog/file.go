@@ -115,7 +115,35 @@ func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
 			return err
 		}
 	}
-	rowDatas := ts.encoder.MixedBuild(firstCreated)
+
+	tableDir := filepath.Join(sink.root(), makeTableDirectoryName(ts.tableID))
+	if ts.rowFile == nil {
+		// create new file to append data
+		err := os.MkdirAll(tableDir, defaultDirMode)
+		if err != nil {
+			return err
+		}
+		file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+		if err != nil {
+			return err
+		}
+		ts.rowFile = file
+	}
+
+	currentStat, er := ts.rowFile.Stat()
+	if er != nil {
+		return er
+	}
+
+	currentFileSize := currentStat.Size()
+	withVersion := firstCreated && currentFileSize == 0
+
+	if firstCreated && currentFileSize > 0 {
+		ts.encoder.Reset()
+	}
+
+	rowDatas := ts.encoder.MixedBuild(withVersion)
+
 	defer func() {
 		if ts.encoder != nil {
 			ts.encoder.Reset()
@@ -129,21 +157,6 @@ func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
 		zap.Int("encode size", len(rowDatas)),
 		zap.String("file name", fileName),
 	)
-
-	tableDir := filepath.Join(sink.root(), makeTableDirectoryName(ts.tableID))
-
-	if ts.rowFile == nil {
-		// create new file to append data
-		err := os.MkdirAll(tableDir, defaultDirMode)
-		if err != nil {
-			return err
-		}
-		file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
-		if err != nil {
-			return err
-		}
-		ts.rowFile = file
-	}
 
 	_, err := ts.rowFile.Write(rowDatas)
 	if err != nil {
