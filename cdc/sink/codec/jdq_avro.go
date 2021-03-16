@@ -58,33 +58,20 @@ const (
 
 // JdqEventBatchEncoder converts the events to binary Jdq data
 type JdqEventBatchEncoder struct {
-	valueSchemaManager *AvroSchemaManager
-	resultBuf          []*MQMessage
-	binaryEncode       *encoding.Decoder
+	resultBuf    []*MQMessage
+	binaryEncode *encoding.Decoder
 }
 
 type jdqEncodeResult struct {
-	data       []byte
-	registryID int
+	data []byte
 }
 
 // NewJdqEventBatchEncoder creates an JdqEventBatchEncoder
 func NewJdqEventBatchEncoder() EventBatchEncoder {
 	return &JdqEventBatchEncoder{
-		valueSchemaManager: nil,
-		resultBuf:          make([]*MQMessage, 0, 4096),
-		binaryEncode:       charmap.ISO8859_1.NewDecoder(),
+		resultBuf:    make([]*MQMessage, 0, 4096),
+		binaryEncode: charmap.ISO8859_1.NewDecoder(),
 	}
-}
-
-// SetValueSchemaManager sets the value schema manager for an Avro encoder
-func (a *JdqEventBatchEncoder) SetValueSchemaManager(manager *AvroSchemaManager) {
-	a.valueSchemaManager = manager
-}
-
-// GetValueSchemaManager gets the value schema manager for an Avro encoder
-func (a *JdqEventBatchEncoder) GetValueSchemaManager() *AvroSchemaManager {
-	return a.valueSchemaManager
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -214,11 +201,8 @@ func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeRe
                               {"name":"cur","type":[{"type":"map","values":["string","null"]},"null"]},
                               {"name":"cus","type":[{"type":"map","values":["string","null"]},"null"]}]}
                   `
-	var codec *goavro.Codec
-	var registryID int
-	var err error
 
-	codec, err = goavro.NewCodec(jdwSchema)
+	codec, err := goavro.NewCodec(jdwSchema)
 	if err != nil {
 		return nil, errors.Annotate(err, "jdqEncode: Could not make goavro codec")
 	}
@@ -235,8 +219,7 @@ func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeRe
 	}
 
 	return &jdqEncodeResult{
-		data:       bin,
-		registryID: registryID,
+		data: bin,
 	}, nil
 }
 
