@@ -111,6 +111,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 }
 
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	log.Info("LEOPPRO: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
 	atomic.StoreUint64(&s.resolvedTs, resolvedTs)
 	s.resolvedNotifier.Notify()
 
@@ -147,6 +148,17 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			}
 			s.txnCache.UpdateCheckpoint(resolvedTs)
 			continue
+		}
+
+		log.Info("LEOPPRO get txn map", zap.Any("resolvedTs", resolvedTs))
+		for _, txns := range resolvedTxnsMap {
+			for _, txn := range txns {
+				log.Info("LEOPPRO txn start", zap.Any("startts", txn.StartTs))
+				for _, row := range txn.Rows {
+					log.Info("LEOPPRO rows", zap.Any("row", row))
+				}
+				log.Info("LEOPPRO txn end", zap.Any("startts", txn.StartTs))
+			}
 		}
 
 		if !config.NewReplicaImpl && s.cyclic != nil {
