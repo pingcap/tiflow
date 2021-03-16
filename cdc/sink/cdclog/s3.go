@@ -51,7 +51,7 @@ type tableBuffer struct {
 	encoder codec.EventBatchEncoder
 
 	uploadParts struct {
-		uploader  storage.Uploader
+		writer    storage.ExternalFileWriter
 		uploadNum int
 		byteSize  int64
 	}
@@ -132,15 +132,15 @@ func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {
 		// so, if this batch data size is greater than 5Mb or it has uploadPart already
 		// we will use multi-upload this batch data
 		if len(rowDatas) > 0 {
-			if hashPart.uploader == nil {
-				uploader, err := sink.storage().CreateUploader(ctx, newFileName)
+			if hashPart.writer == nil {
+				fileWriter, err := sink.storage().Create(ctx, newFileName)
 				if err != nil {
 					return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 				}
-				hashPart.uploader = uploader
+				hashPart.writer = fileWriter
 			}
 
-			err := hashPart.uploader.UploadPart(ctx, rowDatas)
+			_, err := hashPart.writer.Write(ctx, rowDatas)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 			}
@@ -153,19 +153,19 @@ func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {
 			// we need do complete when total upload size is greater than 100Mb
 			// or this part data is less than 5Mb to avoid meet EntityTooSmall error
 			log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID))
-			err := hashPart.uploader.CompleteUpload(ctx)
+			err := hashPart.writer.Close(ctx)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 			}
 			hashPart.byteSize = 0
 			hashPart.uploadNum = 0
-			hashPart.uploader = nil
+			hashPart.writer = nil
 			tb.encoder = nil
 		}
 	} else {
 		// generate normal file because S3 multi-upload need every part at least 5Mb.
 		log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
-		err := sink.storage().Write(ctx, newFileName, rowDatas)
+		err := sink.storage().WriteFile(ctx, newFileName, rowDatas)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 		}
@@ -185,11 +185,11 @@ func newTableBuffer(tableID int64) logUnit {
 		sendSize:   atomic.NewInt64(0),
 		sendEvents: atomic.NewInt64(0),
 		uploadParts: struct {
-			uploader  storage.Uploader
+			writer    storage.ExternalFileWriter
 			uploadNum int
 			byteSize  int64
 		}{
-			uploader:  nil,
+			writer:    nil,
 			uploadNum: 0,
 			byteSize:  0,
 		},
@@ -218,7 +218,7 @@ func (s *s3Sink) flushLogMeta(ctx context.Context) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
-	return cerror.WrapError(cerror.ErrS3SinkWriteStorage, s.storage.Write(ctx, logMetaFile, data))
+	return cerror.WrapError(cerror.ErrS3SinkWriteStorage, s.storage.WriteFile(ctx, logMetaFile, data))
 }
 
 func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
@@ -304,13 +304,13 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		// hack way: append data to old file
 		log.Debug("[EmitDDLEvent] append ddl to origin log",
 			zap.String("name", name), zap.Any("ddl", ddl))
-		fileData, err = s.storage.Read(ctx, name)
+		fileData, err = s.storage.ReadFile(ctx, name)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 		}
 		fileData = append(fileData, data...)
 	}
-	return s.storage.Write(ctx, name, fileData)
+	return s.storage.WriteFile(ctx, name, fileData)
 }
 
 func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
@@ -322,7 +322,7 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
-		return s.storage.Write(ctx, logMetaFile, data)
+		return s.storage.WriteFile(ctx, logMetaFile, data)
 	}
 	return nil
 }
