@@ -241,7 +241,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	}
 	// when async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs
 	// a DML whose commitTs is equal to a DDL finishedTs using the schema info before the DDL
-	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs-1)
+	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
