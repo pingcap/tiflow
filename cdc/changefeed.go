@@ -888,7 +888,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if len(c.ddlJobHistory) > 0 && minResolvedTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS - 1
 		c.ddlState = model.ChangeFeedWaitToExecDDL
-		c.ddlTs = minResolvedTs
+		c.ddlTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 	}
 
 	if len(c.ddlJobHistory) > 0 && minCheckpointTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
