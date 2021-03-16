@@ -122,9 +122,9 @@ func switchAsyncCommit(ctx context.Context, db *sql.DB) {
 			return
 		case <-ticker.C:
 			if enabled {
-				util.MustExec(db, "set global tidb_enable_async_commit = on")
-			} else {
 				util.MustExec(db, "set global tidb_enable_async_commit = off")
+			} else {
+				util.MustExec(db, "set global tidb_enable_async_commit = on")
 			}
 			enabled = !enabled
 		}
