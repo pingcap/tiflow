@@ -109,24 +109,6 @@ func newMqSink(
 	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
 		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
-	} else if protocol == codec.ProtocolJdqAvro {
-		registryURI, ok := opts["registry"]
-		if !ok {
-			return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
-		}
-		valueSchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
-		if err != nil {
-			return nil, errors.Annotate(
-				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
-				"Could not create Avro schema manager for message values")
-		}
-		newEncoder1 := newEncoder
-		newEncoder = func() codec.EventBatchEncoder {
-			avroEncoder := newEncoder1().(*codec.JdqEventBatchEncoder)
-			avroEncoder.SetValueSchemaManager(valueSchemaManager)
-			return avroEncoder
-		}
-
 	}
 
 	// pre-flight verification of encoder parameters

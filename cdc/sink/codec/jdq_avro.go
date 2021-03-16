@@ -15,7 +15,6 @@ package codec
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"strconv"
 
@@ -31,8 +30,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding/charmap"
 )
-
-const isTest = true
 
 // OperationType for row events type
 type OperationType string
@@ -50,6 +47,7 @@ const (
 	schemaKeyTab    = "tab"
 	schemaKeyOpt    = "opt"
 	schemaKeyTs     = "ts"
+	schemaKeyDdl    = "ddl"
 	schemaKeyErr    = "err"
 	schemaKeySrc    = "src"
 	schemaKeyCur    = "cur"
@@ -210,6 +208,7 @@ func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeRe
                               {"name":"tab","type":"string"},
                               {"name":"opt","type":"string"},
                               {"name":"ts","type":"long"},
+                              {"name":"ddl","type":["string","null"]},
                               {"name":"err","type":["string","null"]},
                               {"name":"src","type":[{"type":"map","values":["string","null"]},"null"]},
                               {"name":"cur","type":[{"type":"map","values":["string","null"]},"null"]},
@@ -218,21 +217,10 @@ func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeRe
 	var codec *goavro.Codec
 	var registryID int
 	var err error
-	if isTest {
-		schemaGen := func() (string, error) {
-			return jdwSchema, nil
-		}
 
-		// TODO pass ctx from the upper function. Need to modify the EventBatchEncoder interface.
-		codec, registryID, err = a.valueSchemaManager.GetCachedOrRegister(context.Background(), *(e.Table), e.TableInfoVersion, schemaGen)
-		if err != nil {
-			return nil, errors.Annotate(err, "AvroEventBatchEncoder: get-or-register failed")
-		}
-	} else {
-		codec, err = goavro.NewCodec(jdwSchema)
-		if err != nil {
-			return nil, errors.Annotate(err, "jdqEncode: Could not make goavro codec")
-		}
+	codec, err = goavro.NewCodec(jdwSchema)
+	if err != nil {
+		return nil, errors.Annotate(err, "jdqEncode: Could not make goavro codec")
 	}
 
 	native, err := a.rowToJdqNativeData(e)
@@ -271,6 +259,7 @@ func (a *JdqEventBatchEncoder) rowToJdqNativeData(e *model.RowChangedEvent) (int
 	data[schemaKeySrc] = nil
 	data[schemaKeyCur] = nil
 	data[schemaKeyCus] = nil
+	data[schemaKeyDdl] = nil
 
 	cols := e.Columns
 	if e.IsInsert() {
@@ -503,16 +492,9 @@ func (a *JdqEventBatchEncoder) columnToJdqNativeData(col *model.Column) (interfa
 	}
 }
 
-const jdqMagicByte = uint8(0)
-
 func (r *jdqEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	var data []interface{}
-	if isTest {
-		data = []interface{}{jdqMagicByte, int32(r.registryID), r.data}
-	} else {
-		data = []interface{}{r.data}
-	}
+	data := []interface{}{r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
