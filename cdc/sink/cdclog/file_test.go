@@ -28,10 +28,10 @@ type testFileSuite struct{}
 
 var _ = check.Suite(&testFileSuite{})
 
-func (s *testFileSuite) SetUpSuite(c *check.C) {
+func (tfs *testFileSuite) SetUpSuite(c *check.C) {
 }
 
-func (s *testFileSuite) TearDownSuite(c *check.C) {
+func (tfs *testFileSuite) TearDownSuite(c *check.C) {
 }
 
 func (tfs *testFileSuite) TestFileFlush(c *check.C) {
