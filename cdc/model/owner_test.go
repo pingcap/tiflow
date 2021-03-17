@@ -303,10 +303,11 @@ func (s *removeTableSuite) TestMoveTable(c *check.C) {
 	c.Assert(replicaInfo, check.DeepEquals, &TableReplicaInfo{StartTs: 200})
 	c.Assert(info.Tables, check.HasKey, int64(1))
 	c.Assert(info.Tables, check.Not(check.HasKey), int64(2))
+	expectedFlag := uint64(1) // OperFlagMoveTable
 	c.Assert(info.Operation, check.DeepEquals, map[int64]*TableOperation{
 		2: {
 			Delete:     true,
-			Flag:       OperFlagMoveTable,
+			Flag:       expectedFlag,
 			BoundaryTs: 300,
 			Status:     OperDispatched,
 		},
