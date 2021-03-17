@@ -31,6 +31,11 @@ CREATE TABLE t5 (
     b int default 10
 );
 
+CREATE TABLE t6 (
+    a tinytext not null collate UTF8MB4_GENERAL_CI,
+    b blob,
+    unique key a(`a`(10))
+);
 
 insert into t1 (a) values ('A'),(' A'),('A\t'),('b'),('bA'),('bac'),('ab');
 insert into t1 (a) values ('😉');
@@ -42,8 +47,10 @@ insert into t3 (a) values ('b'),('b '),('b   '),(' b'),('b\t'),('b\t ');
 insert into t4 values (1,'A','A','1'),(2,'a\t','a\t','2'),(3,'ab','ab','3'),(4,'abc','abc','4');
 insert into t5 (a) values ('😉');
 insert into t5 (a) values ('a'),('A'),(' a'),(' A'),('a\t'),('ab'),('Ab');
+insert into t6 (a, b) values ('A', x'89504E470D0A1A0A'),('B', x'123456');
 update t1 set b = b + 1;
 update t2 set b = 13;
 update t3 set b = 11 where a > 'A';
 drop index `primary` on t4;
 update t5 set b = 12;
+update t6 set a = 'c' where a = 'A';
