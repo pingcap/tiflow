@@ -167,6 +167,35 @@ func (o *Owner) addCapture(info *model.CaptureInfo) {
 	o.rebalanceMu.Unlock()
 }
 
+// When a table is moved from one capture to another, the workflow is as follows
+// 1. Owner deletes the table from the original capture (we call it capture-1),
+//    and adds an table operation record in the task status
+// 2. The processor in capture-1 reads the operation record, and waits the table
+//    checkpoint ts reaches the boundary ts in operation, which often equals to
+//    the global resovled ts, larger the current checkpoint ts of this table.
+// 3. After table checkpoint ts reaches boundary ts, capture-1 marks the table
+//    operation as finished.
+// 4. Owner reads the finished mark and re-dispatches this table to another capture.
+//
+// When capture-1 crashes between step-2 and step-3, this function should be
+// called to let owner re dispatch the table. Besides owner could also crash at
+// the same time, in that case this function should also be called. In addtition,
+// this function only handles move table job: 1) the add table job persists both
+// table replicaInfo and operation, we can recover enough information from table
+// replicaInfo; 2) if a table is deleted from a capture and that capture crashes,
+// we just ignore this table.
+func (o *Owner) rebuildTableFromOperations(cf *changeFeed, taskStatus *model.TaskStatus, startTs uint64) {
+	for tableID, op := range taskStatus.Operation {
+		if op.Delete && op.Flag&model.OperFlagMoveTable > 0 {
+			cf.orphanTables[tableID] = startTs
+			if job, ok := cf.moveTableJobs[tableID]; ok {
+				log.Info("remove outdated move table job", zap.Reflect("job", job), zap.Uint64("start-ts", startTs))
+				delete(cf.moveTableJobs, tableID)
+			}
+		}
+	}
+}
+
 func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	o.l.Lock()
 	defer o.l.Unlock()
@@ -201,6 +230,8 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 				feed.orphanTables[tableID] = replicaInfo.StartTs
 			}
 		}
+
+		o.rebuildTableFromOperations(feed, task, startTs)
 
 		ctx := context.TODO()
 		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
@@ -1389,6 +1420,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 							}
 						}
 						o.addOrphanTable(changeFeedID, tableID, startTs)
+					}
+					if cf, ok := o.changeFeeds[changeFeedID]; ok {
+						o.rebuildTableFromOperations(cf, status, cf.status.CheckpointTs)
 					}
 				}
 
