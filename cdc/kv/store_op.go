@@ -25,21 +25,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/ticdc/pkg/security"
 	tidbconfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
-	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
-
-// TiKVStorage is the tikv storage interface used by CDC.
-type TiKVStorage interface {
-	tikv.Storage
-	GetCachedCurrentVersion() (version tidbkv.Version, err error)
-}
 
 const (
 	storageVersionCacheUpdateInterval = time.Second * 2
@@ -62,7 +53,7 @@ var (
 	curVersionCacheMu sync.Mutex
 )
 
-func newStorageWithCurVersionCache(storage tikv.Storage, cacheKey string) TiKVStorage {
+func newStorageWithCurVersionCache(storage tidbkv.Storage, cacheKey string) tidbkv.Storage {
 	curVersionCacheMu.Lock()
 	defer curVersionCacheMu.Unlock()
 
@@ -74,7 +65,7 @@ func newStorageWithCurVersionCache(storage tikv.Storage, cacheKey string) TiKVSt
 	}
 
 	return &StorageWithCurVersionCache{
-		Storage:  storage,
+		Storage:  storage.(tikv.Storage),
 		cacheKey: cacheKey,
 	}
 }
@@ -95,7 +86,7 @@ func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.V
 
 	if time.Now().After(entry.lastUpdated.Add(storageVersionCacheUpdateInterval)) {
 		var ver tidbkv.Version
-		ver, err = s.CurrentVersion(oracle.GlobalTxnScope)
+		ver, err = s.CurrentVersion()
 		if err != nil {
 			return
 		}
@@ -115,14 +106,14 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 }
 
 // CreateTiStore creates a new tikv storage client
-func CreateTiStore(urls string, credential *security.Credential) (kv.Storage, error) {
+func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	// Ignore error if it is already registered.
-	_ = store.Register("tikv", driver.TiKVDriver{})
+	_ = store.Register("tikv", tikv.Driver{})
 
 	if credential.CAPath != "" {
 		conf := tidbconfig.GetGlobalConfig()
@@ -137,5 +128,7 @@ func CreateTiStore(urls string, credential *security.Credential) (kv.Storage, er
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrNewStore, err)
 	}
+
+	tiStore = newStorageWithCurVersionCache(tiStore, tiPath)
 	return tiStore, nil
 }

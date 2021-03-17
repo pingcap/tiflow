@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/tests/util"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -121,7 +120,7 @@ func addLock(ctx context.Context, cfg *util.Config) error {
 	}
 	defer pdcli.Close()
 
-	driver := driver.TiKVDriver{}
+	driver := tikv.Driver{}
 	store, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PDAddr))
 	if err != nil {
 		return errors.Trace(err)

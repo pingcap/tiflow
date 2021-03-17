@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 )
@@ -64,10 +63,8 @@ var testKVCmd = &cobra.Command{
 			return
 		}
 
-		tikvStorage := storage.(tikv.Storage) // we know it is tikv.
-
 		t := new(testingT)
-		kv.TestGetKVSimple(t, cli, tikvStorage, storage)
-		kv.TestSplit(t, cli, tikvStorage, storage)
+		kv.TestGetKVSimple(t, cli, storage)
+		kv.TestSplit(t, cli, storage)
 	},
 }

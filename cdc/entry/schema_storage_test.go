@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/testkit"
 )
@@ -682,7 +681,7 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *check.C) {
 	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
-	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := store.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	c.Assert(err, check.IsNil)
@@ -718,7 +717,7 @@ func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
-	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := store.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	c.Assert(err, check.IsNil)
@@ -754,7 +753,7 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	defer domain.Close()
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(c, store)
-	ver1, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	ver1, err := store.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	tk.MustExec("create database test2")
 	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
@@ -762,7 +761,7 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	tk.MustExec("create table test2.simple_test3 (a bigint)")
 	tk.MustExec("create table test2.simple_test4 (a varchar(20) unique key)")
 	tk.MustExec("create table test2.simple_test5 (a varchar(20))")
-	ver2, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	ver2, err := store.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
 	c.Assert(err, check.IsNil)

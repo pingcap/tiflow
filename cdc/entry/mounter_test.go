@@ -28,7 +28,6 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
 )
@@ -255,7 +254,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 		tk.MustExec(insertSQL, params...)
 	}
 
-	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := store.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	mounter := NewMounter(scheamStorage, 1, false).(*mounterImpl)
