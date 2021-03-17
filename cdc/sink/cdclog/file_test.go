@@ -15,6 +15,7 @@ package cdclog
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"io/ioutil"
 	"net/url"
 	"time"
@@ -37,6 +38,7 @@ func (tfs *testFileSuite) TearDownSuite(c *check.C) {
 func (tfs *testFileSuite) TestFileFlush(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	defer testleak.AfterTest(c)()
 
 	fiSink, err := NewLocalFileSink(ctx, &url.URL{Scheme: "local", Path: "/tmp/"}, make(chan error))
 	if err != nil || fiSink == nil {
