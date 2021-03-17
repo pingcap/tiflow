@@ -4,7 +4,7 @@
 addr = "127.0.0.1:8300"
 
 # 用于客户端建立连接的对外公开的地址，这个地址会被注册到 PD, 默认：和 addr 相同
-# the advertise listening address for client communication, this address will be registered to the PD, default: same with the addr item
+# the advertised listening address for client communication, this address will be registered with the PD, default: same with the addr item
 advertise-addr = "127.0.0.1:8300"
 
 # 日志文件路径
