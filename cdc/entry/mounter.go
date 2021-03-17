@@ -561,8 +561,7 @@ func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, e
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
 		v, err := datum.GetBinaryLiteral().ToInt(nil)
 		return v, "", err
-	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
-		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		b := datum.GetBytes()
 		if b == nil {
 			b = emptyBytes
