@@ -16,6 +16,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	grpc_proxy "github.com/bradleyjkemp/grpc-tools/grpc-proxy"
 	"google.golang.org/grpc"
@@ -24,11 +26,17 @@ import (
 func main() {
 	grpc_proxy.RegisterDefaultFlags()
 	flag.Parse()
-	proxy, _ := grpc_proxy.New(
+	proxy, err := grpc_proxy.New(
 		grpc_proxy.WithInterceptor(intercept),
 		grpc_proxy.DefaultFlags(),
 	)
-	proxy.Start()
+	if err != nil {
+		log.Fatal("failed to create proxy", zap.Error(err))
+	}
+	err = proxy.Start()
+	if err != nil {
+		log.Fatal("failed to start proxy", zap.Error(err))
+	}
 }
 
 func intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
