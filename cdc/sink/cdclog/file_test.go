@@ -39,7 +39,7 @@ func (tfs *testFileSuite) TestFileFlush(c *check.C) {
 	defer cancel()
 
 	fiSink, err := NewLocalFileSink(ctx, &url.URL{Scheme: "local", Path: "/tmp/"}, make(chan error))
-	if err != nil {
+	if err != nil || fiSink == nil {
 		c.Fail()
 	}
 
@@ -55,7 +55,11 @@ func (tfs *testFileSuite) TestFileFlush(c *check.C) {
 		}
 	}
 
-	fiSink.logSink.flushRowChangedEvents(ctx, 10000)
+	_, errs := fiSink.logSink.flushRowChangedEvents(ctx, 10000)
+	if errs != nil {
+		c.Fail()
+	}
+
 	// ensure 5 seconds later
 	time.Sleep(time.Second * 6)
 
