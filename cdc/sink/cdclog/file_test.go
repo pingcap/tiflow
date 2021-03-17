@@ -15,10 +15,11 @@ package cdclog
 
 import (
 	"context"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"io/ioutil"
 	"net/url"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
