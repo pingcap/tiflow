@@ -68,6 +68,19 @@ func newChangefeedCommand() *cobra.Command {
 	return command
 }
 
+func resumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
+	resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
+	if err != nil {
+		return err
+	}
+	info := &cdc.ChangefeedResp{}
+	err = json.Unmarshal([]byte(resp), info)
+	if err != nil {
+		return err
+	}
+	return confirmLargeDataGap(ctx, cmd, info.TSO)
+}
+
 func newAdminChangefeedCommand() []*cobra.Command {
 	cmds := []*cobra.Command{
 		{
@@ -90,6 +103,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminResume,
+				}
+				if err := resumeChangefeedCheck(ctx, cmd); err != nil {
+					return err
 				}
 				return applyAdminChangefeed(ctx, job, getCredential())
 			},
@@ -116,6 +132,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 		_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 		if cmd.Use == "remove" {
 			cmd.PersistentFlags().BoolVarP(&optForceRemove, "force", "f", false, "remove all information of the changefeed")
+		}
+		if cmd.Use == "resume" {
+			cmd.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 		}
 	}
 	return cmds
@@ -234,6 +253,9 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			startTs = oracle.ComposeTS(ts, logical)
 		}
 		if err := verifyStartTs(ctx, startTs); err != nil {
+			return nil, err
+		}
+		if err := confirmLargeDataGap(ctx, cmd, startTs); err != nil {
 			return nil, err
 		}
 		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {
