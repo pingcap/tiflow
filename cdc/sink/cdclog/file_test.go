@@ -37,9 +37,9 @@ func (tfs *testFileSuite) TearDownSuite(c *check.C) {
 }
 
 func (tfs *testFileSuite) TestFileFlush(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer testleak.AfterTest(c)()
 
 	fiSink, err := NewLocalFileSink(ctx, &url.URL{Scheme: "local", Path: "/tmp/"}, make(chan error))
 	if err != nil || fiSink == nil {
