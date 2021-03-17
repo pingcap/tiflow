@@ -15,12 +15,13 @@ package cdclog
 
 import (
 	"context"
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"io/ioutil"
 	"net/url"
 	"time"
+
+	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
 type testFileSuite struct{}
@@ -47,7 +48,8 @@ func (tfs *testFileSuite) TestFileFlush(c *check.C) {
 	for i := 0; i < 10000; i++ {
 		rowChange := &model.RowChangedEvent{
 			Table:           &model.TableName{Schema: "db1", Table: "test", TableID: 1},
-			ApproximateSize: 1000}
+			ApproximateSize: 1000,
+		}
 		if fiSink.EmitRowChangedEvents(ctx, rowChange) != nil {
 			c.Fail()
 		}
@@ -63,11 +65,12 @@ func (tfs *testFileSuite) TestFileFlush(c *check.C) {
 	var key interface{} = int64(1)
 	fiSink.logSink.hashMap.Delete(key)
 
-	//write data again
+	// write data again
 	for i := 0; i < 10000; i++ {
 		rowChange := &model.RowChangedEvent{
 			Table:           &model.TableName{Schema: "db1", Table: "test", TableID: 1},
-			ApproximateSize: 1000}
+			ApproximateSize: 1000,
+		}
 		if fiSink.EmitRowChangedEvents(ctx, rowChange) != nil {
 			c.Fail()
 		}
@@ -92,7 +95,6 @@ func (tfs *testFileSuite) TestFileFlush(c *check.C) {
 	}
 	for {
 		_, hasNext, err := decoder.HasNext()
-
 		if err != nil {
 			c.Fail()
 			break
@@ -111,5 +113,4 @@ func (tfs *testFileSuite) TestFileFlush(c *check.C) {
 		// TableID is omited...
 		c.Assert(event.Table, check.DeepEquals, &model.TableName{Schema: "db1", Table: "test", TableID: 0})
 	}
-
 }
