@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -353,10 +352,9 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	cluster.ChangeLeader(3, 5)
 
-	ts, err := kvStorage.CurrentTimestamp(oracle.GlobalTxnScope)
-	ver := kv.NewVersion(ts)
+	ts, err := kvStorage.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
-	ch2 <- makeEvent(ver.Ver)
+	ch2 <- makeEvent(ts.Ver)
 	var event *model.RegionFeedEvent
 	select {
 	case event = <-eventCh:
@@ -370,7 +368,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
-	checkEvent(event, ver.Ver)
+	checkEvent(event, ts.Ver)
 	cancel()
 }
 
