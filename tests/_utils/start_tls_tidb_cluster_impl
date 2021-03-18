@@ -134,20 +134,6 @@ while ! mysql -uroot -h${TLS_TIDB_HOST} -P${TLS_TIDB_PORT} --default-character-s
     sleep 2
 done
 
-run_sql "SET GLOBAL tidb_enable_clustered_index = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} \
-    --ssl-ca=$TLS_DIR/ca.pem \
-    --ssl-cert=$TLS_DIR/server.pem \
-    --ssl-key=$TLS_DIR/server-key.pem
-
-run_sql "use test;drop table if exists fooooo;create table fooooo(pk int primary key);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-    --ssl-ca=$TLS_DIR/ca.pem \
-    --ssl-cert=$TLS_DIR/server.pem \
-    --ssl-key=$TLS_DIR/server-key.pem
-
-run_sql "select table_name, tidb_pk_type from information_schema.tables where table_schema = 'test';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-    --ssl-ca=$TLS_DIR/ca.pem \
-    --ssl-cert=$TLS_DIR/server.pem \
-    --ssl-key=$TLS_DIR/server-key.pem
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
     --ssl-ca=$TLS_DIR/ca.pem \
     --ssl-cert=$TLS_DIR/server.pem \

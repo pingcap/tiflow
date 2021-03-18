@@ -222,6 +222,7 @@ sleep 5
 run_sql "use test;drop table if exists foooooo;create table foooooo(pk1 int, pk2 int, primary key (pk1, pk2) clustered  );insert into foooooo values(42, 42), (89, 89)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "select table_name, tidb_pk_type from information_schema.tables where table_schema = 'test';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "select version();"
+run_sql "drop table if exists test.foooooo;"
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}

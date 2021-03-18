@@ -19,7 +19,7 @@ CREATE TABLE t3 (
 );
 
 CREATE TABLE t4 (
-    a int primary key clustered ,
+    a int primary key,
     b varchar(10) charset utf8mb4 collate utf8mb4_general_ci,
     c varchar(10) charset utf8 collate utf8_general_ci,
     d varchar(10) not null,
