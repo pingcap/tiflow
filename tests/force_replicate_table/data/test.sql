@@ -23,7 +23,7 @@ update t3 set a = 1;
 update t4 set a = 1;
 update t5 set a = 1;
 
-alter table t0 drop primary key clustered ;
+alter table t0 drop primary key ;
 alter table t1 drop key id;
 
 update t0 set a = 2 where id > 3;

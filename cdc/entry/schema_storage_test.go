@@ -856,7 +856,7 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", // ActionAddTablePartition
 		"ALTER TABLE test_ddl2.employees TRUNCATE PARTITION p3",                              // ActionTruncateTablePartition
 		"alter table test_ddl2.employees comment='modify comment'",                           // ActionModifyTableComment
-		"alter table test_ddl2.simple_test1 drop primary key clustered ",                     // ActionDropPrimaryKey
+		"alter table test_ddl2.simple_test1 drop primary key ",                               // ActionDropPrimaryKey
 		"alter table test_ddl2.simple_test1 add primary key pk(id) clustered ",               // ActionAddPrimaryKey
 		"ALTER TABLE test_ddl2.simple_test1 ALTER id SET DEFAULT 18",                         // ActionSetDefaultValue
 		"ALTER TABLE test_ddl2.simple_test1 CHARACTER SET = utf8mb4",                         // ActionModifyTableCharsetAndCollate

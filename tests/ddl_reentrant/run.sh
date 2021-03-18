@@ -39,7 +39,7 @@ function complete_ddls() {
         ddls+=( "alter table ddl_reentrant.t2 add column c1 int, add column c2 int, add column c3 int" false )
         ddls+=( "alter table ddl_reentrant.t2 drop column c1, drop column c2, drop column c3" false )
     fi
-    ddls+=( "alter table ddl_reentrant.t2 drop primary key clustered " false )
+    ddls+=( "alter table ddl_reentrant.t2 drop primary key " false )
     ddls+=( "alter table ddl_reentrant.t2 add primary key pk(id) clustered " false )
     ddls+=( "drop table ddl_reentrant.t2" false )
     ddls+=( "recover table ddl_reentrant.t2" false )
