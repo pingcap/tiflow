@@ -392,17 +392,14 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	inChan := make(chan *flushTask, 1024)
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
-	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan)
-	})
-
 	builder := newMockFlushTaskBuilder()
 	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
 
+	inChan <- task1
+	close(task1.finished)
+
 	wg.Go(func() error {
-		inChan <- task1
-		close(task1.finished)
-		return nil
+		return runMerger(ctx, 1, inChan, outChan)
 	})
 
 	wg.Go(func() error {
