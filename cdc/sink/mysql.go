@@ -746,6 +746,24 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		lastCommitTs uint64
 	)
 
+	// There should be a barrier to prevent more txns to be sent to `txnCh`
+	// after the last time to consume txn from `txnCh`, because the WaitGroup
+	// counter must match.
+	defer func() {
+		incr := 0
+	fillinLoop:
+		for {
+			select {
+			case w.txnCh <- nil:
+				incr++
+			default:
+				break fillinLoop
+			}
+		}
+		txnNum += len(w.txnCh) - incr
+		w.txnWg.Add(-1 * txnNum)
+	}()
+
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
@@ -754,6 +772,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
 			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
 			w.txnWg.Add(-1 * txnNum)
+			txnNum = 0
 		}
 	}()
 
@@ -780,13 +799,14 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(flushRows())
+			return errors.Trace(ctx.Err())
 		case txn := <-w.txnCh:
 			if txn == nil {
 				return errors.Trace(flushRows())
 			}
 			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
+					txnNum++
 					return errors.Trace(err)
 				}
 			}
