@@ -210,7 +210,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		notifier.Notify()
 		w.waitAllTxnsExecuted()
 		cancel()
-		c.Assert(errg.Wait(), check.IsNil)
+		c.Assert(errors.Cause(errg.Wait()), check.Equals, context.Canceled)
 		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
 		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
