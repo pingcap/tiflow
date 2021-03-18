@@ -215,12 +215,13 @@ while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character
     sleep 2
 done
 
-# TEMPORARY COMMENT: just for testing clustered index compatibility.
-run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} || echo "tidb_enable_clustered_index not supports"
-run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=1;" ${UP_TIDB_HOST} ${UP_TIDB_OTHER_PORT} || echo "tidb_enable_clustered_index not supports"
-run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} || echo "tidb_enable_clustered_index not supports"
-# TiDB global variables cache 2 seconds
-sleep 2
+run_sql "SET GLOBAL tidb_enable_clustered_index = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+sleep 5
+
+run_sql "use test;drop table if exists foooooo;create table foooooo(pk1 int, pk2 int, primary key (pk1, pk2) );insert into foooooo values(42, 42), (89, 89)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+run_sql "select table_name, tidb_pk_type from information_schema.tables where table_schema = 'test';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+run_sql "select version();"
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
