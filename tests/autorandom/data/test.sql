@@ -5,7 +5,7 @@ use `autorandom_test`;
 CREATE TABLE table_a (
 	id BIGINT AUTO_RANDOM,
 	data int,
-	PRIMARY KEY(id) clustered  clustered
+	PRIMARY KEY(id) clustered 
 );
 
 INSERT INTO table_a (data) value (1);
