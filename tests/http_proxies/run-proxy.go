@@ -16,6 +16,7 @@ package main
 import (
 	"flag"
 	"fmt"
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
