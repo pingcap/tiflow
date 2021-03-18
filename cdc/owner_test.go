@@ -1028,6 +1028,9 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 		changefeed: {
 			id:           changefeed,
 			orphanTables: make(map[model.TableID]model.Ts),
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 100,
+			},
 		},
 	}
 
