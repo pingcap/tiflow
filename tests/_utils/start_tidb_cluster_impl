@@ -219,7 +219,7 @@ run_sql "SET GLOBAL tidb_enable_clustered_index = 1;" ${UP_TIDB_HOST} ${UP_TIDB_
 
 sleep 5
 
-run_sql "use test;drop table if exists foooooo;create table foooooo(pk1 int, pk2 int, primary key (pk1, pk2) );insert into foooooo values(42, 42), (89, 89)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+run_sql "use test;drop table if exists foooooo;create table foooooo(pk1 int, pk2 int, primary key (pk1, pk2) clustered  );insert into foooooo values(42, 42), (89, 89)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "select table_name, tidb_pk_type from information_schema.tables where table_schema = 'test';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "select version();"
 

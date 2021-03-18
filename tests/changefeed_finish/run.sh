@@ -54,7 +54,7 @@ function run() {
     changefeed_id=$(cdc cli changefeed create --sink-uri="$SINK_URI" --target-ts=$target_ts 2>&1|tail -n2|head -n1|awk '{print $2}')
 
     run_sql "CREATE DATABASE changefeed_finish;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table changefeed_finish.t (id int primary key auto_increment, t datetime DEFAULT CURRENT_TIMESTAMP)"
+    run_sql "CREATE table changefeed_finish.t (id int primary key auto clustered _increment, t datetime DEFAULT CURRENT_TIMESTAMP)"
     for i in $(seq 1 10); do
         run_sql "insert into changefeed_finish.t values (),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     done

@@ -86,8 +86,8 @@ function check_cdclog() {
 function cdclog_test() {
   run_sql "drop database if exists $TEST_NAME"
   run_sql "create database $TEST_NAME"
-  run_sql "create table $TEST_NAME.t1 (c0 int primary key, payload varchar(1024));"
-  run_sql "create table $TEST_NAME.t2 (c0 int primary key, payload varchar(1024));"
+  run_sql "create table $TEST_NAME.t1 (c0 int primary key clustered , payload varchar(1024));"
+  run_sql "create table $TEST_NAME.t2 (c0 int primary key clustered , payload varchar(1024));"
 
   run_sql "insert into $TEST_NAME.t1 values (1, 'a')"
   # because flush row changed events interval is 5 second

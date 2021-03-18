@@ -123,7 +123,7 @@ func CreateMarkTables(ctx context.Context, upstreamDSN string, upstreamCred *sec
 				%s BIGINT UNSIGNED NOT NULL,
 				val BIGINT DEFAULT 0,
 				start_timestamp BIGINT DEFAULT 0,
-				PRIMARY KEY (bucket, %s)
+				PRIMARY KEY (bucket, %s) clustered 
 			);`, quotes.QuoteSchema(schema, table), CyclicReplicaIDCol, CyclicReplicaIDCol))
 		if err != nil {
 			return cerror.WrapError(cerror.ErrCreateMarkTableFailed,

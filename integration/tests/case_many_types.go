@@ -66,7 +66,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
 						t_set       SET ('a', 'b', 'c'),
 						t_json      JSON,
-						PRIMARY KEY (id)
+						PRIMARY KEY (id) clustered 
 					)`
 	case *canal.SingleTableTask:
 		createDBQuery = `create table test (
@@ -87,7 +87,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
 						t_set       SET ('a', 'b', 'c'),
 						t_json      JSON,
-						PRIMARY KEY (id)
+						PRIMARY KEY (id) clustered 
 					)`
 	case *mysql.SingleTableTask:
 		createDBQuery = `create table test (
@@ -110,7 +110,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
 						t_set       SET ('a', 'b', 'c'),
 						t_json      JSON,
-						PRIMARY KEY (id)
+						PRIMARY KEY (id) clustered 
 					)`
 	default:
 		return errors.New("unknown test case type")

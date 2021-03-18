@@ -27,7 +27,7 @@ import (
 
 var casePKAddDuplicateUK = []string{
 	`
-CREATE TABLE binlog_pk_add_duplicate_uk(id INT PRIMARY KEY, a1 INT);
+CREATE TABLE binlog_pk_add_duplicate_uk(id INT PRIMARY KEY clustered , a1 INT);
 `,
 	`
 INSERT INTO binlog_pk_add_duplicate_uk(id, a1) VALUES(1,1),(2,1);
@@ -116,7 +116,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	// swap unique index value
 	tr.run(func(src *sql.DB) {
-		mustExec(src, "create table uindex(id int primary key, a1 int unique)")
+		mustExec(src, "create table uindex(id int primary key clustered , a1 int unique)")
 
 		mustExec(src, "insert into uindex(id, a1) values(1, 10), (2, 20)")
 
@@ -151,7 +151,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	// test big cdc msg
 	tr.run(func(src *sql.DB) {
-		mustExec(src, "create table binlog_big(id int primary key, data longtext);")
+		mustExec(src, "create table binlog_big(id int primary key clustered , data longtext);")
 
 		tx, err := src.Begin()
 		if err != nil {
@@ -234,7 +234,7 @@ TestLoop:
 func caseUpdateWhileAddingCol(db *sql.DB) {
 	mustExec(db, `
 CREATE TABLE growing_cols (
-	id INT AUTO_INCREMENT PRIMARY KEY,
+	id INT AUTO_INCREMENT PRIMARY KEY clustered ,
 	val INT DEFAULT 0
 );`)
 
@@ -276,7 +276,7 @@ func caseUpdateWhileDroppingCol(db *sql.DB) {
 	}
 	createSQL := fmt.Sprintf(`
 CREATE TABLE many_cols (
-	id INT AUTO_INCREMENT PRIMARY KEY,
+	id INT AUTO_INCREMENT PRIMARY KEY clustered ,
 	val INT DEFAULT 0,
 	%s
 );`, builder.String())
@@ -329,7 +329,7 @@ CREATE TABLE many_cols (
 func caseTblWithGeneratedCol(db *sql.DB) {
 	mustExec(db, `
 CREATE TABLE gen_contacts (
-	id INT AUTO_INCREMENT PRIMARY KEY,
+	id INT AUTO_INCREMENT PRIMARY KEY clustered ,
 	first_name VARCHAR(50) NOT NULL,
 	last_name VARCHAR(50) NOT NULL,
 	other VARCHAR(101),
@@ -354,7 +354,7 @@ CREATE TABLE gen_contacts (
 func caseCreateView(db *sql.DB) {
 	mustExec(db, `
 CREATE TABLE base_for_view (
-	id INT AUTO_INCREMENT PRIMARY KEY,
+	id INT AUTO_INCREMENT PRIMARY KEY clustered ,
 	user_id INT NOT NULL,
 	amount INT NOT NULL
 );`)
@@ -379,11 +379,11 @@ AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
 	}
 }
 
-// updatePKUK create a table with primary key and unique key
+// updatePKUK create a table with primary key and clustered  unique key
 // then do opNum randomly DML
 func updatePKUK(db *sql.DB, opNum int) error {
 	maxKey := 20
-	mustExec(db, "create table pkuk(pk int primary key, uk int, v int, unique key uk(uk));")
+	mustExec(db, "create table pkuk(pk int primary key clustered , uk int, v int, unique key uk(uk));")
 
 	pks := make(map[int]struct{})
 	freePks := rand.Perm(maxKey)

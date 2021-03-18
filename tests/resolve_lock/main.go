@@ -80,7 +80,7 @@ func main() {
 func prepare(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
-		"create table t1 (a int primary key);",
+		"create table t1 (a int primary key clustered );",
 	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)
@@ -95,7 +95,7 @@ func finishMark(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
 		"insert into t1 value (1);",
-		"create table t2 (a int primary key);",
+		"create table t2 (a int primary key clustered );",
 	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)

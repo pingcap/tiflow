@@ -9,4 +9,4 @@ insert into a4 values (2);
 insert into a5 values (2);
 
 
-create table finish_mark (id int primary key);
+create table finish_mark (id int primary key clustered );

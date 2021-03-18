@@ -167,6 +167,6 @@ var testCaseDdl = &model.DDLEvent{
 	TableInfo: &model.SimpleTableInfo{
 		Schema: "cdc", Table: "person",
 	},
-	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id) clustered )",
 	Type:  mm.ActionCreateTable,
 }

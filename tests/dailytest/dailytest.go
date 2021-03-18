@@ -24,7 +24,7 @@ func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, job
 	TableSQLs := []string{
 		`
 		create table ptest(
-			a int primary key,
+			a int primary key clustered ,
 			b double NOT NULL DEFAULT 2.0,
 			c varchar(10) NOT NULL,
 			d time unique
@@ -35,7 +35,7 @@ func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, job
 			b double NOT NULL DEFAULT 2.0,
 			c varchar(10) NOT NULL,
 			d time unique,
-			PRIMARY KEY(a, b)
+			PRIMARY KEY(a, b) clustered 
 		);
 		`,
 		`create table ntest(

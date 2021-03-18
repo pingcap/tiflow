@@ -677,10 +677,10 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *check.C) {
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(c, store)
 	tk.MustExec("create database test2")
-	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
-	tk.MustExec("create table test.simple_test2 (id bigint primary key)")
-	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
-	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key clustered )")
+	tk.MustExec("create table test.simple_test2 (id bigint primary key clustered )")
+	tk.MustExec("create table test2.simple_test3 (id bigint primary key clustered )")
+	tk.MustExec("create table test2.simple_test4 (id bigint primary key clustered )")
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
@@ -713,10 +713,10 @@ func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(c, store)
 	tk.MustExec("create database test2")
-	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
-	tk.MustExec("create table test.simple_test2 (id bigint primary key)")
-	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
-	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key clustered )")
+	tk.MustExec("create table test.simple_test2 (id bigint primary key clustered )")
+	tk.MustExec("create table test2.simple_test3 (id bigint primary key clustered )")
+	tk.MustExec("create table test2.simple_test4 (id bigint primary key clustered )")
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
@@ -757,7 +757,7 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	ver1, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
 	tk.MustExec("create database test2")
-	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key clustered )")
 	tk.MustExec("create table test.simple_test2 (id bigint unique key)")
 	tk.MustExec("create table test2.simple_test3 (a bigint)")
 	tk.MustExec("create table test2.simple_test4 (a varchar(20) unique key)")
@@ -812,34 +812,34 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	testCases := [][]string{{
-		"create database test_ddl1",                                                               // ActionCreateSchema
-		"create table test_ddl1.simple_test1 (id bigint primary key)",                             // ActionCreateTable
-		"create table test_ddl1.simple_test2 (id bigint)",                                         // ActionCreateTable
-		"create table test_ddl1.simple_test3 (id bigint primary key)",                             // ActionCreateTable
-		"create table test_ddl1.simple_test4 (id bigint primary key)",                             // ActionCreateTable
-		"DROP TABLE test_ddl1.simple_test3",                                                       // ActionDropTable
-		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                           // ActionAddColumn
-		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                         // ActionAddColumn
-		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",             // ActionAddColumns
-		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                              // ActionDropColumn
-		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                     // ActionDropColumns
-		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                       // ActionAddIndex
-		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                        // ActionDropIndex
-		"TRUNCATE test_ddl1.simple_test1",                                                         // ActionTruncateTable
-		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                          // ActionModifySchemaCharsetAndCollate
-		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",             // ActionAddColumns
-		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                       // ActionAddIndex
-		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                             // ActionAlterIndexVisibility
-		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                            // ActionRenameIndex
-		"ALTER TABLE test_ddl1.simple_test2 MODIFY c2 BIGINT",                                     // ActionModifyColumn
-		"CREATE VIEW test_ddl1.view_test2 AS SELECT * FROM test_ddl1.simple_test2 WHERE id > 2",   // ActionCreateView
-		"DROP VIEW test_ddl1.view_test2",                                                          // ActionDropView
-		"RENAME TABLE test_ddl1.simple_test2 TO test_ddl1.simple_test5",                           // ActionRenameTable
-		"DROP DATABASE test_ddl1",                                                                 // ActionDropSchema
-		"create database test_ddl2",                                                               // ActionCreateSchema
-		"create table test_ddl2.simple_test1 (id bigint primary key, c1 int not null unique key)", // ActionCreateTable
+		"create database test_ddl1", // ActionCreateSchema
+		"create table test_ddl1.simple_test1 (id bigint primary key clustered )",                             // ActionCreateTable
+		"create table test_ddl1.simple_test2 (id bigint)",                                                    // ActionCreateTable
+		"create table test_ddl1.simple_test3 (id bigint primary key clustered )",                             // ActionCreateTable
+		"create table test_ddl1.simple_test4 (id bigint primary key clustered )",                             // ActionCreateTable
+		"DROP TABLE test_ddl1.simple_test3",                                                                  // ActionDropTable
+		"ALTER TABLE test_ddl1.simple_test1 ADD COLUMN c1 INT NOT NULL",                                      // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c2 INT NOT NULL AFTER id",                                    // ActionAddColumn
+		"ALTER TABLE test_ddl1.simple_test1 ADD c3 INT NOT NULL, ADD c4 INT NOT NULL",                        // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test1 DROP c1",                                                         // ActionDropColumn
+		"ALTER TABLE test_ddl1.simple_test1 DROP c2, DROP c3",                                                // ActionDropColumns
+		"ALTER TABLE test_ddl1.simple_test1 ADD INDEX (c4)",                                                  // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test1 DROP INDEX c4",                                                   // ActionDropIndex
+		"TRUNCATE test_ddl1.simple_test1",                                                                    // ActionTruncateTable
+		"ALTER DATABASE test_ddl1 CHARACTER SET = binary COLLATE binary",                                     // ActionModifySchemaCharsetAndCollate
+		"ALTER TABLE test_ddl1.simple_test2 ADD c1 INT NOT NULL, ADD c2 INT NOT NULL",                        // ActionAddColumns
+		"ALTER TABLE test_ddl1.simple_test2 ADD INDEX (c1)",                                                  // ActionAddIndex
+		"ALTER TABLE test_ddl1.simple_test2 ALTER INDEX c1 INVISIBLE",                                        // ActionAlterIndexVisibility
+		"ALTER TABLE test_ddl1.simple_test2 RENAME INDEX c1 TO idx_c1",                                       // ActionRenameIndex
+		"ALTER TABLE test_ddl1.simple_test2 MODIFY c2 BIGINT",                                                // ActionModifyColumn
+		"CREATE VIEW test_ddl1.view_test2 AS SELECT * FROM test_ddl1.simple_test2 WHERE id > 2",              // ActionCreateView
+		"DROP VIEW test_ddl1.view_test2",                                                                     // ActionDropView
+		"RENAME TABLE test_ddl1.simple_test2 TO test_ddl1.simple_test5",                                      // ActionRenameTable
+		"DROP DATABASE test_ddl1",                                                                            // ActionDropSchema
+		"create database test_ddl2",                                                                          // ActionCreateSchema
+		"create table test_ddl2.simple_test1 (id bigint primary key clustered , c1 int not null unique key)", // ActionCreateTable
 		`CREATE TABLE test_ddl2.employees  (
-			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY clustered ,
 			fname VARCHAR(25) NOT NULL,
 			lname VARCHAR(25) NOT NULL,
 			store_id INT NOT NULL,
@@ -856,8 +856,8 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", // ActionAddTablePartition
 		"ALTER TABLE test_ddl2.employees TRUNCATE PARTITION p3",                              // ActionTruncateTablePartition
 		"alter table test_ddl2.employees comment='modify comment'",                           // ActionModifyTableComment
-		"alter table test_ddl2.simple_test1 drop primary key",                                // ActionDropPrimaryKey
-		"alter table test_ddl2.simple_test1 add primary key pk(id)",                          // ActionAddPrimaryKey
+		"alter table test_ddl2.simple_test1 drop primary key clustered ",                     // ActionDropPrimaryKey
+		"alter table test_ddl2.simple_test1 add primary key pk(id) clustered ",               // ActionAddPrimaryKey
 		"ALTER TABLE test_ddl2.simple_test1 ALTER id SET DEFAULT 18",                         // ActionSetDefaultValue
 		"ALTER TABLE test_ddl2.simple_test1 CHARACTER SET = utf8mb4",                         // ActionModifyTableCharsetAndCollate
 		// "recover table test_ddl2.employees",                                                  // ActionRecoverTable this ddl can't work on mock tikv

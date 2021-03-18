@@ -45,8 +45,8 @@ function run() {
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
 
     run_sql "CREATE DATABASE kafka_sink_error_resume;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table kafka_sink_error_resume.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table kafka_sink_error_resume.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table kafka_sink_error_resume.t1(id int primary key auto clustered _increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table kafka_sink_error_resume.t2(id int primary key auto clustered _increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES ();"
 
     for i in $(seq 1 4); do

@@ -31,19 +31,19 @@ function run() {
     cd $WORK_DIR
 
     # create table in all cluters.
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2)) \
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2) clustered ) \
             partition by range (id1) ( \
                 partition p0 values less than (10), \
                 partition p1 values less than (20), \
                 partition p3 values less than (30) \
             );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2)) \
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2) clustered ) \
             partition by range (id1) ( \
                 partition p0 values less than (10), \
                 partition p1 values less than (20), \
                 partition p3 values less than (30) \
             );" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2)) \
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2) clustered ) \
             partition by range (id1) ( \
                 partition p0 values less than (10), \
                 partition p1 values less than (20), \

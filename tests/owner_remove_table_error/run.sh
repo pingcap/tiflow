@@ -31,12 +31,12 @@ function run() {
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
 
     run_sql "CREATE DATABASE owner_remove_table_error;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table owner_remove_table_error.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table owner_remove_table_error.t1(id int primary key auto clustered _increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "INSERT INTO owner_remove_table_error.t1 VALUES (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "DROP table owner_remove_table_error.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table owner_remove_table_error.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table owner_remove_table_error.t2(id int primary key auto clustered _increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "INSERT INTO owner_remove_table_error.t2 VALUES (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table owner_remove_table_error.finished_mark(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table owner_remove_table_error.finished_mark(id int primary key auto clustered _increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 
     check_table_exists "owner_remove_table_error.finished_mark" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}

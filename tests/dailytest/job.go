@@ -162,7 +162,7 @@ func doDDLProcess(table *table, db *sql.DB) {
 
 func doProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch int) {
 	if len(table.columns) <= 2 {
-		log.S().Fatal("column count must > 2, and the first and second column are for primary key")
+		log.S().Fatal("column count must > 2, and the first and second column are for primary key clustered ")
 	}
 
 	doDMLProcess(table, db, jobCount/2, workerCount, batch)

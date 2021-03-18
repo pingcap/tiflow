@@ -47,5 +47,5 @@ values ('a', 'a,b', b'1000001', '{
 
 create table finish_mark
 (
-    id int PRIMARY KEY
+    id int PRIMARY KEY clustered 
 );

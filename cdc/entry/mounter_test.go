@@ -45,7 +45,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 		values         [][]interface{}
 	}{{
 		tableName:      "simple",
-		createTableDDL: "create table simple(id int primary key)",
+		createTableDDL: "create table simple(id int primary key clustered )",
 		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
 	}, {
 		tableName:      "no_pk",
@@ -57,7 +57,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 		values:         [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
 	}, {
 		tableName:      "default_value",
-		createTableDDL: "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
+		createTableDDL: "create table default_value(id int primary key clustered , c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
 		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
 	}, {
 		tableName: "partition_table",
@@ -94,7 +94,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			c_int       int       null,
 			c_bigint    bigint    null,
 			constraint pk
-				primary key (id)
+				primary key (id) clustered 
 		);`,
 		values: [][]interface{}{
 			{1, 1, 2, 3, 4, 5},
@@ -121,7 +121,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			c_binary     binary(16)    null,
 			c_varbinary  varbinary(16) null,
 			constraint pk
-				primary key (id)
+				primary key (id) clustered 
 		);`,
 		values: [][]interface{}{
 			{1},
@@ -154,7 +154,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			c_time      time      null,
 			c_year      year      null,
 			constraint pk
-				primary key (id)
+				primary key (id) clustered 
 		);`,
 		values: [][]interface{}{
 			{1},
@@ -169,7 +169,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			c_double  double  null,
 			c_decimal decimal null,
 			constraint pk
-				primary key (id)
+				primary key (id) clustered 
 		);`,
 		values: [][]interface{}{
 			{1},
@@ -185,7 +185,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 			c_bit  bit(64)            null,
 			c_json json               null,
 			constraint pk
-				primary key (id)
+				primary key (id) clustered 
 		);`,
 		values: [][]interface{}{
 			{1},
@@ -193,7 +193,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 		},
 	}, {
 		tableName:      "clustered_index1",
-		createTableDDL: "CREATE TABLE clustered_index1 (id VARCHAR(255) PRIMARY KEY, data INT);",
+		createTableDDL: "CREATE TABLE clustered_index1 (id VARCHAR(255) PRIMARY KEY clustered , data INT);",
 		values: [][]interface{}{
 			{"hhh"},
 			{"你好😘", 666},
@@ -201,7 +201,7 @@ func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 		},
 	}, {
 		tableName:      "clustered_index2",
-		createTableDDL: "CREATE TABLE clustered_index2 (id VARCHAR(255), data INT, ddaa date, PRIMARY KEY (id, data, ddaa), UNIQUE KEY (id, data, ddaa));",
+		createTableDDL: "CREATE TABLE clustered_index2 (id VARCHAR(255), data INT, ddaa date, PRIMARY KEY (id, data, ddaa) clustered , UNIQUE KEY (id, data, ddaa));",
 		values: [][]interface{}{
 			{"你好😘", 666, "2020-11-20"},
 			{"世界🤪", 888, "2020-05-12"},

@@ -22,12 +22,12 @@ function run() {
 
 
     # create table to upstream.
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2) clustered );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # create an ineligible table to make sure cyclic replication works fine even with some ineligible tables.
     run_sql "CREATE table test.ineligible(id int, val int);"
 
     # create table to downsteam.
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2) clustered );" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"

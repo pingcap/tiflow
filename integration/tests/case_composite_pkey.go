@@ -18,12 +18,12 @@ import (
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
-// CompositePKeyCase is base impl of test case for composite primary keys
+// CompositePKeyCase is base impl of test case for composite primary keys clustered
 type CompositePKeyCase struct {
 	framework.Task
 }
 
-// NewCompositePKeyCase create a test case which have composite primary key
+// NewCompositePKeyCase create a test case which have composite primary key clustered
 func NewCompositePKeyCase(task framework.Task) *CompositePKeyCase {
 	return &CompositePKeyCase{
 		Task: task,
@@ -32,12 +32,12 @@ func NewCompositePKeyCase(task framework.Task) *CompositePKeyCase {
 
 // Name impl framework.Task interface
 func (s *CompositePKeyCase) Name() string {
-	return "Composite Primary Key"
+	return "Composite Primary Key clustered "
 }
 
 // Run impl framework.Task interface
 func (s *CompositePKeyCase) Run(ctx *framework.TaskContext) error {
-	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id1 int, id2 int, value int, primary key (id1, id2))")
+	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id1 int, id2 int, value int, primary key (id1, id2) clustered )")
 	if err != nil {
 		return err
 	}

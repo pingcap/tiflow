@@ -40,7 +40,7 @@ func (c *AlterCase) Name() string {
 
 // Run impl framework.Task interface
 func (c *AlterCase) Run(ctx *framework.TaskContext) error {
-	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key)")
+	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key clustered )")
 	if err != nil {
 		return err
 	}

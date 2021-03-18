@@ -23,9 +23,9 @@ function prepare() {
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
-    run_sql "CREATE table test.availability1(id int primary key, val int);"
-    run_sql "CREATE table test.availability2(id int primary key, val int);"
-    run_sql "CREATE table test.availability3(id int primary key, val int);"
+    run_sql "CREATE table test.availability1(id int primary key clustered , val int);"
+    run_sql "CREATE table test.availability2(id int primary key clustered , val int);"
+    run_sql "CREATE table test.availability3(id int primary key clustered , val int);"
 
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/"
 }

@@ -3,23 +3,23 @@ create database `new_ci_collation_test`;
 use `new_ci_collation_test`;
 
 CREATE TABLE t1 (
-    a varchar(20) charset utf8mb4 collate utf8mb4_general_ci primary key,
+    a varchar(20) charset utf8mb4 collate utf8mb4_general_ci primary key clustered ,
     b int default 10
 );
 
 CREATE TABLE t2 (
-    a varchar(10) charset utf8 collate utf8_general_ci, primary key(a),
+    a varchar(10) charset utf8 collate utf8_general_ci, primary key(a) clustered ,
     b int default 10
 );
 
 CREATE TABLE t3 (
-    id int primary key auto_increment,
+    id int primary key auto clustered _increment,
     a varchar(20) charset utf8mb4 collate utf8mb4_general_ci,
     b int default 10
 );
 
 CREATE TABLE t4 (
-    a int primary key,
+    a int primary key clustered ,
     b varchar(10) charset utf8mb4 collate utf8mb4_general_ci,
     c varchar(10) charset utf8 collate utf8_general_ci,
     d varchar(10) not null,
@@ -27,7 +27,7 @@ CREATE TABLE t4 (
 );
 
 CREATE TABLE t5 (
-    a varchar(10) charset utf8mb4 collate utf8mb4_bin, primary key(a),
+    a varchar(10) charset utf8mb4 collate utf8mb4_bin, primary key(a) clustered ,
     b int default 10
 );
 

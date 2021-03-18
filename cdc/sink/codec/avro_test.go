@@ -160,7 +160,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		TableInfo: &model.SimpleTableInfo{
 			Schema: "test", Table: "person",
 		},
-		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id) clustered )",
 		Type:  model2.ActionCreateTable,
 	}
 

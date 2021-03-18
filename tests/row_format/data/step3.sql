@@ -29,7 +29,7 @@ create table tp_int
     c_int       int       null,
     c_bigint    bigint    null,
     constraint pk
-        primary key (id)
+        primary key (id) clustered 
 );
 
 create table tp_text
@@ -48,7 +48,7 @@ create table tp_text
     c_binary     binary(16)    null,
     c_varbinary  varbinary(16) null,
     constraint pk
-        primary key (id)
+        primary key (id) clustered 
 );
 
 create table tp_time
@@ -60,7 +60,7 @@ create table tp_time
     c_time      time      null,
     c_year      year      null,
     constraint pk
-        primary key (id)
+        primary key (id) clustered 
 );
 
 create table tp_real
@@ -70,7 +70,7 @@ create table tp_real
     c_double  double  null,
     c_decimal decimal null,
     constraint pk
-        primary key (id)
+        primary key (id) clustered 
 );
 
 create table tp_other
@@ -81,7 +81,7 @@ create table tp_other
     c_bit  bit(64)            null,
     c_json json               null,
     constraint pk
-        primary key (id)
+        primary key (id) clustered 
 );
 
 insert into tp_int()

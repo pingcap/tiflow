@@ -22,7 +22,7 @@ CREATE TABLE multi_data_type
     t_enum      ENUM ('enum1', 'enum2', 'enum3'),
     t_set       SET ('a', 'b', 'c'),
     t_json      JSON,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id) clustered 
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8
   COLLATE = utf8_bin;

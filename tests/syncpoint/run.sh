@@ -18,7 +18,7 @@ function ddl() {
     sleep 2
     run_sql "DROP table IF EXISTS testSync.simple2"
     sleep 2
-    run_sql "CREATE table testSync.simple1(id int primary key, val int);"
+    run_sql "CREATE table testSync.simple1(id int primary key clustered , val int);"
     sleep 2
     run_sql "INSERT INTO testSync.simple1(id, val) VALUES (1, 1);"
     sleep 2
@@ -32,7 +32,7 @@ function ddl() {
     sleep 2
     run_sql "INSERT INTO testSync.simple1(id, val) VALUES (6, 6);"
     sleep 2
-    run_sql "CREATE table testSync.simple2(id int primary key, val int);"
+    run_sql "CREATE table testSync.simple2(id int primary key clustered , val int);"
     sleep 2
     run_sql "INSERT INTO testSync.simple2(id, val) VALUES (1, 1);"
     sleep 2

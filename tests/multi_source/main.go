@@ -67,7 +67,7 @@ func main() {
 	go switchAsyncCommit(ctx, sourceDB0)
 	util.MustExec(sourceDB0, "create database mark;")
 	runDDLTest([]*sql.DB{sourceDB0, sourceDB1})
-	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
+	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key clustered );")
 }
 
 // for every DDL, run the DDL continuously, and one goroutine for one TiDB instance to do some DML op
@@ -108,7 +108,7 @@ func runDDLTest(srcs []*sql.DB) {
 		time.Sleep(5 * time.Second)
 		cancel()
 
-		util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", i))
+		util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key clustered );", i))
 	}
 }
 

@@ -37,7 +37,7 @@ function run() {
 
     # Add a check table to reduce check time, or if we check data with sync diff
     # directly, there maybe a lot of diff data at first because of the incremental scan
-    run_sql "CREATE table move_table.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table move_table.check1(id int primary key clustered );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "move_table.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     cd $CUR
@@ -48,7 +48,7 @@ function run() {
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
     run_sql "truncate table move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-    run_sql "CREATE table move_table.check2(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table move_table.check2(id int primary key clustered );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "move_table.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 

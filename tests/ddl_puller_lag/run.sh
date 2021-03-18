@@ -18,8 +18,8 @@ function prepare() {
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
-    run_sql "CREATE table test.ddl_puller_lag1(id int primary key, val int);"
-    run_sql "CREATE table test.ddl_puller_lag2(id int primary key, val int);"
+    run_sql "CREATE table test.ddl_puller_lag1(id int primary key clustered , val int);"
+    run_sql "CREATE table test.ddl_puller_lag2(id int primary key clustered , val int);"
 
     # run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processorDDLResolved=1*sleep(180000)' # old processor
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processor/processorDDLResolved=1*sleep(180000)' # new processor

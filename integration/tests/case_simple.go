@@ -37,7 +37,7 @@ func (s *SimpleCase) Name() string {
 
 // Run impl framework.Task interface
 func (s *SimpleCase) Run(ctx *framework.TaskContext) error {
-	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
+	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key clustered , value int)")
 	if err != nil {
 		return err
 	}

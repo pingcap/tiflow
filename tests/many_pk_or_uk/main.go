@@ -48,11 +48,11 @@ func main() {
 		}
 	}()
 	runPKorUKcases(sourceDB)
-	util.MustExec(sourceDB, "create table finish_mark(a int primary key);")
+	util.MustExec(sourceDB, "create table finish_mark(a int primary key clustered );")
 }
 
 // create a table with one column id with different type
-// test the case whether it is primary key too, this can
+// test the case whether it is primary key too clustered , this can
 // also help test when the column is handle or not.
 func runPKorUKcases(db *sql.DB) {
 	cases := []struct {
@@ -105,7 +105,7 @@ func runPKorUKcases(db *sql.DB) {
 	var g sync.WaitGroup
 
 	for i, c := range cases {
-		for j, pkOrUK := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
+		for j, pkOrUK := range []string{"UNIQUE NOT NULL", "PRIMARY KEY clustered "} {
 			g.Add(1)
 			tableName := fmt.Sprintf("pk_or_uk_%d_%d", i, j)
 			pkOrUK := pkOrUK

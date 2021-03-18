@@ -3,7 +3,7 @@ USE `common_1`;
 
 CREATE TABLE `add_and_drop_columns`
 (
-    `id` int(11) NOT NULL PRIMARY KEY
+    `id` int(11) NOT NULL PRIMARY KEY clustered 
 );
 
 insert into `add_and_drop_columns` (id)

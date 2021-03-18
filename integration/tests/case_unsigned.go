@@ -41,7 +41,7 @@ func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 		t_int       INT UNSIGNED,
 		t_bigint    BIGINT UNSIGNED,
 		t_bit       BIT(64),
-		PRIMARY KEY (id)
+		PRIMARY KEY (id) clustered 
 	)
     `
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, createDBQuery)
