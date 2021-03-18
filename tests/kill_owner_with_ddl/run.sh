@@ -51,14 +51,14 @@ function run() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
     cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI"
     run_sql "CREATE DATABASE kill_owner_with_ddl;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table kill_owner_with_ddl.t1 (id int primary key auto clustered _increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table kill_owner_with_ddl.t1 (id int primary key clustered auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "kill_owner_with_ddl.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkExecDDLDelay=return(true);github.com/pingcap/ticdc/cdc/ownerFlushIntervalInject=return(0)'
     kill_cdc_and_restart $pd_addr $WORK_DIR $CDC_BINARY
 
     for i in $(seq 2 3); do
-        run_sql "CREATE table kill_owner_with_ddl.t$i (id int primary key auto clustered _increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+        run_sql "CREATE table kill_owner_with_ddl.t$i (id int primary key clustered auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     done
     for i in $(seq 1 3); do
         run_sql "INSERT INTO kill_owner_with_ddl.t$i VALUES (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

@@ -45,7 +45,7 @@ function run() {
 
     run_sql "CREATE DATABASE capture_suicide_while_balance_table;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     for i in $(seq 1 4); do
-        run_sql "CREATE table capture_suicide_while_balance_table.t$i (id int primary key auto clustered _increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+        run_sql "CREATE table capture_suicide_while_balance_table.t$i (id int primary key clustered auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     done
 
     for i in $(seq 1 4); do

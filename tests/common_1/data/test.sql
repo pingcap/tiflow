@@ -69,7 +69,7 @@ VALUES ('{
 
 CREATE TABLE t1
 (
-    id INT NOT NULL PRIMARY KEY AUTO clustered _INCREMENT,
+    id INT NOT NULL PRIMARY KEY clustered auto_increment,
     c1 INT NOT NULL
 );
 

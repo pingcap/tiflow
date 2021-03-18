@@ -28,7 +28,7 @@ function run() {
 
     run_sql "CREATE DATABASE changefeed_pause_resume;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     for i in $(seq 1 $TABLE_COUNT); do
-        stmt="CREATE table changefeed_pause_resume.t$i (id int primary key auto clustered _increment, t datetime DEFAULT CURRENT_TIMESTAMP)"
+        stmt="CREATE table changefeed_pause_resume.t$i (id int primary key clustered auto_increment, t datetime DEFAULT CURRENT_TIMESTAMP)"
         run_sql "$stmt" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     done
 
@@ -46,7 +46,7 @@ function run() {
         done
 
         for j in $(seq 1 $TABLE_COUNT); do
-            stmt="CREATE table changefeed_pause_resume.t$j (id int primary key auto clustered _increment, t datetime DEFAULT CURRENT_TIMESTAMP)"
+            stmt="CREATE table changefeed_pause_resume.t$j (id int primary key clustered auto_increment, t datetime DEFAULT CURRENT_TIMESTAMP)"
             run_sql "$stmt" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
         done
 

@@ -46,8 +46,8 @@ function run() {
     run_sql "CREATE DATABASE processor_err_chan;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE DATABASE processor_err_chan;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     for i in $(seq 1 10); do
-        run_sql "CREATE table processor_err_chan.t$i (id int primary key auto clustered _increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-        run_sql "CREATE table processor_err_chan.t$i (id int primary key auto clustered _increment)" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+        run_sql "CREATE table processor_err_chan.t$i (id int primary key clustered auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+        run_sql "CREATE table processor_err_chan.t$i (id int primary key clustered auto_increment)" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     done
 
     # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorAddTableError=1*return(true)' # old processor

@@ -13,7 +13,7 @@ CREATE TABLE t2 (
 );
 
 CREATE TABLE t3 (
-    id int primary key auto clustered _increment,
+    id int primary key clustered auto_increment,
     a varchar(20) charset utf8mb4 collate utf8mb4_general_ci,
     b int default 10
 );
