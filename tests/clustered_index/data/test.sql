@@ -2,7 +2,8 @@ drop database if exists `clustered_index_test`;
 create database `clustered_index_test`;
 use `clustered_index_test`;
 
-set @@tidb_enable_clustered_index=1;
+set global tidb_enable_clustered_index=1;
+select sleep(2);
 
 CREATE TABLE t0 (
 	id VARCHAR(255),

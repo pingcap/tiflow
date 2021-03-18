@@ -48,7 +48,7 @@ export -f check_data_subset
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster --workdir $WORK_DIR --tidb-config $CUR/conf/tidb_config.toml
+    start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
 
