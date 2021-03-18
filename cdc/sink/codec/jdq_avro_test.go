@@ -44,6 +44,7 @@ func (s *jdqEventBatchEncoderSuite) SetUpSuite(c *check.C) {
 	s.encoder = &JdqEventBatchEncoder{
 		resultBuf:    make([]*MQMessage, 0, 4096),
 		binaryEncode: charmap.ISO8859_1.NewDecoder(),
+		opt:          map[string]string{"tidb-domain": "tidb-ji341e4do7-tidb.tidb-ji341e4do7-hb.xxxx.jdcloud.com"},
 	}
 }
 
@@ -60,6 +61,7 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
                               {"name":"tab","type":"string"},
                               {"name":"opt","type":"string"},
                               {"name":"ts","type":"long"},
+                              {"name":"ddl","type":["string","null"]},
                               {"name":"err","type":["string","null"]},
                               {"name":"src","type":[{"type":"map","values":["string","null"]},"null"]},
                               {"name":"cur","type":[{"type":"map","values":["string","null"]},"null"]},

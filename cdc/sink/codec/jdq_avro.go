@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"strconv"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 
@@ -54,12 +55,17 @@ const (
 	schemaKeyCus    = "cus"
 	schemaKeyMap    = "map"
 	schemaKeyString = "string"
+
+	cusKeyPts = "p_ts"
+	cusKeyFt  = "ft"
+	cusKeyIP  = "ip"
 )
 
 // JdqEventBatchEncoder converts the events to binary Jdq data
 type JdqEventBatchEncoder struct {
 	resultBuf    []*MQMessage
 	binaryEncode *encoding.Decoder
+	opt          map[string]string
 }
 
 type jdqEncodeResult struct {
@@ -72,6 +78,12 @@ func NewJdqEventBatchEncoder() EventBatchEncoder {
 		resultBuf:    make([]*MQMessage, 0, 4096),
 		binaryEncode: charmap.ISO8859_1.NewDecoder(),
 	}
+}
+
+// SetParams is no-op for now
+func (a *JdqEventBatchEncoder) SetParams(params map[string]string) error {
+	a.opt = params
+	return nil
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -180,12 +192,6 @@ func (a *JdqEventBatchEncoder) Size() int {
 	return sum
 }
 
-// SetParams is no-op for now
-func (a *JdqEventBatchEncoder) SetParams(params map[string]string) error {
-	// no op
-	return nil
-}
-
 func (a *JdqEventBatchEncoder) jdqEncode(e *model.RowChangedEvent) (*jdqEncodeResult, error) {
 	jdwSchema := `
                   {"type":"record","name":"JdwData","namespace":"com.jd.bdp.jdw.avro",
@@ -283,7 +289,30 @@ func (a *JdqEventBatchEncoder) rowToJdqNativeData(e *model.RowChangedEvent) (int
 		return nil, errors.New("ignore other row events")
 	}
 
+	cusMap, err := a.getCusNativeData()
+	if err != nil {
+		return nil, err
+	}
+
+	data[schemaKeyCus] = cusMap
 	return data, nil
+}
+
+func (a *JdqEventBatchEncoder) getCusNativeData() (interface{}, error) {
+	ptsUnion := make(map[string]interface{}, 1)
+	ftUnion := make(map[string]interface{}, 1)
+	ipUnion := make(map[string]interface{}, 1)
+	cusMap := make(map[string]interface{}, 1)
+
+	millTime := time.Now().UnixNano() / int64(time.Millisecond)
+	timeStr := strconv.FormatInt(millTime, 10)
+	ipUnion[schemaKeyString] = a.opt["tidb-domain"]
+	ptsUnion[schemaKeyString] = timeStr
+	ftUnion[schemaKeyString] = timeStr
+	unions := map[string]interface{}{cusKeyIP: ipUnion, cusKeyPts: ptsUnion, cusKeyFt: ftUnion}
+
+	cusMap[schemaKeyMap] = unions
+	return cusMap, nil
 }
 
 func (a *JdqEventBatchEncoder) getColumnsNativeData(cols []*model.Column) (interface{}, error) {
