@@ -100,7 +100,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	ctx = util.PutChangefeedIDInCtx(ctx, s.metricsInfo.changeFeedID)
 	ctx = util.PutTableInfoInCtx(ctx, s.metricsInfo.tableID, s.metricsInfo.tableName)
 
-	sorterConfig := config.GetSorterConfig()
+	sorterConfig := config.GetGlobalServerConfig().Sorter
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
 	errg, subctx := errgroup.WithContext(ctx)
