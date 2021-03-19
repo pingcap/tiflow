@@ -2,7 +2,7 @@ drop database if exists `force_replicate_table`;
 create database `force_replicate_table`;
 use `force_replicate_table`;
 
-CREATE TABLE t0 (id bigint primary key nonclustered, a int);
+CREATE TABLE t0 (id bigint primary key, a int);
 CREATE TABLE t1 (id bigint not null unique key, a int);
 CREATE TABLE t2 (id bigint unique key, a int);
 CREATE TABLE t3 (id bigint, a int);
