@@ -87,7 +87,7 @@ function cdclog_test() {
 
   SINK_URI="s3://logbucket/test?endpoint=http://$S3_ENDPOINT/"
 
-  run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+  run_cdc_cli changefeed create --start-ts=0 --sink-uri="$SINK_URI"
 
   run_sql "create table $TEST_NAME.t2 (c0 int primary key, payload varchar(1024));"
 
