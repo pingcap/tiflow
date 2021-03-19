@@ -9,7 +9,7 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 ddls=("create database ddl_reentrant" false
-      "create table ddl_reentrant.t1 (id int primary key, id2 int not null, a varchar(10) not null, unique a(a), unique id2(id2))" false
+      "create table ddl_reentrant.t1 (id int primary key nonclustered, id2 int not null, a varchar(10) not null, unique a(a), unique id2(id2))" false
       "alter table ddl_reentrant.t1 add column b int" false
       "alter table ddl_reentrant.t1 drop column b" false
       "alter table ddl_reentrant.t1 add key index_a(a)" false
