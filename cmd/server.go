@@ -78,6 +78,7 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", defaultServerConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
 	// We use 8GB as a safe default before we support local configuration file.
 	cmd.Flags().Uint64Var(&serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", defaultServerConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
+	cmd.Flags().StringVar(&serverConfig.Sorter.SortDir, "sort-dir", defaultServerConfig.Sorter.SortDir, "sorter's temporary file directory")
 
 	addSecurityFlags(cmd.Flags(), true /* isServer */)
 
@@ -166,6 +167,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.KeyPath = serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
+		case "sort-dir":
+			conf.Sorter.SortDir = serverConfig.Sorter.SortDir
 		case "pd", "config":
 			// do nothing
 		default:

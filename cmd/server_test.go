@@ -90,6 +90,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		"--sorter-max-memory-percentage", "70",
 		"--sorter-num-concurrent-worker", "80",
 		"--sorter-num-workerpool-goroutine", "90",
+		"--sort-dir", "/tmp/just_a_test",
 	}), check.IsNil)
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
@@ -108,6 +109,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60,
 			NumWorkerPoolGoroutine: 90,
+			SortDir:                "/tmp/just_a_test",
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -138,6 +140,7 @@ max-memory-consumption = 2
 max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
+sort-dir = "/tmp/just_a_test"
 `
 	err = ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -161,6 +164,7 @@ num-workerpool-goroutine = 5
 			MaxMemoryPressure:      3,
 			MaxMemoryConsumption:   2,
 			NumWorkerPoolGoroutine: 5,
+			SortDir:                "/tmp/just_a_test",
 		},
 		Security: &config.SecurityConfig{},
 	})

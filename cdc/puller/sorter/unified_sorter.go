@@ -44,6 +44,11 @@ func NewUnifiedSorter(dir string, tableName string, captureAddr string) *Unified
 	defer poolMu.Unlock()
 
 	if pool == nil {
+		sorterConfig := config.GetGlobalServerConfig().Sorter
+		if sorterConfig.SortDir != "" {
+			// Let the local setting override the changefeed setting
+			dir = sorterConfig.SortDir
+		}
 		pool = newBackEndPool(dir, captureAddr)
 	}
 

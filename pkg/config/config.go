@@ -153,6 +153,8 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryPressure:      80,
 		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
 		NumWorkerPoolGoroutine: 16,
+		// We use the empty string as the default to let the any non-empty setting override the changefeed's `sort-dir` setting.
+		SortDir: "",
 	},
 	Security: &SecurityConfig{},
 }
@@ -248,6 +250,26 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 			return errors.Annotate(err, "invalidate TLS config")
 		}
 	}
+
+	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
+	}
+	if c.Sorter.NumConcurrentWorker < 1 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker should be at least 1")
+	}
+	if c.Sorter.NumWorkerPoolGoroutine > 4096 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at most 4096")
+	}
+	if c.Sorter.NumConcurrentWorker > c.Sorter.NumWorkerPoolGoroutine {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker larger than num-workerpool-goroutine is useless")
+	}
+	if c.Sorter.NumWorkerPoolGoroutine < 1 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
+	}
+	if c.Sorter.MaxMemoryPressure < 0 || c.Sorter.MaxMemoryPressure > 100 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+	}
+
 	return nil
 }
 
