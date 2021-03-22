@@ -50,10 +50,15 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	defer func() {
 		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
 		// clean up resources
-		// TODO add deadline
+		cleanUpCtx, cancel := context.WithTimeout(context.TODO(), 2*time.Second)
+		defer cancel()
 		for task := range pendingSet {
-			err := <-task.finished
-			_ = printError(err)
+			select {
+			case <-cleanUpCtx.Done():
+				break
+			case err := <-task.finished:
+				_ = printError(err)
+			}
 
 			if task.reader != nil {
 				_ = printError(task.reader.resetAndClose())
