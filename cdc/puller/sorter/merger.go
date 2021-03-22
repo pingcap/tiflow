@@ -55,7 +55,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		for task := range pendingSet {
 			select {
 			case <-cleanUpCtx.Done():
-				break
+				// This should only happen when the workerpool is being cancelled, in which case
+				// the whole CDC process is exiting, so the leaked resource should not matter.
+				log.Warn("Unified Sorter: merger cleaning up timeout.")
+				return
 			case err := <-task.finished:
 				_ = printError(err)
 			}
@@ -101,7 +104,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			for task := range workingSet {
 				select {
 				case <-cleanUpCtx.Done():
-					break
+					// This should only happen when the workerpool is being cancelled, in which case
+					// the whole CDC process is exiting, so the leaked resource should not matter.
+					log.Warn("Unified Sorter: merger cleaning up timeout.")
+					return
 				case err := <-task.finished:
 					_ = printError(err)
 				}
