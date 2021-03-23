@@ -413,12 +413,17 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
 type SingleTableTxn struct {
+	// data fields of SingleTableTxn
 	Table     *TableName
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
 	ReplicaID uint64
-	FinishWg  *sync.WaitGroup // used to notify txn consumed
+
+	// control fields of SingleTableTxn
+	// FinishWg is a barrier txn, after this txn is received, the worker must
+	// flush cached txns and call FinishWg.Done() to mark txns have been flushed.
+	FinishWg *sync.WaitGroup
 }
 
 // Append adds a row changed event into SingleTableTxn
