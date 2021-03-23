@@ -842,7 +842,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 				sorter = puller.NewFileSorter(p.changefeed.SortDir)
 			} else {
 				// Unified Sorter
-				sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
+				sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, p.changefeedID, tableName, tableID, util.CaptureAddrFromCtx(ctx))
 			}
 		default:
 			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))

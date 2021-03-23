@@ -18,9 +18,8 @@ import (
 	"math"
 	"os"
 	"sync/atomic"
+	"testing"
 	"time"
-
-	_ "net/http/pprof"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -32,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	_ "net/http/pprof"
 )
 
 const (
@@ -40,7 +40,9 @@ const (
 
 type sorterSuite struct{}
 
-var _ = check.Suite(&sorterSuite{})
+var _ = check.SerialSuites(&sorterSuite{})
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 func generateMockRawKV(ts uint64) *model.RawKVEntry {
 	return &model.RawKVEntry{
@@ -70,7 +72,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
+	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -93,7 +95,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
+	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -138,7 +140,7 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 	for i := 0; i < numProducers; i++ {
 		finalI := i
 		errg.Go(func() error {
-			for j := 0; j < count; j++ {
+			for j := 1; j <= count; j++ {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -150,8 +152,8 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 					atomic.StoreUint64(&producerProgress[finalI], uint64(j)<<5)
 				}
 			}
-			sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(count)<<5)))
-			atomic.StoreUint64(&producerProgress[finalI], uint64(count)<<5)
+			sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(count+1)<<5)))
+			atomic.StoreUint64(&producerProgress[finalI], uint64(count+1)<<5)
 			return nil
 		})
 	}
@@ -252,7 +254,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	}()
 
 	for i := 0; i < 5; i++ {
-		sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test")
+		sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		testSorter(ctx, c, sorter, 100000000, true)
 		cancel()
