@@ -808,6 +808,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 					return errors.Trace(err)
 				}
 				txn.FinishWg.Done()
+				continue
 			}
 			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
