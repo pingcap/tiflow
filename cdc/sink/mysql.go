@@ -94,6 +94,7 @@ type mysqlSink struct {
 	execWaitNotifier *notify.Notifier
 	resolvedNotifier *notify.Notifier
 	errCh            chan error
+	flushSyncWg      sync.WaitGroup
 
 	statistics *Statistics
 
@@ -647,9 +648,7 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	s.execWaitNotifier.Notify()
 	done := make(chan struct{})
 	go func() {
-		for _, w := range s.workers {
-			w.waitAllTxnsExecuted()
-		}
+		s.flushSyncWg.Wait()
 		close(done)
 	}()
 	// This is a hack code to avoid io wait in some routine blocks others to exit.
@@ -691,12 +690,17 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		resolveConflict(txn)
 		s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 	})
+	// Note all data txn is sent via channel, the control txn must come after all
+	// data txns in each worker. So after worker receives the control txn, it can
+	// flush txns immediately and call wait group done once.
+	for _, worker := range s.workers {
+		worker.appendFinishTxn(&s.flushSyncWg)
+	}
 	s.notifyAndWaitExec(ctx)
 }
 
 type mysqlSinkWorker struct {
 	txnCh            chan *model.SingleTableTxn
-	txnWg            sync.WaitGroup
 	maxTxnRow        int
 	bucket           int
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
@@ -722,19 +726,22 @@ func newMySQLSinkWorker(
 	}
 }
 
-func (w *mysqlSinkWorker) waitAllTxnsExecuted() {
-	w.txnWg.Wait()
-}
-
 func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
 	if txn == nil {
 		return
 	}
-	w.txnWg.Add(1)
 	select {
 	case <-ctx.Done():
-		w.txnWg.Done()
 	case w.txnCh <- txn:
+	}
+}
+
+func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
+	// since worker will always fetch txns from txnCh, we don't need to worry the
+	// txnCh full and send is blocked.
+	wg.Add(1)
+	w.txnCh <- &model.SingleTableTxn{
+		FinishWg: wg,
 	}
 }
 
@@ -746,22 +753,18 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		lastCommitTs uint64
 	)
 
-	// There should be a barrier to prevent more txns to be sent to `txnCh`
-	// after the last time to consume txn from `txnCh`, because the WaitGroup
-	// counter must match.
+	// mark FinishWg before worker exits, all data txns can be omitted.
 	defer func() {
-		incr := 0
-	fillinLoop:
 		for {
 			select {
-			case w.txnCh <- nil:
-				incr++
+			case txn := <-w.txnCh:
+				if txn.FinishWg != nil {
+					txn.FinishWg.Done()
+				}
 			default:
-				break fillinLoop
+				return
 			}
 		}
-		txnNum += len(w.txnCh) - incr
-		w.txnWg.Add(-1 * txnNum)
 	}()
 
 	defer func() {
@@ -771,8 +774,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			buf = buf[:stackSize]
 			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
 			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
-			w.txnWg.Add(-1 * txnNum)
-			txnNum = 0
 		}
 	}()
 
@@ -784,14 +785,12 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		copy(rows, toExecRows)
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
-			w.txnWg.Add(-1 * txnNum)
 			txnNum = 0
 			return err
 		}
 		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
-		w.txnWg.Add(-1 * txnNum)
 		txnNum = 0
 		return nil
 	}
@@ -803,6 +802,12 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		case txn := <-w.txnCh:
 			if txn == nil {
 				return errors.Trace(flushRows())
+			}
+			if txn.FinishWg != nil {
+				if err := flushRows(); err != nil {
+					return errors.Trace(err)
+				}
+				txn.FinishWg.Done()
 			}
 			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {

@@ -205,10 +205,12 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		for _, txn := range tc.txns {
 			w.appendTxn(cctx, txn)
 		}
+		var wg sync.WaitGroup
+		w.appendFinishTxn(&wg)
 		// ensure all txns are fetched from txn channel in sink worker
 		time.Sleep(time.Millisecond * 100)
 		notifier.Notify()
-		w.waitAllTxnsExecuted()
+		wg.Wait()
 		cancel()
 		c.Assert(errors.Cause(errg.Wait()), check.Equals, context.Canceled)
 		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
@@ -270,13 +272,15 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
 	for _, txn := range txns1 {
 		w.appendTxn(cctx, txn)
 	}
+	var wg sync.WaitGroup
+	w.appendFinishTxn(&wg)
 	time.Sleep(time.Millisecond * 100)
 	// txn in txn2 will be blocked since the worker has exited
 	for _, txn := range txns2 {
 		w.appendTxn(cctx, txn)
 	}
 	notifier.Notify()
-	w.waitAllTxnsExecuted()
+	wg.Wait()
 	cancel()
 	c.Assert(errg.Wait(), check.Equals, errExecFailed)
 }

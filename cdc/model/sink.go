@@ -16,6 +16,7 @@ package model
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -417,6 +418,7 @@ type SingleTableTxn struct {
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
 	ReplicaID uint64
+	FinishWg  *sync.WaitGroup // used to notify txn consumed
 }
 
 // Append adds a row changed event into SingleTableTxn
