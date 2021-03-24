@@ -41,14 +41,15 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-RELEASE_VERSION := v5.0.0-master
-ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
+# a hack to trigger TiKV feature gating
+RELEASE_VERSION := v5.0.1
+# ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
 	# If we are in release branch, use tag version.
-	RELEASE_VERSION := $(shell git describe --tags --dirty="-dirty")
-else ifneq ($(shell git status --porcelain),)
+#	RELEASE_VERSION := $(shell git describe --tags --dirty="-dirty")
+#else ifneq ($(shell git status --porcelain),)
 	# Add -dirty if the working tree is dirty for non release branch.
-	RELEASE_VERSION := $(RELEASE_VERSION)-dirty
-endif
+#	RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+#endif
 
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
