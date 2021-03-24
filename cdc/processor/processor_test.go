@@ -317,7 +317,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	})
 
 	// remove table, in processing
-	p.changefeed.TaskStatus.RemoveTable(66, 120)
+	p.changefeed.TaskStatus.RemoveTable(66, 120, false)
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
@@ -431,7 +431,7 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	table3.resolvedTs = 102
 	table4.resolvedTs = 103
 	// removed table 3
-	p.changefeed.TaskStatus.RemoveTable(3, 60)
+	p.changefeed.TaskStatus.RemoveTable(3, 60, false)
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
@@ -488,8 +488,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(p.tables, check.HasLen, 3)
 
 	// remove table, in processing
-	p.changefeed.TaskStatus.RemoveTable(1, 120)
-	p.changefeed.TaskStatus.RemoveTable(4, 120)
+	p.changefeed.TaskStatus.RemoveTable(1, 120, false)
+	p.changefeed.TaskStatus.RemoveTable(4, 120, false)
 	delete(p.changefeed.TaskStatus.Tables, 2)
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
