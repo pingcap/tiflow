@@ -321,7 +321,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 		id := id
 		targetTs := targetTs
 		updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
-			status.RemoveTable(id, targetTs)
+			status.RemoveTable(id, targetTs, false /*isMoveTable*/)
 			return true, nil
 		})
 		cleanedTables[id] = struct{}{}
@@ -530,7 +530,7 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			// To ensure that the replication pipeline stops exactly at the boundary TS,
 			// The boundary TS specified by Remove Table Operation MUST greater or equal to the checkpoint TS of this table.
 			// So the global resolved TS is a reasonable values.
-			replicaInfo, exist := status.RemoveTable(tableID, c.status.ResolvedTs)
+			replicaInfo, exist := status.RemoveTable(tableID, c.status.ResolvedTs, true /*isMoveTable*/)
 			if !exist {
 				delete(c.moveTableJobs, tableID)
 				log.Warn("ignored the move job, the table is not exist in the source capture", zap.Reflect("job", job))

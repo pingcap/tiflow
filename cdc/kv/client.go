@@ -68,12 +68,12 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
-
-	// hard code switch
-	// true: use kv client v2, which has a region worker for each stream
-	// false: use kv client v1, which runs a goroutine for every single region
-	enableKVClientV2 = true
 )
+
+// hard code switch
+// true: use kv client v2, which has a region worker for each stream
+// false: use kv client v1, which runs a goroutine for every single region
+var enableKVClientV2 = true
 
 type singleRegionInfo struct {
 	verID  tikv.RegionVerID
@@ -344,7 +344,7 @@ type CDCClient struct {
 	}
 
 	regionCache *tikv.RegionCache
-	kvStorage   tikv.Storage
+	kvStorage   TiKVStorage
 
 	regionLimiters *regionEventFeedLimiters
 }
@@ -354,11 +354,21 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 	clusterID := pd.GetClusterID(ctx)
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
+	var store TiKVStorage
+	if kvStorage != nil {
+		// wrap to TiKVStorage if need.
+		if s, ok := kvStorage.(TiKVStorage); ok {
+			store = s
+		} else {
+			store = newStorageWithCurVersionCache(kvStorage, kvStorage.UUID())
+		}
+	}
+
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
+		kvStorage:   store,
 		credential:  credential,
-		kvStorage:   kvStorage,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
@@ -471,7 +481,7 @@ func currentRequestID() uint64 {
 type eventFeedSession struct {
 	client      *CDCClient
 	regionCache *tikv.RegionCache
-	kvStorage   tikv.Storage
+	kvStorage   TiKVStorage
 
 	lockResolver txnutil.LockResolver
 	isPullerInit PullerInitialization
@@ -514,7 +524,7 @@ type rangeRequestTask struct {
 func newEventFeedSession(
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
-	kvStorage tikv.Storage,
+	kvStorage TiKVStorage,
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
@@ -628,12 +638,14 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				// goroutine, it won't block the caller of `schedulerRegionRequest`.
 				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts)
 			}
+		case regionspan.LockRangeStatusCancel:
+			return
 		default:
 			panic("unreachable")
 		}
 	}
 
-	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
+	res := s.rangeLock.LockRange(ctx, sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
 	if res.Status == regionspan.LockRangeStatusWait {
 		res = res.WaitFn()
@@ -755,6 +767,7 @@ MainLoop:
 
 			state := newRegionFeedState(sri, requestID)
 			pendingRegions.insert(requestID, state)
+			failpoint.Inject("kvClientPendingRegionDelay", nil)
 
 			stream, ok := s.getStream(rpcCtx.Addr)
 			// Establish the stream if it has not been connected yet.
@@ -783,8 +796,12 @@ MainLoop:
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
-					pendingRegions.take(requestID)
+					// Take the pendingRegion from `pendingRegions`, if the region
+					// is deleted already, we don't retry for this region. Otherwise,
+					// retry to connect and send request for this region.
+					if _, exists := pendingRegions.take(requestID); !exists {
+						continue MainLoop
+					}
 					continue
 				}
 				s.addStream(rpcCtx.Addr, stream)
@@ -1053,6 +1070,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	}
 
+	failpoint.Inject("kvClientRegionReentrantErrorDelay", nil)
 	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 	return nil
 }
@@ -1379,7 +1397,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
+			version, err := s.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue

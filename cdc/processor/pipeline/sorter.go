@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
@@ -31,16 +32,27 @@ type sorterNode struct {
 	sortEngine model.SortEngine
 	sortDir    string
 	sorter     puller.EventSorter
-	tableName  string // quoted schema and table, used in metircs only
-	wg         errgroup.Group
-	cancel     context.CancelFunc
+
+	changeFeedID model.ChangeFeedID
+	tableID      model.TableID
+	tableName    string // quoted schema and table, used in metircs only
+
+	wg     errgroup.Group
+	cancel context.CancelFunc
 }
 
-func newSorterNode(sortEngine model.SortEngine, sortDir string, tableName string) pipeline.Node {
+func newSorterNode(
+	sortEngine model.SortEngine,
+	sortDir string,
+	changeFeedID model.ChangeFeedID,
+	tableName string, tableID model.TableID) pipeline.Node {
 	return &sorterNode{
 		sortEngine: sortEngine,
 		sortDir:    sortDir,
-		tableName:  tableName,
+
+		changeFeedID: changeFeedID,
+		tableID:      tableID,
+		tableName:    tableName,
 	}
 }
 
@@ -68,11 +80,14 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			sorter = puller.NewFileSorter(n.sortDir)
 		} else {
 			// Unified Sorter
-			sorter = psorter.NewUnifiedSorter(n.sortDir, n.tableName, ctx.Vars().CaptureAddr)
+			sorter = psorter.NewUnifiedSorter(n.sortDir, n.changeFeedID, n.tableName, n.tableID, ctx.Vars().CaptureAddr)
 		}
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
 	}
+	failpoint.Inject("ProcessorAddTableError", func() {
+		failpoint.Return(errors.New("processor add table injected error"))
+	})
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))
 		return nil

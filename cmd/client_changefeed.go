@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/version"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -67,6 +69,19 @@ func newChangefeedCommand() *cobra.Command {
 	return command
 }
 
+func resumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
+	resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
+	if err != nil {
+		return err
+	}
+	info := &cdc.ChangefeedResp{}
+	err = json.Unmarshal([]byte(resp), info)
+	if err != nil {
+		return err
+	}
+	return confirmLargeDataGap(ctx, cmd, info.TSO)
+}
+
 func newAdminChangefeedCommand() []*cobra.Command {
 	cmds := []*cobra.Command{
 		{
@@ -89,6 +104,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminResume,
+				}
+				if err := resumeChangefeedCheck(ctx, cmd); err != nil {
+					return err
 				}
 				return applyAdminChangefeed(ctx, job, getCredential())
 			},
@@ -115,6 +133,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 		_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 		if cmd.Use == "remove" {
 			cmd.PersistentFlags().BoolVarP(&optForceRemove, "force", "f", false, "remove all information of the changefeed")
+		}
+		if cmd.Use == "resume" {
+			cmd.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 		}
 	}
 	return cmds
@@ -220,7 +241,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
-func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential) (*model.ChangeFeedInfo, error) {
+func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if sinkURI == "" {
 			return nil, errors.New("Creating chengfeed without a sink-uri")
@@ -235,14 +256,29 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		if err := verifyStartTs(ctx, startTs); err != nil {
 			return nil, err
 		}
+		if err := confirmLargeDataGap(ctx, cmd, startTs); err != nil {
+			return nil, err
+		}
 		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {
 			return nil, err
 		}
 	}
-
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	cfg := config.GetDefaultReplicaConfig()
+
+	sortEngineFlag := cmd.Flag("sort-engine")
+	if cdcClusterVer == version.TiCDCClusterVersion4_0 {
+		cfg.EnableOldValue = false
+		if !sortEngineFlag.Changed {
+			sortEngine = model.SortInMemory
+		}
+		log.Warn("The TiCDC cluster is built from 4.0-release branch, the old-value and unified-sorter are disabled by default.")
+	}
 	if len(configFile) > 0 {
-		if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
+		if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -298,6 +334,11 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			}
 		}
 	}
+	switch sortEngine {
+	case model.SortUnified, model.SortInMemory, model.SortInFile:
+	default:
+		return nil, errors.Errorf("Creating chengfeed with an invalid sort engine(%s), `%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
+	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
 		Opts:              make(map[string]string),
@@ -305,11 +346,12 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		StartTs:           startTs,
 		TargetTs:          targetTs,
 		Config:            cfg,
-		Engine:            model.SortEngine(sortEngine),
+		Engine:            sortEngine,
 		SortDir:           sortDir,
 		State:             model.StateNormal,
 		SyncPointEnabled:  syncPointEnabled,
 		SyncPointInterval: syncPointInterval,
+		CreatorVersion:    version.ReleaseVersion,
 	}
 
 	if info.Engine != model.SortInMemory && (info.SortDir == ".") {
@@ -390,7 +432,7 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "", "sink uri")
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
-	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "unified", "sort engine used for data sort")
+	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", defaultSortDir, "directory used for data sort")
 	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
@@ -412,7 +454,11 @@ func newCreateChangefeedCommand() *cobra.Command {
 				id = uuid.New().String()
 			}
 
-			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential())
+			_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
+			if err != nil {
+				return err
+			}
+			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential(), captureInfos)
 			if err != nil {
 				return err
 			}
@@ -453,7 +499,11 @@ func newUpdateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, getCredential())
+			_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
+			if err != nil {
+				return err
+			}
+			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, getCredential(), captureInfos)
 			if err != nil {
 				return err
 			}
@@ -592,7 +642,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 
 				cfg := config.GetDefaultReplicaConfig()
 				if len(configFile) > 0 {
-					if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
+					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
 						return err
 					}
 				}
