@@ -765,6 +765,7 @@ MainLoop:
 
 			state := newRegionFeedState(sri, requestID)
 			pendingRegions.insert(requestID, state)
+			failpoint.Inject("kvClientPendingRegionDelay", nil)
 
 			stream, ok := s.getStream(rpcCtx.Addr)
 			// Establish the stream if it has not been connected yet.
@@ -793,8 +794,12 @@ MainLoop:
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
-					pendingRegions.take(requestID)
+					// Take the pendingRegion from `pendingRegions`, if the region
+					// is deleted already, we don't retry for this region. Otherwise,
+					// retry to connect and send request for this region.
+					if _, exists := pendingRegions.take(requestID); !exists {
+						continue MainLoop
+					}
 					continue
 				}
 				s.addStream(rpcCtx.Addr, stream)
