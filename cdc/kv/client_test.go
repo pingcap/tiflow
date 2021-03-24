@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -352,9 +353,10 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	cluster.ChangeLeader(3, 5)
 
-	ts, err := kvStorage.CurrentVersion(oracle.GlobalTxnScope)
+	ts, err := kvStorage.CurrentTimestamp(oracle.GlobalTxnScope)
+	ver := kv.NewVersion(ts)
 	c.Assert(err, check.IsNil)
-	ch2 <- makeEvent(ts.Ver)
+	ch2 <- makeEvent(ver.Ver)
 	var event *model.RegionFeedEvent
 	select {
 	case event = <-eventCh:
@@ -368,7 +370,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
-	checkEvent(event, ts.Ver)
+	checkEvent(event, ver.Ver)
 	cancel()
 }
 
@@ -2354,4 +2356,78 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 	// there will be reentrant region failover, the kv client should not panic.
 	time.Sleep(time.Second)
 	cancel()
+}
+
+// TestClientV1UnlockRangeReentrant tests clientV1 can handle region reconnection
+// with unstable TiKV store correctly. The test workflow is as follows:
+// 1. kv client establishes two regions request, naming region-1, region-2, they
+//    belong to the same TiKV store.
+// 2. The region-1 is firstly established, yet region-2 has some delay after its
+//    region state is inserted into `pendingRegions`
+// 3. At this time the TiKV store crashes and `stream.Recv` returns error. In the
+//    defer function of `receiveFromStream`, all pending regions will be cleaned
+//    up, which means the region lock will be unlocked once for these regions.
+// 4. In step-2, the region-2 continues to run, it can't get store stream which
+//    has been deleted in step-3, so it will create new stream but fails because
+//    of unstable TiKV store, at this point, the kv client should handle with the
+//    pending region correctly.
+func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = false
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID3 := uint64(3)
+	regionID4 := uint64(4)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
+	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	c.Assert(err, check.IsNil)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay", "1*sleep(0)->1*sleep(2000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay")
+	}()
+	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait the second region is scheduled
+	time.Sleep(time.Millisecond * 500)
+	close(ch1)
+	server1.Stop()
+	// wait the kvClientPendingRegionDelay ends, and the second region is processed
+	time.Sleep(time.Second * 2)
+	cancel()
+	wg.Wait()
 }

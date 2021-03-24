@@ -135,8 +135,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 	}
 	failpoint.Inject("sorterDebug", func() {
+		tableID, tableName := util.TableIDFromCtx(ctx)
 		log.Debug("Unified Sorter new flushTask",
-			zap.String("table", tableNameFromCtx(ctx)),
+			zap.Int64("table-id", tableID),
+			zap.String("table-name", tableName),
 			zap.Int("heap-id", task.heapSorterID),
 			zap.Uint64("resolvedTs", task.maxResolvedTs))
 	})
@@ -188,9 +190,11 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			backEndFinal = nil
 
 			failpoint.Inject("sorterDebug", func() {
+				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter flushTask finished",
 					zap.Int("heap-id", task.heapSorterID),
-					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
 					zap.Uint64("resolvedTs", task.maxResolvedTs),
 					zap.Uint64("data-size", dataSize),
 					zap.Int("size", eventCount))
@@ -228,7 +232,7 @@ type heapSorterInternalState struct {
 
 func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	state := &heapSorterInternalState{
-		sorterConfig: config.GetSorterConfig(),
+		sorterConfig: config.GetGlobalServerConfig().Sorter,
 	}
 
 	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
@@ -282,7 +286,7 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 
 func lazyInitWorkerPool() {
 	poolOnce.Do(func() {
-		sorterConfig := config.GetSorterConfig()
+		sorterConfig := config.GetGlobalServerConfig().Sorter
 		heapSorterPool = workerpool.NewDefaultWorkerPool(sorterConfig.NumWorkerPoolGoroutine)
 		heapSorterIOPool = workerpool.NewDefaultAsyncPool(sorterConfig.NumWorkerPoolGoroutine * 2)
 	})
