@@ -2418,7 +2418,9 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	srv1 := newMockChangeDataService(c, ch1)
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2440,9 +2442,9 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
