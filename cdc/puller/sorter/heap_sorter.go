@@ -135,8 +135,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 	}
 	failpoint.Inject("sorterDebug", func() {
+		tableID, tableName := util.TableIDFromCtx(ctx)
 		log.Debug("Unified Sorter new flushTask",
-			zap.String("table", tableNameFromCtx(ctx)),
+			zap.Int64("table-id", tableID),
+			zap.String("table-name", tableName),
 			zap.Int("heap-id", task.heapSorterID),
 			zap.Uint64("resolvedTs", task.maxResolvedTs))
 	})
@@ -188,9 +190,11 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			backEndFinal = nil
 
 			failpoint.Inject("sorterDebug", func() {
+				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter flushTask finished",
 					zap.Int("heap-id", task.heapSorterID),
-					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
 					zap.Uint64("resolvedTs", task.maxResolvedTs),
 					zap.Uint64("data-size", dataSize),
 					zap.Int("size", eventCount))
