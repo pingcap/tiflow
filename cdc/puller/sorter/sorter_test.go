@@ -11,27 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package puller
+package sorter
 
 import (
 	"context"
 	"math"
 	"os"
 	"sync/atomic"
+	"testing"
 	"time"
-
-	_ "net/http/pprof"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	sorter2 "github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	_ "net/http/pprof"
 )
 
 const (
@@ -40,7 +40,9 @@ const (
 
 type sorterSuite struct{}
 
-var _ = check.Suite(&sorterSuite{})
+var _ = check.SerialSuites(&sorterSuite{})
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 func generateMockRawKV(ts uint64) *model.RawKVEntry {
 	return &model.RawKVEntry{
@@ -56,7 +58,7 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer sorter2.UnifiedSorterCleanUp()
+	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.Sorter = &config.SorterConfig{
@@ -70,7 +72,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
+	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -79,7 +81,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer sorter2.UnifiedSorterCleanUp()
+	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.Sorter = &config.SorterConfig{
@@ -93,7 +95,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
+	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -114,7 +116,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	log.Info("Sorter successfully cancelled")
 }
 
-func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) {
+func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -127,7 +129,7 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 	})
 
 	errg.Go(func() error {
-		return sorter2.RunWorkerPool(ctx)
+		return RunWorkerPool(ctx)
 	})
 
 	producerProgress := make([]uint64, numProducers)
@@ -136,7 +138,7 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 	for i := 0; i < numProducers; i++ {
 		finalI := i
 		errg.Go(func() error {
-			for j := 0; j < count; j++ {
+			for j := 1; j <= count; j++ {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -148,8 +150,8 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 					atomic.StoreUint64(&producerProgress[finalI], uint64(j)<<5)
 				}
 			}
-			sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(count)<<5)))
-			atomic.StoreUint64(&producerProgress[finalI], uint64(count)<<5)
+			sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(count+1)<<5)))
+			atomic.StoreUint64(&producerProgress[finalI], uint64(count+1)<<5)
 			return nil
 		})
 	}
