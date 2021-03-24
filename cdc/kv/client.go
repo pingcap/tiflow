@@ -628,12 +628,14 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				// goroutine, it won't block the caller of `schedulerRegionRequest`.
 				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts)
 			}
+		case regionspan.LockRangeStatusCancel:
+			return
 		default:
 			panic("unreachable")
 		}
 	}
 
-	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
+	res := s.rangeLock.LockRange(ctx, sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
 	if res.Status == regionspan.LockRangeStatusWait {
 		res = res.WaitFn()
