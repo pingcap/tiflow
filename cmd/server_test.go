@@ -100,6 +100,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		LogLevel:               "debug",
 		GcTTL:                  10,
 		TZ:                     "UTC",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
@@ -128,6 +129,7 @@ log-level = "warn"
 
 gc-ttl = 500
 tz = "US"
+capture-session-ttl = 10
 
 owner-flush-interval = "600ms"
 processor-flush-interval = "600ms"
@@ -153,6 +155,7 @@ num-workerpool-goroutine = 5
 		LogLevel:               "warn",
 		GcTTL:                  500,
 		TZ:                     "US",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
@@ -200,6 +203,7 @@ cert-allowed-cn = ["dd","ee"]
 		LogLevel:               "debug",
 		GcTTL:                  10,
 		TZ:                     "UTC",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{

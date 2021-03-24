@@ -154,7 +154,9 @@ func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	err := s.client.PutTaskStatus(ctx, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	err = s.client.DeleteTaskStatus(ctx, feedID, captureID)
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+	err = s.client.LeaseGuardDeleteTaskStatus(ctx, feedID, captureID, sess.Lease())
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
 	c.Assert(cerror.ErrTaskStatusNotExists.Equal(err), check.IsTrue)
@@ -209,7 +211,9 @@ func (s *etcdSuite) TestDeleteTaskPosition(c *check.C) {
 	_, err := s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	err = s.client.DeleteTaskPosition(ctx, feedID, captureID)
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+	err = s.client.LeaseGuardDeleteTaskPosition(ctx, feedID, captureID, sess.Lease())
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetTaskPosition(ctx, feedID, captureID)
 	c.Assert(cerror.ErrTaskPositionNotExists.Equal(err), check.IsTrue)
@@ -224,18 +228,55 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	}
 	cfID := "test-op-cf"
 
-	err := s.client.SaveChangeFeedInfo(ctx, detail, cfID)
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+	err = s.client.LeaseGuardSaveChangeFeedInfo(ctx, detail, cfID, sess.Lease())
 	c.Assert(err, check.IsNil)
 
 	d, err := s.client.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(d.SinkURI, check.Equals, detail.SinkURI)
 
-	err = s.client.DeleteChangeFeedInfo(ctx, cfID)
+	err = s.client.LeaseGuardDeleteChangeFeedInfo(ctx, cfID, sess.Lease())
 	c.Assert(err, check.IsNil)
 
 	_, err = s.client.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
+}
+
+func (s *etcdSuite) TestRemoveAllTaskXXX(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx := context.Background()
+	status := &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {StartTs: 100},
+		},
+	}
+	position := &model.TaskPosition{
+		ResolvedTs:   100,
+		CheckPointTs: 100,
+	}
+
+	feedID := "feedid"
+	captureID := "captureid"
+
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+
+	err = s.client.PutTaskStatus(ctx, feedID, captureID, status)
+	c.Assert(err, check.IsNil)
+	_, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, position)
+	c.Assert(err, check.IsNil)
+	err = s.client.LeaseGuardRemoveAllTaskStatus(ctx, feedID, sess.Lease())
+	c.Assert(err, check.IsNil)
+	err = s.client.LeaseGuardRemoveAllTaskPositions(ctx, feedID, sess.Lease())
+	c.Assert(err, check.IsNil)
+
+	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
+	c.Assert(cerror.ErrTaskStatusNotExists.Equal(err), check.IsTrue)
+	_, _, err = s.client.GetTaskPosition(ctx, feedID, captureID)
+	c.Assert(cerror.ErrTaskPositionNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
@@ -272,7 +313,9 @@ func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
 			c.Assert(err, check.IsNil)
 		}
 
-		err = s.client.PutAllChangeFeedStatus(context.Background(), tc.infos)
+		sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+		c.Assert(err, check.IsNil)
+		err = s.client.LeaseGuardPutAllChangeFeedStatus(context.Background(), tc.infos, sess.Lease())
 		c.Assert(err, check.IsNil)
 
 		for changefeedID, info := range tc.infos {
@@ -314,12 +357,16 @@ func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
 	status := &model.ChangeFeedStatus{
 		ResolvedTs: 1,
 	}
-	err := s.client.PutChangeFeedStatus(ctx, changefeedID, status)
+
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+	err = s.client.LeaseGuardPutChangeFeedStatus(ctx, changefeedID, status, sess.Lease())
 	c.Assert(err, check.IsNil)
 	status, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(status, check.DeepEquals, status)
-	err = s.client.RemoveChangeFeedStatus(ctx, changefeedID)
+
+	err = s.client.LeaseGuardRemoveChangeFeedStatus(ctx, changefeedID, sess.Lease())
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
 	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
@@ -372,7 +419,9 @@ func (s *etcdSuite) TestDeleteTaskWorkload(c *check.C) {
 	err := s.client.PutTaskWorkload(ctx, feedID, captureID, workload)
 	c.Assert(err, check.IsNil)
 
-	err = s.client.DeleteTaskWorkload(ctx, feedID, captureID)
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+	err = s.client.LeaseGuardDeleteTaskWorkload(ctx, feedID, captureID, sess.Lease())
 	c.Assert(err, check.IsNil)
 
 	tw, err := s.client.GetTaskWorkload(ctx, feedID, captureID)
@@ -516,4 +565,59 @@ func (s *etcdSuite) TestGetAllCDCInfo(c *check.C) {
 		c.Assert(string(kv.Key), check.Equals, expected[i].key)
 		c.Assert(string(kv.Value), check.Equals, expected[i].value)
 	}
+}
+
+func (s *etcdSuite) TestAtomicPutTaskStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx := context.Background()
+	status := &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {StartTs: 100},
+		},
+	}
+	feedID := "feedid"
+	captureID := "captureid"
+
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+	err = s.client.PutTaskStatus(ctx, feedID, captureID, status)
+	c.Assert(err, check.IsNil)
+
+	status.Tables[2] = &model.TableReplicaInfo{StartTs: 120}
+	_, revision, err := s.client.LeaseGuardAtomicPutTaskStatus(
+		ctx, feedID, captureID, sess.Lease(),
+		func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+			taskStatus.Tables = status.Tables
+			taskStatus.Operation = status.Operation
+			return true, nil
+		},
+	)
+	c.Assert(err, check.IsNil)
+	modRevision, newStatus, err := s.client.GetTaskStatus(ctx, feedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(modRevision, check.Equals, revision)
+	c.Assert(newStatus, check.DeepEquals, status)
+}
+
+func (s *etcdSuite) TestLeaseGuardWorks(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	// embed etcd election timeout is 1s, minimum session ttl is 2s
+	sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(2))
+	c.Assert(err, check.IsNil)
+	ctx, _, err := s.client.contextWithSafeLease(context.Background(), sess.Lease())
+	c.Assert(err, check.IsNil)
+	time.Sleep(time.Second * 2)
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		c.Errorf("context is not done as expected")
+	}
+
+	_, err = s.client.Client.Revoke(context.Background(), sess.Lease())
+	c.Assert(err, check.IsNil)
+	_, _, err = s.client.contextWithSafeLease(context.Background(), sess.Lease())
+	c.Assert(cerror.ErrLeaseTimeout.Equal(err), check.IsTrue)
 }
