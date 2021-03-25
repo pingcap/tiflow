@@ -251,6 +251,10 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		}
 	}
 
+	if c.Sorter == nil {
+		c.Sorter = defaultServerConfig.Sorter
+	}
+
 	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
 	}
