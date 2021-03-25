@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -63,6 +64,10 @@ func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 		"http://" + s.clientURL.Host,
 		"http://invalid-pd-host:2379",
 	}
+	conf := config.GetDefaultServerConfig()
+	conf.Addr = advertiseAddr4Test
+	conf.AdvertiseAddr = advertiseAddr4Test
+	config.StoreGlobalServerConfig(conf)
 	server, err := NewServer(pdEndpoints)
 	c.Assert(err, check.IsNil)
 	c.Assert(server, check.NotNil)
