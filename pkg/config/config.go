@@ -153,8 +153,7 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryPressure:      80,
 		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
 		NumWorkerPoolGoroutine: 16,
-		// We use the empty string as the default to let the any non-empty setting override the changefeed's `sort-dir` setting.
-		SortDir: "",
+		SortDir:                "/tmp/cdc_sort",
 	},
 	Security: &SecurityConfig{},
 }
