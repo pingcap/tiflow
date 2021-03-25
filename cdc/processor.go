@@ -256,7 +256,9 @@ func (p *oldProcessor) Run(ctx context.Context) {
 	})
 
 	wg.Go(func() error {
-		return p.ddlPuller.Run(ddlPullerCtx)
+		err := p.ddlPuller.Run(ddlPullerCtx)
+		failpoint.Inject("ProcessorDDLPullerExitDelaying", nil)
+		return err
 	})
 
 	wg.Go(func() error {
@@ -480,12 +482,10 @@ func (p *oldProcessor) workloadWorker(ctx context.Context) error {
 }
 
 func (p *oldProcessor) flushTaskPosition(ctx context.Context) error {
-	failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
-		time.Sleep(1 * time.Second)
-	})
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
+	failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
