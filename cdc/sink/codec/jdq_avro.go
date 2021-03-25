@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
@@ -260,16 +261,21 @@ func (a *JdqEventBatchEncoder) rowToJdqNativeData(e *model.RowChangedEvent) (int
 
 	} else if e.IsUpdate() {
 		preCols := e.PreColumns
-		preColsMap, err := a.getColumnsNativeData(preCols)
-		if err != nil {
-			return nil, err
-		}
-		data[schemaKeySrc] = preColsMap
+		/*
+			preColsMap, err := a.getColumnsNativeData(preCols)
+			if err != nil {
+				return nil, err
+			}
 
-		colsMap, err := a.getUpdateColumnsNativeData(preCols, cols)
+			colsMap, err := a.getUpdateColumnsNativeData(preCols, cols)
+		*/
+
+		preColsMap, colsMap, err := a.getUpdateColumnsNativeData(preCols, cols)
 		if err != nil {
 			return nil, err
 		}
+
+		data[schemaKeySrc] = preColsMap
 		data[schemaKeyCur] = colsMap
 
 	} else if e.IsDelete() {
@@ -339,6 +345,88 @@ func (a *JdqEventBatchEncoder) getColumnsNativeData(cols []*model.Column) (inter
 	return colMap, nil
 }
 
+func (a *JdqEventBatchEncoder) getUpdateColumnsNativeData(oldCols []*model.Column, newCols []*model.Column) (interface{}, interface{}, error) {
+	oldColsMap := make(map[string]interface{})
+	oldKeyColsMap := make(map[string]interface{})
+	newColsMap := make(map[string]interface{})
+	updateColsMap := make(map[string]interface{})
+	for _, col := range oldCols {
+		if col == nil {
+			continue
+		}
+		data, err := a.columnToJdqNativeData(col)
+		if err != nil {
+			return nil, nil, err
+		}
+		if col.Flag.IsPrimaryKey() {
+			oldKeyColsMap[col.Name] = data
+		} else {
+			oldColsMap[col.Name] = data
+		}
+	}
+
+	for _, col := range newCols {
+		if col == nil {
+			continue
+		}
+		data, err := a.columnToJdqNativeData(col)
+		if err != nil {
+			return nil, nil, err
+		}
+		if col.Flag.IsPrimaryKey() {
+			updateColsMap[col.Name] = data
+		} else {
+			newColsMap[col.Name] = data
+		}
+	}
+
+	for colName, oldData := range oldColsMap {
+		newData := newColsMap[colName]
+		if oldData != nil && newData != nil {
+			if strings.Compare(oldData.(string), newData.(string)) != 0 {
+				updateColsMap[colName] = newData
+			}
+		} else if (oldData == nil && newData != nil) || (oldData != nil && newData == nil) {
+			updateColsMap[colName] = newData
+		}
+	}
+
+	for colName, data := range oldKeyColsMap {
+		if data != nil {
+			oldColsMap[colName] = data
+		}
+	}
+
+	colsUnion := make(map[string]interface{}, len(oldColsMap))
+	for colName, data := range oldColsMap {
+		if data != nil {
+			union := make(map[string]interface{}, 1)
+			union[schemaKeyString] = data
+			colsUnion[colName] = union
+		} else {
+			colsUnion[colName] = nil
+		}
+	}
+	oldNativeMap := make(map[string]interface{}, 1)
+	oldNativeMap[schemaKeyMap] = colsUnion
+
+	updateColsUnion := make(map[string]interface{}, len(updateColsMap))
+	for colName, data := range updateColsMap {
+		if data != nil {
+			union := make(map[string]interface{}, 1)
+			union[schemaKeyString] = data
+			updateColsUnion[colName] = union
+		} else {
+			updateColsUnion[colName] = nil
+		}
+	}
+	updateNativeMap := make(map[string]interface{}, 1)
+	updateNativeMap[schemaKeyMap] = updateColsUnion
+
+	return oldNativeMap, updateNativeMap, nil
+}
+
+/*
 func (a *JdqEventBatchEncoder) getUpdateColumnsNativeData(oldCols []*model.Column, newCols []*model.Column) (interface{}, error) {
 	tmpMap := make(map[string]*model.Column, 1)
 	for _, col := range oldCols {
@@ -366,6 +454,7 @@ func (a *JdqEventBatchEncoder) getUpdateColumnsNativeData(oldCols []*model.Colum
 
 	return colsMap, nil
 }
+*/
 
 func (a *JdqEventBatchEncoder) getKeyColumnsNativeData(cols []*model.Column) (interface{}, error) {
 	var keyCols []*model.Column

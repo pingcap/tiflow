@@ -145,12 +145,7 @@ func (s *jdqEventBatchEncoderSuite) TestJdqEncodeOnly(c *check.C) {
 	updateCols := []*model.Column{
 		{Name: "mykey", Value: int64(101), Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag},
 		{Name: "myint", Value: int64(20), Type: mysql.TypeLong},
-		{Name: "mybool", Value: int64(0), Type: mysql.TypeTiny},
-		{Name: "myfloat", Value: float32(5.14), Type: mysql.TypeFloat},
 		{Name: "mydouble", Value: float64(5.141592666), Type: mysql.TypeDouble},
-		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
-		{Name: "mydatetime", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeDatetime},
-		{Name: "mytime", Value: "18:51:04.123456", Type: mysql.TypeDuration},
 	}
 
 	update := &model.RowChangedEvent{
