@@ -207,11 +207,12 @@ cert-allowed-cn = ["dd","ee"]
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			NumConcurrentWorker:    10,
+			NumConcurrentWorker:    3,
 			ChunkSizeLimit:         50000000,
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000000,
-			NumWorkerPoolGoroutine: 3,
+			NumWorkerPoolGoroutine: 5,
+			SortDir:                "/tmp/just_a_test",
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
