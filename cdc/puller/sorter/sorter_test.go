@@ -260,3 +260,57 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 		cancel()
 	}
 }
+
+func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	poolMu.Lock()
+	// Clean up the back-end pool if one has been created
+	pool = nil
+	poolMu.Unlock()
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+	// We expect the local setting to override the changefeed setting
+	config.GetGlobalServerConfig().Sorter.SortDir = "/tmp/sorter_local"
+
+	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+		"test-cf",
+		"test",
+		0,
+		"0.0.0.0:0")
+
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	c.Assert(pool, check.NotNil)
+	c.Assert(pool.dir, check.Equals, "/tmp/sorter_local")
+}
+
+func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	poolMu.Lock()
+	// Clean up the back-end pool if one has been created
+	pool = nil
+	poolMu.Unlock()
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+	// We expect the changefeed setting to take effect
+	config.GetGlobalServerConfig().Sorter.SortDir = ""
+
+	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+		"test-cf",
+		"test",
+		0,
+		"0.0.0.0:0")
+
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	c.Assert(pool, check.NotNil)
+	c.Assert(pool.dir, check.Equals, "/tmp/sorter")
+}

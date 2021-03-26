@@ -62,7 +62,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	switch n.sortEngine {
 	case model.SortInMemory:
 		sorter = puller.NewEntrySorter()
-	case model.SortInFile, model.SortUnified:
+	case model.SortInFile:
 		err := util.IsDirAndWritable(n.sortDir)
 		if err != nil {
 			if os.IsNotExist(errors.Cause(err)) {
@@ -75,12 +75,13 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			}
 		}
 
-		if n.sortEngine == model.SortInFile {
-			sorter = puller.NewFileSorter(n.sortDir)
-		} else {
-			// Unified Sorter
-			sorter = psorter.NewUnifiedSorter(n.sortDir, n.changeFeedID, n.tableName, n.tableID, ctx.Vars().CaptureAddr)
+		sorter = puller.NewFileSorter(n.sortDir)
+	case model.SortUnified:
+		err := psorter.UnifiedSorterCheckDir(n.sortDir)
+		if err != nil {
+			return errors.Trace(err)
 		}
+		sorter = psorter.NewUnifiedSorter(n.sortDir, n.changeFeedID, n.tableName, n.tableID, ctx.Vars().CaptureAddr)
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
 	}

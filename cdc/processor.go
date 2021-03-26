@@ -823,7 +823,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
-		case model.SortInFile, model.SortUnified:
+		case model.SortInFile:
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				if os.IsNotExist(errors.Cause(err)) {
@@ -838,12 +838,14 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 				}
 			}
 
-			if p.changefeed.Engine == model.SortInFile {
-				sorter = puller.NewFileSorter(p.changefeed.SortDir)
-			} else {
-				// Unified Sorter
-				sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, p.changefeedID, tableName, tableID, util.CaptureAddrFromCtx(ctx))
+			sorter = puller.NewFileSorter(p.changefeed.SortDir)
+		case model.SortUnified:
+			err := psorter.UnifiedSorterCheckDir(p.changefeed.SortDir)
+			if err != nil {
+				p.sendError(errors.Trace(err))
+				return nil
 			}
+			sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, p.changefeedID, tableName, tableID, util.CaptureAddrFromCtx(ctx))
 		default:
 			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
 			return nil
