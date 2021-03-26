@@ -298,6 +298,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
+	// TODO delete
 	if info.Engine == model.SortInFile {
 		err = os.MkdirAll(info.SortDir, 0o755)
 		if err != nil {
