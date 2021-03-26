@@ -205,17 +205,84 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		for _, txn := range tc.txns {
 			w.appendTxn(cctx, txn)
 		}
+		var wg sync.WaitGroup
+		w.appendFinishTxn(&wg)
 		// ensure all txns are fetched from txn channel in sink worker
 		time.Sleep(time.Millisecond * 100)
 		notifier.Notify()
-		w.waitAllTxnsExecuted()
+		wg.Wait()
 		cancel()
-		c.Assert(errg.Wait(), check.IsNil)
+		c.Assert(errors.Cause(errg.Wait()), check.Equals, context.Canceled)
 		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
 		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
 	}
+}
+
+func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	txns1 := []*model.SingleTableTxn{
+		{
+			CommitTs: 1,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+		},
+		{
+			CommitTs: 2,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+		},
+		{
+			CommitTs: 3,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
+		},
+		{
+			CommitTs: 4,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
+		},
+	}
+	txns2 := []*model.SingleTableTxn{
+		{
+			CommitTs: 5,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+		},
+		{
+			CommitTs: 6,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
+		},
+	}
+	maxTxnRow := 1
+	ctx := context.Background()
+
+	errExecFailed := errors.New("sink worker exec failed")
+	notifier := new(notify.Notifier)
+	cctx, cancel := context.WithCancel(ctx)
+	receiver, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
+		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		receiver,
+		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+			return errExecFailed
+		})
+	errg, cctx := errgroup.WithContext(cctx)
+	errg.Go(func() error {
+		return w.run(cctx)
+	})
+	// txn in txns1 will be sent to worker txnCh
+	for _, txn := range txns1 {
+		w.appendTxn(cctx, txn)
+	}
+	var wg sync.WaitGroup
+	w.appendFinishTxn(&wg)
+	time.Sleep(time.Millisecond * 100)
+	// txn in txn2 will be blocked since the worker has exited
+	for _, txn := range txns2 {
+		w.appendTxn(cctx, txn)
+	}
+	notifier.Notify()
+	wg.Wait()
+	cancel()
+	c.Assert(errg.Wait(), check.Equals, errExecFailed)
 }
 
 func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
