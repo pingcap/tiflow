@@ -52,7 +52,7 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 
-    ensure 10 check_changefeed_state  ${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "stopped"
+    ensure 20 check_changefeed_state  ${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "stopped"
 
     cdc cli changefeed resume --changefeed-id=${changefeedid} --pd="http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     for i in $(seq $DB_COUNT); do
