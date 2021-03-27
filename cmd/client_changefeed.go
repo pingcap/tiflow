@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 )
 
@@ -481,17 +482,67 @@ func newUpdateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+<<<<<<< HEAD
 
 			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, getCredential())
+=======
+			info, err := old.Clone()
+>>>>>>> 9cd2530... cmd: make update config conservative, only update listed parameter (#1554)
 			if err != nil {
 				return err
 			}
-			// Fix some fields that can't be updated.
-			info.CreateTime = old.CreateTime
-			info.AdminJobType = old.AdminJobType
-			info.StartTs = old.StartTs
-			info.ErrorHis = old.ErrorHis
-			info.Error = old.Error
+
+			cmd.Flags().Visit(func(flag *pflag.Flag) {
+				switch flag.Name {
+				case "target-ts":
+					info.TargetTs = targetTs
+				case "sink-uri":
+					info.SinkURI = sinkURI
+				case "config":
+					cfg := info.Config
+					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+						log.Panic("decode config file error", zap.Error(err))
+					}
+				case "opts":
+					for _, opt := range opts {
+						s := strings.SplitN(opt, "=", 2)
+						if len(s) <= 0 {
+							cmd.Printf("omit opt: %s", opt)
+							continue
+						}
+
+						var key string
+						var value string
+						key = s[0]
+						if len(s) > 1 {
+							value = s[1]
+						}
+						info.Opts[key] = value
+					}
+
+				case "sort-engine":
+					info.Engine = sortEngine
+				case "sort-dir":
+					info.SortDir = sortDir
+				case "cyclic-replica-id":
+					filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
+					for _, id := range cyclicFilterReplicaIDs {
+						filter = append(filter, uint64(id))
+					}
+					info.Config.Cyclic.FilterReplicaID = filter
+				case "cyclic-sync-ddl":
+					info.Config.Cyclic.SyncDDL = cyclicSyncDDL
+				case "sync-point":
+					info.SyncPointEnabled = syncPointEnabled
+				case "sync-interval":
+					info.SyncPointInterval = syncPointInterval
+				case "tz", "start-ts", "changefeed-id", "no-confirm":
+					// do nothing
+				default:
+					// use this default branch to prevent new added parameter is not added
+					log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
+				}
+			})
 
 			resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
 			// if no cdc owner exists, allow user to update changefeed config
