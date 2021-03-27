@@ -21,7 +21,19 @@ function check_position_removed() {
     fi
 }
 
+function check_changefeed_state() {
+    pd_addr=$1
+    changefeed_id=$2
+    expected=$3
+    state=$(cdc cli --pd=$pd_addr changefeed query -s -c $changefeed_id|jq -r ".state")
+    if [[ "$state" != "$expected" ]];then
+        echo "unexpected state $state, expected $expected"
+        exit 1
+    fi
+}
+
 export -f check_position_removed
+export -f check_changefeed_state
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -51,6 +63,7 @@ function run() {
     # The changefeed should be resumed and no data loss.
     cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure 10 check_position_removed $pd_addr
+    ensure 10 check_changefeed_state $pd_addr $changefeed_id "stopped"
     run_sql "INSERT INTO processor_stop_delay_2.t values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
     run_sql "INSERT INTO processor_stop_delay_2.t values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
