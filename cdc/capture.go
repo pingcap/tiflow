@@ -43,13 +43,10 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-const (
-	captureSessionTTL = 3
-)
-
-// processorOpts records options for processor
-type processorOpts struct {
+// captureOpts records options for capture
+type captureOpts struct {
 	flushCheckpointInterval time.Duration
+	captureSessionTTL       int
 }
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
@@ -69,7 +66,7 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	opts   *processorOpts
+	opts   *captureOpts
 	closed chan struct{}
 }
 
@@ -80,7 +77,7 @@ func NewCapture(
 	pdCli pd.Client,
 	credential *security.Credential,
 	advertiseAddr string,
-	opts *processorOpts,
+	opts *captureOpts,
 ) (c *Capture, err error) {
 	tlsConfig, err := credential.ToTLSConfig()
 	if err != nil {
@@ -116,7 +113,7 @@ func NewCapture(
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 	sess, err := concurrency.NewSession(etcdCli,
-		concurrency.WithTTL(captureSessionTTL))
+		concurrency.WithTTL(opts.captureSessionTTL))
 	if err != nil {
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
