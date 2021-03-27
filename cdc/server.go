@@ -371,8 +371,16 @@ func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 
+<<<<<<< HEAD
 	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
 	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, s.opts.advertiseAddr, procOpts)
+=======
+	opts := &captureOpts{
+		flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval),
+		captureSessionTTL:       conf.CaptureSessionTTL,
+	}
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
+>>>>>>> c8f1b51... owner: fix multiple owner co-exist when pd has jitter (#1540)
 	if err != nil {
 		return err
 	}
