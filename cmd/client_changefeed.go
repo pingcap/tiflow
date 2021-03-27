@@ -482,12 +482,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-<<<<<<< HEAD
-
-			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, getCredential())
-=======
 			info, err := old.Clone()
->>>>>>> 9cd2530... cmd: make update config conservative, only update listed parameter (#1554)
 			if err != nil {
 				return err
 			}
