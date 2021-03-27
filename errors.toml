@@ -381,6 +381,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrLeaseTimeout"]
+error = '''
+owner lease timeout
+'''
+
 ["CDC:ErrLoadTimezone"]
 error = '''
 load timezone
