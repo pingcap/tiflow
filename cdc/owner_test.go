@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
@@ -105,13 +106,18 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	c.Assert(err, check.IsNil)
 	mockPDCli := &mockPDClient{}
 	mockOwner := Owner{
+		session:               session,
+		etcdClient:            s.client,
 		pdClient:              mockPDCli,
 		gcSafepointLastUpdate: time.Now(),
 	}
 
-	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
 	s.TearDownTest(c)
@@ -142,7 +148,11 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 		},
 	}
 
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	c.Assert(err, check.IsNil)
 	mockOwner := Owner{
+		session:                 session,
 		pdClient:                mockPDCli,
 		etcdClient:              s.client,
 		lastFlushChangefeeds:    time.Now(),
@@ -153,7 +163,7 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 	}
 
 	time.Sleep(3 * time.Second)
-	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
 
@@ -208,8 +218,12 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 		},
 	}
 
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	c.Assert(err, check.IsNil)
 	mockOwner := Owner{
 		pdClient:                mockPDCli,
+		session:                 session,
 		etcdClient:              s.client,
 		lastFlushChangefeeds:    time.Now(),
 		flushChangefeedInterval: 1 * time.Hour,
@@ -218,7 +232,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
 	}
 
-	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
 
@@ -630,7 +644,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	sampleCF.sink = sink
 
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+		&security.Credential{}, "127.0.0.1:12034", &captureOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
@@ -932,7 +946,7 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
+		&security.Credential{}, "127.0.0.1:12034", &captureOpts{})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
@@ -990,7 +1004,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, addr, &processorOpts{})
+		&security.Credential{}, addr, &captureOpts{})
 	c.Assert(err, check.IsNil)
 	err = s.client.PutCaptureInfo(ctx, capture.info, capture.session.Lease())
 	c.Assert(err, check.IsNil)
@@ -1077,7 +1091,7 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
-		&security.Credential{}, addr, &processorOpts{})
+		&security.Credential{}, addr, &captureOpts{})
 	c.Assert(err, check.IsNil)
 	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
 		cdcGCSafePointTTL4Test, time.Millisecond*200)
