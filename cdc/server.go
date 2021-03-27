@@ -48,6 +48,8 @@ const (
 
 	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
 	DefaultCDCGCSafePointTTL = 24 * 60 * 60
+
+	defaultCaptureSessionTTL = 10
 )
 
 type options struct {
@@ -371,16 +373,11 @@ func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 
-<<<<<<< HEAD
-	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, s.opts.advertiseAddr, procOpts)
-=======
 	opts := &captureOpts{
-		flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval),
-		captureSessionTTL:       conf.CaptureSessionTTL,
+		flushCheckpointInterval: s.opts.processorFlushInterval,
+		captureSessionTTL:       defaultCaptureSessionTTL,
 	}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
->>>>>>> c8f1b51... owner: fix multiple owner co-exist when pd has jitter (#1540)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, s.opts.credential, s.opts.advertiseAddr, opts)
 	if err != nil {
 		return err
 	}
