@@ -237,8 +237,11 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	conf := config.GetGlobalServerConfig()
 
-	procOpts := &processorOpts{flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval)}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, procOpts)
+	opts := &captureOpts{
+		flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval),
+		captureSessionTTL:       conf.CaptureSessionTTL,
+	}
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
 	if err != nil {
 		return err
 	}

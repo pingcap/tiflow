@@ -81,7 +81,7 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034",
-		&processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+		&captureOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 
 	var wg sync.WaitGroup
@@ -114,7 +114,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034",
-		&processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+		&captureOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 
 	runProcessorCount := 0
