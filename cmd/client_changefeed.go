@@ -41,7 +41,9 @@ import (
 )
 
 const (
-	defaultSortDir = "/tmp/cdc_sort"
+	// Use the empty string as the default to let the server local setting override the changefeed setting.
+	// TODO remove this when we change the changefeed `sort-dir` to no-op, which it currently is NOT.
+	defaultSortDir = ""
 )
 
 var forceEnableOldValueProtocols = []string{
@@ -352,6 +354,12 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		SyncPointEnabled:  syncPointEnabled,
 		SyncPointInterval: syncPointInterval,
 		CreatorVersion:    version.ReleaseVersion,
+	}
+
+	if info.SortDir != "" {
+		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. "+
+			"Please use `cdc server --sort-dir` if possible. "+
+			"If you wish to continue, make sure %s is writable ON EACH SERVER where you run TiCDC", info.SortDir)
 	}
 
 	if info.Engine != model.SortInMemory && (info.SortDir == ".") {

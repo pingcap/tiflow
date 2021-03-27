@@ -85,11 +85,12 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		"--cert", "bb",
 		"--key", "cc",
 		"--cert-allowed-cn", "dd,ee",
-		"--sorter-chunk-size-limit", "50",
-		"--sorter-max-memory-consumption", "60",
+		"--sorter-chunk-size-limit", "50000000",
+		"--sorter-max-memory-consumption", "60000",
 		"--sorter-max-memory-percentage", "70",
 		"--sorter-num-concurrent-worker", "80",
 		"--sorter-num-workerpool-goroutine", "90",
+		"--sort-dir", "/tmp/just_a_test",
 	}), check.IsNil)
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
@@ -100,14 +101,16 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		LogLevel:               "debug",
 		GcTTL:                  10,
 		TZ:                     "UTC",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    80,
-			ChunkSizeLimit:         50,
+			ChunkSizeLimit:         50000000,
 			MaxMemoryPressure:      70,
-			MaxMemoryConsumption:   60,
+			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
+			SortDir:                "/tmp/just_a_test",
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -128,16 +131,18 @@ log-level = "warn"
 
 gc-ttl = 500
 tz = "US"
+capture-session-ttl = 10
 
 owner-flush-interval = "600ms"
 processor-flush-interval = "600ms"
 
 [sorter]
-chunk-size-limit = 1
-max-memory-consumption = 2
+chunk-size-limit = 10000000
+max-memory-consumption = 2000000
 max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
+sort-dir = "/tmp/just_a_test"
 `
 	err = ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -153,14 +158,16 @@ num-workerpool-goroutine = 5
 		LogLevel:               "warn",
 		GcTTL:                  500,
 		TZ:                     "US",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    4,
-			ChunkSizeLimit:         1,
+			ChunkSizeLimit:         10000000,
 			MaxMemoryPressure:      3,
-			MaxMemoryConsumption:   2,
+			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
+			SortDir:                "/tmp/just_a_test",
 		},
 		Security: &config.SecurityConfig{},
 	})
@@ -185,10 +192,10 @@ cert-allowed-cn = ["dd","ee"]
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
 		"--ca", "",
-		"--sorter-chunk-size-limit", "50",
-		"--sorter-max-memory-consumption", "60",
+		"--sorter-chunk-size-limit", "50000000",
+		"--sorter-max-memory-consumption", "60000000",
 		"--sorter-max-memory-percentage", "70",
-		"--sorter-num-concurrent-worker", "80",
+		"--sorter-num-concurrent-worker", "3",
 		"--config", configPath,
 	}), check.IsNil)
 	cfg, err = loadAndVerifyServerConfig(cmd)
@@ -200,14 +207,16 @@ cert-allowed-cn = ["dd","ee"]
 		LogLevel:               "debug",
 		GcTTL:                  10,
 		TZ:                     "UTC",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			NumConcurrentWorker:    80,
-			ChunkSizeLimit:         50,
+			NumConcurrentWorker:    3,
+			ChunkSizeLimit:         50000000,
 			MaxMemoryPressure:      70,
-			MaxMemoryConsumption:   60,
+			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
+			SortDir:                "/tmp/just_a_test",
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
