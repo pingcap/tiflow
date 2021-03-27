@@ -106,8 +106,7 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 	mockPDCli := &mockPDClient{}
 	mockOwner := Owner{
@@ -148,8 +147,7 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 		},
 	}
 
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 	mockOwner := Owner{
 		session:                 session,
@@ -219,7 +217,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+		concurrency.WithTTL(defaultCaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 	mockOwner := Owner{
 		pdClient:                mockPDCli,
