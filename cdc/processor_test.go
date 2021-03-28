@@ -36,9 +36,9 @@ func (s *processorSuite) TestWriteDebugInfo(c *check.C) {
 		},
 		tables: map[int64]*tableInfo{
 			1: {
-				id:         47,
-				name:       "test.t1",
-				resolvedTs: 100,
+				id:             47,
+				name:           "test.t1",
+				sinkResolvedTs: 100,
 			},
 		},
 	}
