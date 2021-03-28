@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	defaultOutputChanSize = 32
+	defaultOutputChanSize = 128000
 )
 
 type baseKVEntry struct {

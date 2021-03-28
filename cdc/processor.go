@@ -107,35 +107,22 @@ type oldProcessor struct {
 }
 
 type tableInfo struct {
-	id               int64
-	name             string // quoted schema and table, used in metircs only
-	pullerResolvedTs uint64
-	sinkResolvedTs   uint64
-	checkpointTs     uint64
+	id           int64
+	name         string // quoted schema and table, used in metircs only
+	resolvedTs   uint64
+	checkpointTs uint64
 
-	markTableID       int64
-	mPullerResolvedTs uint64
-	mSinkResolvedTs   uint64
-	mCheckpointTs     uint64
-	workload          model.WorkloadInfo
-	cancel            context.CancelFunc
+	markTableID   int64
+	mResolvedTs   uint64
+	mCheckpointTs uint64
+	workload      model.WorkloadInfo
+	cancel        context.CancelFunc
 }
 
-func (t *tableInfo) loadSinkResolvedTs() uint64 {
-	tableRts := atomic.LoadUint64(&t.sinkResolvedTs)
+func (t *tableInfo) loadResolvedTs() uint64 {
+	tableRts := atomic.LoadUint64(&t.resolvedTs)
 	if t.markTableID != 0 {
-		mTableRts := atomic.LoadUint64(&t.mSinkResolvedTs)
-		if mTableRts < tableRts {
-			return mTableRts
-		}
-	}
-	return tableRts
-}
-
-func (t *tableInfo) loadPullerResolvedTs() uint64 {
-	tableRts := atomic.LoadUint64(&t.pullerResolvedTs)
-	if t.markTableID != 0 {
-		mTableRts := atomic.LoadUint64(&t.mPullerResolvedTs)
+		mTableRts := atomic.LoadUint64(&t.mResolvedTs)
 		if mTableRts < tableRts {
 			return mTableRts
 		}
@@ -316,7 +303,7 @@ func (p *oldProcessor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "tables:\n")
 	p.stateMu.Lock()
 	for _, table := range p.tables {
-		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadSinkResolvedTs())
+		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTs())
 	}
 	p.stateMu.Unlock()
 }
@@ -380,33 +367,26 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-p.localResolvedReceiver.C:
-			minSinkResolvedTs := p.ddlPuller.GetResolvedTs()
-			minPullerResolvedTs := p.ddlPuller.GetResolvedTs()
+			minResolvedTs := p.ddlPuller.GetResolvedTs()
 			p.stateMu.Lock()
 			for _, table := range p.tables {
-				pTs := table.loadPullerResolvedTs()
+				ts := table.loadResolvedTs()
 
-				if pTs < minPullerResolvedTs {
-					minPullerResolvedTs = pTs
-				}
-
-				sTs := table.loadSinkResolvedTs()
-
-				if sTs < minSinkResolvedTs {
-					minSinkResolvedTs = sTs
+				if ts < minResolvedTs {
+					minResolvedTs = ts
 				}
 			}
 			p.stateMu.Unlock()
-			atomic.StoreUint64(&p.localResolvedTs, minSinkResolvedTs)
+			atomic.StoreUint64(&p.localResolvedTs, minResolvedTs)
 
-			phyTs := oracle.ExtractPhysical(minPullerResolvedTs)
+			phyTs := oracle.ExtractPhysical(minResolvedTs)
 			// It is more accurate to get tso from PD, but in most cases we have
 			// deployed NTP service, a little bias is acceptable here.
 			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 			resolvedTsGauge.Set(float64(phyTs))
 
-			if p.position.ResolvedTs < minPullerResolvedTs {
-				p.position.ResolvedTs = minPullerResolvedTs
+			if p.position.ResolvedTs < minResolvedTs {
+				p.position.ResolvedTs = minResolvedTs
 				if err := retryFlushTaskStatusAndPosition(); err != nil {
 					return errors.Trace(err)
 				}
@@ -821,16 +801,15 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	ctx = util.PutTableInfoInCtx(ctx, tableID, tableName)
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
-		id:               tableID,
-		name:             tableName,
-		sinkResolvedTs:   replicaInfo.StartTs,
-		pullerResolvedTs: replicaInfo.StartTs,
+		id:         tableID,
+		name:       tableName,
+		resolvedTs: replicaInfo.StartTs,
 	}
 	// TODO(leoppro) calculate the workload of this table
 	// We temporarily set the value to constant 1
 	table.workload = model.WorkloadInfo{Workload: 1}
 
-	startPuller := func(tableID model.TableID, sinkResolvedTs, pullerResolvedTs, pCheckpointTs *uint64) sink.Sink {
+	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
@@ -892,12 +871,12 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		}()
 
 		go func() {
-			p.pullerConsume(ctx, plr, sorter, pullerResolvedTs)
+			p.pullerConsume(ctx, plr, sorter)
 		}()
 
 		tableSink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 		go func() {
-			p.sorterConsume(ctx, tableID, tableName, sorter, sinkResolvedTs, pCheckpointTs, replicaInfo, tableSink)
+			p.sorterConsume(ctx, tableID, tableName, sorter, pResolvedTs, pCheckpointTs, replicaInfo, tableSink)
 		}()
 		return tableSink
 	}
@@ -908,9 +887,9 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		if _, exist := p.markTableIDs[mTableID]; !exist {
 			p.markTableIDs[mTableID] = struct{}{}
 			table.markTableID = mTableID
-			table.mSinkResolvedTs = replicaInfo.StartTs
+			table.mResolvedTs = replicaInfo.StartTs
 
-			mTableSink = startPuller(mTableID, &table.mSinkResolvedTs, &table.mPullerResolvedTs, &table.mCheckpointTs)
+			mTableSink = startPuller(mTableID, &table.mResolvedTs, &table.mCheckpointTs)
 		}
 	}
 
@@ -923,7 +902,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	}
 
 	atomic.StoreUint64(&p.localResolvedTs, p.position.ResolvedTs)
-	tableSink = startPuller(tableID, &table.sinkResolvedTs, &table.pullerResolvedTs, &table.checkpointTs)
+	tableSink = startPuller(tableID, &table.resolvedTs, &table.checkpointTs)
 	table.cancel = func() {
 		cancel()
 		if tableSink != nil {
@@ -936,7 +915,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
-const maxLagWithGlobalCheckpointTs = (30 * 1000) << 18 //30s
+const maxLagWithGlobalCheckpointTs = (30 * 1000) << 18 // 30s
 
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
@@ -1159,7 +1138,6 @@ func (p *oldProcessor) pullerConsume(
 	ctx context.Context,
 	plr puller.Puller,
 	sorter puller.EventSorter,
-	pullerResolvedTs *uint64,
 ) {
 	for {
 		select {
@@ -1171,9 +1149,6 @@ func (p *oldProcessor) pullerConsume(
 		case rawKV := <-plr.Output():
 			if rawKV == nil {
 				continue
-			}
-			if rawKV.OpType == model.OpTypeResolved && rawKV.CRTs != 0 {
-				atomic.StoreUint64(pullerResolvedTs, rawKV.CRTs)
 			}
 			pEvent := model.NewPolymorphicEvent(rawKV)
 			sorter.AddEntry(ctx, pEvent)
