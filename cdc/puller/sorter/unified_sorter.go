@@ -97,8 +97,8 @@ func NewUnifiedSorter(
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:  make(chan *model.PolymorphicEvent, 128000),
-		outputCh: make(chan *model.PolymorphicEvent, 128000),
+		inputCh:  make(chan *model.PolymorphicEvent, 128),
+		outputCh: make(chan *model.PolymorphicEvent, 128),
 		dir:      dir,
 		pool:     pool,
 		metricsInfo: &metricsInfo{

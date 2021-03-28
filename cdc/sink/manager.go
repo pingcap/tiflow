@@ -33,7 +33,7 @@ const (
 	// the count of sorted data and unmounted data. In current benchmark a single
 	// processor can reach 50k-100k QPS, and accumulated data is around
 	// 200k-400k in most cases. We need a better chan cache mechanism.
-	defaultBufferChanSize = 1280000
+	defaultBufferChanSize = 128
 	defaultMetricInterval = time.Second * 15
 )
 
@@ -122,6 +122,7 @@ type tableSink struct {
 	buffer  []*model.RowChangedEvent
 	// emittedTs means all of events which of commitTs less than or equal to emittedTs is sent to backendSink
 	emittedTs model.Ts
+	bufferMu  sync.Mutex
 }
 
 func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
@@ -130,6 +131,8 @@ func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 }
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	t.bufferMu.Lock()
+	defer t.bufferMu.Unlock()
 	t.buffer = append(t.buffer, rows...)
 	return nil
 }
@@ -140,6 +143,8 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	t.bufferMu.Lock()
+	defer t.bufferMu.Unlock()
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
