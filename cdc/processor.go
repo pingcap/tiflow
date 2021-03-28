@@ -936,7 +936,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
-const maxLagWithGlobalResolvedTs = (30 * 1000) << 18 //30s
+const maxLagWithGlobalCheckpointTs = (30 * 1000) << 18 //30s
 
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
@@ -1051,8 +1051,8 @@ func (p *oldProcessor) sorterConsume(
 				continue
 			}
 
-			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-			for lastResolvedTs-globalResolvedTs > maxLagWithGlobalResolvedTs {
+			globalCheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+			for lastResolvedTs > maxLagWithGlobalCheckpointTs+globalCheckpointTs {
 				select {
 				case <-ctx.Done():
 					if errors.Cause(ctx.Err()) != context.Canceled {
