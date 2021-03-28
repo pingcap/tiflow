@@ -915,7 +915,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
-const maxLagWithGlobalCheckpointTs = (2 * 1000) << 18 // 30s
+const maxLagWithGlobalCheckpointTs = (1 * 1000) << 18 // 30s
 
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
@@ -1063,8 +1063,14 @@ func (p *oldProcessor) sorterConsume(
 				continue
 			}
 
-			globalCheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
-			for lastResolvedTs > maxLagWithGlobalCheckpointTs+globalCheckpointTs {
+			for {
+				globalCheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+				if lastResolvedTs < maxLagWithGlobalCheckpointTs+globalCheckpointTs {
+					break
+				}
+				log.Debug("the lag between global checkpoint and local resolved Ts is too lang",
+					zap.Uint64("resolvedTs", lastResolvedTs), zap.Uint64("globalCheckpointTs", globalCheckpointTs),
+					zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
 				select {
 				case <-ctx.Done():
 					if errors.Cause(ctx.Err()) != context.Canceled {
