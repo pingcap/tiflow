@@ -915,7 +915,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
-const maxLagWithGlobalCheckpointTs = (30 * 1000) << 18 // 30s
+const maxLagWithGlobalCheckpointTs = (2 * 1000) << 18 // 30s
 
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
@@ -1018,6 +1018,39 @@ func (p *oldProcessor) sorterConsume(
 	}
 	defer globalResolvedTsReceiver.Stop()
 
+	sendResolvedTs2Sink := func() error {
+		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+		var minTs uint64
+		if localResolvedTs < globalResolvedTs {
+			minTs = localResolvedTs
+			log.Warn("the local resolved ts is less than the global resolved ts",
+				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		} else {
+			minTs = globalResolvedTs
+		}
+		if minTs == 0 {
+			return nil
+		}
+
+		checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
+		if err != nil {
+			if errors.Cause(err) != context.Canceled {
+				p.sendError(errors.Trace(err))
+			}
+			return err
+		}
+
+		if checkpointTs < replicaInfo.StartTs {
+			checkpointTs = replicaInfo.StartTs
+		}
+
+		if checkpointTs != 0 {
+			atomic.StoreUint64(pCheckpointTs, checkpointTs)
+			p.localCheckpointTsNotifier.Notify()
+		}
+		return nil
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -1041,6 +1074,11 @@ func (p *oldProcessor) sorterConsume(
 				default:
 				}
 				time.Sleep(100 * time.Millisecond)
+
+				if err := sendResolvedTs2Sink(); err != nil {
+					// error is already sent to processor, so we can just ignore it
+					return
+				}
 			}
 
 			pEvent.SetUpFinishedChan()
@@ -1094,35 +1132,9 @@ func (p *oldProcessor) sorterConsume(
 				return
 			}
 		case <-globalResolvedTsReceiver.C:
-			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-			var minTs uint64
-			if localResolvedTs < globalResolvedTs {
-				minTs = localResolvedTs
-				log.Warn("the local resolved ts is less than the global resolved ts",
-					zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
-			} else {
-				minTs = globalResolvedTs
-			}
-			if minTs == 0 {
-				continue
-			}
-
-			checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
-			if err != nil {
-				if errors.Cause(err) != context.Canceled {
-					p.errCh <- errors.Trace(err)
-				}
+			if err := sendResolvedTs2Sink(); err != nil {
+				// error is already sent to processor, so we can just ignore it
 				return
-			}
-
-			if checkpointTs < replicaInfo.StartTs {
-				checkpointTs = replicaInfo.StartTs
-			}
-
-			if checkpointTs != 0 {
-				atomic.StoreUint64(pCheckpointTs, checkpointTs)
-				p.localCheckpointTsNotifier.Notify()
 			}
 		case <-checkDoneTicker.C:
 			if !opDone {
