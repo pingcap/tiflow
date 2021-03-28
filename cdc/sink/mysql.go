@@ -721,7 +721,7 @@ func newMySQLSinkWorker(
 	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
 ) *mysqlSinkWorker {
 	return &mysqlSinkWorker{
-		txnCh:            make(chan *model.SingleTableTxn, 64),
+		txnCh:            make(chan *model.SingleTableTxn, 1024),
 		maxTxnRow:        maxTxnRow,
 		bucket:           bucket,
 		metricBucketSize: metricBucketSize,
