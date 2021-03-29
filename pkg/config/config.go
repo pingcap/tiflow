@@ -139,12 +139,17 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 type SecurityConfig = security.Credential
 
 var defaultServerConfig = &ServerConfig{
-	Addr:                   "127.0.0.1:8300",
-	AdvertiseAddr:          "",
-	LogFile:                "",
-	LogLevel:               "info",
-	GcTTL:                  24 * 60 * 60, // 24H
-	TZ:                     "System",
+	Addr:          "127.0.0.1:8300",
+	AdvertiseAddr: "",
+	LogFile:       "",
+	LogLevel:      "info",
+	GcTTL:         24 * 60 * 60, // 24H
+	TZ:            "System",
+	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
+	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
+	// default capture session ttl to 10s to increase robust to PD jitter,
+	// however it will decrease RTO when single TiCDC node error happens.
+	CaptureSessionTTL:      10,
 	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
@@ -153,6 +158,7 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryPressure:      80,
 		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
 		NumWorkerPoolGoroutine: 16,
+		SortDir:                "/tmp/cdc_sort",
 	},
 	Security: &SecurityConfig{},
 }
@@ -167,6 +173,8 @@ type ServerConfig struct {
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
+
+	CaptureSessionTTL int `toml:"capture-session-ttl" json:"capture-session-ttl"`
 
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
@@ -236,6 +244,11 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.GcTTL == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
 	}
+	// 5s is minimum lease ttl in etcd(PD)
+	if c.CaptureSessionTTL < 5 {
+		log.Warn("capture session ttl too small, set to default value 10s")
+		c.CaptureSessionTTL = 10
+	}
 
 	if c.Security != nil && c.Security.IsTLSEnabled() {
 		var err error
@@ -248,6 +261,30 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 			return errors.Annotate(err, "invalidate TLS config")
 		}
 	}
+
+	if c.Sorter == nil {
+		c.Sorter = defaultServerConfig.Sorter
+	}
+
+	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
+	}
+	if c.Sorter.NumConcurrentWorker < 1 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker should be at least 1")
+	}
+	if c.Sorter.NumWorkerPoolGoroutine > 4096 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at most 4096")
+	}
+	if c.Sorter.NumConcurrentWorker > c.Sorter.NumWorkerPoolGoroutine {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-concurrent-worker larger than num-workerpool-goroutine is useless")
+	}
+	if c.Sorter.NumWorkerPoolGoroutine < 1 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
+	}
+	if c.Sorter.MaxMemoryPressure < 0 || c.Sorter.MaxMemoryPressure > 100 {
+		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+	}
+
 	return nil
 }
 
