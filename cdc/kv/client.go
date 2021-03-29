@@ -751,15 +751,23 @@ MainLoop:
 				ExtraOp:      extraOp,
 			}
 
-			// pendingRegions is store independent
+			failpoint.Inject("kvClientPendingRegionDelay", nil)
+
+			// each TiKV store has an independent pendingRegions.
 			var pendingRegions *syncRegionFeedStateMap
 
 			stream, ok := s.getStream(rpcCtx.Addr)
-			// Establish the stream if it has not been connected yet.
-			if !ok {
+			if ok {
+				var ok bool
+				pendingRegions, ok = storePendingRegions[rpcCtx.Addr]
+				if !ok {
+					// Should never happen
+					log.Panic("pending regions is not found for store", zap.String("store", rpcCtx.Addr))
+				}
+			} else {
 				// when a new stream is established, always create a new pending
-				// regions map, the old map will be kept in old `receiveFromStream`
-				// until that goroutine exits.
+				// regions map, the old map will be used in old `receiveFromStream`
+				// and won't be deleted until that goroutine exits.
 				pendingRegions = newSyncRegionFeedStateMap()
 				storePendingRegions[rpcCtx.Addr] = pendingRegions
 				storeID := rpcCtx.Peer.GetStoreId()
@@ -797,18 +805,10 @@ MainLoop:
 					}
 					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				})
-			} else {
-				var ok bool
-				pendingRegions, ok = storePendingRegions[rpcCtx.Addr]
-				if !ok {
-					// Should never happen
-					log.Panic("pending regions is not found for store", zap.String("store", rpcCtx.Addr))
-				}
 			}
 
 			state := newRegionFeedState(sri, requestID)
 			pendingRegions.insert(requestID, state)
-			failpoint.Inject("kvClientPendingRegionDelay", nil)
 
 			logReq := log.Debug
 			if s.isPullerInit.IsInitialized() {
@@ -1092,6 +1092,8 @@ func (s *eventFeedSession) receiveFromStream(
 	// however not registered in the new reconnected stream.
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
+
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
 
 		remainingRegions := pendingRegions.takeAll()
 
