@@ -245,6 +245,8 @@ func (o *Owner) removeCapture(ctx context.Context, info *model.CaptureInfo) {
 			log.Warn("failed to delete task workload",
 				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
+		ownerMaintainTableNumGauge.DeleteLabelValues(feed.id, info.AdvertiseAddr, maintainTableTypeTotal)
+		ownerMaintainTableNumGauge.DeleteLabelValues(feed.id, info.AdvertiseAddr, maintainTableTypeWip)
 	}
 }
 
@@ -839,6 +841,7 @@ func (o *Owner) handleSyncPoint(ctx context.Context) error {
 }
 
 // dispatchJob dispatches job to processors
+// Note job type in this function contains pause, remove and finish
 func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	cf, ok := o.changeFeeds[job.CfID]
 	if !ok {
@@ -870,6 +873,15 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
 	if job.Type == model.AdminStop {
 		o.stoppedFeeds[job.CfID] = cf.status
+	}
+	for captureID := range cf.taskStatus {
+		capture, ok := o.captures[captureID]
+		if !ok {
+			log.Warn("capture not found", zap.String("capture-id", captureID))
+			continue
+		}
+		ownerMaintainTableNumGauge.DeleteLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeTotal)
+		ownerMaintainTableNumGauge.DeleteLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeWip)
 	}
 	delete(o.changeFeeds, job.CfID)
 	return nil
@@ -932,6 +944,17 @@ func (o *Owner) checkClusterHealth(_ context.Context) error {
 			if err != nil {
 				return err
 			}
+		}
+	}
+	for _, cf := range o.changeFeeds {
+		for captureID, pinfo := range cf.taskStatus {
+			capture, ok := o.captures[captureID]
+			if !ok {
+				log.Warn("capture not found", zap.String("capture-id", captureID))
+				continue
+			}
+			ownerMaintainTableNumGauge.WithLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeTotal).Set(float64(len(pinfo.Tables)))
+			ownerMaintainTableNumGauge.WithLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(pinfo.Operation)))
 		}
 	}
 	// TODO: check processor normal exited
