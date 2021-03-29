@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/workerpool"
 	"go.uber.org/zap"
@@ -43,8 +44,10 @@ type flushTask struct {
 	maxResolvedTs uint64
 	finished      chan error
 	dealloc       func() error
+	isDeallocated int32
 	dataSize      int64
 	lastTs        uint64 // for debugging TODO remove
+	canceller     *asyncCanceller
 }
 
 type heapSorter struct {
@@ -53,6 +56,7 @@ type heapSorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *flushTask
 	heap        sortHeap
+	canceller   *asyncCanceller
 
 	poolHandle    workerpool.EventHandle
 	internalState *heapSorterInternalState
@@ -60,10 +64,11 @@ type heapSorter struct {
 
 func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 	return &heapSorter{
-		id:       id,
-		inputCh:  make(chan *model.PolymorphicEvent, 1024*1024),
-		outputCh: out,
-		heap:     make(sortHeap, 0, 65536),
+		id:        id,
+		inputCh:   make(chan *model.PolymorphicEvent, 1024*1024),
+		outputCh:  out,
+		heap:      make(sortHeap, 0, 65536),
+		canceller: new(asyncCanceller),
 	}
 }
 
@@ -115,12 +120,16 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		tsLowerBound:  lowerBound,
 		maxResolvedTs: maxResolvedTs,
 		finished:      finishCh,
+		canceller:     h.canceller,
 	}
 	h.taskCounter++
 
 	var oldHeap sortHeap
 	if !isEmptyFlush {
 		task.dealloc = func() error {
+			if atomic.SwapInt32(&task.isDeallocated, 1) == 1 {
+				return nil
+			}
 			if task.backend != nil {
 				task.backend = nil
 				return pool.dealloc(backEnd)
@@ -146,6 +155,21 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	if !isEmptyFlush {
 		backEndFinal := backEnd
 		err := heapSorterIOPool.Go(ctx, func() {
+			failpoint.Inject("asyncFlushStartDelay", func() {
+				log.Debug("asyncFlushStartDelay")
+			})
+
+			h.canceller.EnterAsyncOp()
+			defer h.canceller.FinishAsyncOp()
+
+			if h.canceller.IsCanceled() {
+				if backEndFinal != nil {
+					_ = task.dealloc()
+				}
+				task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
+				return
+			}
+
 			writer, err := backEnd.writer()
 			if err != nil {
 				if backEndFinal != nil {
@@ -166,7 +190,18 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 				close(task.finished)
 			}()
 
+			counter := 0
 			for oldHeap.Len() > 0 {
+				failpoint.Inject("asyncFlushInProcessDelay", func() {
+					log.Debug("asyncFlushInProcessDelay")
+				})
+				// no need to check for cancellation so frequently.
+				if counter%10000 == 0 && h.canceller.IsCanceled() {
+					task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
+					return
+				}
+				counter++
+
 				event := heap.Pop(&oldHeap).(*sortItem).entry
 				err := writer.writeNext(event)
 				if err != nil {
@@ -282,6 +317,35 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 
 	h.poolHandle = poolHandle
 	h.internalState = state
+}
+
+// asyncCanceller is a shared object used to cancel async IO operations.
+// We do not use `context.Context` because (1) selecting on `ctx.Done()` is expensive
+// and costly especially if the context is shared by many goroutines (2) due to the complexity
+// of managing contexts through the workerpools, using a special shared object seems more reasonable
+// and readable.
+type asyncCanceller struct {
+	exitRWLock sync.RWMutex // held when an asynchronous flush is taking place
+	hasExited  int32
+}
+
+func (c *asyncCanceller) EnterAsyncOp() {
+	c.exitRWLock.RLock()
+}
+
+func (c *asyncCanceller) FinishAsyncOp() {
+	c.exitRWLock.RUnlock()
+}
+
+func (c *asyncCanceller) IsCanceled() bool {
+	return atomic.LoadInt32(&c.hasExited) == 1
+}
+
+func (c *asyncCanceller) Cancel() {
+	atomic.StoreInt32(&c.hasExited, 1)
+
+	c.exitRWLock.Lock()
+	defer c.exitRWLock.Unlock()
 }
 
 func lazyInitWorkerPool() {
