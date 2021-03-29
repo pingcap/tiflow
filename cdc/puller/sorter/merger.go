@@ -58,11 +58,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
-
+	taskBuf := newTaskBuffer(bufLen)
 	var workingSet map[*flushTask]struct{}
 	pendingSet := make(map[*flushTask]*model.PolymorphicEvent)
+
 	defer func() {
 		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
+		taskBuf.setClosed()
 		// cancel pending async IO operations.
 		onExit()
 		cleanUpTask := func(task *flushTask) {
@@ -86,12 +88,29 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			_ = printError(task.dealloc())
 		}
 
+		for {
+			task, err := taskBuf.get(ctx)
+			if err != nil {
+				_ = printError(err)
+				break
+			}
+
+			if task == nil {
+				log.Debug("Merger exiting, taskBuf is exhausted")
+				break
+			}
+
+			cleanUpTask(task)
+		}
+
 		for task := range pendingSet {
 			cleanUpTask(task)
 		}
 		for task := range workingSet {
 			cleanUpTask(task)
 		}
+
+		log.Info("Merger has exited")
 	}()
 
 	lastOutputTs := uint64(0)
@@ -363,9 +382,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	resolveTicker := time.NewTicker(1 * time.Second)
 	defer resolveTicker.Stop()
 
-	taskBuf := newTaskBuffer(bufLen)
-	bufOutCh := make(chan *flushTask, 16)
-
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		for {
@@ -381,8 +397,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				log.Debug("Merger input channel closed, exiting",
 					zap.Int64("table-id", tableID),
 					zap.String("table-name", tableName))
-
-				taskBuf.setClosed()
 				return nil
 			}
 
@@ -391,88 +405,44 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	})
 
 	errg.Go(func() error {
-		// Clean up remaining elements in taskBuf
-		defer func() {
-			close(bufOutCh)
-			onExit()
-			for {
-				task, err := taskBuf.get(ctx)
-				if task == nil || err != nil {
-					return
-				}
-
-				if task.reader != nil {
-					_ = printError(task.reader.resetAndClose())
-				}
-				_ = printError(task.dealloc())
-			}
-		}()
-
-		for {
-			task, err := taskBuf.get(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if task == nil {
-				tableID, tableName := util.TableIDFromCtx(ctx)
-				log.Debug("Merger taskBuf closed, exiting",
-					zap.Int64("table-id", tableID),
-					zap.String("table-name", tableName))
-
-				return nil
-			}
-
-			select {
-			case <-ctx.Done():
-				return errors.Trace(err)
-			case bufOutCh <- task:
-			}
-		}
-	})
-
-	errg.Go(func() error {
-		defer func() {
-			onExit()
-			mergerCleanUp(bufOutCh)
-		}()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case task := <-bufOutCh:
-				if task == nil {
-					tableID, tableName := util.TableIDFromCtx(ctx)
-					log.Debug("Merger bufOut channel closed, exiting",
-						zap.Int64("table-id", tableID),
-						zap.String("table-name", tableName),
-						zap.Uint64("max-output", minResolvedTs))
-					return nil
-				}
+			default:
+			}
+			task, err := taskBuf.get(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-				if task.backend != nil {
-					pendingSet[task] = nil
-				} // otherwise it is an empty flush
+			if task == nil {
+				tableID, tableName := util.TableIDFromCtx(ctx)
+				log.Debug("Merger buffer exhausted and is closed, exiting",
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
+					zap.Uint64("max-output", minResolvedTs))
+				return nil
+			}
 
-				if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
-					lastResolvedTs[task.heapSorterID] = task.maxResolvedTs
-				}
+			if task.backend != nil {
+				pendingSet[task] = nil
+			} // otherwise it is an empty flush
 
-				minTemp := uint64(math.MaxUint64)
-				for _, ts := range lastResolvedTs {
-					if minTemp > ts {
-						minTemp = ts
-					}
-				}
+			if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
+				lastResolvedTs[task.heapSorterID] = task.maxResolvedTs
+			}
 
-				if minTemp > minResolvedTs {
-					minResolvedTs = minTemp
-					err := onMinResolvedTsUpdate()
-					if err != nil {
-						return errors.Trace(err)
-					}
+			minTemp := uint64(math.MaxUint64)
+			for _, ts := range lastResolvedTs {
+				if minTemp > ts {
+					minTemp = ts
 				}
-			case <-resolveTicker.C:
-				err := sendResolvedEvent(minResolvedTs)
+			}
+
+			if minTemp > minResolvedTs {
+				minResolvedTs = minTemp
+				err := onMinResolvedTsUpdate()
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -516,18 +486,18 @@ func printError(err error) error {
 // The design purpose is to reduce the backpressure caused by a congested output chan of the merger,
 // so that heapSorter does not block.
 type taskBuffer struct {
- 	mu sync.Mutex
- 	queue deque.Deque
- 	notifier notify.Notifier
- 	len *int64
- 	isClosed int32
+	mu       sync.Mutex
+	queue    deque.Deque
+	notifier notify.Notifier
+	len      *int64
+	isClosed int32
 }
 
 func newTaskBuffer(len *int64) *taskBuffer {
 	return &taskBuffer{
 		queue:    deque.NewDeque(),
 		notifier: notify.Notifier{},
-		len: len,
+		len:      len,
 	}
 }
 
@@ -567,7 +537,7 @@ func (b *taskBuffer) get(ctx context.Context) (*flushTask, error) {
 				return nil, nil
 			}
 
-			if time.Since(startTime) > time.Second * 5 {
+			if time.Since(startTime) > time.Second*5 {
 				log.Debug("taskBuffer reading blocked for too long", zap.Duration("duration", time.Since(startTime)))
 			}
 		}
@@ -590,10 +560,5 @@ func (b *taskBuffer) get(ctx context.Context) (*flushTask, error) {
 }
 
 func (b *taskBuffer) setClosed() {
-	prev := atomic.SwapInt32(&b.isClosed, 1)
-	if prev != 0 {
-		log.Panic("taskBuffer: setClosed() called repeatedly, report a bug")
-	}
-
-	// b.notifier.Close()
+	atomic.SwapInt32(&b.isClosed, 1)
 }
