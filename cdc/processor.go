@@ -690,8 +690,8 @@ func (p *oldProcessor) globalStatusWorker(ctx context.Context) error {
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
 			log.Debug("Update globalResolvedTs",
 				zap.Uint64("globalResolvedTs", lastResolvedTs), util.ZapFieldChangefeed(ctx))
+			p.globalResolvedTsNotifier.Notify()
 		}
-		p.globalResolvedTsNotifier.Notify()
 	}
 
 	retryCfg := backoff.WithMaxRetries(
@@ -915,7 +915,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
-const maxLagWithGlobalCheckpointTs = (1 * 1000) << 18 // 30s
+const maxLagWithCheckpointTs = (1 * 1000) << 18 // 30s
 
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
@@ -929,7 +929,7 @@ func (p *oldProcessor) sorterConsume(
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 ) {
-	var lastResolvedTs uint64
+	var lastResolvedTs, lastCheckPointTs uint64
 	opDone := false
 	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
@@ -1009,7 +1009,7 @@ func (p *oldProcessor) sorterConsume(
 		return nil
 	}
 
-	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(100 * time.Millisecond)
+	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(500 * time.Millisecond)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- errors.Trace(err)
@@ -1040,6 +1040,7 @@ func (p *oldProcessor) sorterConsume(
 			}
 			return err
 		}
+		lastCheckPointTs = checkpointTs
 
 		if checkpointTs < replicaInfo.StartTs {
 			checkpointTs = replicaInfo.StartTs
@@ -1063,13 +1064,9 @@ func (p *oldProcessor) sorterConsume(
 				continue
 			}
 
-			for {
-				globalCheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
-				if lastResolvedTs < maxLagWithGlobalCheckpointTs+globalCheckpointTs {
-					break
-				}
-				log.Debug("the lag between global checkpoint and local resolved Ts is too lang",
-					zap.Uint64("resolvedTs", lastResolvedTs), zap.Uint64("globalCheckpointTs", globalCheckpointTs),
+			for lastResolvedTs > maxLagWithCheckpointTs+lastCheckPointTs {
+				log.Debug("the lag between local checkpoint Ts and local resolved Ts is too lang",
+					zap.Uint64("resolvedTs", lastResolvedTs), zap.Uint64("lastCheckPointTs", lastCheckPointTs),
 					zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
 				select {
 				case <-ctx.Done():
