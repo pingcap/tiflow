@@ -915,7 +915,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
-const maxLagWithGlobalCheckpointTs = (30 * 1000) << 18 // 30s
+const maxLagWithGlobalCheckpointTs = (1 * 1000) << 18 // 30s
 
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
