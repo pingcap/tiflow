@@ -47,8 +47,10 @@ var (
 )
 
 const (
+	// total tables that have been dispatched to a single processor
 	maintainTableTypeTotal string = "total"
-	maintainTableTypeWip   string = "wip"
+	// tables that are dispatched to a processor and have not been finished yet
+	maintainTableTypeWip string = "wip"
 )
 
 // initOwnerMetrics registers all metrics used in owner
