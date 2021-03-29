@@ -196,7 +196,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 					log.Debug("asyncFlushInProcessDelay")
 				})
 				// no need to check for cancellation so frequently.
-				if h.canceller.IsCanceled() {
+				if counter%10000 == 0 && h.canceller.IsCanceled() {
 					task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
 					return
 				}
