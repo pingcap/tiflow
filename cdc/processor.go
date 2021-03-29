@@ -690,8 +690,8 @@ func (p *oldProcessor) globalStatusWorker(ctx context.Context) error {
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
 			log.Debug("Update globalResolvedTs",
 				zap.Uint64("globalResolvedTs", lastResolvedTs), util.ZapFieldChangefeed(ctx))
-			p.globalResolvedTsNotifier.Notify()
 		}
+		p.globalResolvedTsNotifier.Notify()
 	}
 
 	retryCfg := backoff.WithMaxRetries(
@@ -1009,7 +1009,7 @@ func (p *oldProcessor) sorterConsume(
 		return nil
 	}
 
-	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(1 * time.Second)
+	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(100 * time.Millisecond)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- errors.Trace(err)
@@ -1077,9 +1077,8 @@ func (p *oldProcessor) sorterConsume(
 						p.sendError(ctx.Err())
 					}
 					return
-				default:
+				case <-globalResolvedTsReceiver.C:
 				}
-				time.Sleep(100 * time.Millisecond)
 
 				if err := sendResolvedTs2Sink(); err != nil {
 					// error is already sent to processor, so we can just ignore it
