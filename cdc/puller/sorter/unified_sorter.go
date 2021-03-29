@@ -182,7 +182,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	})
 
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, nil))
 	})
 
 	errg.Go(func() error {
