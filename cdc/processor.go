@@ -1075,11 +1075,14 @@ func (p *oldProcessor) sorterConsume(
 					}
 					return
 				case <-globalResolvedTsReceiver.C:
-				}
-
-				if err := sendResolvedTs2Sink(); err != nil {
-					// error is already sent to processor, so we can just ignore it
-					return
+					if err := sendResolvedTs2Sink(); err != nil {
+						// error is already sent to processor, so we can just ignore it
+						return
+					}
+				case <-checkDoneTicker.C:
+					if !opDone {
+						checkDone()
+					}
 				}
 			}
 
