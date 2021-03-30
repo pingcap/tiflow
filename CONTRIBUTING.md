@@ -1,6 +1,6 @@
 # How to contribute
 
-This document outlines some of the conventions on development workflow, commit
+This document outlines some conventions on development workflow, commit
 message formatting, contact points and other resources to make it easier to get
 your contribution accepted.
 
@@ -15,7 +15,7 @@ your contribution accepted.
 Developing TiDB-CDC requires:
 
 * [Go 1.13+](http://golang.org/doc/code.html)
-* An internet connection to download the dependencies
+* An internet connection to download the dependencies.
 
 Simply run `make` to build the program.
 
@@ -30,7 +30,7 @@ See [tests/README.md](./tests/README.md) for how to execute and add tests.
 
 ### Updating dependencies
 
-TiDB-CDC uses [Go 1.11 module](https://github.com/golang/go/wiki/Modules) to manage dependencies.
+TiDB-CDC uses [Go Modules](https://github.com/golang/go/wiki/Modules) to manage dependencies.
 To add or update a dependency: use the `go mod edit` command to change the dependency.
 
 ## Contribution flow
@@ -85,6 +85,6 @@ If the change affects more than one subsystem, you can use comma to separate the
 
 If the change affects many subsystems, you can use ```*``` instead, like ```*:```.
 
-For the why part, if no specific reason for the change,
+For why part, if no specific reason for the change,
 you can use one of some generic reasons like "Improve documentation.",
 "Improve performance.", "Improve robustness.", "Improve test coverage."
