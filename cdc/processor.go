@@ -1070,8 +1070,8 @@ func (p *oldProcessor) sorterConsume(
 					zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
 				select {
 				case <-ctx.Done():
-					if errors.Cause(ctx.Err()) != context.Canceled {
-						p.sendError(ctx.Err())
+					if ctx.Err() != context.Canceled {
+						p.sendError(errors.Trace(ctx.Err()))
 					}
 					return
 				case <-globalResolvedTsReceiver.C:
