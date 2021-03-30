@@ -35,7 +35,7 @@ How to obatin pictures in this document?
 
 对于日常运维，我们通过观察 TiCDC 面板上的 Metrics，可以了解 TiCDC 当前的状态。
 
-本文档使用默认配置创建一个同步到 MySQL 的同步任务为例，参见 [创建同步任务](https://docs.pingcap.com/zh/tidb/stable/manage-ticdc#%E5%88%9B%E5%BB%BA%E5%90%8C%E6%AD%A5%E4%BB%BB%E5%8A%A1)。
+本文档使用默认配置创建两个同步到 MySQL 的同步任务为例，参见 [创建同步任务](https://docs.pingcap.com/zh/tidb/stable/manage-ticdc#%E5%88%9B%E5%BB%BA%E5%90%8C%E6%AD%A5%E4%BB%BB%E5%8A%A1)。
 
 ```shell
 cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:123456@127.0.0.1:3306/" --changefeed-id="simple-replication-task"
