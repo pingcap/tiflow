@@ -111,9 +111,10 @@ How to obatin pictures in this document?
 - KV client dispatch events/s ： TiCDC 节点内部 KV client 模块每秒分发数据变更的个数
 - KV client batch resolved size ： TiKV 批量发给 TiCDC 的 resolved ts 消息的大小
 
-![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-1.png)
-![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-2.png)
-![TiCDC Dashboard - Events metrics 2](/docs/media/ticdc-dashboard-events-3.png)
+![TiCDC Dashboard - Events metrics 1](/docs/media/dashboard/events-1.png)
+![TiCDC Dashboard - Events metrics 2](/docs/media/dashboard/events-2.png)
+![TiCDC Dashboard - Events metrics 3](/docs/media/dashboard/events-3.png)
+![TiCDC Dashboard - Events metrics 4](/docs/media/dashboard/events-4.png)
 
 ## Unified Sorter
 - Unified Sorter intake rate: Unified Sorter 从 puller 消费消息的速率 (events / s)
