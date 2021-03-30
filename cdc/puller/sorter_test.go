@@ -71,7 +71,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	testSorter(ctx, c, sorter, 10000)
+	testSorter(ctx, c, sorter, 10000, true)
 }
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
@@ -95,21 +95,25 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		testSorter(ctx, c, sorter, 10000000)
+		testSorter(ctx, c, sorter, 10000000, true)
 		close(finishedCh)
 	}()
 
 	after := time.After(30 * time.Second)
 	select {
 	case <-after:
-		c.FailNow()
+		c.Fatal("TestSorterCancel timed out")
 	case <-finishedCh:
 	}
 
 	log.Info("Sorter successfully cancelled")
 }
 
+<<<<<<< HEAD:cdc/puller/sorter_test.go
 func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) {
+=======
+func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int, needWorkerPool bool) {
+>>>>>>> 759fdba... sorter: fix Unified Sorter resource release (#1558):cdc/puller/sorter/sorter_test.go
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -121,9 +125,17 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 		return sorter.Run(ctx)
 	})
 
+<<<<<<< HEAD:cdc/puller/sorter_test.go
 	errg.Go(func() error {
 		return sorter2.RunWorkerPool(ctx)
 	})
+=======
+	if needWorkerPool {
+		errg.Go(func() error {
+			return RunWorkerPool(ctx)
+		})
+	}
+>>>>>>> 759fdba... sorter: fix Unified Sorter resource release (#1558):cdc/puller/sorter/sorter_test.go
 
 	producerProgress := make([]uint64, numProducers)
 
@@ -151,7 +163,7 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 
 	// launch the resolver
 	errg.Go(func() error {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
@@ -210,3 +222,101 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 	}
 	c.Assert(err, check.IsNil)
 }
+<<<<<<< HEAD:cdc/puller/sorter_test.go
+=======
+
+func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	poolMu.Lock()
+	// Clean up the back-end pool if one has been created
+	pool = nil
+	poolMu.Unlock()
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+	// We expect the local setting to override the changefeed setting
+	config.GetGlobalServerConfig().Sorter.SortDir = "/tmp/sorter_local"
+
+	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+		"test-cf",
+		"test",
+		0,
+		"0.0.0.0:0")
+
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	c.Assert(pool, check.NotNil)
+	c.Assert(pool.dir, check.Equals, "/tmp/sorter_local")
+}
+
+func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	poolMu.Lock()
+	// Clean up the back-end pool if one has been created
+	pool = nil
+	poolMu.Unlock()
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+	// We expect the changefeed setting to take effect
+	config.GetGlobalServerConfig().Sorter.SortDir = ""
+
+	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+		"test-cf",
+		"test",
+		0,
+		"0.0.0.0:0")
+
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	c.Assert(pool, check.NotNil)
+	c.Assert(pool.dir, check.Equals, "/tmp/sorter")
+}
+
+// TestSorterCancelRestart tests the situation where the Unified Sorter is repeatedly canceled and
+// restarted. There should not be any problem, especially file corruptions.
+func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      0, // disable memory sort
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
+	}
+	config.StoreGlobalServerConfig(conf)
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+
+	// enable the failpoint to simulate delays
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushStartDelay", "sleep(100)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushStartDelay")
+	}()
+
+	// enable the failpoint to simulate delays
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushInProcessDelay", "1%sleep(1)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushInProcessDelay")
+	}()
+
+	for i := 0; i < 5; i++ {
+		sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		testSorter(ctx, c, sorter, 100000000, true)
+		cancel()
+	}
+}
+>>>>>>> 759fdba... sorter: fix Unified Sorter resource release (#1558):cdc/puller/sorter/sorter_test.go
