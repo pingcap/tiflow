@@ -35,20 +35,15 @@ How to obatin pictures in this document?
 
 对于日常运维，我们通过观察 TiCDC 面板上的 Metrics，可以了解 TiCDC 当前的状态。
 
-本文档使用默认配置创建两个同步到 MySQL 的同步任务为例，参见 [创建同步任务](https://docs.pingcap.com/zh/tidb/stable/manage-ticdc#%E5%88%9B%E5%BB%BA%E5%90%8C%E6%AD%A5%E4%BB%BB%E5%8A%A1)。
-
-```shell
-cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:123456@127.0.0.1:3306/" --changefeed-id="simple-replication-task"
-```
-
 以下为 TiCDC Dashboard 监控说明 ：
 
 - Server ： TiDB 集群中 TiKV 节点和 TiCDC 节点的概要信息
 - Changefeed ： TiCDC 同步任务的详细信息
 - Events ： TiCDC 内部数据流转的详细信息
+- Unified Sorter ： TiCDC 中内存和外存融合的排序器的相关的详细信息
 - TiKV ： TiKV 中和 TiCDC 相关的详细信息
 
-![TiCDC Dashboard - Overview](/docs/media/ticdc-dashboard-overview.png)
+![TiCDC Dashboard - Overview](/docs/media/dashboard/overview.png)
 ## Server
 
 - Uptime ： TiKV 节点和 TiCDC 节点已经运行的时间
@@ -60,28 +55,39 @@ cdc cli changefeed create --pd=http://10.0.10.25:2379 --sink-uri="mysql://root:1
 - Memory usage ： TiCDC 节点使用的内存
 - Etcd health check duration ：TiCDC 节点访问 PD 的延迟统计
 
-![TiCDC Dashboard - Server metrics](/docs/media/ticdc-dashboard-server.png)
+![TiCDC Dashboard - Server metrics](/docs/media/dashboard/server.png)
 ## Changefeed
 
 - Changefeed table count ： 一个同步任务中分配到各个 TiCDC 节点同步的数据表个数
 - Processor resolved ts ： TiCDC 节点内部状态中已同步的时间点
 - Table resolved ts ： 同步任务中各数据表的同步进度
+- Table count maintained by owner： 同步任务中由 owner 管理的表数量和状态
 - Changefeed checkpoint ： 同步任务同步到下游的进度，正常情况下绿柱应和黄线相接
 - PD etcd requests/s ： TiCDC 节点每秒读写 PD 的次数
 - Exit error count ： 每分钟导致同步中断的错误的发生次数
+
+![TiCDC Dashboard - Changefeed metrics 1](/docs/media/dashboard/changefeed-1.png)
+
 - Changefeed checkpoint lag ： 同步任务上下游数据的进度差（以时间计算）
 - Changefeed resolved ts lag ： TiCDC 节点内部同步状态与上游的进度差（以时间计算）
-- Flush sink duration ： TiCDC 异步刷写下游的耗时直方图
-- Flush sink duration percentile： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 异步刷写下游所花费的时间
 - Sink write duration ： TiCDC 将一个事务的更改写到下游的耗时直方图
 - Sink write duration percentile： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 将一个事务的更改写到下游所花费的时间
+
+![TiCDC Dashboard - Changefeed metrics 2](/docs/media/dashboard/changefeed-2.png)
+
+- Sink write rows count/s ： TiCDC 每秒写入下游的行数
+- Sink write batch size percentile ： TiCDC 写入下游的 batch size
+- Flush sink duration ： TiCDC 异步刷写下游的耗时直方图
+- Flush sink duration percentile： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 异步刷写下游所花费的时间
+
+![TiCDC Dashboard - Changefeed metrics 3](/docs/media/dashboard/changefeed-3.png)
+
 - MySQL sink conflict detect duration ： MySQL 写入冲突检测耗时直方图
 - MySQL sink conflict detect duration percentile ： 每秒钟中 95%，99% 和 99.9% 的情况下，MySQL 写入冲突检测耗时
 - MySQL sink worker load ： TiCDC 节点中写 MySQL 线程的负载情况
 
-![TiCDC Dashboard - Changefeed metrics 1](/docs/media/ticdc-dashboard-changefeed-1.png)
-![TiCDC Dashboard - Changefeed metrics 2](/docs/media/ticdc-dashboard-changefeed-2.png)
-![TiCDC Dashboard - Changefeed metrics 3](/docs/media/ticdc-dashboard-changefeed-3.png)
+![TiCDC Dashboard - Changefeed metrics 4](/docs/media/dashboard/changefeed-4.png)
+
 
 ## Events
 
