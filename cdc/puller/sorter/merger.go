@@ -110,6 +110,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			cleanUpTask(task)
 		}
 
+		taskBuf.close()
 		log.Info("Merger has exited")
 	}()
 
@@ -561,4 +562,9 @@ func (b *taskBuffer) get(ctx context.Context) (*flushTask, error) {
 
 func (b *taskBuffer) setClosed() {
 	atomic.SwapInt32(&b.isClosed, 1)
+}
+
+// Only call this when the taskBuffer is NEVER going to be accessed again.
+func (b *taskBuffer) close() {
+	b.notifier.Close()
 }
