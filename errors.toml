@@ -16,6 +16,11 @@ error = '''
 Async broadcasts not supported
 '''
 
+["CDC:ErrAsyncIOCancelled"]
+error = '''
+asynchronous IO operation is cancelled. Internal use only, report a bug if seen in log
+'''
+
 ["CDC:ErrAsyncPoolExited"]
 error = '''
 asyncPool has exited. Report a bug if seen externally.
