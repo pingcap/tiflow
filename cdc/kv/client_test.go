@@ -2572,9 +2572,6 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 	initialized := mockInitializedEvent(regionID3, currentRequestID())
 	ch1 <- initialized
 
-	// wait kv client reconnect
-	// time.Sleep(time.Second * 6)
-
 	<-server1Stopped
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv2 := newMockChangeDataService(c, ch2)
