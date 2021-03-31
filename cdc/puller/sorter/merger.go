@@ -509,7 +509,7 @@ func (b *taskBuffer) put(task *flushTask) {
 	b.queue.PushBack(task)
 	prevCount := atomic.AddInt64(b.len, 1)
 
-	if prevCount == 0 {
+	if prevCount == 1 {
 		b.notifier.Notify()
 	}
 }
