@@ -79,6 +79,8 @@ function check() {
 
 trap "stop_tidb_cluster && stop_proxy" EXIT
 
+# disable this test temporarily
+exit 0
 prepare
 sleep 5
 check
