@@ -911,7 +911,7 @@ func (s *eventFeedSession) partialRegionFeed(
 		cancel, ok := s.getStreamCancel(state.sri.rpcCtx.Addr)
 		if ok {
 			// cancel the stream to trigger strem.Recv with context cancel error
-			// Note use context cancel is the only to terminate a gRPC stream
+			// Note use context cancel is the only way to terminate a gRPC stream
 			cancel()
 			// Failover in stream.Recv has 0-100ms delay, the onRegionFail
 			// should be called after stream has been deleted. Add a delay here
