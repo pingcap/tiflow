@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -ex
 
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
@@ -49,13 +49,18 @@ function prepare() {
     start_tidb_cluster --workdir $WORK_DIR
 
     start_proxy
+    # TODO: make sure the proxy is started.
+    sleep 20
+    export http_proxy=http://127.0.0.1:8080
+    export https_proxy=http://127.0.0.1:8080
     echo started proxy at $proxy_pid
+    if ! curl http://example.com; then
+        echo "proxy failed to start after 20s, skipping this test in bad network enviorment."
+    fi
 
     cd $WORK_DIR
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
-    export http_proxy=http://127.0.0.1:8080
-    export https_proxy=http://127.0.0.1:8080
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     SINK_URI="blackhole:///"
