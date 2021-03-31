@@ -907,7 +907,7 @@ func (s *eventFeedSession) partialRegionFeed(
 		return nil
 	}
 
-	if err == errReconnect {
+	if errors.Cause(err) == errReconnect {
 		cancel, ok := s.getStreamCancel(state.sri.rpcCtx.Addr)
 		if ok {
 			// cancel the stream to trigger strem.Recv with context cancel error
