@@ -95,25 +95,30 @@ How to obatin pictures in this document?
 - Event size percentile ： 每秒钟中 95% 和 99.9% 的情况下，TiCDC 收到的来自 TiKV 的数据变更消息大小
 - Eventfeed error/m ： TiCDC 节点每分钟 Eventfeed RPC 遇到的错误个数
 - KV client receive events/s ： TiCDC 节点中 KV client 模块每秒收到来自 TiKV 的数据变更个数
-- Puller receive events/s ： TiCDC 节点中 Puller 模块每秒收到来自 KV client 模块的数据变更个数
 - Puller output events/s ： TiCDC 节点中 Puller 模块每秒输出到 Sorter 模块的数据变更个数
 - Sink flush rows/s ： TiCDC 节点每秒写到下游的数据变更的个数
+
+![TiCDC Dashboard - Events metrics 1](/docs/media/dashboard/events-1.png)
+
 - Puller buffer size ： TiCDC 节点中缓存在 Puller 模块中的数据变更个数
 - Entry sorter buffer size ： TiCDC 节点中缓存在 Sorter 模块中的数据变更个数
 - Sink/Mounter buffer size ： TiCDC 节点中缓存在 Buffer Sink 模块和 Mounter 模块中的数据变更个数
 - Sink row buffer size ： TiCDC 节点中缓存在 Sink 模块中的数据变更个数
 - Entry sorter sort duration ： TiCDC 节点排序数据变更的耗时直方图
 - Entry sorter sort duration percentile ： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 排序数据变更所花费的时间
+
+![TiCDC Dashboard - Events metrics 2](/docs/media/dashboard/events-2.png)
+
 - Entry sorter merge duration ： TiCDC 节点合并排序后的数据变更的耗时直方图
 - Entry sorter merge duration percentile ： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 合并排序后的数据变更所花费的时间
 - Mounter unmarshal duration ： TiCDC 节点解码的数据变更的耗时直方图
 - Mounter unmarshal duration percentile ： 每秒钟中 95%，99% 和 99.9% 的情况下，TiCDC 解码数据变更所花费的时间
+
+![TiCDC Dashboard - Events metrics 3](/docs/media/dashboard/events-3.png)
+
 - KV client dispatch events/s ： TiCDC 节点内部 KV client 模块每秒分发数据变更的个数
 - KV client batch resolved size ： TiKV 批量发给 TiCDC 的 resolved ts 消息的大小
 
-![TiCDC Dashboard - Events metrics 1](/docs/media/dashboard/events-1.png)
-![TiCDC Dashboard - Events metrics 2](/docs/media/dashboard/events-2.png)
-![TiCDC Dashboard - Events metrics 3](/docs/media/dashboard/events-3.png)
 ![TiCDC Dashboard - Events metrics 4](/docs/media/dashboard/events-4.png)
 
 ## Unified Sorter
@@ -121,9 +126,13 @@ How to obatin pictures in this document?
 - Unified Sorter event output rate: Unified Sorter 排序后的消息的输出速率 (events / s)
 - Unified Sorter on disk data size: Unified Sorter 暂存在硬盘上的数据大小 (bytes)
 - Unified Sorter in-memory data size: Unified Sorter 暂存在内存中的数据大小 (bytes)
+
+![TiCDC Dashboard - Unified Sorter metrics 1](/docs/media/dashboard/unified-sorter-1.png)
+
 - Unified Sorter flush sizes: Unified Sorter 的堆排序器 (heapSorter) 的单次排序操作处理的消息数量 (events)
 - Unified Sorter merge size: Unified Sorter 的归并器 (merger) 的单批次中处理的消息数量 (events)
-- Unified Sorter resolved ts: Unified Sorter 输出过的最大的 resolved ts, 每个 capture 多个 table 取最小值, 提示排序进度。
+
+![TiCDC Dashboard - Unified Sorter metrics 2](/docs/media/dashboard/unified-sorter-2.png)
 
 
 ## TiKV
@@ -133,11 +142,13 @@ How to obatin pictures in this document?
 - Min resolved ts ： TiKV 节点上最小的 resolved ts
 - Min resovled region ： TiKV 节点上最小的 resolved ts 的 region ID
 - Resolved ts lag duration percentile ： TiKV 节点上最小的 resolved ts 与当前时间的差距
+
+![TiCDC Dashboard - TiKV metrics 1](/docs/media/dashboard/tikv-1.png)
+
 - Initial scan duration ： TiKV 节点与 TiCDC 建立链接是增量扫的耗时直方图
 - Initial scan duration percentile ： 每秒钟中 95%，99% 和 99.9% 的情况下，TiKV 节点增量扫的耗时
 - Memory without block cache ： TiKV 节点在减去 RocksDB block cache 后使用的内存
 - CDC pending bytes in memory ： TiKV 节点中 CDC 模块使用的内存
 - Captured region count ： TiKV 节点上捕获数据变更的 region 个数
 
-![TiCDC Dashboard - TiKV metrics 1](/docs/media/ticdc-dashboard-tikv-1.png)
-![TiCDC Dashboard - TiKV metrics 2](/docs/media/ticdc-dashboard-tikv-2.png)
+![TiCDC Dashboard - TiKV metrics 2](/docs/media/dashboard/tikv-2.png)
