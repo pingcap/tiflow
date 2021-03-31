@@ -20,9 +20,10 @@ export UP_TIDB_HOST=$lan_addr \
 
 
 proxy_pid=""
+proxy_port=$(shuf -i 10000-20000 -n1)
 function start_proxy() {
     echo "dumpling grpc packet to $WORK_DIR/packets.dump..."
-    GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=8080 >$WORK_DIR/packets.dump &
+    GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=$proxy_port >$WORK_DIR/packets.dump &
     proxy_pid=$!
 }
 
@@ -51,10 +52,10 @@ function prepare() {
     start_proxy
     # TODO: make sure the proxy is started.
     sleep 20
-    export http_proxy=http://127.0.0.1:8080
-    export https_proxy=http://127.0.0.1:8080
+    export http_proxy=http://127.0.0.1:$proxy_port
+    export https_proxy=http://127.0.0.1:$proxy_port
     echo started proxy at $proxy_pid
-    if ! curl http://example.com; then
+    if ! curl http://$UP_PD_HOST_1:2379/; then
         echo "proxy failed to start after 20s, skipping this test in bad network enviorment."
     fi
 
