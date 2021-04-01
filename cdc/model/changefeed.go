@@ -171,17 +171,6 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	return nil
 }
 
-// Clone returns a cloned ChangeFeedInfo
-func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
-	s, err := info.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	cloned := new(ChangeFeedInfo)
-	err = cloned.Unmarshal([]byte(s))
-	return cloned, err
-}
-
 // VerifyAndFix verifies changefeed info and may fillin some fields.
 // If a must field is not provided, return an error.
 // If some necessary filed is missing but can use a default value, fillin it.
