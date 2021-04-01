@@ -2504,3 +2504,131 @@ func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	server1.Stop()
 	wg.Wait()
 }
+
+// TestKVClientForceReconnect force reconnect gRPC stream can work
+func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = false
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	server1Stopped := make(chan struct{})
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		defer func() {
+			close(ch1)
+			server1.Stop()
+			server1Stopped <- struct{}{}
+		}()
+		for {
+			_, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				break
+			}
+		}
+	}
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID3 := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientForceReconnect", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientForceReconnect")
+	}()
+	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	baseAllocatedID := currentRequestID()
+	waitRequestID(c, baseAllocatedID+1)
+	initialized := mockInitializedEvent(regionID3, currentRequestID())
+	ch1 <- initialized
+
+	<-server1Stopped
+	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv2 := newMockChangeDataService(c, ch2)
+	// Reuse the same listen addresss as server 1 to simulate TiKV handles the
+	// gRPC stream terminate and reconnect.
+	server2, _ := newMockServiceSpecificAddr(ctx, c, srv2, addr1, wg)
+	defer func() {
+		close(ch2)
+		server2.Stop()
+		wg.Wait()
+	}()
+
+	waitRequestID(c, baseAllocatedID+2)
+	initialized = mockInitializedEvent(regionID3, currentRequestID())
+	ch2 <- initialized
+
+	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  regionID3,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 135},
+		},
+	}}
+	ch2 <- resolved
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID3,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID3,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+				ResolvedTs: 135,
+			},
+			RegionID: regionID3,
+		},
+	}
+
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+
+	cancel()
+}
