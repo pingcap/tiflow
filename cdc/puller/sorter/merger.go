@@ -487,8 +487,9 @@ func printError(err error) error {
 // The design purpose is to reduce the backpressure caused by a congested output chan of the merger,
 // so that heapSorter does not block.
 type taskBuffer struct {
-	mu       sync.Mutex
-	queue    deque.Deque
+	mu    sync.Mutex // mu only protects queue
+	queue deque.Deque
+
 	notifier notify.Notifier
 	len      *int64
 	isClosed int32
@@ -532,9 +533,10 @@ func (b *taskBuffer) get(ctx context.Context) (*flushTask, error) {
 			case <-ctx.Done():
 				return nil, errors.Trace(ctx.Err())
 			case <-recv.C:
+				// Note that there can be spurious wake-ups
 			}
 
-			if atomic.LoadInt32(&b.isClosed) == 1 {
+			if atomic.LoadInt32(&b.isClosed) == 1 && atomic.LoadInt64(b.len) == 0 {
 				return nil, nil
 			}
 
