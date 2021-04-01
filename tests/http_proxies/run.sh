@@ -20,7 +20,7 @@ export UP_TIDB_HOST=$lan_addr \
 
 
 proxy_pid=""
-proxy_port=$(shuf -i 10000-20000 -n1)
+proxy_port=$(shuf -i 10081-20081 -n1)
 function start_proxy() {
     echo "dumpling grpc packet to $WORK_DIR/packets.dump..."
     GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=$proxy_port >$WORK_DIR/packets.dump &
