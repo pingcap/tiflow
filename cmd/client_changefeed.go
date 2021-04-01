@@ -531,11 +531,11 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SyncPointEnabled = syncPointEnabled
 				case "sync-interval":
 					info.SyncPointInterval = syncPointInterval
-				case "tz", "start-ts", "changefeed-id", "no-confirm":
+				case "pd", "tz", "start-ts", "changefeed-id", "no-confirm":
 					// do nothing
 				default:
 					// use this default branch to prevent new added parameter is not added
-					log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
+					log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
 				}
 			})
 
