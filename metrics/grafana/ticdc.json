@@ -78,7 +78,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "enable": true,
         "expr": "min(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}) by (job, instance) == BOOL 0",
-        "hide": true,
+        "hide": false,
         "iconColor": "#FF9830",
         "limit": 100,
         "name": "Server down",
@@ -109,7 +109,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1617089343502,
+  "iteration": 1617365191327,
   "links": [],
   "panels": [
     {
@@ -5389,7 +5389,7 @@
           "fill": 1,
           "gridPos": {
             "h": 7,
-            "w": 12,
+            "w": 6,
             "x": 12,
             "y": 19
           },
@@ -5402,7 +5402,7 @@
             "hideZero": true,
             "max": true,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "sideWidth": null,
             "sort": "current",
@@ -5453,6 +5453,101 @@
           "yaxes": [
             {
               "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "decimals": 1,
+          "description": "The number of incremental scan task in different status.",
+          "fill": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 6,
+            "x": 18,
+            "y": 19
+          },
+          "id": 140,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(tikv_cdc_scan_tasks{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (type, instance)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}} - {{type}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Initial scan tasks status",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -5597,7 +5692,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The memory usage per TiKV instance",
+          "description": "The speed of TiKV CDC incremental scan",
           "editable": true,
           "error": false,
           "fill": 0,
@@ -5613,6 +5708,8 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
             "max": true,
             "min": false,
             "rightSide": true,
@@ -5638,9 +5735,9 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
+              "expr": "sum(rate(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
               "format": "time_series",
-              "hide": true,
+              "hide": false,
               "intervalFactor": 2,
               "legendFormat": "tikv-{{instance}}",
               "refId": "A",
@@ -5651,7 +5748,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "CDC pending bytes in memory",
+          "title": "CDC scan speed",
           "tooltip": {
             "msResolution": false,
             "shared": true,
@@ -5672,7 +5769,7 @@
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": null,
+              "min": "0",
               "show": true
             },
             {
@@ -5741,8 +5838,17 @@
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
+              "legendFormat": "tikv-{{instance}}-total",
               "refId": "A",
+              "step": 10
+            },
+            {
+              "expr": "avg(tikv_cdc_region_resolve_status{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance, status)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "tikv-{{instance}}-{{status}}",
+              "refId": "B",
               "step": 10
             }
           ],
@@ -5772,6 +5878,107 @@
               "logBase": 1,
               "max": null,
               "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "decimals": 1,
+          "description": "The total bytes of TiKV CDC incremental scan",
+          "editable": true,
+          "error": false,
+          "fill": 0,
+          "grid": {},
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 33
+          },
+          "id": 139,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sideWidth": null,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": false,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "tikv-{{instance}}",
+              "refId": "A",
+              "step": 10
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "CDC total scan bytes",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
               "show": true
             },
             {
@@ -5974,5 +6181,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 13
+  "version": 14
 }
