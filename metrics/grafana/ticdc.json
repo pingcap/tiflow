@@ -5857,7 +5857,7 @@
               "step": 10
             },
             {
-              "expr": "avg(tikv_cdc_region_resolve_status{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance, status)",
+              "expr": "sum(tikv_cdc_region_resolve_status{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance, status)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
