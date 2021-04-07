@@ -39,6 +39,8 @@ type AvroEventBatchEncoder struct {
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
 	resultBuf          []*MQMessage
+
+	tz *time.Location
 }
 
 type avroEncodeResult struct {
@@ -75,13 +77,19 @@ func (a *AvroEventBatchEncoder) GetKeySchemaManager() *AvroSchemaManager {
 	return a.keySchemaManager
 }
 
+// SetTimeZone sets the time-zone that is used to serialize Avro date-time types
+func (a *AvroEventBatchEncoder) SetTimeZone(tz *time.Location) {
+	log.Debug("Setting Avro serializer timezone", zap.String("tz", tz.String()))
+	a.tz = tz
+}
+
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	mqMessage := NewMQMessage(ProtocolAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
 
 	if !e.IsDelete() {
-		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns)
+		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns, a.tz)
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -100,7 +108,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 	pkeyCols := e.HandleKeyColumns()
 
-	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols)
+	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols, a.tz)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -169,7 +177,7 @@ func (a *AvroEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
-func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
+func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column, tz *time.Location) (*avroEncodeResult, error) {
 	schemaGen := func() (string, error) {
 		schema, err := ColumnInfoToAvroSchema(table.Table, cols)
 		if err != nil {
@@ -184,7 +192,7 @@ func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: get-or-register failed")
 	}
 
-	native, err := rowToAvroNativeData(cols)
+	native, err := rowToAvroNativeData(cols, tz)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: converting to native failed")
 	}
@@ -255,13 +263,13 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 	return string(str), nil
 }
 
-func rowToAvroNativeData(cols []*model.Column) (interface{}, error) {
+func rowToAvroNativeData(cols []*model.Column, tz *time.Location) (interface{}, error) {
 	ret := make(map[string]interface{}, len(cols))
 	for _, col := range cols {
 		if col == nil {
 			continue
 		}
-		data, str, err := columnToAvroNativeData(col)
+		data, str, err := columnToAvroNativeData(col, tz)
 		if err != nil {
 			return nil, err
 		}
@@ -361,7 +369,7 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	}
 }
 
-func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
+func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
 	}
@@ -380,18 +388,18 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 	switch col.Type {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		str := col.Value.(string)
-		t, err := time.Parse(types.DateFormat, str)
+		t, err := time.ParseInLocation(types.DateFormat, str, tz)
 		const fullType = "long." + timestampMillis
 		if err == nil {
 			return t, string(fullType), nil
 		}
 
-		t, err = time.Parse(types.TimeFormat, str)
+		t, err = time.ParseInLocation(types.TimeFormat, str, tz)
 		if err == nil {
 			return t, string(fullType), nil
 		}
 
-		t, err = time.Parse(types.TimeFSPFormat, str)
+		t, err = time.ParseInLocation(types.TimeFSPFormat, str, tz)
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}

@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -104,6 +106,7 @@ func newMqSink(
 			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
 			avroEncoder.SetKeySchemaManager(keySchemaManager)
 			avroEncoder.SetValueSchemaManager(valueSchemaManager)
+			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
 	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
