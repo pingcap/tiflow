@@ -387,19 +387,29 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 
 	switch col.Type {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
+		var actualTz *time.Location
+		if col.Type != mysql.TypeDatetime {
+			var err error
+			actualTz, err = time.LoadLocation("UTC")
+			if err != nil {
+				return nil, "", cerror.ErrAvroEncodeFailed.Wrap(err)
+			}
+		} else {
+			actualTz = tz
+		}
 		str := col.Value.(string)
-		t, err := time.ParseInLocation(types.DateFormat, str, tz)
+		t, err := time.ParseInLocation(types.DateFormat, str, actualTz)
 		const fullType = "long." + timestampMillis
 		if err == nil {
 			return t, string(fullType), nil
 		}
 
-		t, err = time.ParseInLocation(types.TimeFormat, str, tz)
+		t, err = time.ParseInLocation(types.TimeFormat, str, actualTz)
 		if err == nil {
 			return t, string(fullType), nil
 		}
 
-		t, err = time.ParseInLocation(types.TimeFSPFormat, str, tz)
+		t, err = time.ParseInLocation(types.TimeFSPFormat, str, actualTz)
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
