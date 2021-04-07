@@ -140,11 +140,8 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 	res, _, err := avroCodec.NativeFromBinary(r.data)
 	c.Check(err, check.IsNil)
 	c.Check(res, check.NotNil)
-
-	txt, err := avroCodec.TextualFromNative(nil, res)
-	c.Check(err, check.IsNil)
-	c.Check((res.(map[string]interface{}))["ts"].(map[string]interface{})["long.timestamp-millis"], check.Equals, timestamp)
-	log.Info("TestAvroEncodeOnly", zap.ByteString("result", txt))
+	actual := (res.(map[string]interface{}))["ts"].(map[string]interface{})["long.timestamp-millis"].(time.Time)
+	c.Check(actual.Local().Sub(timestamp), check.LessEqual, time.Millisecond)
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
