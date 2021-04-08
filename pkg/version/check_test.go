@@ -40,8 +40,8 @@ var _ = check.Suite(&checkSuite{})
 
 type mockPDClient struct {
 	pd.Client
-	getAllStores func() []*metapb.Store
-	getVersion   func() string
+	getAllStores  func() []*metapb.Store
+	getVersion    func() string
 	getStatusCode func() int
 }
 
