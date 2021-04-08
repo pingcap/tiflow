@@ -26,6 +26,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -36,7 +38,7 @@ import (
 )
 
 const (
-	backgroundJobInterval = time.Second * 5
+	backgroundJobInterval = time.Second * 15
 )
 
 var (
@@ -107,11 +109,11 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
 				// Increase GC frequency to avoid unnecessary OOMs
 				debug.SetGCPercent(10)
-				if memPressure > 95 {
+				if memPressure > 80 {
 					runtime.GC()
 				}
 			} else {
-				debug.SetGCPercent(100)
+				debug.SetGCPercent(50)
 			}
 
 			// garbage collect temporary files in batches
@@ -142,7 +144,7 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 }
 
 func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
-	sorterConfig := config.GetSorterConfig()
+	sorterConfig := config.GetGlobalServerConfig().Sorter
 	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
 		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
 
@@ -166,9 +168,11 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	}
 
 	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
+	tableID, tableName := util.TableIDFromCtx(ctx)
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
-		zap.String("table", tableNameFromCtx(ctx)))
+		zap.Int64("table-id", tableID),
+		zap.String("table-name", tableName))
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {

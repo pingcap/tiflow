@@ -30,7 +30,7 @@ import (
 )
 
 // SortEngine is the sorter engine
-type SortEngine string
+type SortEngine = string
 
 // sort engines
 const (
@@ -85,6 +85,7 @@ type ChangeFeedInfo struct {
 
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
+	CreatorVersion    string        `json:"creator-version"`
 }
 
 var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
@@ -168,6 +169,17 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
 	}
 	return nil
+}
+
+// Clone returns a cloned ChangeFeedInfo
+func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
+	s, err := info.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	cloned := new(ChangeFeedInfo)
+	err = cloned.Unmarshal([]byte(s))
+	return cloned, err
 }
 
 // VerifyAndFix verifies changefeed info and may fillin some fields.
