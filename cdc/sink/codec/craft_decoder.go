@@ -428,7 +428,7 @@ func decodeCraftColumnarColumnGroup(bits []byte) (*craftColumnarColumnGroup, err
 
 func (d *craftMessageDecoder) decodeRowChangedEvent(index int) (preColumns, columns *craftColumnarColumnGroup, err error) {
 	bits := d.valueBits(index)
-	columnGroupSizeTable := d.sizeTables[craftValueSizeTableIndex+index]
+	columnGroupSizeTable := d.sizeTables[craftColumnGroupSizeTableStartIndex+index]
 	columnGroupIndex := 0
 	for len(bits) > 0 {
 		columnGroupSize := columnGroupSizeTable[columnGroupIndex]
