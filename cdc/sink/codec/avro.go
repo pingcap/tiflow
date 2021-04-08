@@ -369,6 +369,11 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	}
 }
 
+var (
+	zeroTimeStr = types.NewTime(types.ZeroCoreTime, mysql.TypeTimestamp, 0).String()
+	zeroDateStr = types.NewTime(types.ZeroCoreTime, mysql.TypeDate, 0).String()
+)
+
 func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
@@ -387,6 +392,16 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 
 	switch col.Type {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
+		// Refer to `unflatten` in cdc/entry/codec.go for why this piece of code is like this.
+		const fullType = "long." + timestampMillis
+		str := col.Value.(string)
+
+		if (col.Type == mysql.TypeDate && str == zeroDateStr) ||
+			(col.Type != mysql.TypeDate && str == zeroTimeStr) {
+
+			return time.Time{}, string(fullType), nil
+		}
+
 		var actualTz *time.Location
 		if col.Type != mysql.TypeTimestamp {
 			var err error
@@ -397,9 +412,9 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 		} else {
 			actualTz = tz
 		}
-		str := col.Value.(string)
+
 		t, err := time.ParseInLocation(types.DateFormat, str, actualTz)
-		const fullType = "long." + timestampMillis
+
 		if err == nil {
 			return t, string(fullType), nil
 		}
