@@ -426,6 +426,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				return nil
 			}
 
+			if atomic.LoadInt32(&task.isDeallocated) == 1 {
+				log.Panic("task has been deallocated, report a bug")
+			}
+
 			if task.backend != nil {
 				pendingSet[task] = nil
 			} // otherwise it is an empty flush

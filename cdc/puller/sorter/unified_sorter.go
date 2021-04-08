@@ -223,6 +223,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 						default:
 						}
 						err := sorter.poolHandle.AddEvent(subctx, event)
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(errors.Cause(err)) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						if err != nil {
 							return errors.Trace(err)
 						}
@@ -240,6 +245,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				default:
 					err := heapSorters[targetID].poolHandle.AddEvent(subctx, event)
 					if err != nil {
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(errors.Cause(err)) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						return errors.Trace(err)
 					}
 					metricSorterConsumeCount.WithLabelValues("kv").Inc()

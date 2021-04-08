@@ -104,6 +104,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	isEmptyFlush := h.heap.Len() == 0
 	var finishCh chan error
 	if !isEmptyFlush {
+		failpoint.Inject("InjectErrorBackEndAlloc", func() {
+			failpoint.Return(cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected alloc error"))).FastGenWithCause()
+		})
+
 		var err error
 		backEnd, err = pool.alloc(ctx)
 		if err != nil {
@@ -189,6 +193,11 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 				}
 				close(task.finished)
 			}()
+
+			failpoint.Inject("InjectErrorBackEndWrite", func() {
+				task.finished <- cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected write error")).FastGenWithCause()
+				failpoint.Return()
+			})
 
 			counter := 0
 			for oldHeap.Len() > 0 {
