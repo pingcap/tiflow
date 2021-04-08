@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -exu
 
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
@@ -32,7 +32,7 @@ function stop_proxy() {
 }
 
 function prepare() {
-    for host in ${TEST_HOST_LIST[@]}; do
+    for host in "${TEST_HOST_LIST[@]}"; do
         echo "$host $(printenv $host)"
         case $(printenv $host) in
             # Should we handle ::1/128 here?
@@ -51,13 +51,12 @@ function prepare() {
 
     start_proxy
     # TODO: make sure the proxy is started.
-    sleep 20
+    sleep 5
     export http_proxy=http://127.0.0.1:$proxy_port
     export https_proxy=http://127.0.0.1:$proxy_port
+    ensure curl http://$UP_PD_HOST_1:2379/
+
     echo started proxy at $proxy_pid
-    if ! curl http://$UP_PD_HOST_1:2379/; then
-        echo "proxy failed to start after 20s, skipping this test in bad network enviorment."
-    fi
 
     cd $WORK_DIR
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
