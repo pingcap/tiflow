@@ -295,3 +295,32 @@ func (s *craftCodecSuite) TestUvarintReverse(c *check.C) {
 		}
 	}
 }
+
+func newNullableString(a string) *string {
+	return &a
+}
+
+func (s *craftCodecSuite) TestEncodeChunk(c *check.C) {
+	defer testleak.AfterTest(c)()
+	stringChunk := []string{"a", "b", "c"}
+	nullableStringChunk := []*string{newNullableString("a"), newNullableString("b"), newNullableString("c")}
+	int64Chunk := []int64{1, 2, 3}
+
+	bits := encodeStringChunk(nil, stringChunk)
+	bits, decodedStringChunk, err := decodeStringChunk(bits, 3)
+	c.Check(err, check.IsNil)
+	c.Check(len(bits), check.Equals, 0)
+	c.Check(decodedStringChunk, check.DeepEquals, stringChunk)
+
+	bits = encodeNullableStringChunk(nil, nullableStringChunk)
+	bits, decodedNullableStringChunk, err := decodeNullableStringChunk(bits, 3)
+	c.Check(err, check.IsNil)
+	c.Check(len(bits), check.Equals, 0)
+	c.Check(decodedNullableStringChunk, check.DeepEquals, nullableStringChunk)
+
+	bits = encodeVarintChunk(nil, int64Chunk)
+	bits, decodedVarintChunk, err := decodeVarintChunk(bits, 3)
+	c.Check(err, check.IsNil)
+	c.Check(len(bits), check.Equals, 0)
+	c.Check(decodedVarintChunk, check.DeepEquals, int64Chunk)
+}
