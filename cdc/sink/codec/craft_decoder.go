@@ -72,7 +72,7 @@ func decodeUvarintReversed(bits []byte) (int, uint64, error) {
 func decodeUvarintReversedLength(bits []byte) (int, int, error) {
 	nb, x, err := decodeUvarintReversed(bits)
 	if x > math.MaxInt32 {
-		return 0, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("length %d is greater than max limit of %d", x, math.MaxInt32)
+		return 0, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("length is greater than max int32")
 	}
 	return nb, int(x), err
 }
@@ -83,7 +83,7 @@ func decodeUvarint32(bits []byte) ([]byte, int32, error) {
 		return bits, 0, errors.Trace(err)
 	}
 	if x > math.MaxInt32 {
-		return bits, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("length %d is greater than max limit of %d", x, math.MaxInt32)
+		return bits, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("length is greater than max int32")
 	}
 	return newBits, int32(x), nil
 }
@@ -94,7 +94,7 @@ func decodeVarint32(bits []byte) ([]byte, int32, error) {
 		return bits, 0, errors.Trace(err)
 	}
 	if x > math.MaxInt32 {
-		return bits, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("length %d is greater than max limit of %d", x, math.MaxInt32)
+		return bits, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("length is greater than max int32")
 	}
 	return newBits, int32(x), nil
 }
