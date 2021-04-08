@@ -123,7 +123,7 @@ func (e *CraftEventBatchEncoder) flush() {
 	e.messageBuf = append(e.messageBuf, NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.encode(), ts, model.MqMessageTypeRow, &schema, &table))
 }
 
-// AppendResolvedEvent is no-op
+// AppendRowChangedEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) (EncoderResult, error) {
 	rows, size := e.rowChangedBuffer.appendRowChangedEvent(ev)
 	if size > e.maxMessageSize || rows >= e.maxBatchSize {
