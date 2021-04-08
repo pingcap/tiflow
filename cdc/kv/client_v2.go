@@ -173,9 +173,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
-			if state.lastResolvedTs > state.sri.ts {
-				state.sri.ts = state.lastResolvedTs
-			}
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
