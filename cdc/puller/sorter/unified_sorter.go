@@ -173,6 +173,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			}
 			// must wait for all writers to exit to close the channel.
 			close(heapSorterCollectCh)
+			failpoint.Inject("InjectHeapSorterExitDelay", func() {})
 		}()
 
 		select {

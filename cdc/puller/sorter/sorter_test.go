@@ -377,3 +377,52 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	case <-finishedCh:
 	}
 }
+
+func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
+	}
+	config.StoreGlobalServerConfig(conf)
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay", "sleep(2000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay")
+	}()
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	}()
+
+	finishedCh := make(chan struct{})
+	go func() {
+		err := testSorter(ctx, c, sorter, 10000000, true)
+		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
+		close(finishedCh)
+	}()
+
+	after := time.After(10 * time.Second)
+	select {
+	case <-after:
+		c.Fatal("TestSorterIOError timed out")
+	case <-finishedCh:
+	}
+}
