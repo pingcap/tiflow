@@ -100,6 +100,7 @@ const (
 	craftColumnGroupSizeTableStartIndex = 2
 )
 
+// CraftEventBatchEncoder encodes the events into the byte of a batch into craft binary format.
 type CraftEventBatchEncoder struct {
 	rowChangedBuffer *craftRowChangedEventBuffer
 	messageBuf       []*MQMessage
@@ -122,6 +123,7 @@ func (e *CraftEventBatchEncoder) flush() {
 	e.messageBuf = append(e.messageBuf, NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.encode(), ts, model.MqMessageTypeRow, &schema, &table))
 }
 
+// AppendResolvedEvent is no-op
 func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) (EncoderResult, error) {
 	rows, size := e.rowChangedBuffer.appendRowChangedEvent(ev)
 	if size > e.maxMessageSize || rows >= e.maxBatchSize {
@@ -135,10 +137,12 @@ func (e *CraftEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, 
 	return EncoderNoOperation, nil
 }
 
+// EncodeDDLEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*MQMessage, error) {
 	return newDDLMQMessage(ProtocolCraft, nil, newCraftDDLEventEncoder(ev).encode(), ev), nil
 }
 
+// Build implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Build() []*MQMessage {
 	if e.rowChangedBuffer.size() > 0 {
 		// flush buffered data to message buffer
@@ -149,18 +153,22 @@ func (e *CraftEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
+// MixedBuild implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 	panic("Only JsonEncoder supports mixed build")
 }
 
+// Size implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Size() int {
 	return e.rowChangedBuffer.size()
 }
 
+// Reset implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Reset() {
 	e.rowChangedBuffer.reset()
 }
 
+// SetParams reads relevant parameters for craft protocol
 func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
@@ -191,6 +199,7 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
+// NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
 func NewCraftEventBatchEncoder() EventBatchEncoder {
 	return &CraftEventBatchEncoder{
 		rowChangedBuffer: &craftRowChangedEventBuffer{

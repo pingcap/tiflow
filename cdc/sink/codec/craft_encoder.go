@@ -34,9 +34,8 @@ func encodeVarint(bits []byte, data int64) []byte {
 	buf = buf[:l]
 	if bits == nil {
 		return buf
-	} else {
-		return append(bits, buf...)
 	}
+	return append(bits, buf...)
 }
 
 func encodeUvarint(bits []byte, data uint64) []byte {
@@ -45,9 +44,8 @@ func encodeUvarint(bits []byte, data uint64) []byte {
 	buf = buf[:l]
 	if bits == nil {
 		return buf
-	} else {
-		return append(bits, buf...)
 	}
+	return append(bits, buf...)
 }
 
 func encodeUvarintReversed(bits []byte, data uint64) ([]byte, int) {
@@ -198,9 +196,8 @@ func encodeTiDBType(ty byte, flag model.ColumnFlagType, value interface{}) []byt
 		// value type for these mysql types are int64 or uint64 depends on flags
 		if flag.IsUnsigned() {
 			return encodeUvarint(nil, value.(uint64))
-		} else {
-			return encodeVarint(nil, value.(int64))
 		}
+		return encodeVarint(nil, value.(int64))
 	case mysql.TypeUnspecified:
 		fallthrough
 	case mysql.TypeNull:
