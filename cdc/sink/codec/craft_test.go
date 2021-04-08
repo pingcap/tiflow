@@ -257,10 +257,10 @@ type craftCodecSuite struct{}
 func (s *craftCodecSuite) TestSizeTable(c *check.C) {
 	defer testleak.AfterTest(c)()
 	tables := [][]uint64{
-		[]uint64{
+		{
 			1, 3, 5, 7, 9,
 		},
-		[]uint64{
+		{
 			2, 4, 6, 8, 10,
 		},
 	}

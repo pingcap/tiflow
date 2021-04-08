@@ -413,7 +413,7 @@ func decodeCraftColumnarColumnGroup(bits []byte) (*craftColumnarColumnGroup, err
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	bits, values, err = decodeBytesChunk(bits, numColumns)
+	_, values, err = decodeBytesChunk(bits, numColumns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -479,9 +479,13 @@ func decodeRowChangedEvent(keys *craftColumnarKeys, keyIndex int, sizeTables [][
 		case craftColumnGroupTypeDelete:
 			fallthrough
 		case craftColumnGroupTypeOld:
-			ev.PreColumns, err = columnGroup.toModel()
+			if ev.PreColumns, err = columnGroup.toModel(); err != nil {
+				return nil, errors.Trace(err)
+			}
 		case craftColumnGroupTypeNew:
-			ev.Columns, err = columnGroup.toModel()
+			if ev.Columns, err = columnGroup.toModel(); err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
 	}
 	return ev, nil

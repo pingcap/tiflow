@@ -16,7 +16,6 @@ package codec
 import (
 	"bytes"
 	"compress/zlib"
-	"encoding/json"
 	"fmt"
 
 	"github.com/pingcap/check"
@@ -81,14 +80,6 @@ var (
 	codecResolvedTSCases = [][]uint64{{1}, {1, 2, 3}, {}}
 )
 
-func dumpJson(v interface{}) {
-	b, e := json.Marshal(v)
-	if e != nil {
-		panic(e)
-	}
-	fmt.Println(string(b))
-}
-
 var _ = check.Suite(&codecTestSuite{})
 
 type codecTestSuite struct{}
@@ -100,9 +91,9 @@ func (s *codecTestSuite) checkCompressedSize(messages []*MQMessage) (int, int) {
 	for _, message := range messages {
 		originalSize += len(message.Key) + len(message.Value)
 		if len(message.Key) > 0 {
-			writer.Write(message.Key)
+			_, _ = writer.Write(message.Key)
 		}
-		writer.Write(message.Value)
+		_, _ = writer.Write(message.Value)
 	}
 	writer.Close()
 	return originalSize, buff.Len()
