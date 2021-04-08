@@ -153,7 +153,7 @@ func decodeCraftColumnarKeys(bits []byte, numKeys int) (*craftColumnarKeys, erro
 	if bits, schema, err = decodeNullableBytesChunk(bits, numKeys); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if bits, table, err = decodeNullableBytesChunk(bits, numKeys); err != nil {
+	if _, table, err = decodeNullableBytesChunk(bits, numKeys); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &craftColumnarKeys{

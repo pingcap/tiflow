@@ -86,10 +86,6 @@ const (
 	// CraftVersion1 represents the version of craft format
 	CraftVersion1 uint64 = 1
 
-	// craftMaxMessageBytes sets the default value for max-message-bytes
-	craftMaxMessageBytes int = 64 * 1024 * 1024 // 64M
-	// craftMaxBatchSize sets the default value for max-batch-size
-	craftMaxBatchSize int = 4096
 	// default buffer size
 	craftDefaultBufferCapacity = 512
 
