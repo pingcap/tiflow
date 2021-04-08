@@ -535,27 +535,27 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
-			return cerror.ErrKafkaInvalidConfig.Wrap(err)
+			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
 	} else {
 		d.maxKafkaMessageSize = DefaultMaxMessageBytes
 	}
 
 	if d.maxKafkaMessageSize <= 0 {
-		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
 	}
 
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
 		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
 		if err != nil {
-			return cerror.ErrKafkaInvalidConfig.Wrap(err)
+			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
 	} else {
 		d.maxBatchSize = DefaultMaxBatchSize
 	}
 
 	if d.maxBatchSize <= 0 {
-		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
 	}
 	return nil
 }
