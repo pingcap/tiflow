@@ -132,9 +132,8 @@ func decodeString(bits []byte) ([]byte, string, error) {
 	bits, bytes, err := decodeBytes(bits)
 	if err == nil {
 		return bits, string(bytes), nil
-	} else {
-		return bits, "", errors.Trace(err)
 	}
+	return bits, "", errors.Trace(err)
 }
 
 /// Chunk decoders
@@ -314,10 +313,9 @@ func decodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 		if flag.IsUnsigned() {
 			_, u64, err := decodeUvarint(bits)
 			return u64, err
-		} else {
-			_, i64, err := decodeUvarint(bits)
-			return i64, err
 		}
+		_, i64, err := decodeUvarint(bits)
+		return i64, err
 	case mysql.TypeUnspecified:
 		fallthrough
 	case mysql.TypeNull:
