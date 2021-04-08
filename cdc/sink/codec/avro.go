@@ -388,7 +388,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 	switch col.Type {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		var actualTz *time.Location
-		if col.Type != mysql.TypeDatetime {
+		if col.Type != mysql.TypeTimestamp {
 			var err error
 			actualTz, err = time.LoadLocation("UTC")
 			if err != nil {
