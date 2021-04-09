@@ -502,7 +502,9 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			}
 			state.markStopped()
 			singleRegionInfo := state.sri.partialClone()
-			singleRegionInfo.ts = state.lastResolvedTs
+			if state.lastResolvedTs > singleRegionInfo.ts {
+				singleRegionInfo.ts = state.lastResolvedTs
+			}
 			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
