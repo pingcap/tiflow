@@ -36,6 +36,7 @@ func testAvro() {
 	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=America/Los_Angeles"}
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
+		tests.NewDateTimeCase(task),
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
