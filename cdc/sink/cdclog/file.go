@@ -87,7 +87,7 @@ func (ts *tableStream) isEmpty() bool {
 }
 
 func (ts *tableStream) shouldFlush() bool {
-	return ts.sendSize.Load() > maxPartFlushSize
+	return ts.sendSize.Load() > maxRowFileSize
 }
 
 func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
