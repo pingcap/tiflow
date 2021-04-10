@@ -39,8 +39,9 @@ var _ = check.Suite(&checkSuite{})
 
 type mockPDClient struct {
 	pd.Client
-	getAllStores func() []*metapb.Store
-	getVersion   func() string
+	getAllStores  func() []*metapb.Store
+	getVersion    func() string
+	getStatusCode func() int
 }
 
 func (m *mockPDClient) GetAllStores(ctx context.Context, opts ...pd.GetStoreOption) ([]*metapb.Store, error) {
@@ -51,6 +52,11 @@ func (m *mockPDClient) GetAllStores(ctx context.Context, opts ...pd.GetStoreOpti
 }
 
 func (m *mockPDClient) ServeHTTP(resp http.ResponseWriter, _ *http.Request) {
+	// set status code at first, else will not work
+	if m.getStatusCode != nil {
+		resp.WriteHeader(m.getStatusCode())
+	}
+
 	if m.getVersion != nil {
 		_, _ = resp.Write([]byte(fmt.Sprintf(`{"version":"%s"}`, m.getVersion())))
 	}
@@ -117,6 +123,15 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			".*TiKV .* is not supported.*")
 		err = CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
 		c.Assert(err, check.IsNil)
+	}
+
+	{
+		mock.getStatusCode = func() int {
+			return http.StatusBadRequest
+		}
+
+		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
+		c.Assert(err, check.ErrorMatches, ".*response status: .*")
 	}
 }
 
