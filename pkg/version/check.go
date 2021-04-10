@@ -82,6 +82,8 @@ func CheckClusterVersion(
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		arg := fmt.Sprintf("response status: %s", resp.Status)
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
@@ -93,11 +95,6 @@ func CheckClusterVersion(
 	}
 
 	err = json.Unmarshal(content, &pdVer)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
-	}
-
-	err = resp.Body.Close()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
