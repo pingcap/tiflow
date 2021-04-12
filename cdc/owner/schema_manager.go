@@ -148,7 +148,6 @@ func (m *schemaManager) TopDDLJobToExec() (*timodel.Job, error) {
 	for len(m.pendingDDLJob) > 0 {
 		job := m.pendingDDLJob[0]
 		if !m.shouldIgnoreDDL(job) {
-
 			return job, nil
 		}
 		err := m.schemaSnapshot.HandleDDL(job)

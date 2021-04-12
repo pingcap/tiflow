@@ -185,7 +185,7 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 			c.changeFeedState.ApplyTableActions(tableActions)
 			c.changeFeedState.ClearBarrier(barrierType, barrierIndex)
 		case SyncPointBarrier:
-			//todo
+			// todo
 			panic("not implemented")
 		case DDLResolvedTs:
 			// just go to next tick

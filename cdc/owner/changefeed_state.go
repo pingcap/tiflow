@@ -54,6 +54,7 @@ type barrier struct {
 	tp    barrierType
 	index uint64
 }
+
 type barriers struct {
 	inner map[barrier]model.Ts
 	dirty bool
