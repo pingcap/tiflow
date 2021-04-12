@@ -1304,6 +1304,137 @@ func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
 	cancel()
 }
 
+// TestStreamRecvWithErrorAndResolvedGoBack mainly tests the scenario that the `Recv` call of a gPRC
+// stream in kv client meets error, and kv client reconnection with tikv with the current tso
+func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID := uint64(3)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
+
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	initialized1 := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized1
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		if len(ch1) == 0 {
+			return nil
+		}
+		return errors.New("message is not sent")
+	})
+	c.Assert(err, check.IsNil)
+
+	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  regionID,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 120},
+		},
+	}}
+	ch1 <- resolved
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		if len(ch1) == 0 {
+			return nil
+		}
+		return errors.New("message is not sent")
+	})
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
+	}()
+	ch1 <- resolved
+
+	// another stream will be established, so we notify and wait the first
+	// EventFeed loop exits.
+	callback := srv1.notifyExit(0)
+	select {
+	case <-callback:
+	case <-time.After(time.Second * 3):
+		c.Error("event feed loop can't exit")
+	}
+
+	// wait request id allocated with: new session, new request*2
+	waitRequestID(c, baseAllocatedID+2)
+	initialized2 := mockInitializedEvent(regionID, currentRequestID())
+	ch1 <- initialized2
+	err = retry.Run(time.Millisecond*200, 10, func() error {
+		if len(ch1) == 0 {
+			return nil
+		}
+		return errors.New("message is not sent")
+	})
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 120,
+			},
+			RegionID: regionID,
+		},
+	}
+
+	defer cancel()
+	for _, expectedEv := range expected {
+		select {
+		case event := <-eventCh:
+			log.Info("receive event", zap.Reflect("event", event), zap.Reflect("expected", expectedEv))
+			c.Assert(event, check.DeepEquals, expectedEv)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+}
+
 // TestIncompatibleTiKV tests TiCDC new request to TiKV meets `ErrVersionIncompatible`
 // error (in fact this error is raised before EventFeed API is really called),
 // TiCDC will wait 20s and then retry. This is a common scenario when rolling
