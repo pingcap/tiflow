@@ -874,19 +874,17 @@ func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
 	)
-	val, equal, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
+	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
 	c.Assert(err, check.IsNil)
-	c.Assert(equal, check.IsFalse)
 	c.Assert(val, check.Equals, "1")
 
 	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
-	val, equal, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
+	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
 	c.Assert(err, check.IsNil)
-	c.Assert(equal, check.IsFalse)
 	c.Assert(val, check.Equals, "")
 
 	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
-	_, _, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
+	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
 	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
 }
 
@@ -902,6 +900,10 @@ func mockTestDB() (*sql.DB, error) {
 	)
 	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	)
+	// Simulate the default value in MySQL5.7 is OFF
+	mock.ExpectQuery("select version\\(\\);").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("version()", "5.7.32"),
 	)
 	// Simulate the default value in MySQL5.7 is OFF
 	mock.ExpectQuery("show session variables like 'explicit_defaults_for_timestamp';").WillReturnRows(
@@ -924,9 +926,8 @@ func mockTestDBTiDB() (*sql.DB, error) {
 	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "optimistic"),
 	)
-	// Simulate the default value in TiDB is ON
-	mock.ExpectQuery("show session variables like 'explicit_defaults_for_timestamp';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("explicit_defaults_for_timestamp", "ON"),
+	mock.ExpectQuery("select version\\(\\);").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("version()", "5.7.25-TiDB-v5.0.0"),
 	)
 	mock.ExpectClose()
 	return db, nil

@@ -69,6 +69,8 @@ const (
 // SyncpointTableName is the name of table where all syncpoint maps sit
 const syncpointTableName string = "syncpoint_v1"
 
+const tidbVersionString string = "TiDB"
+
 var validSchemes = map[string]bool{
 	"mysql":     true,
 	"mysql+ssl": true,
@@ -306,9 +308,19 @@ var defaultParams = &sinkParams{
 	safeMode:            defaultSafeMode,
 }
 
+func checkIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
+	var name string
+	var value string
+	querySQL := "select version();"
+	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
+	if err != nil && err != sql.ErrNoRows {
+		return false, errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), "failed to select version")
+	}
+	return strings.Contains(value, tidbVersionString), nil
+}
+
 func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (
 	sinkURIParameter string,
-	dbVarEqualToDefault bool,
 	err error,
 ) {
 	var name string
@@ -323,7 +335,6 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	if err == nil {
 		// session variable exists, use given default value
 		sinkURIParameter = defaultValue
-		dbVarEqualToDefault = value == defaultValue
 	} else {
 		// session variable does not exist, sinkURIParameter is "" and will be ignored
 		err = nil
@@ -351,7 +362,7 @@ func configureSinkURI(
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 	dsnCfg.Params["timeout"] = params.dialTimeout
 
-	autoRandom, _, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
+	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
 		return "", err
 	}
@@ -359,7 +370,7 @@ func configureSinkURI(
 		dsnCfg.Params["allow_auto_random_explicit_insert"] = autoRandom
 	}
 
-	txnMode, _, err := checkTiDBVariable(ctx, testDB, "tidb_txn_mode", params.tidbTxnMode)
+	txnMode, err := checkTiDBVariable(ctx, testDB, "tidb_txn_mode", params.tidbTxnMode)
 	if err != nil {
 		return "", err
 	}
@@ -367,14 +378,18 @@ func configureSinkURI(
 		dsnCfg.Params["tidb_txn_mode"] = txnMode
 	}
 
-	// Default value of explicit_defaults_for_timestamp is different between TiDB and MySQL5.7
-	// Besides in TiDB variable `explicit_defaults_for_timestamp` is readonly.
-	// ref: https://docs.pingcap.com/tidb/stable/mysql-compatibility#default-differences
-	explicitTs, equalToDefault, err := checkTiDBVariable(ctx, testDB, "explicit_defaults_for_timestamp", "ON")
+	isTiDB, err := checkIsTiDB(ctx, testDB)
 	if err != nil {
 		return "", err
 	}
-	if explicitTs != "" && !equalToDefault {
+	// variable `explicit_defaults_for_timestamp` is readonly in TiDB, we don't
+	// need to set it. Yet Default value in MySQL 5.7 is `OFF`
+	// ref: https://docs.pingcap.com/tidb/stable/mysql-compatibility#default-differences
+	if !isTiDB {
+		explicitTs, err := checkTiDBVariable(ctx, testDB, "explicit_defaults_for_timestamp", "ON")
+		if err != nil {
+			return "", err
+		}
 		dsnCfg.Params["explicit_defaults_for_timestamp"] = explicitTs
 	}
 
