@@ -309,10 +309,9 @@ var defaultParams = &sinkParams{
 }
 
 func checkIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
-	var name string
 	var value string
 	querySQL := "select version();"
-	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
+	err := db.QueryRowContext(ctx, querySQL).Scan(&value)
 	if err != nil && err != sql.ErrNoRows {
 		return false, errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), "failed to select version")
 	}

@@ -903,7 +903,7 @@ func mockTestDB() (*sql.DB, error) {
 	)
 	// Simulate the default value in MySQL5.7 is OFF
 	mock.ExpectQuery("select version\\(\\);").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("version()", "5.7.32"),
+		sqlmock.NewRows([]string{"version"}).AddRow("5.7.32"),
 	)
 	// Simulate the default value in MySQL5.7 is OFF
 	mock.ExpectQuery("show session variables like 'explicit_defaults_for_timestamp';").WillReturnRows(
@@ -927,7 +927,7 @@ func mockTestDBTiDB() (*sql.DB, error) {
 		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "optimistic"),
 	)
 	mock.ExpectQuery("select version\\(\\);").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("version()", "5.7.25-TiDB-v5.0.0"),
+		sqlmock.NewRows([]string{"version"}).AddRow("5.7.25-TiDB-v5.0.0"),
 	)
 	mock.ExpectClose()
 	return db, nil
