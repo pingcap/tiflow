@@ -43,7 +43,7 @@ service ChangeData { rpc EventFeed(ChangeDataRequest) returns(stream ChangeDataE
 
 ### TiCDC 处理增量扫和实时数据流
 
-TiCDC 使用 EventFeed 接口获取获取 ts 之后的数据的流程是：
+TiCDC 使用 EventFeed 接口获取 ts 之后的数据的流程是：
 
 1. 指定 ts 建立 EventFeed stream，接口返回的实时数据先在 TiCDC 内部缓存。(EventFeed stream 会返回 P + C，所以建立 stream 的时候应该要先扫下还没提交的数据，不然可能后续只拿到个 C 没有对应的 value)。
 2. 在 EventFeed 接口持续获取 raftstore 的 snapshot 扫出的 ts 后的数据变更， 拿到的信息包括：(key, value, Put/Delete, ts)。（如果对应的 row kv 已经 commited，返回 commited kv record，如果没有 commited，需要返回 prewrite record），这一步就是增量扫的环节。
