@@ -722,6 +722,28 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 		c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
 	}
 
+	testDefaultParamsTiDB := func() {
+		db, err := mockTestDBTiDB()
+		c.Assert(err, check.IsNil)
+		defer db.Close()
+
+		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+		c.Assert(err, check.IsNil)
+		params := defaultParams.Clone()
+		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
+		c.Assert(err, check.IsNil)
+		expectedParams := []string{
+			"tidb_txn_mode=optimistic",
+			"readTimeout=2m",
+			"writeTimeout=2m",
+			"allow_auto_random_explicit_insert=1",
+		}
+		for _, param := range expectedParams {
+			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+		}
+		c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
+	}
+
 	testTimezoneParam := func() {
 		db, err := mockTestDB()
 		c.Assert(err, check.IsNil)
@@ -760,6 +782,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	}
 
 	testDefaultParams()
+	testDefaultParamsTiDB()
 	testTimezoneParam()
 	testTimeoutParams()
 }
@@ -851,17 +874,19 @@ func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
 	)
-	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
+	val, equal, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
 	c.Assert(err, check.IsNil)
+	c.Assert(equal, check.IsFalse)
 	c.Assert(val, check.Equals, "1")
 
 	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
-	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
+	val, equal, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
 	c.Assert(err, check.IsNil)
+	c.Assert(equal, check.IsFalse)
 	c.Assert(val, check.Equals, "")
 
 	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
-	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
+	_, _, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
 	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
 }
 
@@ -881,6 +906,27 @@ func mockTestDB() (*sql.DB, error) {
 	// Simulate the default value in MySQL5.7 is OFF
 	mock.ExpectQuery("show session variables like 'explicit_defaults_for_timestamp';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("explicit_defaults_for_timestamp", "OFF"),
+	)
+	mock.ExpectClose()
+	return db, nil
+}
+
+func mockTestDBTiDB() (*sql.DB, error) {
+	// mock for test db, which is used querying TiDB session variable
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		return nil, err
+	}
+	columns := []string{"Variable_name", "Value"}
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "1"),
+	)
+	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "optimistic"),
+	)
+	// Simulate the default value in TiDB is ON
+	mock.ExpectQuery("show session variables like 'explicit_defaults_for_timestamp';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("explicit_defaults_for_timestamp", "ON"),
 	)
 	mock.ExpectClose()
 	return db, nil
