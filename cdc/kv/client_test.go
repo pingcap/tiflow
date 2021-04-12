@@ -2436,13 +2436,21 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 // The difference is the delay injected point for region 2
 func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-
 	clientv2 := enableKVClientV2
 	enableKVClientV2 = false
 	defer func() {
 		enableKVClientV2 = clientv2
 	}()
+	// test for client v1
+	s.testClientErrNoPendingRegion(c)
+
+	enableKVClientV2 = true
+	// test for client v2
+	s.testClientErrNoPendingRegion(c)
+}
+
+func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
+	defer s.TearDownTest(c)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
