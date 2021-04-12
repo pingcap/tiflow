@@ -714,6 +714,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 			"readTimeout=2m",
 			"writeTimeout=2m",
 			"allow_auto_random_explicit_insert=1",
+			"explicit_defaults_for_timestamp=ON",
 		}
 		for _, param := range expectedParams {
 			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
@@ -876,6 +877,10 @@ func mockTestDB() (*sql.DB, error) {
 	)
 	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	)
+	// Simulate the default value in MySQL5.7 is OFF
+	mock.ExpectQuery("show session variables like 'explicit_defaults_for_timestamp';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("explicit_defaults_for_timestamp", "OFF"),
 	)
 	mock.ExpectClose()
 	return db, nil

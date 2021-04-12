@@ -359,6 +359,14 @@ func configureSinkURI(
 		dsnCfg.Params["tidb_txn_mode"] = txnMode
 	}
 
+	explicitDefaultsForTimestamp, err := checkTiDBVariable(ctx, testDB, "explicit_defaults_for_timestamp", "ON")
+	if err != nil {
+		return "", err
+	}
+	if explicitDefaultsForTimestamp != "" {
+		dsnCfg.Params["explicit_defaults_for_timestamp"] = explicitDefaultsForTimestamp
+	}
+
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
 	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
