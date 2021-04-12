@@ -113,7 +113,7 @@ func decodeFloat64(bits []byte) ([]byte, float64, error) {
 	if len(bits) < 8 {
 		return bits, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("buffer underflow")
 	}
-	x := binary.BigEndian.Uint64(bits)
+	x := binary.LittleEndian.Uint64(bits)
 	return bits[8:], math.Float64frombits(x), nil
 }
 
