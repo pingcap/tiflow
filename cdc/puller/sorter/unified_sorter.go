@@ -15,13 +15,17 @@ package sorter
 
 import (
 	"context"
+	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -45,6 +49,34 @@ type metricsInfo struct {
 type ctxKey struct {
 }
 
+// UnifiedSorterCheckDir checks whether the directory needed exists and is writable.
+// If it does not exist, we try to create one.
+// parameter: cfSortDir - the directory designated in changefeed's setting,
+// which will be overridden by a non-empty local setting of `sort-dir`.
+// TODO better way to organize this function after we obsolete chanegfeed setting's `sort-dir`
+func UnifiedSorterCheckDir(cfSortDir string) error {
+	dir := cfSortDir
+	sorterConfig := config.GetGlobalServerConfig().Sorter
+	if sorterConfig.SortDir != "" {
+		// Let the local setting override the changefeed setting
+		dir = sorterConfig.SortDir
+	}
+
+	err := util.IsDirAndWritable(dir)
+	if err != nil {
+		if os.IsNotExist(errors.Cause(err)) {
+			err = os.MkdirAll(dir, 0o755)
+			if err != nil {
+				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
+			}
+		} else {
+			return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
+		}
+	}
+
+	return nil
+}
+
 // NewUnifiedSorter creates a new UnifiedSorter
 func NewUnifiedSorter(
 	dir string,
@@ -56,13 +88,18 @@ func NewUnifiedSorter(
 	defer poolMu.Unlock()
 
 	if pool == nil {
+		sorterConfig := config.GetGlobalServerConfig().Sorter
+		if sorterConfig.SortDir != "" {
+			// Let the local setting override the changefeed setting
+			dir = sorterConfig.SortDir
+		}
 		pool = newBackEndPool(dir, captureAddr)
 	}
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:  make(chan *model.PolymorphicEvent, 128000),
-		outputCh: make(chan *model.PolymorphicEvent, 128000),
+		inputCh:  make(chan *model.PolymorphicEvent, 128),
+		outputCh: make(chan *model.PolymorphicEvent, 128),
 		dir:      dir,
 		pool:     pool,
 		metricsInfo: &metricsInfo{
@@ -113,13 +150,19 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	heapSorterErrOnce := &sync.Once{}
 	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
 	for i := range heapSorters {
-		finalI := i
-		heapSorters[finalI] = newHeapSorter(finalI, heapSorterCollectCh)
-		heapSorters[finalI].init(subctx, func(err error) {
+		heapSorters[i] = newHeapSorter(i, heapSorterCollectCh)
+		heapSorters[i].init(subctx, func(err error) {
 			heapSorterErrOnce.Do(func() {
 				heapSorterErrCh <- err
 			})
 		})
+	}
+
+	ioCancelFunc := func() {
+		for _, heapSorter := range heapSorters {
+			// cancels async IO operations
+			heapSorter.canceller.Cancel()
+		}
 	}
 
 	errg.Go(func() error {
@@ -132,18 +175,17 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			close(heapSorterCollectCh)
 		}()
 
-		for {
-			select {
-			case <-subctx.Done():
-				return errors.Trace(subctx.Err())
-			case err := <-heapSorterErrCh:
-				return errors.Trace(err)
-			}
+		select {
+		case <-subctx.Done():
+			return errors.Trace(subctx.Err())
+		case err := <-heapSorterErrCh:
+			return errors.Trace(err)
 		}
 	})
 
+	var mergerBufLen int64
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, &mergerBufLen))
 	})
 
 	errg.Go(func() error {
@@ -159,6 +201,15 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
+			// tentative value 1280000
+			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
+				after := time.After(1 * time.Second)
+				select {
+				case <-subctx.Done():
+					return subctx.Err()
+				case <-after:
+				}
+			}
 			select {
 			case <-subctx.Done():
 				return subctx.Err()

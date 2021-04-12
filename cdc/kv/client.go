@@ -56,9 +56,9 @@ const (
 	dialTimeout               = 10 * time.Second
 	maxRetry                  = 100
 	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms)
-	grpcInitialWindowSize     = 1 << 30 // The value for initial window size on a stream
-	grpcInitialConnWindowSize = 1 << 30 // The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 30 // The maximum message size the client can receive
+	grpcInitialWindowSize     = 1 << 27 // 128 MB The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
+	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
 	grpcConnCount             = 10
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
