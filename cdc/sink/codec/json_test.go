@@ -226,7 +226,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxBatchSize, check.Equals, 16)
 	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
