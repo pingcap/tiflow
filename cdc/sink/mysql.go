@@ -308,7 +308,7 @@ var defaultParams = &sinkParams{
 
 func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (
 	sinkURIParameter string,
-	equalToDefaultValue bool,
+	dbVarEqualToDefault bool,
 	err error,
 ) {
 	var name string
@@ -320,12 +320,12 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 		err = errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
 		return
 	}
-	// session variable exists, use given default value
 	if err == nil {
+		// session variable exists, use given default value
 		sinkURIParameter = defaultValue
-		equalToDefaultValue = value == defaultValue
+		dbVarEqualToDefault = value == defaultValue
 	} else {
-		//session variable does not exist, sinkURIParameter is "" and will be ignored
+		// session variable does not exist, sinkURIParameter is "" and will be ignored
 		err = nil
 	}
 	return
