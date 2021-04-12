@@ -37,7 +37,7 @@ const (
 	maxCompletePartSize = 100 << 20 // rotate row changed event file if one complete file larger than 100Mb
 	maxDDLFlushSize     = 10 << 20  // rotate ddl event file if one complete file larger than 10Mb
 
-	defaultBufferChanSize               = 20480
+	defaultBufferChanSize               = 1280000
 	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
