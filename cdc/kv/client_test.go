@@ -1373,6 +1373,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 		}
 		return errors.New("message is not sent")
 	})
+	c.Assert(err, check.IsNil)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
 	c.Assert(err, check.IsNil)
 	defer func() {
@@ -1399,6 +1400,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 		}
 		return errors.New("message is not sent")
 	})
+	c.Assert(err, check.IsNil)
 	expected := []*model.RegionFeedEvent{
 		{
 			Resolved: &model.ResolvedSpan{
