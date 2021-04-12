@@ -24,7 +24,7 @@ import (
 /// Primitive type encoders
 func encodeFloat64(bits []byte, data float64) []byte {
 	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, math.Float64bits(data))
+	binary.LittleEndian.PutUint64(buf, math.Float64bits(data))
 	return buf
 }
 
