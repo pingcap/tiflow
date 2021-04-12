@@ -17,6 +17,8 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -96,8 +98,8 @@ func NewUnifiedSorter(
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:  make(chan *model.PolymorphicEvent, 128000),
-		outputCh: make(chan *model.PolymorphicEvent, 128000),
+		inputCh:  make(chan *model.PolymorphicEvent, 128),
+		outputCh: make(chan *model.PolymorphicEvent, 128),
 		dir:      dir,
 		pool:     pool,
 		metricsInfo: &metricsInfo{
@@ -181,8 +183,9 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
+	var mergerBufLen int64
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, &mergerBufLen))
 	})
 
 	errg.Go(func() error {
@@ -198,6 +201,15 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
+			// tentative value 1280000
+			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
+				after := time.After(1 * time.Second)
+				select {
+				case <-subctx.Done():
+					return subctx.Err()
+				case <-after:
+				}
+			}
 			select {
 			case <-subctx.Done():
 				return subctx.Err()
