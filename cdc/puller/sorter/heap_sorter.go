@@ -47,7 +47,7 @@ type flushTask struct {
 	lastTs        uint64 // for debugging TODO remove
 	canceller     *asyncCanceller
 
-	isEmpty bool // ready only field
+	isEmpty bool // read only field
 
 	deallocLock   sync.RWMutex
 	isDeallocated bool    // do not access directly
