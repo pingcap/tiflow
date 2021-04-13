@@ -228,7 +228,7 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 	pool = nil
 	poolMu.Unlock()
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll("/tmp/sorter_local", 0o755)
 	c.Assert(err, check.IsNil)
 	// We expect the local setting to override the changefeed setting
 	config.GetGlobalServerConfig().Sorter.SortDir = "/tmp/sorter_local"
