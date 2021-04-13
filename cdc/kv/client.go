@@ -1122,16 +1122,14 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientStreamRecvError", func() {
-			err = errors.New("injected stream recv error")
-		})
-		// TODO: Should we have better way to handle the errors?
-		if err == io.EOF {
-			for _, state := range regionStates {
-				close(state.regionEventCh)
+		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+			errStr := msg.(string)
+			if errStr == io.EOF.Error() {
+				err = io.EOF
+			} else {
+				err = errors.New(errStr)
 			}
-			return nil
-		}
+		})
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(
@@ -1419,12 +1417,8 @@ func (s *eventFeedSession) singleEventFeed(
 			continue
 		case event, ok = <-receiverCh:
 		}
-		if !ok {
-			log.Debug("singleEventFeed receiver closed")
-			return lastResolvedTs, nil
-		}
 
-		if event == nil {
+		if !ok || event == nil {
 			log.Debug("singleEventFeed closed by error")
 			return lastResolvedTs, cerror.ErrEventFeedAborted.GenWithStackByArgs()
 		}
