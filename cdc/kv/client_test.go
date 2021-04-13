@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
@@ -1309,6 +1310,9 @@ func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
 func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
+	if !util.FailpointBuild {
+		c.Skip("skip when this is not a failpoint build")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
