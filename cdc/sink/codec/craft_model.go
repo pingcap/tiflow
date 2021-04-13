@@ -182,7 +182,7 @@ func (g *craftColumnarColumnGroup) encode(bits []byte) []byte {
 	bits = encodeBytesChunk(bits, g.names)
 	bits = encodeUvarintChunk(bits, g.types)
 	bits = encodeUvarintChunk(bits, g.flags)
-	bits = encodeBytesChunk(bits, g.values)
+	bits = encodeNullableBytesChunk(bits, g.values)
 	return bits
 }
 
@@ -203,6 +203,43 @@ func (g *craftColumnarColumnGroup) toModel() ([]*model.Column, error) {
 		}
 	}
 	return columns, nil
+}
+
+func decodeCraftColumnarColumnGroup(bits []byte) (*craftColumnarColumnGroup, error) {
+	var numColumns int
+	bits, ty, err := decodeUint8(bits)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	bits, numColumns, err = decodeUvarintLength(bits)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var names, values [][]byte
+	var types, flags []uint64
+	bits, names, err = decodeBytesChunk(bits, numColumns)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	bits, types, err = decodeUvarintChunk(bits, numColumns)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	bits, flags, err = decodeUvarintChunk(bits, numColumns)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	_, values, err = decodeNullableBytesChunk(bits, numColumns)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &craftColumnarColumnGroup{
+		ty:     ty,
+		names:  names,
+		types:  types,
+		flags:  flags,
+		values: values,
+	}, nil
 }
 
 func newCraftColumnarColumnGroup(ty byte, columns []*model.Column) (int, *craftColumnarColumnGroup) {
