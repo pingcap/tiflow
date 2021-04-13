@@ -20,6 +20,14 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR
     start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
 
+    echo " \
+[security] 
+ ca-path = \"$TLS_DIR/ca.pem\" 
+ cert-path = \"$TLS_DIR/server.pem\" 
+ key-path = \"$TLS_DIR/server-key.pem\" 
+ cert-allowed-cn = [\"fake_cn\"] 
+" > $WORK_DIR/server.toml
+
     cd $WORK_DIR
 
     # create table in all cluters.
@@ -86,25 +94,25 @@ function run() {
         --logsuffix "_${TEST_NAME}_tls" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
         --addr "127.0.0.1:8302" \
-        --tlsdir $TLS_DIR \
+        --config "$WORK_DIR/server.toml" \
         --cert-allowed-cn "client" # The common name of client.pem
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
+        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?safe-mode=false" \
         --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --cyclic-replica-id 1 \
         --cyclic-filter-replica-ids 2 \
         --cyclic-sync-ddl true
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${TLS_TIDB_HOST}:${TLS_TIDB_PORT}/?ssl-ca=${TLS_DIR}/ca.pem&ssl-cert=${TLS_DIR}/server.pem?ssl-key=${TLS_DIR}/server-key.pem" \
+        --sink-uri="mysql://root@${TLS_TIDB_HOST}:${TLS_TIDB_PORT}/?safe-mode=false&ssl-ca=${TLS_DIR}/ca.pem&ssl-cert=${TLS_DIR}/server.pem?ssl-key=${TLS_DIR}/server-key.pem" \
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 3 \
         --cyclic-sync-ddl true
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
+        --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/?safe-mode=false" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
         --changefeed-id "tls-changefeed" \
         --ca=$TLS_DIR/ca.pem \
@@ -183,4 +191,5 @@ function run() {
 
 trap stop_tidb_cluster EXIT
 run $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

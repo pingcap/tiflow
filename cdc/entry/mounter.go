@@ -131,7 +131,7 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage    *SchemaStorage
+	schemaStorage    SchemaStorage
 	rawRowChangedChs []chan *model.PolymorphicEvent
 	tz               *time.Location
 	workerNum        int
@@ -139,7 +139,7 @@ type mounterImpl struct {
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage, workerNum int, enableOldValue bool) Mounter {
+func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool) Mounter {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
@@ -195,8 +195,8 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 			return errors.Trace(err)
 		}
 		pEvent.Row = rowEvent
-		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
+		pEvent.RawKV.OldValue = nil
 		pEvent.PrepareFinished()
 		metricMountDuration.Observe(time.Since(startTime).Seconds())
 	}
@@ -239,7 +239,9 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		PhysicalTableID: physicalTableID,
 		Delete:          raw.OpType == model.OpTypeDelete,
 	}
-	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs)
+	// when async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs
+	// a DML whose commitTs is equal to a DDL finishedTs using the schema info before the DDL
+	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs-1)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -369,8 +371,10 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, raw
 	}, nil
 }
 
-const ddlJobListKey = "DDLJobList"
-const ddlAddIndexJobListKey = "DDLJobAddIdxList"
+const (
+	ddlJobListKey         = "DDLJobList"
+	ddlAddIndexJobListKey = "DDLJobAddIdxList"
+)
 
 // UnmarshalDDL unmarshals the ddl job from RawKVEntry
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
@@ -580,7 +584,8 @@ func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, e
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
 		v, err := datum.GetBinaryLiteral().ToInt(nil)
 		return v, "", err
-	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
+		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		b := datum.GetBytes()
 		if b == nil {
 			b = emptyBytes
@@ -623,4 +628,13 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 
 	d := table.GetZeroValue(col)
 	return d.GetValue()
+}
+
+// DecodeTableID decodes the raw key to a table ID
+func DecodeTableID(key []byte) (model.TableID, error) {
+	_, physicalTableID, err := decodeTableID(key)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return physicalTableID, nil
 }

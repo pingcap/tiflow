@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
@@ -70,14 +72,28 @@ type ChangeFeedRWriter interface {
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error)
+
 	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
+
+	// LeaseGuardRemoveAllTaskStatus wraps RemoveAllTaskStatus with a context restricted by lease TTL.
+	LeaseGuardRemoveAllTaskStatus(ctx context.Context, changefeedID string, leaseID clientv3.LeaseID) error
+
+	// LeaseGuardRemoveAllTaskPositions wraps RemoveAllTaskPositions with a context restricted by lease TTL.
+	LeaseGuardRemoveAllTaskPositions(ctx context.Context, changefeedID string, leaseID clientv3.LeaseID) error
+
+	// LeaseGuardPutAllChangeFeedStatus wraps PutAllChangeFeedStatus with a context restricted by lease TTL.
+	LeaseGuardPutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus, leaseID clientv3.LeaseID) error
 }
 
 type changeFeed struct {
 	id     string
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
+	// The latest checkpointTs already applied to Etcd.
+	// We need to check this field to ensure visibility to the processors,
+	// if the operation assumes the progress of the global checkpoint.
+	appliedCheckpointTs uint64
 
 	schema           *entry.SingleSchemaSnapshot
 	ddlState         model.ChangeFeedDDLState
@@ -114,6 +130,7 @@ type changeFeed struct {
 	lastRebalanceTime time.Time
 
 	etcdCli kv.CDCEtcdClient
+	leaseID clientv3.LeaseID
 
 	// context cancel function for all internal goroutines
 	cancel context.CancelFunc
@@ -291,6 +308,11 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 		return nil
 	}
 
+	// Do NOT rebalance orphan tables before checkpoint ts has advanced to FinishTs of a DDL
+	if c.appliedCheckpointTs != c.status.CheckpointTs {
+		return nil
+	}
+
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	cleanedTables := make(map[model.TableID]struct{})
 	addedTables := make(map[model.TableID]struct{})
@@ -311,7 +333,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 		id := id
 		targetTs := targetTs
 		updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
-			status.RemoveTable(id, targetTs)
+			status.RemoveTable(id, targetTs, false /*isMoveTable*/)
 			return true, nil
 		})
 		cleanedTables[id] = struct{}{}
@@ -356,12 +378,17 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	}
 
 	for captureID, funcs := range updateFuncs {
-		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, funcs...)
+		newStatus, _, err := c.etcdCli.LeaseGuardAtomicPutTaskStatus(ctx, c.id, captureID, c.leaseID, funcs...)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		c.taskStatus[captureID] = newStatus.Clone()
 		log.Info("dispatch table success", zap.String("capture-id", captureID), zap.Stringer("status", newStatus))
+		failpoint.Inject("OwnerRemoveTableError", func() {
+			if len(cleanedTables) > 0 {
+				failpoint.Return(errors.New("failpoint injected error"))
+			}
+		})
 	}
 
 	for tableID := range cleanedTables {
@@ -376,15 +403,17 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 
 func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.CaptureID]*model.TaskStatus) error {
 	for captureID, status := range taskStatus {
-		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
-			if taskStatus.SomeOperationsUnapplied() {
-				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
-				return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
-			}
-			taskStatus.Tables = status.Tables
-			taskStatus.Operation = status.Operation
-			return true, nil
-		})
+		newStatus, _, err := c.etcdCli.LeaseGuardAtomicPutTaskStatus(
+			ctx, c.id, captureID, c.leaseID,
+			func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+				if taskStatus.SomeOperationsUnapplied() {
+					log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
+					return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
+				}
+				taskStatus.Tables = status.Tables
+				taskStatus.Operation = status.Operation
+				return true, nil
+			})
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -512,28 +541,41 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 				log.Warn("ignored the move job, the source capture is not found", zap.Reflect("job", job))
 				continue
 			}
-			replicaInfo, exist := status.RemoveTable(tableID, c.status.CheckpointTs)
+			// To ensure that the replication pipeline stops exactly at the boundary TS,
+			// The boundary TS specified by Remove Table Operation MUST greater or equal to the checkpoint TS of this table.
+			// So the global resolved TS is a reasonable values.
+			replicaInfo, exist := status.RemoveTable(tableID, c.status.ResolvedTs, true /*isMoveTable*/)
 			if !exist {
 				delete(c.moveTableJobs, tableID)
 				log.Warn("ignored the move job, the table is not exist in the source capture", zap.Reflect("job", job))
 				continue
 			}
-			replicaInfo.StartTs = c.status.CheckpointTs
+			replicaInfo.StartTs = c.status.ResolvedTs
 			job.TableReplicaInfo = replicaInfo
 			job.Status = model.MoveTableStatusDeleted
 			log.Info("handle the move job, remove table from the source capture", zap.Reflect("job", job))
 		case model.MoveTableStatusDeleted:
+			// Do NOT dispatch tables before checkpoint ts has been flushed to Etcd.
+			if c.appliedCheckpointTs != c.status.CheckpointTs {
+				log.Debug("handle the move job, waiting for checkpoint ts to be uploaded",
+					zap.Uint64("applied-checkpoint-ts", c.appliedCheckpointTs),
+					zap.Uint64("latest-checkpoint-ts", c.status.CheckpointTs))
+				continue
+			}
+
 			// add table to target capture
 			status, exist := cloneStatus(job.To)
 			replicaInfo := job.TableReplicaInfo.Clone()
-			replicaInfo.StartTs = c.status.CheckpointTs
+			if replicaInfo.StartTs < c.status.CheckpointTs {
+				replicaInfo.StartTs = c.status.CheckpointTs
+			}
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
 				c.orphanTables[tableID] = replicaInfo.StartTs
 				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
 				continue
 			}
-			status.AddTable(tableID, replicaInfo, c.status.CheckpointTs)
+			status.AddTable(tableID, replicaInfo, replicaInfo.StartTs)
 			job.Status = model.MoveTableStatusFinished
 			delete(c.moveTableJobs, tableID)
 			log.Info("handle the move job, add table to the target capture", zap.Reflect("job", job))
@@ -606,6 +648,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
+
 	if len(c.ddlJobHistory) == 0 {
 		log.Panic("ddl job history can not be empty in changefeed when should to execute DDL")
 	}
@@ -616,12 +659,19 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	if c.status.CheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
+	if c.appliedCheckpointTs < todoDDLJob.BinlogInfo.FinishedTS-1 {
 		log.Debug("wait checkpoint ts",
 			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
 			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
 			zap.String("ddl query", todoDDLJob.Query))
 		return nil
+	}
+
+	if c.appliedCheckpointTs >= todoDDLJob.BinlogInfo.FinishedTS {
+		log.Panic("applied checkpoint ts is larger than DDL finish ts",
+			zap.Uint64("applied checkpoint ts", c.appliedCheckpointTs),
+			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))
 	}
 
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
@@ -661,12 +711,12 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	err = c.balanceOrphanTables(ctx, captures)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
+		failpoint.Inject("InjectChangefeedDDLError", func() {
+			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
+		})
+
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
@@ -699,7 +749,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 // handleSyncPoint record every syncpoint to downstream if the syncpoint feature is enable
 func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
-	//sync-point on
+	// sync-point on
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
 		defer c.syncpointMutex.Unlock()
@@ -855,6 +905,10 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		c.ddlTs = minResolvedTs
 	}
 
+	if len(c.ddlJobHistory) > 0 && minCheckpointTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
+		minCheckpointTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS - 1
+	}
+
 	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
 	if minCheckpointTs > minResolvedTs {
 		minCheckpointTs = minResolvedTs
@@ -863,7 +917,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	var tsUpdated bool
 
-	//syncpoint on
+	// syncpoint on
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
 		if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
@@ -947,20 +1001,29 @@ func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Dur
 }
 
 func (c *changeFeed) Close() {
-	err := c.ddlHandler.Close()
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Warn("failed to close ddl handler", zap.Error(err))
+	if c.ddlHandler != nil {
+		err := c.ddlHandler.Close()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("failed to close ddl handler", zap.Error(err))
+		}
 	}
-	err = c.sink.Close()
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Warn("failed to close owner sink", zap.Error(err))
-	}
-	if c.syncpointStore != nil {
-		err = c.syncpointStore.Close()
+
+	if c.sink != nil {
+		err := c.sink.Close()
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("failed to close owner sink", zap.Error(err))
 		}
 	}
-	c.cancel()
+
+	if c.syncpointStore != nil {
+		err := c.syncpointStore.Close()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("failed to close owner sink", zap.Error(err))
+		}
+	}
+
+	if c.cancel != nil {
+		c.cancel()
+	}
 	log.Info("changefeed closed", zap.String("id", c.id))
 }

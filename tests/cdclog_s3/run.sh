@@ -16,6 +16,7 @@ export AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY
 export S3_ENDPOINT=127.0.0.1:24927
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
+pkill -9 minio || true
 bin/minio server --address $S3_ENDPOINT "$WORK_DIR/s3" &
 MINIO_PID=$!
 i=0
@@ -112,4 +113,5 @@ function cdclog_test() {
 trap stop EXIT
 prepare $*
 cdclog_test $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

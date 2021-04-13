@@ -37,7 +37,7 @@ const (
 	maxCompletePartSize = 100 << 20 // rotate row changed event file if one complete file larger than 100Mb
 	maxDDLFlushSize     = 10 << 20  // rotate ddl event file if one complete file larger than 10Mb
 
-	defaultBufferChanSize               = 20480
+	defaultBufferChanSize               = 1280000
 	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
@@ -51,7 +51,7 @@ type tableBuffer struct {
 	encoder codec.EventBatchEncoder
 
 	uploadParts struct {
-		uploader  storage.Uploader
+		writer    storage.ExternalFileWriter
 		uploadNum int
 		byteSize  int64
 	}
@@ -132,15 +132,15 @@ func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {
 		// so, if this batch data size is greater than 5Mb or it has uploadPart already
 		// we will use multi-upload this batch data
 		if len(rowDatas) > 0 {
-			if hashPart.uploader == nil {
-				uploader, err := sink.storage().CreateUploader(ctx, newFileName)
+			if hashPart.writer == nil {
+				fileWriter, err := sink.storage().Create(ctx, newFileName)
 				if err != nil {
 					return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 				}
-				hashPart.uploader = uploader
+				hashPart.writer = fileWriter
 			}
 
-			err := hashPart.uploader.UploadPart(ctx, rowDatas)
+			_, err := hashPart.writer.Write(ctx, rowDatas)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 			}
@@ -153,19 +153,19 @@ func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {
 			// we need do complete when total upload size is greater than 100Mb
 			// or this part data is less than 5Mb to avoid meet EntityTooSmall error
 			log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID))
-			err := hashPart.uploader.CompleteUpload(ctx)
+			err := hashPart.writer.Close(ctx)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 			}
 			hashPart.byteSize = 0
 			hashPart.uploadNum = 0
-			hashPart.uploader = nil
+			hashPart.writer = nil
 			tb.encoder = nil
 		}
 	} else {
 		// generate normal file because S3 multi-upload need every part at least 5Mb.
 		log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
-		err := sink.storage().Write(ctx, newFileName, rowDatas)
+		err := sink.storage().WriteFile(ctx, newFileName, rowDatas)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 		}
@@ -185,11 +185,11 @@ func newTableBuffer(tableID int64) logUnit {
 		sendSize:   atomic.NewInt64(0),
 		sendEvents: atomic.NewInt64(0),
 		uploadParts: struct {
-			uploader  storage.Uploader
+			writer    storage.ExternalFileWriter
 			uploadNum int
 			byteSize  int64
 		}{
-			uploader:  nil,
+			writer:    nil,
 			uploadNum: 0,
 			byteSize:  0,
 		},
@@ -218,7 +218,7 @@ func (s *s3Sink) flushLogMeta(ctx context.Context) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
-	return cerror.WrapError(cerror.ErrS3SinkWriteStorage, s.storage.Write(ctx, logMetaFile, data))
+	return cerror.WrapError(cerror.ErrS3SinkWriteStorage, s.storage.WriteFile(ctx, logMetaFile, data))
 }
 
 func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
@@ -260,11 +260,6 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		s.ddlEncoder = s.encoder()
 		firstCreated = true
 	}
-	_, err := s.ddlEncoder.EncodeDDLEvent(ddl)
-	if err != nil {
-		return err
-	}
-	data := s.ddlEncoder.MixedBuild(firstCreated)
 	// reset encoder buf for next round append
 	defer s.ddlEncoder.Reset()
 
@@ -277,7 +272,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		SubDir:    ddlEventsDir,
 		ListCount: 1,
 	}
-	err = s.storage.WalkDir(ctx, opt, func(key string, fileSize int64) error {
+	err := s.storage.WalkDir(ctx, opt, func(key string, fileSize int64) error {
 		log.Debug("[EmitDDLEvent] list content from s3",
 			zap.String("key", key),
 			zap.Int64("size", size),
@@ -289,7 +284,27 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 	}
-	if size == 0 || size > maxDDLFlushSize {
+
+	// only reboot and (size = 0 or size >= maxRowFileSize) should we add version to s3
+	withVersion := firstCreated && (size == 0 || size >= maxDDLFlushSize)
+
+	// clean ddlEncoder version part
+	// if we reboot cdc and size between (0, maxDDLFlushSize), we should skip version part in
+	// JSONEventBatchEncoder.keyBuf, JSONEventBatchEncoder consturctor func has
+	// alreay filled with version part, see NewJSONEventBatchEncoder and
+	// JSONEventBatchEncoder.MixedBuild
+	if firstCreated && size > 0 && size < maxDDLFlushSize {
+		s.ddlEncoder.Reset()
+	}
+
+	_, er := s.ddlEncoder.EncodeDDLEvent(ddl)
+	if er != nil {
+		return er
+	}
+
+	data := s.ddlEncoder.MixedBuild(withVersion)
+
+	if size == 0 || size >= maxDDLFlushSize {
 		// no ddl file exists or
 		// exists file is oversized. we should generate a new file
 		fileData = data
@@ -304,20 +319,20 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		// hack way: append data to old file
 		log.Debug("[EmitDDLEvent] append ddl to origin log",
 			zap.String("name", name), zap.Any("ddl", ddl))
-		fileData, err = s.storage.Read(ctx, name)
+		fileData, err = s.storage.ReadFile(ctx, name)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 		}
 		fileData = append(fileData, data...)
 	}
-	return s.storage.Write(ctx, name, fileData)
+	return s.storage.WriteFile(ctx, name, fileData)
 }
 
 func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if tableInfo != nil {
 		for _, table := range tableInfo {
 			if table != nil {
-				err := s.storage.Write(ctx, makeTableDirectoryName(table.TableID), nil)
+				err := s.storage.WriteFile(ctx, makeTableDirectoryName(table.TableID), nil)
 				if err != nil {
 					return errors.Annotate(
 						cerror.WrapError(cerror.ErrS3SinkStorageAPI, err),
@@ -332,7 +347,7 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
-		return s.storage.Write(ctx, logMetaFile, data)
+		return s.storage.WriteFile(ctx, logMetaFile, data)
 	}
 	return nil
 }
@@ -381,6 +396,8 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()

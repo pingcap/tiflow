@@ -7,6 +7,7 @@ killall -q -w -s 9 cdc || true
 killall -q -w -s 9 cdc.test || true
 killall -q -w -s 9 tiflash || true
 killall -q -w -s 9 flash_cluster_manager || true
+killall -q -w -s 9 cdc_state_checker || true
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare

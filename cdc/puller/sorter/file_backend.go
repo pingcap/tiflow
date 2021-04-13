@@ -32,9 +32,7 @@ const (
 	magic          = 0xbeefbeef
 )
 
-var (
-	openFDCount int64
-)
+var openFDCount int64
 
 type fileBackEnd struct {
 	fileName string
@@ -63,7 +61,7 @@ func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd
 }
 
 func (f *fileBackEnd) reader() (backEndReader, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_RDONLY, 0644)
+	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -94,7 +92,7 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 }
 
 func (f *fileBackEnd) writer() (backEndWriter, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0644)
+	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -121,6 +119,10 @@ func (f *fileBackEnd) free() error {
 		}
 	})
 
+	log.Debug("Removing file", zap.String("file", f.fileName))
+
+	f.cleanStats()
+
 	err := os.Remove(f.fileName)
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
@@ -131,6 +133,13 @@ func (f *fileBackEnd) free() error {
 	}
 
 	return nil
+}
+
+func (f *fileBackEnd) cleanStats() {
+	if pool != nil {
+		atomic.AddInt64(&pool.onDiskDataSize, -f.size)
+	}
+	f.size = 0
 }
 
 type fileBackEndReader struct {
@@ -209,12 +218,11 @@ func (r *fileBackEndReader) resetAndClose() error {
 		// fail-fast for double-close
 		r.f = nil
 
-		atomic.AddInt64(&pool.onDiskDataSize, -r.backEnd.size)
+		r.backEnd.cleanStats()
 
 		failpoint.Inject("sorterDebug", func() {
 			atomic.StoreInt32(&r.backEnd.borrowed, 0)
 		})
-
 	}()
 
 	if r.f == nil {

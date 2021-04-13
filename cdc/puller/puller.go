@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	defaultPullerEventChanSize  = 128000
-	defaultPullerOutputChanSize = 128000
+	defaultPullerEventChanSize  = 128
+	defaultPullerOutputChanSize = 128
 )
 
 // Puller pull data from tikv and push changes into a buffer
@@ -56,7 +56,6 @@ type pullerImpl struct {
 	kvStorage      tikv.Storage
 	checkpointTs   uint64
 	spans          []regionspan.ComparableSpan
-	buffer         *memBuffer
 	outputCh       chan *model.RawKVEntry
 	tsTracker      frontier.Frontier
 	resolvedTs     uint64
@@ -96,7 +95,6 @@ func NewPuller(
 		kvStorage:      tikvStorage,
 		checkpointTs:   checkpointTs,
 		spans:          comparableSpans,
-		buffer:         makeMemBuffer(limitter),
 		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:      tsTracker,
 		resolvedTs:     checkpointTs,
@@ -133,10 +131,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	tableID, tableName := util.TableIDFromCtx(ctx)
 	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
 	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
 	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
-	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
 	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "resolved")
 	defer func() {
@@ -156,41 +151,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				return nil
 			case <-time.After(15 * time.Second):
 				metricEventChanSize.Set(float64(len(eventCh)))
-				metricMemBufferSize.Set(float64(p.buffer.Size()))
 				metricOutputChanSize.Set(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-			}
-		}
-	})
-
-	g.Go(func() error {
-		for {
-			select {
-			case e := <-eventCh:
-				if e.Val != nil {
-					metricEventCounterKv.Inc()
-					val := e.Val
-					// if a region with kv range [a, z)
-					// and we only want the get [b, c) from this region,
-					// tikv will return all key events in the region although we specified [b, c) int the request.
-					// we can make tikv only return the events about the keys in the specified range.
-					comparableKey := regionspan.ToComparableKey(val.Key)
-					if !regionspan.KeyInSpans(comparableKey, p.spans) {
-						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Stringer("span", p.spans))
-						continue
-					}
-
-					if err := p.buffer.AddEntry(ctx, *e); err != nil {
-						return errors.Trace(err)
-					}
-				} else if e.Resolved != nil {
-					metricEventCounterResolved.Inc()
-					if err := p.buffer.AddEntry(ctx, *e); err != nil {
-						return errors.Trace(err)
-					}
-				}
-			case <-ctx.Done():
-				return ctx.Err()
 			}
 		}
 	})
@@ -216,9 +178,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		start := time.Now()
 		initialized := false
 		for {
-			e, err := p.buffer.Get(ctx)
-			if err != nil {
-				return errors.Trace(err)
+			var e *model.RegionFeedEvent
+			select {
+			case e = <-eventCh:
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+			if e == nil {
+				continue
 			}
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()

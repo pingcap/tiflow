@@ -30,7 +30,7 @@ import (
 )
 
 // SortEngine is the sorter engine
-type SortEngine string
+type SortEngine = string
 
 // sort engines
 const (
@@ -52,8 +52,8 @@ const (
 )
 
 const (
-	// errorHistoryGCInterval represents how long we keep error record in changefeed info
-	errorHistoryGCInterval = time.Minute * 10
+	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
+	ErrorHistoryGCInterval = time.Minute * 10
 
 	// errorHistoryCheckInterval represents time window for failure check
 	errorHistoryCheckInterval = time.Minute * 2
@@ -85,6 +85,7 @@ type ChangeFeedInfo struct {
 
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
+	CreatorVersion    string        `json:"creator-version"`
 }
 
 var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
@@ -170,13 +171,24 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	return nil
 }
 
+// Clone returns a cloned ChangeFeedInfo
+func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
+	s, err := info.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	cloned := new(ChangeFeedInfo)
+	err = cloned.Unmarshal([]byte(s))
+	return cloned, err
+}
+
 // VerifyAndFix verifies changefeed info and may fillin some fields.
 // If a must field is not provided, return an error.
 // If some necessary filed is missing but can use a default value, fillin it.
 func (info *ChangeFeedInfo) VerifyAndFix() error {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
-		info.Engine = SortInMemory
+		info.Engine = SortUnified
 	}
 	if info.Config.Filter == nil {
 		info.Config.Filter = defaultConfig.Filter
@@ -202,7 +214,7 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryGCInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
 	})
 	if i == len(info.ErrorHis) {
 		info.ErrorHis = info.ErrorHis[:]

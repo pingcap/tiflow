@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,14 +16,18 @@ package sorter
 import (
 	"container/heap"
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/workerpool"
 	"go.uber.org/zap"
 )
 
@@ -40,8 +44,10 @@ type flushTask struct {
 	maxResolvedTs uint64
 	finished      chan error
 	dealloc       func() error
+	isDeallocated int32
 	dataSize      int64
 	lastTs        uint64 // for debugging TODO remove
+	canceller     *asyncCanceller
 }
 
 type heapSorter struct {
@@ -50,33 +56,53 @@ type heapSorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *flushTask
 	heap        sortHeap
+	canceller   *asyncCanceller
+
+	poolHandle    workerpool.EventHandle
+	internalState *heapSorterInternalState
 }
 
 func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 	return &heapSorter{
-		id:       id,
-		inputCh:  make(chan *model.PolymorphicEvent, 1024*1024),
-		outputCh: out,
-		heap:     make(sortHeap, 0, 65536),
+		id:        id,
+		inputCh:   make(chan *model.PolymorphicEvent, 1024*1024),
+		outputCh:  out,
+		heap:      make(sortHeap, 0, 65536),
+		canceller: new(asyncCanceller),
 	}
 }
 
-// flush should only be called within the main loop in run().
+// flush should only be called in the same goroutine where the heap is being written to.
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	_, tableName := util.TableIDFromCtx(ctx)
-	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName).Observe(float64(h.heap.Len()))
 
-	isEmptyFlush := h.heap.Len() == 0
-	if isEmptyFlush {
-		return nil
-	}
 	var (
 		backEnd    backEnd
 		lowerBound uint64
 	)
 
+	if h.heap.Len() > 0 {
+		lowerBound = h.heap[0].entry.CRTs
+	} else {
+		return nil
+	}
+
+	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName).Observe(float64(h.heap.Len()))
+
+	// We check if the heap contains only one entry and that entry is a ResolvedEvent.
+	// As an optimization, when the condition is true, we clear the heap and send an empty flush.
+	// Sending an empty flush saves CPU and potentially IO.
+	// Since when a table is mostly idle or near-idle, most flushes would contain one ResolvedEvent alone,
+	// this optimization will greatly improve performance when (1) total number of table is large,
+	// and (2) most tables do not have many events.
+	if h.heap.Len() == 1 && h.heap[0].entry.RawKV.OpType == model.OpTypeResolved {
+		h.heap.Pop()
+	}
+
+	isEmptyFlush := h.heap.Len() == 0
+	var finishCh chan error
 	if !isEmptyFlush {
 		var err error
 		backEnd, err = pool.alloc(ctx)
@@ -84,7 +110,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			return errors.Trace(err)
 		}
 
-		lowerBound = h.heap[0].entry.CRTs
+		finishCh = make(chan error, 1)
 	}
 
 	task := &flushTask{
@@ -93,13 +119,17 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		backend:       backEnd,
 		tsLowerBound:  lowerBound,
 		maxResolvedTs: maxResolvedTs,
-		finished:      make(chan error, 2),
+		finished:      finishCh,
+		canceller:     h.canceller,
 	}
 	h.taskCounter++
 
 	var oldHeap sortHeap
 	if !isEmptyFlush {
 		task.dealloc = func() error {
+			if atomic.SwapInt32(&task.isDeallocated, 1) == 1 {
+				return nil
+			}
 			if task.backend != nil {
 				task.backend = nil
 				return pool.dealloc(backEnd)
@@ -113,73 +143,105 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			return nil
 		}
 	}
+	failpoint.Inject("sorterDebug", func() {
+		tableID, tableName := util.TableIDFromCtx(ctx)
+		log.Debug("Unified Sorter new flushTask",
+			zap.Int64("table-id", tableID),
+			zap.String("table-name", tableName),
+			zap.Int("heap-id", task.heapSorterID),
+			zap.Uint64("resolvedTs", task.maxResolvedTs))
+	})
 
-	log.Debug("Unified Sorter new flushTask",
-		zap.String("table", tableNameFromCtx(ctx)),
-		zap.Int("heap-id", task.heapSorterID),
-		zap.Uint64("resolvedTs", task.maxResolvedTs))
-
-	go func() {
-		if isEmptyFlush {
-			return
-		}
+	if !isEmptyFlush {
 		backEndFinal := backEnd
-		writer, err := backEnd.writer()
-		if err != nil {
-			if backEndFinal != nil {
-				_ = task.dealloc()
-			}
-			task.finished <- errors.Trace(err)
-			return
-		}
+		err := heapSorterIOPool.Go(ctx, func() {
+			failpoint.Inject("asyncFlushStartDelay", func() {
+				log.Debug("asyncFlushStartDelay")
+			})
 
-		defer func() {
-			// handle errors (or aborts) gracefully to prevent resource leaking (especially FD's)
-			if writer != nil {
-				_ = writer.flushAndClose()
-			}
-			if backEndFinal != nil {
-				_ = task.dealloc()
-			}
-			close(task.finished)
-		}()
+			h.canceller.EnterAsyncOp()
+			defer h.canceller.FinishAsyncOp()
 
-		for oldHeap.Len() > 0 {
-			select {
-			case <-ctx.Done():
-				task.finished <- ctx.Err()
-			default:
+			if h.canceller.IsCanceled() {
+				if backEndFinal != nil {
+					_ = task.dealloc()
+				}
+				task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
+				return
 			}
 
-			event := heap.Pop(&oldHeap).(*sortItem).entry
-			err := writer.writeNext(event)
+			writer, err := backEnd.writer()
+			if err != nil {
+				if backEndFinal != nil {
+					_ = task.dealloc()
+				}
+				task.finished <- errors.Trace(err)
+				return
+			}
+
+			defer func() {
+				// handle errors (or aborts) gracefully to prevent resource leaking (especially FD's)
+				if writer != nil {
+					_ = writer.flushAndClose()
+				}
+				if backEndFinal != nil {
+					_ = task.dealloc()
+				}
+				close(task.finished)
+			}()
+
+			counter := 0
+			for oldHeap.Len() > 0 {
+				failpoint.Inject("asyncFlushInProcessDelay", func() {
+					log.Debug("asyncFlushInProcessDelay")
+				})
+				// no need to check for cancellation so frequently.
+				if counter%10000 == 0 && h.canceller.IsCanceled() {
+					task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
+					return
+				}
+				counter++
+
+				event := heap.Pop(&oldHeap).(*sortItem).entry
+				err := writer.writeNext(event)
+				if err != nil {
+					task.finished <- errors.Trace(err)
+					return
+				}
+			}
+
+			dataSize := writer.dataSize()
+			atomic.StoreInt64(&task.dataSize, int64(dataSize))
+			eventCount := writer.writtenCount()
+
+			writer1 := writer
+			writer = nil
+			err = writer1.flushAndClose()
 			if err != nil {
 				task.finished <- errors.Trace(err)
 				return
 			}
-		}
 
-		dataSize := writer.dataSize()
-		atomic.StoreInt64(&task.dataSize, int64(dataSize))
-		eventCount := writer.writtenCount()
+			backEndFinal = nil
 
-		writer1 := writer
-		writer = nil
-		err = writer1.flushAndClose()
+			failpoint.Inject("sorterDebug", func() {
+				tableID, tableName := util.TableIDFromCtx(ctx)
+				log.Debug("Unified Sorter flushTask finished",
+					zap.Int("heap-id", task.heapSorterID),
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
+					zap.Uint64("resolvedTs", task.maxResolvedTs),
+					zap.Uint64("data-size", dataSize),
+					zap.Int("size", eventCount))
+			})
+
+			task.finished <- nil // DO NOT access `task` beyond this point in this function
+		})
 		if err != nil {
-			task.finished <- errors.Trace(err)
-			return
+			close(task.finished)
+			return errors.Trace(err)
 		}
-
-		backEndFinal = nil
-		task.finished <- nil // DO NOT access `task` beyond this point in this function
-		log.Debug("Unified Sorter flushTask finished",
-			zap.Int("heap-id", task.heapSorterID),
-			zap.String("table", tableNameFromCtx(ctx)),
-			zap.Uint64("resolvedTs", task.maxResolvedTs),
-			zap.Uint64("data-size", dataSize),
-			zap.Int("size", eventCount))
-	}()
+	}
 
 	select {
 	case <-ctx.Done():
@@ -189,63 +251,114 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	return nil
 }
 
-func (h *heapSorter) run(ctx context.Context) error {
-	var (
-		maxResolved           uint64
-		heapSizeBytesEstimate int64
-		rateCounter           int
-	)
+var (
+	heapSorterPool   workerpool.WorkerPool
+	heapSorterIOPool workerpool.AsyncPool
+	poolOnce         sync.Once
+)
 
-	rateTicker := time.NewTicker(1 * time.Second)
-	defer rateTicker.Stop()
+type heapSorterInternalState struct {
+	maxResolved           uint64
+	heapSizeBytesEstimate int64
+	rateCounter           int
+	sorterConfig          *config.SorterConfig
+	timerMultiplier       int
+}
 
-	flushTicker := time.NewTicker(5 * time.Second)
-	defer flushTicker.Stop()
-
-	sorterConfig := config.GetSorterConfig()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case event := <-h.inputCh:
-			heap.Push(&h.heap, &sortItem{entry: event})
-			isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
-
-			if isResolvedEvent {
-				if event.RawKV.CRTs < maxResolved {
-					log.Panic("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
-						zap.Uint64("max-resolvedTs", maxResolved))
-				}
-				maxResolved = event.RawKV.CRTs
-			}
-
-			if event.RawKV.CRTs < maxResolved {
-				log.Panic("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", maxResolved))
-			}
-
-			// 5 * 8 is for the 5 fields in PolymorphicEvent
-			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
-			needFlush := heapSizeBytesEstimate >= int64(sorterConfig.ChunkSizeLimit) ||
-				(isResolvedEvent && rateCounter < flushRateLimitPerSecond)
-
-			if needFlush {
-				rateCounter++
-				err := h.flush(ctx, maxResolved)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				heapSizeBytesEstimate = 0
-			}
-		case <-flushTicker.C:
-			if rateCounter < flushRateLimitPerSecond {
-				err := h.flush(ctx, maxResolved)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				heapSizeBytesEstimate = 0
-			}
-		case <-rateTicker.C:
-			rateCounter = 0
-		}
+func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
+	state := &heapSorterInternalState{
+		sorterConfig: config.GetGlobalServerConfig().Sorter,
 	}
+
+	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
+		event := eventI.(*model.PolymorphicEvent)
+		heap.Push(&h.heap, &sortItem{entry: event})
+		isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
+
+		if isResolvedEvent {
+			if event.RawKV.CRTs < state.maxResolved {
+				log.Panic("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
+					zap.Uint64("max-resolvedTs", state.maxResolved))
+			}
+			state.maxResolved = event.RawKV.CRTs
+		}
+
+		if event.RawKV.CRTs < state.maxResolved {
+			log.Panic("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", state.maxResolved))
+		}
+
+		// 5 * 8 is for the 5 fields in PolymorphicEvent
+		state.heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
+		needFlush := state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit) ||
+			(isResolvedEvent && state.rateCounter < flushRateLimitPerSecond)
+
+		if needFlush {
+			state.rateCounter++
+			err := h.flush(ctx, state.maxResolved)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			state.heapSizeBytesEstimate = 0
+		}
+
+		return nil
+	}).SetTimer(ctx, 1*time.Second, func(ctx context.Context) error {
+		state.rateCounter = 0
+		state.timerMultiplier = (state.timerMultiplier + 1) % 5
+		if state.timerMultiplier == 0 && state.rateCounter < flushRateLimitPerSecond {
+			err := h.flush(ctx, state.maxResolved)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			state.heapSizeBytesEstimate = 0
+		}
+		return nil
+	}).OnExit(onError)
+
+	h.poolHandle = poolHandle
+	h.internalState = state
+}
+
+// asyncCanceller is a shared object used to cancel async IO operations.
+// We do not use `context.Context` because (1) selecting on `ctx.Done()` is expensive
+// especially if the context is shared by many goroutines, and (2) due to the complexity
+// of managing contexts through the workerpools, using a special shared object seems more reasonable
+// and readable.
+type asyncCanceller struct {
+	exitRWLock sync.RWMutex // held when an asynchronous flush is taking place
+	hasExited  int32        // this flag should be accessed atomically
+}
+
+func (c *asyncCanceller) EnterAsyncOp() {
+	c.exitRWLock.RLock()
+}
+
+func (c *asyncCanceller) FinishAsyncOp() {
+	c.exitRWLock.RUnlock()
+}
+
+func (c *asyncCanceller) IsCanceled() bool {
+	return atomic.LoadInt32(&c.hasExited) == 1
+}
+
+func (c *asyncCanceller) Cancel() {
+	// Sets the flag
+	atomic.StoreInt32(&c.hasExited, 1)
+
+	// By taking the lock, we are making sure that all IO operations that started before setting the flag have finished,
+	// so that by the returning of this function, no more IO operations will finish successfully.
+	// Since IO operations that are NOT successful will clean up themselves, the goroutine in which this
+	// function was called is responsible for releasing files written by only those IO operations that complete BEFORE
+	// this function returns.
+	// In short, we are creating a linearization point here.
+	c.exitRWLock.Lock()
+	defer c.exitRWLock.Unlock()
+}
+
+func lazyInitWorkerPool() {
+	poolOnce.Do(func() {
+		sorterConfig := config.GetGlobalServerConfig().Sorter
+		heapSorterPool = workerpool.NewDefaultWorkerPool(sorterConfig.NumWorkerPoolGoroutine)
+		heapSorterIOPool = workerpool.NewDefaultAsyncPool(sorterConfig.NumWorkerPoolGoroutine * 2)
+	})
 }

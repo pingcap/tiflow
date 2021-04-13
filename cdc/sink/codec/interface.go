@@ -15,9 +15,11 @@ package codec
 
 import (
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -52,9 +54,13 @@ type EventBatchEncoder interface {
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
-	Key   []byte
-	Value []byte
-	Ts    uint64 // reserved for possible output sorting
+	Key      []byte
+	Value    []byte
+	Ts       uint64              // reserved for possible output sorting
+	Schema   *string             // schema
+	Table    *string             // table
+	Type     model.MqMessageType // type
+	Protocol Protocol            // protocol
 }
 
 // Length returns the expected size of the Kafka message
@@ -62,13 +68,30 @@ func (m *MQMessage) Length() int {
 	return len(m.Key) + len(m.Value)
 }
 
+// PhysicalTime returns physical time part of Ts in time.Time
+func (m *MQMessage) PhysicalTime() time.Time {
+	return oracle.GetTimeFromTS(m.Ts)
+}
+
+func newDDLMQMessage(proto Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
+	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
+}
+
+func newResolvedMQMessage(proto Protocol, key, value []byte, ts uint64) *MQMessage {
+	return NewMQMessage(proto, key, value, ts, model.MqMessageTypeResolved, nil, nil)
+}
+
 // NewMQMessage should be used when creating a MQMessage struct.
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
-func NewMQMessage(key []byte, value []byte, ts uint64) *MQMessage {
+func NewMQMessage(proto Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
 	ret := &MQMessage{
-		Key:   nil,
-		Value: nil,
-		Ts:    ts,
+		Key:      nil,
+		Value:    nil,
+		Ts:       ts,
+		Schema:   schema,
+		Table:    table,
+		Type:     ty,
+		Protocol: proto,
 	}
 
 	if key != nil {

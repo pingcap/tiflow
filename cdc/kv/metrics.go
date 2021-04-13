@@ -36,7 +36,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "scan_regions_duration_seconds",
 			Help:      "The time it took to finish a scanRegions call.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 18),
 		}, []string{"capture"})
 	eventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{

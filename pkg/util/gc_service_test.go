@@ -35,13 +35,12 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	ctx := context.Background()
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60) //nolint:errcheck
 	err := CheckSafetyOfStartTs(ctx, s.pdCli, 50)
-	c.Assert(err.Error(), check.Equals, "startTs less than gcSafePoint: [tikv:9006]GC life time is shorter than transaction duration, transaction starts at 50, GC safe point is 60")
+	c.Assert(err.Error(), check.Equals, "[CDC:ErrStartTsBeforeGC]fail to create changefeed because start-ts 50 is earlier than GC safepoint at 60")
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80) //nolint:errcheck
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70) //nolint:errcheck
 	err = CheckSafetyOfStartTs(ctx, s.pdCli, 65)
 	c.Assert(err, check.IsNil)
 	c.Assert(s.pdCli.serviceSafePoint, check.DeepEquals, map[string]uint64{"service1": 60, "service2": 80, "service3": 70, "ticdc-changefeed-creating": 65})
-
 }
 
 type mockPdClientForServiceGCSafePoint struct {

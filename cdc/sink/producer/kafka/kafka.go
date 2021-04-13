@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -84,13 +85,13 @@ type kafkaSaramaProducer struct {
 	closed  int32
 }
 
-func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
-		Key:       sarama.ByteEncoder(key),
-		Value:     sarama.ByteEncoder(value),
+		Key:       sarama.ByteEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
 	}
 	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
@@ -119,15 +120,15 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
 	for i := 0; i < int(k.partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
 			Topic:     k.topic,
-			Key:       sarama.ByteEncoder(key),
-			Value:     sarama.ByteEncoder(value),
+			Key:       sarama.ByteEncoder(message.Key),
+			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
 		}
 	}
@@ -342,6 +343,10 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	}
 
 	notifier := new(notify.Notifier)
+	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
 	k := &kafkaSaramaProducer{
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
@@ -352,7 +357,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			sent    uint64
 		}, partitionNum),
 		flushedNotifier: notifier,
-		flushedReceiver: notifier.NewReceiver(50 * time.Millisecond),
+		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 	}
@@ -362,6 +367,8 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()

@@ -62,6 +62,9 @@ func main() {
 			log.S().Errorf("Failed to close source database: %s\n", err)
 		}
 	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go switchAsyncCommit(ctx, sourceDB0)
 	util.MustExec(sourceDB0, "create database mark;")
 	runDDLTest([]*sql.DB{sourceDB0, sourceDB1})
 	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
@@ -75,8 +78,10 @@ func runDDLTest(srcs []*sql.DB) {
 		log.S().Infof("runDDLTest take %v", time.Since(start))
 	}()
 
-	for i, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL,
-		modifyColumnDDL, addDropIndexDDL} {
+	for i, ddlFunc := range []func(context.Context, *sql.DB){
+		createDropSchemaDDL, truncateDDL, addDropColumnDDL,
+		modifyColumnDDL, addDropIndexDDL,
+	} {
 		testName := getFunctionName(ddlFunc)
 		log.S().Info("running ddl test: ", i, " ", testName)
 
@@ -104,6 +109,25 @@ func runDDLTest(srcs []*sql.DB) {
 		cancel()
 
 		util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", i))
+	}
+}
+
+func switchAsyncCommit(ctx context.Context, db *sql.DB) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	enabled := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if enabled {
+				util.MustExec(db, "set global tidb_enable_async_commit = off")
+			} else {
+				util.MustExec(db, "set global tidb_enable_async_commit = on")
+			}
+			enabled = !enabled
+		}
 	}
 }
 
@@ -309,8 +333,9 @@ func addDropIndexDDL(ctx context.Context, db *sql.DB) {
 	}
 }
 
-const createDatabaseSQL = "create database if not exists test"
-const createTableSQL = `
+const (
+	createDatabaseSQL = "create database if not exists test"
+	createTableSQL    = `
 create table if not exists test.%s
 (
     id1 int unique key not null,
@@ -318,6 +343,7 @@ create table if not exists test.%s
     v1  int default null
 )
 `
+)
 
 func mustCreateTable(db *sql.DB, tableName string) {
 	util.MustExec(db, createDatabaseSQL)

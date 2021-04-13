@@ -15,21 +15,22 @@ package cdc
 
 import (
 	"context"
-	"crypto/tls"
-	"net"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/kv"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -41,132 +42,10 @@ import (
 
 const (
 	ownerRunInterval = time.Millisecond * 500
-
-	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
-	DefaultCDCGCSafePointTTL = 24 * 60 * 60
 )
-
-type options struct {
-	pdEndpoints            string
-	credential             *security.Credential
-	addr                   string
-	advertiseAddr          string
-	gcTTL                  int64
-	timezone               *time.Location
-	ownerFlushInterval     time.Duration
-	processorFlushInterval time.Duration
-}
-
-func (o *options) validateAndAdjust() error {
-	if o.pdEndpoints == "" {
-		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
-	}
-	if o.addr == "" {
-		return cerror.ErrInvalidServerOption.GenWithStack("empty address")
-	}
-	if o.advertiseAddr == "" {
-		o.advertiseAddr = o.addr
-	}
-	// Advertise address must be specified.
-	if idx := strings.LastIndex(o.advertiseAddr, ":"); idx >= 0 {
-		ip := net.ParseIP(o.advertiseAddr[:idx])
-		// Skip nil as it could be a domain name.
-		if ip != nil && ip.IsUnspecified() {
-			return cerror.ErrInvalidServerOption.GenWithStack("advertise address must be specified as a valid IP")
-		}
-	} else {
-		return cerror.ErrInvalidServerOption.GenWithStack("advertise address or address does not contain a port")
-	}
-	if o.gcTTL == 0 {
-		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
-	}
-	var tlsConfig *tls.Config
-	if o.credential != nil {
-		var err error
-		tlsConfig, err = o.credential.ToTLSConfig()
-		if err != nil {
-			return errors.Annotate(err, "invalidate TLS config")
-		}
-		_, err = o.credential.ToGRPCDialOption()
-		if err != nil {
-			return errors.Annotate(err, "invalidate TLS config")
-		}
-	}
-	for _, ep := range strings.Split(o.pdEndpoints, ",") {
-		if tlsConfig != nil {
-			if strings.Index(ep, "http://") == 0 {
-				return cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
-			}
-		} else if strings.Index(ep, "http://") != 0 {
-			return cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
-		}
-	}
-
-	return nil
-}
-
-// PDEndpoints returns a ServerOption that sets the endpoints of PD for the server.
-func PDEndpoints(s string) ServerOption {
-	return func(o *options) {
-		o.pdEndpoints = s
-	}
-}
-
-// Address returns a ServerOption that sets the server listen address
-func Address(s string) ServerOption {
-	return func(o *options) {
-		o.addr = s
-	}
-}
-
-// AdvertiseAddress returns a ServerOption that sets the server advertise address
-func AdvertiseAddress(s string) ServerOption {
-	return func(o *options) {
-		o.advertiseAddr = s
-	}
-}
-
-// GCTTL returns a ServerOption that sets the gc ttl.
-func GCTTL(t int64) ServerOption {
-	return func(o *options) {
-		o.gcTTL = t
-	}
-}
-
-// Timezone returns a ServerOption that sets the timezone
-func Timezone(tz *time.Location) ServerOption {
-	return func(o *options) {
-		o.timezone = tz
-	}
-}
-
-// OwnerFlushInterval returns a ServerOption that sets the ownerFlushInterval
-func OwnerFlushInterval(dur time.Duration) ServerOption {
-	return func(o *options) {
-		o.ownerFlushInterval = dur
-	}
-}
-
-// ProcessorFlushInterval returns a ServerOption that sets the processorFlushInterval
-func ProcessorFlushInterval(dur time.Duration) ServerOption {
-	return func(o *options) {
-		o.processorFlushInterval = dur
-	}
-}
-
-// Credential returns a ServerOption that sets the TLS
-func Credential(credential *security.Credential) ServerOption {
-	return func(o *options) {
-		o.credential = credential
-	}
-}
-
-// A ServerOption sets options such as the addr of PD.
-type ServerOption func(*options)
 
 // Server is the capture server
 type Server struct {
-	opts         options
 	capture      *Capture
 	owner        *Owner
 	ownerLock    sync.RWMutex
@@ -176,39 +55,29 @@ type Server struct {
 }
 
 // NewServer creates a Server instance.
-func NewServer(opt ...ServerOption) (*Server, error) {
-	opts := options{}
-	for _, o := range opt {
-		o(&opts)
-	}
-	if err := opts.validateAndAdjust(); err != nil {
-		return nil, err
-	}
+func NewServer(pdEndpoints []string) (*Server, error) {
+	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
-		zap.String("pd-addr", opts.pdEndpoints),
-		zap.String("address", opts.addr),
-		zap.String("advertise-address", opts.advertiseAddr),
-		zap.Int64("gc-ttl", opts.gcTTL),
-		zap.Any("timezone", opts.timezone),
-		zap.Duration("owner-flush-interval", opts.ownerFlushInterval),
-		zap.Duration("processor-flush-interval", opts.processorFlushInterval),
+		zap.Strings("pd-addrs", pdEndpoints),
+		zap.Stringer("config", conf),
 	)
 
 	s := &Server{
-		opts: opts,
+		pdEndpoints: pdEndpoints,
 	}
 	return s, nil
 }
 
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
-	s.pdEndpoints = strings.Split(s.opts.pdEndpoints, ",")
-	grpcTLSOption, err := s.opts.credential.ToGRPCDialOption()
+	conf := config.GetGlobalServerConfig()
+
+	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	pdClient, err := pd.NewClientWithContext(
-		ctx, s.pdEndpoints, s.opts.credential.PDSecurityOption(),
+		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -230,7 +99,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], s.opts.credential, errorTiKVIncompatible)
+	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], conf.Security, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}
@@ -238,6 +107,18 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		err := kvStore.Close()
+		if err != nil {
+			log.Warn("kv store close failed", zap.Error(err))
+		}
+	}()
+	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 	// When a capture suicided, restart it
 	for {
 		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
@@ -257,6 +138,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
 
+	conf := config.GetGlobalServerConfig()
 	rl := rate.NewLimiter(0.05, 2)
 	for {
 		err := rl.Wait(ctx)
@@ -278,8 +160,9 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			log.Warn("campaign owner failed", zap.Error(err))
 			continue
 		}
-		log.Info("campaign owner successfully", zap.String("capture-id", s.capture.info.ID))
-		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
+		captureID := s.capture.info.ID
+		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
+		owner, err := NewOwner(ctx, s.pdClient, conf.Security, s.capture.session, conf.GcTTL, time.Duration(conf.OwnerFlushInterval))
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -288,13 +171,19 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		s.setOwner(owner)
 		if err := owner.Run(ctx, ownerRunInterval); err != nil {
 			if errors.Cause(err) == context.Canceled {
-				log.Info("owner exited", zap.String("capture-id", s.capture.info.ID))
-				return nil
+				log.Info("owner exited", zap.String("capture-id", captureID))
+				select {
+				case <-ctx.Done():
+					// only exits the campaignOwnerLoop if parent context is done
+					return ctx.Err()
+				default:
+				}
+				log.Info("owner exited", zap.String("capture-id", captureID))
 			}
 			err2 := s.capture.Resign(ctx)
 			if err2 != nil {
 				// if regisn owner failed, return error to let capture exits
-				return errors.Annotatef(err2, "resign owner failed, capture: %s", s.capture.info.ID)
+				return errors.Annotatef(err2, "resign owner failed, capture: %s", captureID)
 			}
 			log.Warn("run owner failed", zap.Error(err))
 		}
@@ -303,23 +192,56 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 	}
 }
 
-func (s *Server) run(ctx context.Context) (err error) {
-	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
-	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
-	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		err := kvStore.Close()
-		if err != nil {
-			log.Warn("kv store close failed", zap.Error(err))
-		}
-	}()
-	ctx = util.PutKVStorageInCtx(ctx, kvStore)
+func (s *Server) etcdHealthChecker(ctx context.Context) error {
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
+	conf := config.GetGlobalServerConfig()
 
-	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr, procOpts)
+	httpCli, err := httputil.NewClient(conf.Security)
+	if err != nil {
+		return err
+	}
+	defer httpCli.CloseIdleConnections()
+	metrics := make(map[string]prometheus.Observer)
+	for _, pdEndpoint := range s.pdEndpoints {
+		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(conf.AdvertiseAddr, pdEndpoint)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			for _, pdEndpoint := range s.pdEndpoints {
+				start := time.Now()
+				ctx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*10))
+				req, err := http.NewRequestWithContext(
+					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
+				if err != nil {
+					log.Warn("etcd health check failed", zap.Error(err))
+					cancel()
+					continue
+				}
+				_, err = httpCli.Do(req)
+				if err != nil {
+					log.Warn("etcd health check error", zap.Error(err))
+				} else {
+					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
+				}
+				cancel()
+			}
+		}
+	}
+}
+
+func (s *Server) run(ctx context.Context) (err error) {
+	conf := config.GetGlobalServerConfig()
+
+	opts := &captureOpts{
+		flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval),
+		captureSessionTTL:       conf.CaptureSessionTTL,
+	}
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
 	if err != nil {
 		return err
 	}
@@ -334,6 +256,14 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
+		return s.etcdHealthChecker(cctx)
+	})
+
+	wg.Go(func() error {
+		return sorter.RunWorkerPool(cctx)
+	})
+
+	wg.Go(func() error {
 		return s.capture.Run(cctx)
 	})
 
@@ -343,8 +273,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 // Close closes the server.
 func (s *Server) Close() {
 	if s.capture != nil {
-		s.capture.Cleanup()
-
+		if !config.NewReplicaImpl {
+			s.capture.Cleanup()
+		}
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
 		err := s.capture.Close(closeCtx)
 		if err != nil {
