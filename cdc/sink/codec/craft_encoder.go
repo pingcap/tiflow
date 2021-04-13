@@ -284,13 +284,20 @@ func newCraftResolvedEventEncoder(ts uint64) *craftMessageEncoder {
 func newCraftDDLEventEncoder(ev *model.DDLEvent) *craftMessageEncoder {
 	ty := uint64(ev.Type)
 	query := ev.Query
+	var schema, table []byte
+	if len(ev.TableInfo.Schema) > 0 {
+		schema = []byte(ev.TableInfo.Schema)
+	}
+	if len(ev.TableInfo.Table) > 0 {
+		table = []byte(ev.TableInfo.Table)
+	}
 	return newCraftMessageEncoder().encodeKeys(&craftColumnarKeys{
 		ts:        []uint64{uint64(ev.CommitTs)},
 		ty:        []uint64{uint64(model.MqMessageTypeDDL)},
 		rowID:     []int64{int64(-1)},
 		partition: []int64{int64(-1)},
-		schema:    [][]byte{[]byte(ev.TableInfo.Schema)},
-		table:     [][]byte{[]byte(ev.TableInfo.Table)},
+		schema:    [][]byte{schema},
+		table:     [][]byte{table},
 		count:     1,
 	}).encodeUvarint(ty).encodeString(query).encodeValueSize()
 }

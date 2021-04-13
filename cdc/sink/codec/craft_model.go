@@ -317,13 +317,21 @@ func (b *craftRowChangedEventBuffer) appendRowChangedEvent(ev *model.RowChangedE
 		partition = ev.Table.TableID
 	}
 
+	var schema, table []byte
+	if len(ev.Table.Schema) > 0 {
+		schema = []byte(ev.Table.Schema)
+	}
+	if len(ev.Table.Table) > 0 {
+		table = []byte(ev.Table.Table)
+	}
+
 	b.estimatedSize += b.keys.appendKey(
 		ev.CommitTs,
 		uint64(model.MqMessageTypeRow),
 		ev.RowID,
 		partition,
-		[]byte(ev.Table.Schema),
-		[]byte(ev.Table.Table),
+		schema,
+		table,
 	)
 	if b.eventsCount+1 > len(b.events) {
 		newSize := newBufferSize(b.eventsCount)
