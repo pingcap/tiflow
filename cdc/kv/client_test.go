@@ -1306,15 +1306,17 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	// test client v2
-	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
-
-	// test client v1
 	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
 	defer func() {
 		enableKVClientV2 = clientv2
 	}()
+
+	// test client v2
+	enableKVClientV2 = true
+	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
+
+	// test client v1
+	enableKVClientV2 = false
 	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 }
 
@@ -1324,15 +1326,17 @@ func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	// test client v2
-	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
-
-	// test client v1
 	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
 	defer func() {
 		enableKVClientV2 = clientv2
 	}()
+
+	// test client v2
+	enableKVClientV2 = true
+	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
+
+	// test client v1
+	enableKVClientV2 = false
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 }
 
@@ -2497,7 +2501,7 @@ func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(\"injected stream recv error\")")
 	c.Assert(err, check.IsNil)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay", "1*sleep(0)->2*sleep(1000)")
 	c.Assert(err, check.IsNil)
