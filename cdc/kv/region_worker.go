@@ -267,13 +267,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case event, ok := <-w.inputCh:
-			if !ok {
-				log.Debug("region worker receiver closed")
-				return nil
-			}
 			// event == nil means the region worker should exit and re-establish
 			// all existing regions.
-			if event == nil {
+			if !ok || event == nil {
 				log.Info("region worker closed by error")
 				return w.evictAllRegions(ctx)
 			}
