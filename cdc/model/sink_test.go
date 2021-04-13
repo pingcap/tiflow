@@ -172,7 +172,7 @@ func (s *commonDataStructureSuite) TestColumnValueString(c *check.C) {
 		{interface{}(complex(1, 2)), "(1+2i)"},
 	}
 	for _, tc := range testCases {
-		s := ColumnValueString(tc.val)
+		s := ColumnValueString(tc.val, 0)
 		c.Assert(s, check.Equals, tc.expected)
 	}
 }

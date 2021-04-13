@@ -45,8 +45,7 @@ const (
 
 // newBlackHoleSink creates a block hole sink
 func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, filter *tifilter.Filter, opts map[string]string) *ticdcToOraclSink {
-
-	//address := "192.168.198.48:9099"
+	// address := "192.168.198.48:9099"
 	conn, err := grpc.Dial(
 		sinkURI.Host,
 		grpc.WithInsecure(),
@@ -102,7 +101,6 @@ type ticdcToOraclSink struct {
 var curCookies []*model.RowChangedEvent
 
 func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-
 	count := b.txnCache.Append(b.filter, rows...)
 	b.statistics.AddRowsCount(count)
 
@@ -214,16 +212,15 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 }
 
 func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-
 	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
 	resolvedTxnsMap := b.txnCache.Resolved(resolvedTs)
 
 	if len(resolvedTxnsMap) != 0 {
-		//循环多张表
+		// 循环多张表
 		for _, singleTableTxns := range resolvedTxnsMap {
-			//循环多个事务
+			// 循环多个事务
 			for _, singleTableTxn := range singleTableTxns {
-				//todo 事务的排序
+				// todo 事务的排序
 				err := analysisRowsAndSend(b, ctx, singleTableTxn)
 				if err != nil {
 					return resolvedTs, errors.Trace(err)
@@ -240,7 +237,6 @@ func (b *ticdcToOraclSink) EmitCheckpointTs(ctx context.Context, ts uint64) erro
 }
 
 func (b *ticdcToOraclSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-
 	log.Debug("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
 	return nil
 }
@@ -255,7 +251,6 @@ func (b *ticdcToOraclSink) Close() error {
 }
 
 func getRowDataByClomns(colFlag int32, colums []*model.Column, rowdataBuilder dsgpb.RowData) dsgpb.RowData {
-
 	for _, column := range colums {
 		var colType string
 		columnBuilder := &dsgpb.Column{}
@@ -319,7 +314,7 @@ func clintSendDataWithRetry(ctx context.Context, b *ticdcToOraclSink, entryBuild
 			}
 
 			heart := &dsgpb.Entry{}
-			var entry = dsgpb.EntryType(dsgpb.EntryType_HEARTBEAT)
+			entry := dsgpb.EntryType(dsgpb.EntryType_HEARTBEAT)
 			heart.EntryType = &entry
 			if err := clintSendData(b, heart); err != nil {
 				return errors.Trace(err)
@@ -342,12 +337,12 @@ func clintSendData(b *ticdcToOraclSink, entryBuilder *dsgpb.Entry) error {
 		return errors.Trace(err)
 	}
 	if *resp.ReplyType == dsgpb.ReplyType_ERROR {
-		return errors.Errorf("failed to send data: %s", resp.ErrorMsg)
+		return errors.Errorf("failed to send data: %s", *resp.ErrorMsg)
 	}
 	return nil
 }
 
-//将事务中不同dml类型的rows拆分
+// 将事务中不同dml类型的rows拆分
 func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.RowChangedEvent, error) {
 	resMap := make(map[string][]*model.RowChangedEvent)
 	var insertRows []*model.RowChangedEvent
@@ -359,12 +354,12 @@ func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.Row
 	tmpMap := make(map[string]string, len(rows))
 	for _, row := range rows {
 		if len(row.PreColumns) == 0 {
-			//insert
+			// insert
 			thisKeyStr = ""
 			columns := row.Columns
 			for _, column := range columns {
 				if column.Flag.IsHandleKey() {
-					//获取主键value
+					// 获取主键value
 					val := model.ColumnValueString(column.Value, column.Flag)
 					if val != nil {
 						thisKeyStr = fmt.Sprintf("%s`%s", thisKeyStr, quotes.QuoteName(*val))
@@ -372,17 +367,17 @@ func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.Row
 				}
 			}
 			if _, key := tmpMap[thisKeyStr]; key {
-				//此主键存在去重掉
+				// 此主键存在去重掉
 				log.Info("DSG-Sink: Filter PK", zap.Any("PK Value: ", thisKeyStr))
 			} else {
 				insertRows = append(insertRows, row)
 				tmpMap[thisKeyStr] = thisKeyStr
 			}
 		} else if len(row.Columns) == 0 {
-			//delete
+			// delete
 			deleteRows = append(deleteRows, row)
 		} else {
-			//update
+			// update
 			updateRows = append(updateRows, row)
 		}
 	}
@@ -393,16 +388,15 @@ func analysisRows(singleTableTxn *model.SingleTableTxn) (map[string][]*model.Row
 	return resMap, nil
 }
 
-//将事务中拆分出的rows发送至server端
+// 将事务中拆分出的rows发送至server端
 func send(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.SingleTableTxn, rows []*model.RowChangedEvent, eventTypeValue int32) error {
-
 	var schemaName string
 	var tableName string
 	var batchID string
 
 	schemaName = singleTableTxn.Table.Schema
 	tableName = singleTableTxn.Table.Table
-	//事务号
+	// 事务号
 	batchID = fmt.Sprintf("%d:%d:%d", singleTableTxn.StartTs, singleTableTxn.CommitTs, eventTypeValue)
 
 	entryBuilder := &dsgpb.Entry{}
@@ -412,16 +406,16 @@ func send(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.Single
 	for _, row := range rows {
 		var rowdataBuilder dsgpb.RowData
 		if eventTypeValue == 2 {
-			//insert
+			// insert
 			rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
 		} else if eventTypeValue == 4 {
-			//delete
+			// delete
 			rowdataBuilder = getRowDataByClomns(0, row.PreColumns, rowdataBuilder)
 		} else if eventTypeValue == 3 {
-			//update
-			//after
+			// update
+			// after
 			rowdataBuilder = getRowDataByClomns(0, row.Columns, rowdataBuilder)
-			//before
+			// before
 			rowdataBuilder = getRowDataByClomns(1, row.PreColumns, rowdataBuilder)
 		}
 
@@ -439,10 +433,10 @@ func send(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.Single
 	entryBuilder.Header = headerBuilder
 
 	entryBuilder.BatchID = &batchID
-	var batchCountNo = int32(len(rows))
+	batchCountNo := int32(len(rows))
 	entryBuilder.BatchCountNo = &batchCountNo
 
-	var entry = dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
+	entry := dsgpb.EntryType(dsgpb.EntryType_ROWDATALIST)
 	entryBuilder.EntryType = &entry
 	log.Info("show rowdataListBuilder ", zap.Reflect("e", rowdataListBuilder))
 	rowdataListBuilderBytes, err := rowdataListBuilder.Marshal()
@@ -462,7 +456,6 @@ func send(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.Single
 }
 
 func analysisRowsAndSend(b *ticdcToOraclSink, ctx context.Context, singleTableTxn *model.SingleTableTxn) error {
-
 	var eventTypeValue int32
 
 	rowsMap, err := analysisRows(singleTableTxn)
