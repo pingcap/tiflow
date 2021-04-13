@@ -1183,11 +1183,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cancel()
 }
 
-// TestStreamSendWithError mainly tests the scenario that the `Recv` call of a gPRC
-// stream in kv client meets error, and kv client logs the error and re-establish
-// new request
-func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -1214,7 +1210,7 @@ func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", failpointStr)
 	c.Assert(err, check.IsNil)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
@@ -1302,6 +1298,46 @@ func (s *etcdSuite) TestStreamRecvWithError(c *check.C) {
 		}
 	}
 	cancel()
+}
+
+// TestStreamSendWithErrorNormal mainly tests the scenario that the `Recv` call
+// of a gPRC stream in kv client meets a **logical related** error, and kv client
+// logs the error and re-establish new request.
+func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	clientv2 := enableKVClientV2
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
+	// test client v2
+	enableKVClientV2 = true
+	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
+
+	// test client v1
+	enableKVClientV2 = false
+	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
+}
+
+// TestStreamSendWithErrorIOEOF mainly tests the scenario that the `Recv` call
+// of a gPRC stream in kv client meets error io.EOF, and kv client logs the error
+// and re-establish new request
+func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	clientv2 := enableKVClientV2
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
+	// test client v2
+	enableKVClientV2 = true
+	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
+
+	// test client v1
+	enableKVClientV2 = false
+	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 }
 
 // TestIncompatibleTiKV tests TiCDC new request to TiKV meets `ErrVersionIncompatible`
@@ -2321,8 +2357,8 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientRegionReentrantErrorDelay", "sleep(500)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvErrorDelay")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientRegionReentrantError")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
@@ -2402,7 +2438,7 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(\"injected stream recv error\")")
 	c.Assert(err, check.IsNil)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay", "1*sleep(0)->1*sleep(2000)")
 	c.Assert(err, check.IsNil)
@@ -2465,7 +2501,7 @@ func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(\"injected stream recv error\")")
 	c.Assert(err, check.IsNil)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay", "1*sleep(0)->2*sleep(1000)")
 	c.Assert(err, check.IsNil)
