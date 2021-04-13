@@ -2463,3 +2463,84 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	cancel()
 	wg.Wait()
 }
+
+// TestClientErrNoPendingRegion has the similar procedure with TestClientV1UnlockRangeReentrant
+// The difference is the delay injected point for region 2
+func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
+	defer testleak.AfterTest(c)()
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = false
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+	// test for client v1
+	s.testClientErrNoPendingRegion(c)
+
+	enableKVClientV2 = true
+	// test for client v2
+	s.testClientErrNoPendingRegion(c)
+}
+
+func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	regionID3 := uint64(3)
+	regionID4 := uint64(4)
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
+	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(\"injected error\")")
+	c.Assert(err, check.IsNil)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay", "1*sleep(0)->2*sleep(1000)")
+	c.Assert(err, check.IsNil)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamCloseDelay", "sleep(2000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamCloseDelay")
+	}()
+	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	baseAllocatedID := currentRequestID()
+	// wait the second region is scheduled
+	time.Sleep(time.Millisecond * 500)
+	waitRequestID(c, baseAllocatedID+1)
+	initialized := mockInitializedEvent(regionID3, currentRequestID())
+	ch1 <- initialized
+	waitRequestID(c, baseAllocatedID+2)
+	initialized = mockInitializedEvent(regionID4, currentRequestID())
+	ch1 <- initialized
+	// wait the kvClientPendingRegionDelay ends, and the second region is processed
+	time.Sleep(time.Second * 2)
+	cancel()
+	close(ch1)
+	server1.Stop()
+	wg.Wait()
+}
