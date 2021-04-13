@@ -1301,7 +1301,6 @@ func (s *eventFeedSession) sendResolvedTs(
 		state, ok := regionStates[regionID]
 		if ok {
 			if state.isStopped() {
-				log.Info("region states", zap.Reflect("states", regionStates))
 				log.Warn("drop resolved ts due to region feed stopped",
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", state.requestID),
