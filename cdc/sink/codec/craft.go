@@ -22,66 +22,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
-// string/bytes array layout
-// n bytes array of elements' size, format: uvarint array
-// n bytes elements, format: bits
-//
-// varint/uvarint array layout
-// n bytes elements. format: varint / uvarint
-//
-// delta varint/uvarint array layout
-// n bytes base number
-// n bytes offsets. format: varint/uvarint
-//
-// string/bytes layout
-// n bytes varint length
-// n bytes payload
-//
-// float layout, standard protobuf float
-// double layout, standard protobuf double
-// varint layout, standard protobuf varint
-// uvarint layout, standard protobuf uvarint
-//
-// Message layout
-// 2 bytes version
-// 2 bytes number of pairs
-// n bytes keys
-// n bytes values
-// n bytes size tables
-//
-// Keys layout
-// n bytes array of commit ts, format: delta uvarint array
-// n bytes array of type, format: uvarint array
-// n bytes array of row id, format: uvarint array
-// n bytes array of partition id, format: varint array, -1 means field is not set
-// n bytes array of schema, format: string array
-// n bytes array of table, format: string array
-//
-// Row changed layout
-// n bytes multiple column groups
-//
-// Column group layout
-// 1 byte column group type: 1 New Values, 2: Old Values, 3: Delete Values
-// n bytes number of columns, format: uvarint
-// n bytes array of name, format: string array
-// n bytes array of type, format: uvarint array
-// n bytes array of flag, format: uvarint array
-// n bytes array of value, format: nullable bytes array
-//
-// DDL layout
-// n bytes type, format: uvarint
-// n bytes query, format: string
-//
-// Size tables layout
-// n bytes table to store size of serialized keys
-// n bytes table to store size of values
-// n bytes tables to store of serialized column groups
-// n bytes size of serialized size tables, format: reversed uvarint
-//
-// Size table layout
-// n bytes number of elements, format: uvarint
-// n bytes repeated elements, format: uvarint
-//
 const (
 	// CraftVersion1 represents the version of craft format
 	CraftVersion1 uint64 = 1

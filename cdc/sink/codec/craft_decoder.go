@@ -387,43 +387,6 @@ func (d *craftMessageDecoder) decodeDDLEvent(index int) (pmodel.ActionType, stri
 	return pmodel.ActionType(ty), query, err
 }
 
-func decodeCraftColumnarColumnGroup(bits []byte) (*craftColumnarColumnGroup, error) {
-	var numColumns int
-	bits, ty, err := decodeUint8(bits)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	bits, numColumns, err = decodeUvarintLength(bits)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	var names, values [][]byte
-	var types, flags []uint64
-	bits, names, err = decodeBytesChunk(bits, numColumns)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	bits, types, err = decodeUvarintChunk(bits, numColumns)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	bits, flags, err = decodeUvarintChunk(bits, numColumns)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	_, values, err = decodeBytesChunk(bits, numColumns)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return &craftColumnarColumnGroup{
-		ty:     ty,
-		names:  names,
-		types:  types,
-		flags:  flags,
-		values: values,
-	}, nil
-}
-
 func (d *craftMessageDecoder) decodeRowChangedEvent(index int) (preColumns, columns *craftColumnarColumnGroup, err error) {
 	bits := d.valueBits(index)
 	columnGroupSizeTable := d.sizeTables[craftColumnGroupSizeTableStartIndex+index]
