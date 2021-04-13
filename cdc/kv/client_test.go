@@ -1425,7 +1425,6 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 		},
 	}
 
-	defer cancel()
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
