@@ -18,12 +18,10 @@ import (
 )
 
 // FailpointBuild is ture if this is a failpoint build
-var FailpointBuild = failpointBuild()
+var FailpointBuild = func() bool {
+	failpoint.Return(true)
+	return false
+}()
 
 // using failpoint package whether the failpoint is enabled to avoid imported and not used error
 var _failpointValue = failpoint.Value(0) //nolint
-
-func failpointBuild() bool {
-	failpoint.Return(true)
-	return false
-}
