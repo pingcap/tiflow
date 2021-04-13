@@ -29,6 +29,9 @@ function run() {
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
+    run_sql "set global tidb_enable_clustered_index=1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    # TiDB global variables cache 2 seconds at most
+    sleep 2
     run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 
@@ -43,5 +46,5 @@ function run() {
 
 trap stop_tidb_cluster EXIT
 run $*
-check_cdc_state_log $WORK_DIR
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

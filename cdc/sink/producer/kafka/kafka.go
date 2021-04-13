@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -84,13 +85,13 @@ type kafkaSaramaProducer struct {
 	closed  int32
 }
 
-func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
-		Key:       sarama.ByteEncoder(key),
-		Value:     sarama.ByteEncoder(value),
+		Key:       sarama.ByteEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
 	}
 	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
@@ -119,15 +120,15 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
 	for i := 0; i < int(k.partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
 			Topic:     k.topic,
-			Key:       sarama.ByteEncoder(key),
-			Value:     sarama.ByteEncoder(value),
+			Key:       sarama.ByteEncoder(message.Key),
+			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
 		}
 	}

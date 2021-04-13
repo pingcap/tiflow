@@ -17,7 +17,6 @@ import (
 	"context"
 	"os"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -26,11 +25,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-func TestSuite(t *testing.T) { check.TestingT(t) }
-
 type backendPoolSuite struct{}
 
-var _ = check.Suite(&backendPoolSuite{})
+var _ = check.SerialSuites(&backendPoolSuite{})
 
 func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -38,10 +35,10 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
 
-	config.SetSorterConfig(&config.SorterConfig{
-		MaxMemoryPressure:    90,                      // 90%
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024, // 16G
-	})
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
+	config.StoreGlobalServerConfig(conf)
 
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
@@ -104,10 +101,10 @@ func (s *backendPoolSuite) TestCleanUp(c *check.C) {
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
 
-	config.SetSorterConfig(&config.SorterConfig{
-		MaxMemoryPressure:    90,                      // 90%
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024, // 16G
-	})
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
+	config.StoreGlobalServerConfig(conf)
 
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)

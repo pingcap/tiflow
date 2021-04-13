@@ -37,6 +37,7 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
 
     cd $WORK_DIR
+    pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
 
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
@@ -52,7 +53,7 @@ function run() {
     esac
 
     uuid="custom-changefeed-name"
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sort-engine=memory --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
@@ -87,7 +88,7 @@ case-sensitive = false
 worker-num = 4
 EOF
     set +e
-    update_result=$(cdc cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
+    update_result=$(cdc cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
     set -e
     if [[ ! $update_result == *"can only update changefeed config when it is stopped"* ]]; then
         echo "update changefeed config should fail when changefeed is running, got $update_result"
@@ -103,13 +104,17 @@ EOF
     check_changefeed_state $uuid "stopped"
 
     # Update changefeed
-    run_cdc_cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
+    run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
     changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
     if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then
         echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
         exit 1
     fi
     if [[ ! $changefeed_info == *"\"worker-num\": 4"* ]]; then
+        echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+        exit 1
+    fi
+    if [[ ! $changefeed_info == *"\"sort-engine\": \"memory\""* ]]; then
         echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
         exit 1
     fi
@@ -175,12 +180,12 @@ EOF
     curl -X POST -d '"warn"' http://127.0.0.1:8300/admin/log
     sleep 3
     # make sure TiCDC does not panic
-    check_changefeed_state $uuid "normal"
+    curl http://127.0.0.1:8300/status
 
     cleanup_process $CDC_BINARY
 }
 
 trap stop_tidb_cluster EXIT
 run $*
-check_cdc_state_log $WORK_DIR
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

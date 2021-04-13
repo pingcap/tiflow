@@ -26,8 +26,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -56,27 +56,22 @@ func (s *Server) startStatusHTTP() error {
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
-
-	credential := &security.Credential{}
-	if s.opts.credential != nil {
-		credential = s.opts.credential
-	}
-	tlsConfig, err := credential.ToTLSConfigWithVerify()
+	conf := config.GetGlobalServerConfig()
+	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return errors.Trace(err)
 	}
-	addr := s.opts.addr
-	s.statusServer = &http.Server{Addr: addr, Handler: serverMux, TLSConfig: tlsConfig}
+	s.statusServer = &http.Server{Addr: conf.Addr, Handler: serverMux, TLSConfig: tlsConfig}
 
-	ln, err := net.Listen("tcp", addr)
+	ln, err := net.Listen("tcp", conf.Addr)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrServeHTTP, err)
 	}
 	go func() {
-		log.Info("status http server is running", zap.String("addr", addr))
+		log.Info("status http server is running", zap.String("addr", conf.Addr))
 		if tlsConfig != nil {
-			err = s.statusServer.ServeTLS(ln, credential.CertPath, credential.KeyPath)
+			err = s.statusServer.ServeTLS(ln, conf.Security.CertPath, conf.Security.KeyPath)
 		} else {
 			err = s.statusServer.Serve(ln)
 		}
@@ -117,9 +112,13 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-	for _, p := range s.capture.processors {
-		p.writeDebugInfo(w)
-		fmt.Fprintf(w, "\n")
+	if config.NewReplicaImpl {
+		s.capture.processorManager.WriteDebugInfo(w)
+	} else {
+		for _, p := range s.capture.processors {
+			p.writeDebugInfo(w)
+			fmt.Fprintf(w, "\n")
+		}
 	}
 
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")

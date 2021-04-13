@@ -81,7 +81,7 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034",
-		&processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+		&captureOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 
 	var wg sync.WaitGroup
@@ -106,12 +106,15 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
+	if config.NewReplicaImpl {
+		c.Skip("this case is designed for old processor")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034",
-		&processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+		&captureOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 
 	runProcessorCount := 0
@@ -125,7 +128,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 		ctx context.Context, _ pd.Client, _ *security.Credential,
 		session *concurrency.Session, info model.ChangeFeedInfo, changefeedID string,
 		captureInfo model.CaptureInfo, checkpointTs uint64, flushCheckpointInterval time.Duration,
-	) (*processor, error) {
+	) (*oldProcessor, error) {
 		runProcessorCount++
 		etcdCli := kv.NewCDCEtcdClient(ctx, session.Client())
 		_, _, err := etcdCli.GetTaskStatus(ctx, changefeedID, captureInfo.ID)

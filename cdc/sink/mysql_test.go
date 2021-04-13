@@ -65,217 +65,6 @@ func newMySQLSink4Test(ctx context.Context, c *check.C) *mysqlSink {
 	}
 }
 
-func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
-	defer testleak.AfterTest(c)()
-	testCases := []struct {
-		input    []*model.RowChangedEvent
-		expected map[model.TableID][]*model.SingleTableTxn
-	}{{
-		input:    []*model.RowChangedEvent{},
-		expected: map[model.TableID][]*model.SingleTableTxn{},
-	}, {
-		input: []*model.RowChangedEvent{
-			{
-				StartTs:  1,
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  1,
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  1,
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  3,
-				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  3,
-				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  3,
-				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-		},
-		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-					StartTs:  1,
-					CommitTs: 2,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  1,
-							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-						{
-							StartTs:  1,
-							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-						{
-							StartTs:  1,
-							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-					},
-				},
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-					StartTs:  3,
-					CommitTs: 4,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  3,
-							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-						{
-							StartTs:  3,
-							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-						{
-							StartTs:  3,
-							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-					},
-				},
-			},
-		},
-	}, {
-		input: []*model.RowChangedEvent{
-			{
-				StartTs:  1,
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  3,
-				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  5,
-				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			},
-			{
-				StartTs:  1,
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			},
-			{
-				StartTs:  3,
-				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			},
-			{
-				StartTs:  5,
-				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			},
-		},
-		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-					StartTs:  1,
-					CommitTs: 2,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  1,
-							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-					},
-				},
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-					StartTs:  3,
-					CommitTs: 4,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  3,
-							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-					},
-				},
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-					StartTs:  5,
-					CommitTs: 6,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  5,
-							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-						},
-					},
-				},
-			},
-			2: {
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-					StartTs:  1,
-					CommitTs: 2,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  1,
-							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						},
-					},
-				},
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-					StartTs:  3,
-					CommitTs: 4,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  3,
-							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						},
-					},
-				},
-				{
-					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-					StartTs:  5,
-					CommitTs: 6,
-					Rows: []*model.RowChangedEvent{
-						{
-							StartTs:  5,
-							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-						},
-					},
-				},
-			},
-		},
-	}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	for _, tc := range testCases {
-		ms := newMySQLSink4Test(ctx, c)
-		err := ms.EmitRowChangedEvents(ctx, tc.input...)
-		c.Assert(err, check.IsNil)
-		c.Assert(ms.txnCache.Unresolved(), check.DeepEquals, tc.expected)
-	}
-}
-
 func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testCases := []struct {
@@ -416,17 +205,84 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		for _, txn := range tc.txns {
 			w.appendTxn(cctx, txn)
 		}
+		var wg sync.WaitGroup
+		w.appendFinishTxn(&wg)
 		// ensure all txns are fetched from txn channel in sink worker
 		time.Sleep(time.Millisecond * 100)
 		notifier.Notify()
-		w.waitAllTxnsExecuted()
+		wg.Wait()
 		cancel()
-		c.Assert(errg.Wait(), check.IsNil)
+		c.Assert(errors.Cause(errg.Wait()), check.Equals, context.Canceled)
 		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
 		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
 	}
+}
+
+func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	txns1 := []*model.SingleTableTxn{
+		{
+			CommitTs: 1,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+		},
+		{
+			CommitTs: 2,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+		},
+		{
+			CommitTs: 3,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
+		},
+		{
+			CommitTs: 4,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
+		},
+	}
+	txns2 := []*model.SingleTableTxn{
+		{
+			CommitTs: 5,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+		},
+		{
+			CommitTs: 6,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
+		},
+	}
+	maxTxnRow := 1
+	ctx := context.Background()
+
+	errExecFailed := errors.New("sink worker exec failed")
+	notifier := new(notify.Notifier)
+	cctx, cancel := context.WithCancel(ctx)
+	receiver, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
+		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		receiver,
+		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+			return errExecFailed
+		})
+	errg, cctx := errgroup.WithContext(cctx)
+	errg.Go(func() error {
+		return w.run(cctx)
+	})
+	// txn in txns1 will be sent to worker txnCh
+	for _, txn := range txns1 {
+		w.appendTxn(cctx, txn)
+	}
+	var wg sync.WaitGroup
+	w.appendFinishTxn(&wg)
+	time.Sleep(time.Millisecond * 100)
+	// txn in txn2 will be blocked since the worker has exited
+	for _, txn := range txns2 {
+		w.appendTxn(cctx, txn)
+	}
+	notifier.Notify()
+	wg.Wait()
+	cancel()
+	c.Assert(errg.Wait(), check.Equals, errExecFailed)
 }
 
 func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
@@ -1419,6 +1275,46 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 	err = sink.EmitDDLEvent(ctx, ddl1)
 	c.Assert(err, check.IsNil)
 
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func (s MySQLSinkSuite) TestNewMySQLSink(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectClose()
+		c.Assert(err, check.IsNil)
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConn
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
 	err = sink.Close()
 	c.Assert(err, check.IsNil)
 }

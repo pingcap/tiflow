@@ -41,5 +41,5 @@ GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.
 check_table_exists test.t2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 check_sync_diff $WORK_DIR $CUR/diff_config.toml
 cleanup_process $CDC_BINARY
-check_cdc_state_log $WORK_DIR
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

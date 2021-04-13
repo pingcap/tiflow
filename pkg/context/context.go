@@ -25,8 +25,9 @@ import (
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type Vars struct {
 	// TODO add more vars
+	CaptureAddr   string
 	PDClient      pd.Client
-	SchemaStorage *entry.SchemaStorage
+	SchemaStorage entry.SchemaStorage
 	Config        *config.ReplicaConfig
 }
 

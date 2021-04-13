@@ -131,6 +131,18 @@ func (c CDCEtcdClient) Close() error {
 	return c.Client.Unwrap().Close()
 }
 
+func (c CDCEtcdClient) contextWithSafeLease(ctx context.Context, leaseID clientv3.LeaseID) (context.Context, context.CancelFunc, error) {
+	lease, err := c.Client.TimeToLive(ctx, leaseID)
+	if err != nil {
+		return nil, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	if lease.TTL == int64(-1) {
+		return nil, nil, cerror.ErrLeaseTimeout.GenWithStackByArgs()
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(lease.TTL)*time.Second)
+	return ctx, cancel, nil
+}
+
 // ClearAllCDCInfo delete all keys created by CDC
 func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	_, err := c.Client.Delete(ctx, EtcdKeyBase, clientv3.WithPrefix())
@@ -856,4 +868,173 @@ func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, erro
 		return "", concurrency.ErrElectionNoLeader
 	}
 	return string(resp.Kvs[0].Value), nil
+}
+
+// LeaseGuardDeleteTaskStatus is a wrapper to DeleteTaskStatus,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardDeleteTaskStatus(
+	ctx context.Context,
+	cfID string,
+	captureID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.DeleteTaskStatus(ctx, cfID, captureID)
+}
+
+// LeaseGuardDeleteTaskPosition is a wrapper to DeleteTaskPosition,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardDeleteTaskPosition(
+	ctx context.Context,
+	cfID string,
+	captureID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.DeleteTaskPosition(ctx, cfID, captureID)
+}
+
+// LeaseGuardDeleteTaskWorkload is a wrapper to DeleteTaskWorkload,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardDeleteTaskWorkload(
+	ctx context.Context,
+	cfID string,
+	captureID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.DeleteTaskWorkload(ctx, cfID, captureID)
+}
+
+// LeaseGuardSaveChangeFeedInfo is a wrapper to SaveChangeFeedInfo,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardSaveChangeFeedInfo(
+	ctx context.Context,
+	info *model.ChangeFeedInfo,
+	changefeedID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.SaveChangeFeedInfo(ctx, info, changefeedID)
+}
+
+// LeaseGuardDeleteChangeFeedInfo is a wrapper to DeleteChangeFeedInfo,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardDeleteChangeFeedInfo(
+	ctx context.Context,
+	changefeedID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.DeleteChangeFeedInfo(ctx, changefeedID)
+}
+
+// LeaseGuardRemoveChangeFeedStatus is a wrapper to RemoveChangeFeedStatus,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardRemoveChangeFeedStatus(
+	ctx context.Context,
+	changefeedID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.RemoveChangeFeedStatus(ctx, changefeedID)
+}
+
+// LeaseGuardPutChangeFeedStatus is a wrapper to PutChangeFeedStatus,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardPutChangeFeedStatus(
+	ctx context.Context,
+	changefeedID string,
+	status *model.ChangeFeedStatus,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.PutChangeFeedStatus(ctx, changefeedID, status)
+}
+
+// LeaseGuardRemoveAllTaskStatus wraps RemoveAllTaskStatus,
+// with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardRemoveAllTaskStatus(
+	ctx context.Context,
+	changefeedID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.RemoveAllTaskStatus(ctx, changefeedID)
+}
+
+// LeaseGuardRemoveAllTaskPositions wraps RemoveAllTaskPositions with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardRemoveAllTaskPositions(
+	ctx context.Context,
+	changefeedID string,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.RemoveAllTaskPositions(ctx, changefeedID)
+}
+
+// LeaseGuardPutAllChangeFeedStatus wraps PutAllChangeFeedStatus with a context restricted by lease TTL.
+func (c CDCEtcdClient) LeaseGuardPutAllChangeFeedStatus(
+	ctx context.Context,
+	infos map[model.ChangeFeedID]*model.ChangeFeedStatus,
+	leaseID clientv3.LeaseID,
+) error {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer cancel()
+	return c.PutAllChangeFeedStatus(ctx, infos)
+}
+
+// LeaseGuardAtomicPutTaskStatus puts task status into etcd atomically.
+func (c CDCEtcdClient) LeaseGuardAtomicPutTaskStatus(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	leaseID clientv3.LeaseID,
+	updateFuncs ...UpdateTaskStatusFunc,
+) (*model.TaskStatus, int64, error) {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	defer cancel()
+	return c.AtomicPutTaskStatus(ctx, changefeedID, captureID, updateFuncs...)
 }
