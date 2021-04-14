@@ -1425,6 +1425,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 		},
 	}
 
+	defer cancel()
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
@@ -1433,8 +1434,6 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 			c.Errorf("expected event %v not received", expectedEv)
 		}
 	}
-
-	cancel()
 }
 
 // TestStreamSendWithErrorNormal mainly tests the scenario that the `Recv` call
