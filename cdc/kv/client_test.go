@@ -1343,10 +1343,10 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1428,12 +1428,12 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	}
 
 	defer cancel()
-	for _, expectedEv := range expected {
+	for i, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
-			c.Assert(event, check.DeepEquals, expectedEv, check.Commentf("%s", cmp.Diff(event, expectedEv)))
+			c.Assert(event, check.DeepEquals, expectedEv, check.Commentf("index:%d, %s", i, cmp.Diff(event, expectedEv)))
 		case <-time.After(time.Second):
-			c.Errorf("expected event %v not received", expectedEv)
+			c.Errorf("expected event %v not received, index: %d", expectedEv, i)
 		}
 	}
 }
