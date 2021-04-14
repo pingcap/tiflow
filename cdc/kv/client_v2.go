@@ -171,6 +171,8 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
+
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			err := s.onRegionFail(ctx, regionErrorInfo{
@@ -210,13 +212,14 @@ func (s *eventFeedSession) receiveFromStreamV2(
 				worker.inputCh <- nil
 			}
 		})
-		failpoint.Inject("kvClientStreamRecvError", func() {
-			err = errors.New("injected stream recv error")
+		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+			errStr := msg.(string)
+			if errStr == io.EOF.Error() {
+				err = io.EOF
+			} else {
+				err = errors.New(errStr)
+			}
 		})
-		if err == io.EOF {
-			close(worker.inputCh)
-			return nil
-		}
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(
