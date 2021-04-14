@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -1429,8 +1431,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
-			log.Info("receive event", zap.Reflect("event", event), zap.Reflect("expected", expectedEv))
-			c.Assert(event, check.DeepEquals, expectedEv)
+			c.Assert(event, check.DeepEquals, expectedEv, check.Commentf("%s", cmp.Diff(event, expectedEv)))
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
 		}
