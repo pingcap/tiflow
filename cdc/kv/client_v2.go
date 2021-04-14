@@ -171,6 +171,8 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
+
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			err := s.onRegionFail(ctx, regionErrorInfo{
