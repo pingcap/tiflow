@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/context"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 )
@@ -286,7 +287,7 @@ func (n *throwNode) Receive(ctx NodeContext) error {
 }
 
 func (n *throwNode) Destroy(ctx NodeContext) error {
-	n.c.Assert(n.index, check.Equals, 6)
+	n.c.Assert(map[int]bool{4: true, 6: true}, check.HasKey, n.index)
 	return nil
 }
 
@@ -312,9 +313,11 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 		},
 	}))
 	c.Assert(err, check.IsNil)
-	// this line may be return an error because the pipeline maybe closed before this line was executed
-	//nolint:errcheck
-	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	// whether err is nil is not determined
+	// If add some delay here, such as sleep 50ms, there will be more probability
+	// that the second message is not sent.
+	// time.Sleep(time.Millisecond * 50)
+	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -322,12 +325,22 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 			},
 		},
 	}))
-	p.Wait()
-	c.Assert(len(errs), check.Equals, 4)
-	c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
-	c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
-	c.Assert(errs[2].Error(), check.Equals, "error node throw an error, index: 5")
-	c.Assert(errs[3].Error(), check.Equals, "error node throw an error, index: 6")
+	if err != nil {
+		// pipeline closed before the second message was sent
+		c.Assert(cerror.ErrSendToClosedPipeline.Equal(err), check.IsTrue)
+		p.Wait()
+		c.Assert(len(errs), check.Equals, 2)
+		c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
+		c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
+	} else {
+		// the second message was sent before pipeline closed
+		p.Wait()
+		c.Assert(len(errs), check.Equals, 4)
+		c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
+		c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
+		c.Assert(errs[2].Error(), check.Equals, "error node throw an error, index: 5")
+		c.Assert(errs[3].Error(), check.Equals, "error node throw an error, index: 6")
+	}
 }
 
 func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {

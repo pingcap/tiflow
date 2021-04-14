@@ -16,6 +16,11 @@ error = '''
 Async broadcasts not supported
 '''
 
+["CDC:ErrAsyncIOCancelled"]
+error = '''
+asynchronous IO operation is cancelled. Internal use only, report a bug if seen in log
+'''
+
 ["CDC:ErrAsyncPoolExited"]
 error = '''
 asyncPool has exited. Report a bug if seen externally.
@@ -266,6 +271,11 @@ error = '''
 get tikv grpc context failed
 '''
 
+["CDC:ErrIllegalUnifiedSorterParameter"]
+error = '''
+illegal parameter for unified sorter: %s
+'''
+
 ["CDC:ErrIndexKeyTableNotFound"]
 error = '''
 table not found with index ID %d in index kv
@@ -374,6 +384,11 @@ new sarama producer
 ["CDC:ErrKafkaSendMessage"]
 error = '''
 kafka send message failed
+'''
+
+["CDC:ErrLeaseTimeout"]
+error = '''
+owner lease timeout
 '''
 
 ["CDC:ErrLoadTimezone"]
@@ -489,6 +504,11 @@ changefeed %s not found in owner cache
 ["CDC:ErrOwnerEtcdWatch"]
 error = '''
 etcd watch returns error
+'''
+
+["CDC:ErrOwnerInconsistentStates"]
+error = '''
+owner encountered inconsistent state. report a bug if this happens frequently. %s
 '''
 
 ["CDC:ErrOwnerSortDir"]

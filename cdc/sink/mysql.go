@@ -69,6 +69,8 @@ const (
 // SyncpointTableName is the name of table where all syncpoint maps sit
 const syncpointTableName string = "syncpoint_v1"
 
+const tidbVersionString string = "TiDB"
+
 var validSchemes = map[string]bool{
 	"mysql":     true,
 	"mysql+ssl": true,
@@ -94,6 +96,7 @@ type mysqlSink struct {
 	execWaitNotifier *notify.Notifier
 	resolvedNotifier *notify.Notifier
 	errCh            chan error
+	flushSyncWg      sync.WaitGroup
 
 	statistics *Statistics
 
@@ -305,21 +308,37 @@ var defaultParams = &sinkParams{
 	safeMode:            defaultSafeMode,
 }
 
-func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
+func checkIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
+	var value string
+	querySQL := "select version();"
+	err := db.QueryRowContext(ctx, querySQL).Scan(&value)
+	if err != nil && err != sql.ErrNoRows {
+		return false, errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), "failed to select version")
+	}
+	return strings.Contains(value, tidbVersionString), nil
+}
+
+func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (
+	sinkURIParameter string,
+	err error,
+) {
 	var name string
 	var value string
 	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
-	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
+	err = db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
 	if err != nil && err != sql.ErrNoRows {
 		errMsg := "fail to query session variable " + variableName
-		return "", errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
+		err = errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
+		return
 	}
-	// session variable works, use given default value
 	if err == nil {
-		return defaultValue, nil
+		// session variable exists, use given default value
+		sinkURIParameter = defaultValue
+	} else {
+		// session variable does not exist, sinkURIParameter is "" and will be ignored
+		err = nil
 	}
-	// session variable not exists, return "" to ignore it
-	return "", nil
+	return
 }
 
 func configureSinkURI(
@@ -356,6 +375,21 @@ func configureSinkURI(
 	}
 	if txnMode != "" {
 		dsnCfg.Params["tidb_txn_mode"] = txnMode
+	}
+
+	isTiDB, err := checkIsTiDB(ctx, testDB)
+	if err != nil {
+		return "", err
+	}
+	// variable `explicit_defaults_for_timestamp` is readonly in TiDB, we don't
+	// need to set it. Yet Default value in MySQL 5.7 is `OFF`
+	// ref: https://docs.pingcap.com/tidb/stable/mysql-compatibility#default-differences
+	if !isTiDB {
+		explicitTs, err := checkTiDBVariable(ctx, testDB, "explicit_defaults_for_timestamp", "ON")
+		if err != nil {
+			return "", err
+		}
+		dsnCfg.Params["explicit_defaults_for_timestamp"] = explicitTs
 	}
 
 	dsnClone := dsnCfg.Clone()
@@ -644,12 +678,11 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
+	s.broadcastFinishTxn(ctx)
 	s.execWaitNotifier.Notify()
 	done := make(chan struct{})
 	go func() {
-		for _, w := range s.workers {
-			w.waitAllTxnsExecuted()
-		}
+		s.flushSyncWg.Wait()
 		close(done)
 	}()
 	// This is a hack code to avoid io wait in some routine blocks others to exit.
@@ -659,6 +692,15 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 	case <-done:
+	}
+}
+
+func (s *mysqlSink) broadcastFinishTxn(ctx context.Context) {
+	// Note all data txn is sent via channel, the control txn must come after all
+	// data txns in each worker. So after worker receives the control txn, it can
+	// flush txns immediately and call wait group done once.
+	for _, worker := range s.workers {
+		worker.appendFinishTxn(&s.flushSyncWg)
 	}
 }
 
@@ -696,7 +738,6 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 
 type mysqlSinkWorker struct {
 	txnCh            chan *model.SingleTableTxn
-	txnWg            sync.WaitGroup
 	maxTxnRow        int
 	bucket           int
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
@@ -722,19 +763,22 @@ func newMySQLSinkWorker(
 	}
 }
 
-func (w *mysqlSinkWorker) waitAllTxnsExecuted() {
-	w.txnWg.Wait()
-}
-
 func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
 	if txn == nil {
 		return
 	}
-	w.txnWg.Add(1)
 	select {
 	case <-ctx.Done():
-		w.txnWg.Done()
 	case w.txnCh <- txn:
+	}
+}
+
+func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
+	// since worker will always fetch txns from txnCh, we don't need to worry the
+	// txnCh full and send is blocked.
+	wg.Add(1)
+	w.txnCh <- &model.SingleTableTxn{
+		FinishWg: wg,
 	}
 }
 
@@ -746,6 +790,20 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		lastCommitTs uint64
 	)
 
+	// mark FinishWg before worker exits, all data txns can be omitted.
+	defer func() {
+		for {
+			select {
+			case txn := <-w.txnCh:
+				if txn.FinishWg != nil {
+					txn.FinishWg.Done()
+				}
+			default:
+				return
+			}
+		}
+	}()
+
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
@@ -753,7 +811,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			buf = buf[:stackSize]
 			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
 			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
-			w.txnWg.Add(-1 * txnNum)
 		}
 	}()
 
@@ -765,14 +822,12 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		copy(rows, toExecRows)
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
-			w.txnWg.Add(-1 * txnNum)
 			txnNum = 0
 			return err
 		}
 		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
-		w.txnWg.Add(-1 * txnNum)
 		txnNum = 0
 		return nil
 	}
@@ -780,13 +835,21 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(flushRows())
+			return errors.Trace(ctx.Err())
 		case txn := <-w.txnCh:
 			if txn == nil {
 				return errors.Trace(flushRows())
 			}
+			if txn.FinishWg != nil {
+				if err := flushRows(); err != nil {
+					return errors.Trace(err)
+				}
+				txn.FinishWg.Done()
+				continue
+			}
 			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
+					txnNum++
 					return errors.Trace(err)
 				}
 			}

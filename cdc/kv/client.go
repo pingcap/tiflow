@@ -56,9 +56,9 @@ const (
 	dialTimeout               = 10 * time.Second
 	maxRetry                  = 100
 	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms)
-	grpcInitialWindowSize     = 1 << 30 // The value for initial window size on a stream
-	grpcInitialConnWindowSize = 1 << 30 // The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 30 // The maximum message size the client can receive
+	grpcInitialWindowSize     = 1 << 27 // 128 MB The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
+	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
 	grpcConnCount             = 10
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
@@ -68,12 +68,12 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
-
-	// hard code switch
-	// true: use kv client v2, which has a region worker for each stream
-	// false: use kv client v1, which runs a goroutine for every single region
-	enableKVClientV2 = true
 )
+
+// hard code switch
+// true: use kv client v2, which has a region worker for each stream
+// false: use kv client v1, which runs a goroutine for every single region
+var enableKVClientV2 = true
 
 type singleRegionInfo struct {
 	verID  tikv.RegionVerID
@@ -344,7 +344,7 @@ type CDCClient struct {
 	}
 
 	regionCache *tikv.RegionCache
-	kvStorage   tikv.Storage
+	kvStorage   TiKVStorage
 
 	regionLimiters *regionEventFeedLimiters
 }
@@ -354,11 +354,21 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 	clusterID := pd.GetClusterID(ctx)
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
+	var store TiKVStorage
+	if kvStorage != nil {
+		// wrap to TiKVStorage if need.
+		if s, ok := kvStorage.(TiKVStorage); ok {
+			store = s
+		} else {
+			store = newStorageWithCurVersionCache(kvStorage, kvStorage.UUID())
+		}
+	}
+
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
+		kvStorage:   store,
 		credential:  credential,
-		kvStorage:   kvStorage,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
@@ -471,7 +481,7 @@ func currentRequestID() uint64 {
 type eventFeedSession struct {
 	client      *CDCClient
 	regionCache *tikv.RegionCache
-	kvStorage   tikv.Storage
+	kvStorage   TiKVStorage
 
 	lockResolver txnutil.LockResolver
 	isPullerInit PullerInitialization
@@ -514,7 +524,7 @@ type rangeRequestTask struct {
 func newEventFeedSession(
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
-	kvStorage tikv.Storage,
+	kvStorage TiKVStorage,
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
@@ -628,12 +638,14 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				// goroutine, it won't block the caller of `schedulerRegionRequest`.
 				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts)
 			}
+		case regionspan.LockRangeStatusCancel:
+			return
 		default:
 			panic("unreachable")
 		}
 	}
 
-	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
+	res := s.rangeLock.LockRange(ctx, sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
 	if res.Status == regionspan.LockRangeStatusWait {
 		res = res.WaitFn()
@@ -739,26 +751,25 @@ MainLoop:
 				ExtraOp:      extraOp,
 			}
 
-			// The receiver thread need to know the span, which is only known in the sender thread. So create the
-			// receiver thread for region here so that it can know the span.
-			// TODO: Find a better way to handle this.
-			// TODO: Make sure there will not be goroutine leak.
-			// TODO: Here we use region id to index the regionInfo. However, in case that region merge is enabled, there
-			// may be multiple streams to the same regions. Maybe we need to add a requestID field to the protocol for it.
+			failpoint.Inject("kvClientPendingRegionDelay", nil)
 
-			// Get region info collection of the addr
-			pendingRegions, ok := storePendingRegions[rpcCtx.Addr]
-			if !ok {
-				pendingRegions = newSyncRegionFeedStateMap()
-				storePendingRegions[rpcCtx.Addr] = pendingRegions
-			}
-
-			state := newRegionFeedState(sri, requestID)
-			pendingRegions.insert(requestID, state)
+			// each TiKV store has an independent pendingRegions.
+			var pendingRegions *syncRegionFeedStateMap
 
 			stream, ok := s.getStream(rpcCtx.Addr)
-			// Establish the stream if it has not been connected yet.
-			if !ok {
+			if ok {
+				var ok bool
+				pendingRegions, ok = storePendingRegions[rpcCtx.Addr]
+				if !ok {
+					// Should never happen
+					log.Panic("pending regions is not found for store", zap.String("store", rpcCtx.Addr))
+				}
+			} else {
+				// when a new stream is established, always create a new pending
+				// regions map, the old map will be used in old `receiveFromStream`
+				// and won't be deleted until that goroutine exits.
+				pendingRegions = newSyncRegionFeedStateMap()
+				storePendingRegions[rpcCtx.Addr] = pendingRegions
 				storeID := rpcCtx.Peer.GetStoreId()
 				log.Info("creating new stream to store to send request",
 					zap.Uint64("regionID", sri.verID.GetID()),
@@ -783,8 +794,6 @@ MainLoop:
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
-					pendingRegions.take(requestID)
 					continue
 				}
 				s.addStream(rpcCtx.Addr, stream)
@@ -797,6 +806,9 @@ MainLoop:
 					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				})
 			}
+
+			state := newRegionFeedState(sri, requestID)
+			pendingRegions.insert(requestID, state)
 
 			logReq := log.Debug
 			if s.isPullerInit.IsInitialized() {
@@ -1053,6 +1065,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	}
 
+	failpoint.Inject("kvClientRegionReentrantErrorDelay", nil)
 	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 	return nil
 }
@@ -1080,6 +1093,8 @@ func (s *eventFeedSession) receiveFromStream(
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
+
 		remainingRegions := pendingRegions.takeAll()
 
 		for _, state := range remainingRegions {
@@ -1104,16 +1119,14 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientStreamRecvError", func() {
-			err = errors.New("injected stream recv error")
-		})
-		// TODO: Should we have better way to handle the errors?
-		if err == io.EOF {
-			for _, state := range regionStates {
-				close(state.regionEventCh)
+		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+			errStr := msg.(string)
+			if errStr == io.EOF.Error() {
+				err = io.EOF
+			} else {
+				err = errors.New(errStr)
 			}
-			return nil
-		}
+		})
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(
@@ -1197,7 +1210,7 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 	isNewSubscription := !ok
 	if ok {
 		if state.requestID < event.RequestId {
-			log.Debug("region state entry will be replaced because received message of newer requestID",
+			log.Info("region state entry will be replaced because received message of newer requestID",
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("oldRequestID", state.requestID),
 				zap.Uint64("requestID", event.RequestId),
@@ -1379,7 +1392,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
+			version, err := s.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
@@ -1401,12 +1414,8 @@ func (s *eventFeedSession) singleEventFeed(
 			continue
 		case event, ok = <-receiverCh:
 		}
-		if !ok {
-			log.Debug("singleEventFeed receiver closed")
-			return lastResolvedTs, nil
-		}
 
-		if event == nil {
+		if !ok || event == nil {
 			log.Debug("singleEventFeed closed by error")
 			return lastResolvedTs, cerror.ErrEventFeedAborted.GenWithStackByArgs()
 		}

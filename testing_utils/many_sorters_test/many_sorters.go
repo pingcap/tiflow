@@ -51,13 +51,15 @@ func main() {
 	}
 	log.SetLevel(zapcore.DebugLevel)
 
-	config.SetSorterConfig(&config.SorterConfig{
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
 		NumWorkerPoolGoroutine: 16,
-	})
+	}
+	config.StoreGlobalServerConfig(conf)
 
 	go func() {
 		_ = http.ListenAndServe("localhost:6060", nil)
@@ -78,7 +80,11 @@ func main() {
 
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
-		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir, fmt.Sprintf("test-%d", i), "0.0.0.0:0")
+		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir,
+			"test-cf",
+			fmt.Sprintf("test-%d", i),
+			model.TableID(i),
+			"0.0.0.0:0")
 		finalI := i
 
 		// run sorter

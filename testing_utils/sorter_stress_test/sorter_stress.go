@@ -48,12 +48,14 @@ func main() {
 		log.Fatal("Could not enable failpoint", zap.Error(err))
 	}
 
-	config.SetSorterConfig(&config.SorterConfig{
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:  8,
 		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:    60,
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
-	})
+	}
+	config.StoreGlobalServerConfig(conf)
 
 	go func() {
 		_ = http.ListenAndServe("localhost:6060", nil)
@@ -64,7 +66,7 @@ func main() {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 
-	sorter := pullerSorter.NewUnifiedSorter(*sorterDir, "test", "0.0.0.0:0")
+	sorter := pullerSorter.NewUnifiedSorter(*sorterDir, "test-cf", "test", 0, "0.0.0.0:0")
 
 	ctx1, cancel := context.WithCancel(context.Background())
 

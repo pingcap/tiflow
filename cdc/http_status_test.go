@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -32,16 +33,10 @@ var _ = check.Suite(&httpStatusSuite{})
 
 const retryTime = 20
 
-var testingServerOptions = options{
-	pdEndpoints:   "http://127.0.0.1:2379",
-	addr:          "127.0.0.1:8300",
-	advertiseAddr: "127.0.0.1:8300",
-	timezone:      nil,
-	gcTTL:         DefaultCDCGCSafePointTTL,
-}
+var advertiseAddr4Test = "127.0.0.1:8300"
 
 func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
-	statusURL := fmt.Sprintf("http://%s/status", testingServerOptions.advertiseAddr)
+	statusURL := fmt.Sprintf("http://%s/status", advertiseAddr4Test)
 	for i := 0; i < retryTime; i++ {
 		resp, err := http.Get(statusURL)
 		if err == nil {
@@ -57,8 +52,13 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 
 func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
-	server := &Server{opts: testingServerOptions}
-	err := server.startStatusHTTP()
+	conf := config.GetDefaultServerConfig()
+	conf.Addr = advertiseAddr4Test
+	conf.AdvertiseAddr = advertiseAddr4Test
+	config.StoreGlobalServerConfig(conf)
+	server, err := NewServer([]string{"http://127.0.0.1:2379"})
+	c.Assert(err, check.IsNil)
+	err = server.startStatusHTTP()
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
@@ -75,7 +75,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 }
 
 func testPprof(c *check.C) {
-	resp, err := http.Get(fmt.Sprintf("http://%s/debug/pprof/cmdline", testingServerOptions.advertiseAddr))
+	resp, err := http.Get(fmt.Sprintf("http://%s/debug/pprof/cmdline", advertiseAddr4Test))
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, 200)
@@ -84,31 +84,31 @@ func testPprof(c *check.C) {
 }
 
 func testReisgnOwner(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/resign", testingServerOptions.advertiseAddr)
+	uri := fmt.Sprintf("http://%s/capture/owner/resign", advertiseAddr4Test)
 	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleChangefeedAdmin(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/admin", testingServerOptions.advertiseAddr)
+	uri := fmt.Sprintf("http://%s/capture/owner/admin", advertiseAddr4Test)
 	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleRebalance(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/rebalance_trigger", testingServerOptions.advertiseAddr)
+	uri := fmt.Sprintf("http://%s/capture/owner/rebalance_trigger", advertiseAddr4Test)
 	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleMoveTable(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/move_table", testingServerOptions.advertiseAddr)
+	uri := fmt.Sprintf("http://%s/capture/owner/move_table", advertiseAddr4Test)
 	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleChangefeedQuery(c *check.C) {
-	uri := fmt.Sprintf("http://%s/capture/owner/changefeed/query", testingServerOptions.advertiseAddr)
+	uri := fmt.Sprintf("http://%s/capture/owner/changefeed/query", advertiseAddr4Test)
 	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
