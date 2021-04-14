@@ -193,7 +193,7 @@ func (s *eventFeedSession) receiveFromStreamV2(
 
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
-	worker := newRegionWorker(s, limiter)
+	worker := newRegionWorker(s, limiter, addr)
 	s.workersLock.Lock()
 	s.workers[addr] = worker
 	s.workersLock.Unlock()

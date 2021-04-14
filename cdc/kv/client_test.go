@@ -2712,11 +2712,19 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 	defer s.TearDownTest(c)
 
 	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
 	defer func() {
 		enableKVClientV2 = clientv2
 	}()
 
+	// test kv client v1
+	enableKVClientV2 = false
+	s.testKVClientForceReconnect(c)
+
+	enableKVClientV2 = true
+	s.testKVClientForceReconnect(c)
+}
+
+func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
