@@ -123,6 +123,14 @@ type MoveTableJob struct {
 	Status           MoveTableStatus
 }
 
+// All TableOperation flags
+const (
+	// Move means after the delete operation, the table will be re added.
+	// This field is necessary since we must persist enough information to
+	// restore complete table operation in case of processor or owner crashes.
+	OperFlagMoveTable uint64 = 1 << iota
+)
+
 // All TableOperation status
 const (
 	OperDispatched uint64 = iota
@@ -132,11 +140,12 @@ const (
 
 // TableOperation records the current information of a table migration
 type TableOperation struct {
-	Delete bool `json:"delete"`
+	Done   bool   `json:"done"` // deprecated, will be removed in the next version
+	Delete bool   `json:"delete"`
+	Flag   uint64 `json:"flag,omitempty"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
 	// if the operation is a add operation, BoundaryTs is start ts
 	BoundaryTs uint64 `json:"boundary_ts"`
-	Done       bool   `json:"done"` // deprecated, will be removed in the next version
 	Status     uint64 `json:"status,omitempty"`
 }
 
@@ -209,6 +218,8 @@ type TaskStatus struct {
 	Operation    map[TableID]*TableOperation   `json:"operation"`
 	AdminJobType AdminJobType                  `json:"admin-job-type"`
 	ModRevision  int64                         `json:"-"`
+	// true means Operation record has been changed
+	Dirty bool `json:"-"`
 }
 
 // String implements fmt.Stringer interface.
@@ -218,7 +229,7 @@ func (ts *TaskStatus) String() string {
 }
 
 // RemoveTable remove the table in TableInfos and add a remove table operation.
-func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts) (*TableReplicaInfo, bool) {
+func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts, isMoveTable bool) (*TableReplicaInfo, bool) {
 	if ts.Tables == nil {
 		return nil, false
 	}
@@ -230,10 +241,14 @@ func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts) (*TableReplicaInfo,
 	if ts.Operation == nil {
 		ts.Operation = make(map[TableID]*TableOperation)
 	}
-	ts.Operation[id] = &TableOperation{
+	op := &TableOperation{
 		Delete:     true,
 		BoundaryTs: boundaryTs,
 	}
+	if isMoveTable {
+		op.Flag |= OperFlagMoveTable
+	}
+	ts.Operation[id] = op
 	return table, true
 }
 

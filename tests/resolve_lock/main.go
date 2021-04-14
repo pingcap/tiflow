@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/tests/util"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -79,7 +80,8 @@ func main() {
 func prepare(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
-		"create table t1 (a int primary key);"}
+		"create table t1 (a int primary key);",
+	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)
 		if err != nil {
@@ -93,7 +95,8 @@ func finishMark(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
 		"insert into t1 value (1);",
-		"create table t2 (a int primary key);"}
+		"create table t2 (a int primary key);",
+	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)
 		if err != nil {
@@ -118,7 +121,7 @@ func addLock(ctx context.Context, cfg *util.Config) error {
 	}
 	defer pdcli.Close()
 
-	driver := tikv.Driver{}
+	driver := driver.TiKVDriver{}
 	store, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PDAddr))
 	if err != nil {
 		return errors.Trace(err)
@@ -327,6 +330,7 @@ func (c *Locker) lockBatch(ctx context.Context, keys [][]byte, primary []byte) (
 		return lockedKeys, nil
 	}
 }
+
 func randStr() string {
 	length := rand.Intn(128)
 	res := ""

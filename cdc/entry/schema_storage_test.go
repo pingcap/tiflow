@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/testkit"
 )
@@ -281,7 +282,6 @@ func (*schemaSuite) TestTable(c *check.C) {
 	// drop schema
 	err = snap.dropSchema(3)
 	c.Assert(err, check.IsNil)
-
 }
 
 func (t *schemaSuite) TestHandleDDL(c *check.C) {
@@ -399,7 +399,8 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 	defer testleak.AfterTest(c)()
 	t := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
-			{Name: timodel.CIStr{O: "name"},
+			{
+				Name: timodel.CIStr{O: "name"},
 				FieldType: types.FieldType{
 					Flag: mysql.NotNullFlag,
 				},
@@ -412,8 +413,10 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "name",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "name"},
-						Offset: 0},
+					{
+						Name:   timodel.CIStr{O: "name"},
+						Offset: 0,
+					},
 				},
 				Unique: true,
 			},
@@ -422,8 +425,10 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 					O: "PRIMARY",
 				},
 				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "id"},
-						Offset: 1},
+					{
+						Name:   timodel.CIStr{O: "id"},
+						Offset: 1,
+					},
 				},
 				Primary: true,
 			},
@@ -572,7 +577,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *check.C) {
 	err = storage.HandleDDLJob(job)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(storage.resolvedTs, check.Equals, uint64(140))
+	c.Assert(storage.(*schemaStorageImpl).resolvedTs, check.Equals, uint64(140))
 	snap, err := storage.GetSnapshot(ctx, 100)
 	c.Assert(err, check.IsNil)
 	_, exist := snap.SchemaByID(1)
@@ -677,7 +682,7 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *check.C) {
 	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
-	ver, err := store.CurrentVersion()
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	c.Assert(err, check.IsNil)
@@ -713,7 +718,7 @@ func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
 	tk.MustExec("create table test2.simple_test5 (a bigint)")
-	ver, err := store.CurrentVersion()
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	c.Assert(err, check.IsNil)
@@ -749,7 +754,7 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	defer domain.Close()
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(c, store)
-	ver1, err := store.CurrentVersion()
+	ver1, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
 	tk.MustExec("create database test2")
 	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
@@ -757,7 +762,7 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	tk.MustExec("create table test2.simple_test3 (a bigint)")
 	tk.MustExec("create table test2.simple_test4 (a varchar(20) unique key)")
 	tk.MustExec("create table test2.simple_test5 (a varchar(20))")
-	ver2, err := store.CurrentVersion()
+	ver2, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
 	c.Assert(err, check.IsNil)
@@ -848,7 +853,7 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 			PARTITION p3 VALUES LESS THAN (20)
 		)`, // ActionCreateTable
 		"ALTER TABLE test_ddl2.employees DROP PARTITION p2",                                  // ActionDropTablePartition
-		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", //ActionAddTablePartition
+		"ALTER TABLE test_ddl2.employees ADD PARTITION (PARTITION p4 VALUES LESS THAN (25))", // ActionAddTablePartition
 		"ALTER TABLE test_ddl2.employees TRUNCATE PARTITION p3",                              // ActionTruncateTablePartition
 		"alter table test_ddl2.employees comment='modify comment'",                           // ActionModifyTableComment
 		"alter table test_ddl2.simple_test1 drop primary key",                                // ActionDropPrimaryKey
@@ -955,7 +960,6 @@ func tidySchemaSnapshot(snap *schemaSnapshot) {
 	for _, v := range snap.tableInSchema {
 		sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
 	}
-
 }
 
 func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {

@@ -16,6 +16,16 @@ error = '''
 Async broadcasts not supported
 '''
 
+["CDC:ErrAsyncIOCancelled"]
+error = '''
+asynchronous IO operation is cancelled. Internal use only, report a bug if seen in log
+'''
+
+["CDC:ErrAsyncPoolExited"]
+error = '''
+asyncPool has exited. Report a bug if seen externally.
+'''
+
 ["CDC:ErrAvroEncodeFailed"]
 error = '''
 encode to avro native data
@@ -151,6 +161,21 @@ error = '''
 encode failed: %s
 '''
 
+["CDC:ErrEtcdIgnore"]
+error = '''
+this patch should be excluded from the current etcd txn
+'''
+
+["CDC:ErrEtcdSessionDone"]
+error = '''
+the etcd session is done
+'''
+
+["CDC:ErrEtcdTryAgain"]
+error = '''
+the etcd txn should be aborted and retried immediately
+'''
+
 ["CDC:ErrEventFeedAborted"]
 error = '''
 single event feed aborted
@@ -244,6 +269,11 @@ get snapshot failed
 ["CDC:ErrGetTiKVRPCContext"]
 error = '''
 get tikv grpc context failed
+'''
+
+["CDC:ErrIllegalUnifiedSorterParameter"]
+error = '''
+illegal parameter for unified sorter: %s
 '''
 
 ["CDC:ErrIndexKeyTableNotFound"]
@@ -356,6 +386,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrLeaseTimeout"]
+error = '''
+owner lease timeout
+'''
+
 ["CDC:ErrLoadTimezone"]
 error = '''
 load timezone
@@ -451,6 +486,11 @@ error = '''
 old value is not enabled
 '''
 
+["CDC:ErrOperateOnClosedNotifier"]
+error = '''
+operate on a closed notifier
+'''
+
 ["CDC:ErrOwnerCampaignKeyDeleted"]
 error = '''
 owner campaign key deleted
@@ -464,6 +504,11 @@ changefeed %s not found in owner cache
 ["CDC:ErrOwnerEtcdWatch"]
 error = '''
 etcd watch returns error
+'''
+
+["CDC:ErrOwnerInconsistentStates"]
+error = '''
+owner encountered inconsistent state. report a bug if this happens frequently. %s
 '''
 
 ["CDC:ErrOwnerSortDir"]
@@ -526,6 +571,11 @@ error = '''
 pulsar send message failed
 '''
 
+["CDC:ErrReactorFinished"]
+error = '''
+the reactor has done its job and should no longer be executed
+'''
+
 ["CDC:ErrRegionsNotCoverSpan"]
 error = '''
 regions not completely left cover span, span %v regions: %v
@@ -576,6 +626,11 @@ error = '''
 can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)
 '''
 
+["CDC:ErrSendToClosedPipeline"]
+error = '''
+pipeline is closed, cannot send message
+'''
+
 ["CDC:ErrServeHTTP"]
 error = '''
 serve http error
@@ -584,6 +639,11 @@ serve http error
 ["CDC:ErrServerNewPDClient"]
 error = '''
 server creates pd client failed
+'''
+
+["CDC:ErrServiceSafepointLost"]
+error = '''
+service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
 '''
 
 ["CDC:ErrSinkURIInvalid"]
@@ -611,9 +671,19 @@ error = '''
 table %d not found in schema snapshot
 '''
 
+["CDC:ErrStartTsBeforeGC"]
+error = '''
+fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
+'''
+
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTableProcessorStoppedSafely"]
+error = '''
+table processor stopped safely
 '''
 
 ["CDC:ErrTaskPositionNotExists"]
@@ -641,6 +711,11 @@ error = '''
 url format is invalid
 '''
 
+["CDC:ErrUnifiedSorterBackendTerminating"]
+error = '''
+unified sorter backend is terminating
+'''
+
 ["CDC:ErrUnknownKVEventType"]
 error = '''
 unknown kv event type: %v, entry: %v
@@ -661,6 +736,11 @@ error = '''
 unmarshal failed
 '''
 
+["CDC:ErrUpdateServiceSafepointFailed"]
+error = '''
+updating service safepoint failed
+'''
+
 ["CDC:ErrVersionIncompatible"]
 error = '''
 version is incompatible: %s
@@ -669,6 +749,16 @@ version is incompatible: %s
 ["CDC:ErrWaitHandleOperationTimeout"]
 error = '''
 waiting processor to handle the operation finished timeout
+'''
+
+["CDC:ErrWorkerPoolEmptyTask"]
+error = '''
+workerpool received an empty task, please report a bug
+'''
+
+["CDC:ErrWorkerPoolHandleCancelled"]
+error = '''
+workerpool handle is cancelled
 '''
 
 ["CDC:ErrWriteTsConflict"]

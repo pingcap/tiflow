@@ -21,17 +21,17 @@ function prepare() {
     run_sql "CREATE table test.ddl_puller_lag1(id int primary key, val int);"
     run_sql "CREATE table test.ddl_puller_lag2(id int primary key, val int);"
 
-
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processorDDLResolved=1*sleep(600000)'
+    # run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processorDDLResolved=1*sleep(180000)' # old processor
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processor/processorDDLResolved=1*sleep(180000)' # new processor
 
     TOPIC_NAME="ticdc-ddl-puller-lag-test-$RANDOM"
     case $SINK_TYPE in
-        kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=ddl_puller_lag";;
+        kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=ddl_puller_lag&kafka-version=${KAFKA_VERSION}";;
         *) SINK_URI="mysql+ssl://root@127.0.0.1:3306/";;
     esac
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
-      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
+      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 }
 
@@ -102,6 +102,7 @@ function sql_test() {
 
 trap stop_tidb_cluster EXIT
 prepare $*
-sleep 600
+sleep 180
 sql_test $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

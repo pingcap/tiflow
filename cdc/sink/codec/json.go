@@ -37,6 +37,8 @@ const (
 	BatchVersion1 uint64 = 1
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes
 	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
+	// DefaultMaxBatchSize sets the default value for max-batch-size
+	DefaultMaxBatchSize int = 16
 )
 
 type column struct {
@@ -311,6 +313,16 @@ type JSONEventBatchEncoder struct {
 	maxBatchSize        int
 }
 
+// GetMaxKafkaMessageSize is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
+	return d.maxKafkaMessageSize
+}
+
+// GetMaxBatchSize is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxBatchSize() int {
+	return d.maxBatchSize
+}
+
 // SetMixedBuildSupport is used by CDC Log
 func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
 	d.supportMixedBuild = enabled
@@ -351,7 +363,7 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 	valueBuf := new(bytes.Buffer)
 	valueBuf.Write(valueLenByte[:])
 
-	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	ret := newResolvedMQMessage(ProtocolDefault, keyBuf.Bytes(), valueBuf.Bytes(), ts)
 	return ret, nil
 }
 
@@ -386,7 +398,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
 
-			d.messageBuf = append(d.messageBuf, NewMQMessage(versionHead, nil, 0))
+			d.messageBuf = append(d.messageBuf, NewMQMessage(ProtocolDefault, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
 			d.curBatchSize = 0
 		}
 
@@ -395,6 +407,9 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Key = append(message.Key, key...)
 		message.Value = append(message.Value, valueLenByte[:]...)
 		message.Value = append(message.Value, value...)
+		message.Ts = e.CommitTs
+		message.Schema = &e.Table.Schema
+		message.Table = &e.Table.Table
 
 		if message.Length() > d.maxKafkaMessageSize {
 			// `len(d.messageBuf) == 1` is implied
@@ -442,7 +457,7 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 	valueBuf.Write(valueLenByte[:])
 	valueBuf.Write(value)
 
-	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs)
+	ret := newDDLMQMessage(ProtocolDefault, keyBuf.Bytes(), valueBuf.Bytes(), e)
 	return ret, nil
 }
 
@@ -452,7 +467,8 @@ func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 		if d.valueBuf.Len() == 0 {
 			return nil
 		}
-		ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+		/* there could be multiple types of event encoded within a single message which means the type is not sure */
+		ret := NewMQMessage(ProtocolDefault, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeUnknown, nil, nil)
 		return []*MQMessage{ret}
 	}
 
@@ -519,21 +535,27 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
-			// TODO add error code
-			return errors.Trace(err)
+			return cerror.ErrKafkaInvalidConfig.Wrap(err)
 		}
 	} else {
 		d.maxKafkaMessageSize = DefaultMaxMessageBytes
 	}
 
+	if d.maxKafkaMessageSize <= 0 {
+		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
+	}
+
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
 		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
 		if err != nil {
-			// TODO add error code
-			return errors.Trace(err)
+			return cerror.ErrKafkaInvalidConfig.Wrap(err)
 		}
 	} else {
-		d.maxBatchSize = 4096
+		d.maxBatchSize = DefaultMaxBatchSize
+	}
+
+	if d.maxBatchSize <= 0 {
+		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
 	}
 	return nil
 }

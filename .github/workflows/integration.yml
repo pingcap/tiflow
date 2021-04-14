@@ -13,12 +13,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Free disk space
+        run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
+         docker volume prune -f
+         docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.14.0'
+          go-version: '1.15.8'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -63,12 +69,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Free disk space
+        run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
+         docker volume prune -f
+         docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.14.0'
+          go-version: '1.15.8'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -113,12 +125,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Free disk space
+        run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
+         docker volume prune -f
+         docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.14.0'
+          go-version: '1.15.8'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -164,12 +182,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Free disk space
+        run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
+         docker volume prune -f
+         docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.14.0'
+          go-version: '1.15.8'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -214,12 +238,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Free disk space
+        run: |
+         sudo rm -rf /usr/local/lib/android
+         sudo rm -rf /usr/share/dotnet
+         docker volume prune -f
+         docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.14.0'
+          go-version: '1.15.8'
 
       - name: Cache Vendor
         id: cache-vendor

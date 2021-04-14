@@ -24,8 +24,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const printStatusInterval = 30 * time.Second
-const flushMetricsInterval = 5 * time.Second
+const (
+	printStatusInterval  = 10 * time.Minute
+	flushMetricsInterval = 5 * time.Second
+)
 
 // NewStatistics creates a statistics
 func NewStatistics(ctx context.Context, name string, opts map[string]string) *Statistics {

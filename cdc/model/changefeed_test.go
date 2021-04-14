@@ -180,7 +180,7 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 
 	err := info.VerifyAndFix()
 	c.Assert(err, check.IsNil)
-	c.Assert(info.Engine, check.Equals, SortInMemory)
+	c.Assert(info.Engine, check.Equals, SortUnified)
 
 	marshalConfig1, err := info.Config.Marshal()
 	c.Assert(err, check.IsNil)
@@ -188,6 +188,30 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 	marshalConfig2, err := defaultConfig.Marshal()
 	c.Assert(err, check.IsNil)
 	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
+}
+
+func (s *configSuite) TestChangeFeedInfoClone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	info := &ChangeFeedInfo{
+		SinkURI: "blackhole://",
+		Opts:    map[string]string{},
+		StartTs: 417257993615179777,
+		Config: &config.ReplicaConfig{
+			CaseSensitive:    true,
+			EnableOldValue:   true,
+			CheckGCSafePoint: true,
+		},
+	}
+
+	cloned, err := info.Clone()
+	c.Assert(err, check.IsNil)
+	sinkURI := "mysql://unix:/var/run/tidb.sock"
+	cloned.SinkURI = sinkURI
+	cloned.Config.EnableOldValue = false
+	c.Assert(cloned.SinkURI, check.Equals, sinkURI)
+	c.Assert(cloned.Config.EnableOldValue, check.IsFalse)
+	c.Assert(info.SinkURI, check.Equals, "blackhole://")
+	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 }
 
 type changefeedSuite struct{}
@@ -201,7 +225,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 		ErrorHis: []int64{},
 	}
 	for i := 0; i < 5; i++ {
-		tm := now.Add(-errorHistoryGCInterval)
+		tm := now.Add(-ErrorHistoryGCInterval)
 		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}

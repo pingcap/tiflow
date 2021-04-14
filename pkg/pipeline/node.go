@@ -13,34 +13,25 @@
 
 package pipeline
 
-// Node represents a handle unit for the message stream in pipeline
+// Node represents a handle unit for the message stream in the pipeline
+// The following functions in this interface will be called in one goroutine.
+// It's NO NEED to consider concurrency issues
 type Node interface {
+
+	// Init initializes the node
+	// when the pipeline is started, this function will be called in order
+	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
+	// but it will return nil if you try to call the `ctx.Message()`
+	Init(ctx NodeContext) error
+
 	// Receive receives the message from the previous node
-	Receive(c Context) error
-}
+	// when the node receives a message, this function will be called
+	// you can call `ctx.Message()` to receive the message
+	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
+	Receive(ctx NodeContext) error
 
-// NodeFunc represents a handle unit for the message stream in pipeline
-type NodeFunc func(ctx Context) error
-
-// Receive receives the message from the previous node
-func (f NodeFunc) Receive(ctx Context) error {
-	return f(ctx)
-}
-
-type concurrentNodeGroup struct {
-	nodeGroup    []Node
-	currentIndex int
-}
-
-// NewConcurrentNodeGroup returns a concurrent node group
-func NewConcurrentNodeGroup(nodes ...Node) Node {
-	return &concurrentNodeGroup{
-		nodeGroup: nodes,
-	}
-}
-
-func (cng *concurrentNodeGroup) Receive(ctx Context) error {
-	err := cng.nodeGroup[cng.currentIndex].Receive(ctx)
-	cng.currentIndex = (cng.currentIndex + 1) % len(cng.nodeGroup)
-	return err
+	// Destory frees the resources in this node
+	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
+	// but it will return nil if you try to call the `ctx.Message()`
+	Destroy(ctx NodeContext) error
 }

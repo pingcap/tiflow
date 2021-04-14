@@ -36,8 +36,10 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-var pd = flag.String("pd", "http://127.0.0.1:2379", "PD address and port")
-var logLevel = flag.String("log-level", "debug", "Set log level of the logger")
+var (
+	pd       = flag.String("pd", "http://127.0.0.1:2379", "PD address and port")
+	logLevel = flag.String("log-level", "debug", "Set log level of the logger")
+)
 
 func main() {
 	flag.Parse()
@@ -111,7 +113,6 @@ func main() {
 		err := retry.Run(100*time.Millisecond, 5, func() error {
 			return cluster.refreshInfo(ctx)
 		})
-
 		if err != nil {
 			log.Warn("error refreshing cluster info", zap.Error(err))
 		}
@@ -169,7 +170,6 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 			}),
 		},
 	})
-
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

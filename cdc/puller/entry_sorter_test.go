@@ -45,16 +45,19 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{CRTs: 1, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 4, OpType: model.OpTypeDelete},
-				{CRTs: 2, OpType: model.OpTypeDelete}},
+				{CRTs: 2, OpType: model.OpTypeDelete},
+			},
 			resolvedTs: 0,
 			expect: []*model.RawKVEntry{
-				{CRTs: 0, OpType: model.OpTypeResolved}},
+				{CRTs: 0, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input: []*model.RawKVEntry{
 				{CRTs: 3, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypePut},
-				{CRTs: 5, OpType: model.OpTypePut}},
+				{CRTs: 5, OpType: model.OpTypePut},
+			},
 			resolvedTs: 3,
 			expect: []*model.RawKVEntry{
 				{CRTs: 1, OpType: model.OpTypePut},
@@ -62,7 +65,8 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 2, OpType: model.OpTypePut},
 				{CRTs: 3, OpType: model.OpTypePut},
-				{CRTs: 3, OpType: model.OpTypeResolved}},
+				{CRTs: 3, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{},
@@ -71,18 +75,21 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 		},
 		{
 			input: []*model.RawKVEntry{
-				{CRTs: 7, OpType: model.OpTypePut}},
+				{CRTs: 7, OpType: model.OpTypePut},
+			},
 			resolvedTs: 6,
 			expect: []*model.RawKVEntry{
 				{CRTs: 4, OpType: model.OpTypeDelete},
 				{CRTs: 5, OpType: model.OpTypePut},
-				{CRTs: 6, OpType: model.OpTypeResolved}},
+				{CRTs: 6, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
 			resolvedTs: 6,
 			expect: []*model.RawKVEntry{
-				{CRTs: 6, OpType: model.OpTypeResolved}},
+				{CRTs: 6, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
@@ -91,13 +98,15 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{CRTs: 7, OpType: model.OpTypeDelete},
 				{CRTs: 7, OpType: model.OpTypeDelete},
 				{CRTs: 7, OpType: model.OpTypePut},
-				{CRTs: 8, OpType: model.OpTypeResolved}},
+				{CRTs: 8, OpType: model.OpTypeResolved},
+			},
 		},
 		{
 			input:      []*model.RawKVEntry{},
 			resolvedTs: 15,
 			expect: []*model.RawKVEntry{
-				{CRTs: 15, OpType: model.OpTypeResolved}},
+				{CRTs: 15, OpType: model.OpTypeResolved},
+			},
 		},
 	}
 	es := NewEntrySorter()

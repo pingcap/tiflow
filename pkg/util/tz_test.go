@@ -24,19 +24,17 @@ var _ = check.Suite(&tzSuite{})
 
 func (s *tzSuite) TestGetTimezoneFromZonefile(c *check.C) {
 	defer testleak.AfterTest(c)()
-	var (
-		testCases = []struct {
-			hasErr   bool
-			zonefile string
-			name     string
-		}{
-			{true, "", ""},
-			{false, "UTC", "UTC"},
-			{false, "/usr/share/zoneinfo/UTC", "UTC"},
-			{false, "/usr/share/zoneinfo/Etc/UTC", "Etc/UTC"},
-			{false, "/usr/share/zoneinfo/Asia/Shanghai", "Asia/Shanghai"},
-		}
-	)
+	testCases := []struct {
+		hasErr   bool
+		zonefile string
+		name     string
+	}{
+		{true, "", ""},
+		{false, "UTC", "UTC"},
+		{false, "/usr/share/zoneinfo/UTC", "UTC"},
+		{false, "/usr/share/zoneinfo/Etc/UTC", "Etc/UTC"},
+		{false, "/usr/share/zoneinfo/Asia/Shanghai", "Asia/Shanghai"},
+	}
 	for _, tc := range testCases {
 		loc, err := getTimezoneFromZonefile(tc.zonefile)
 		if tc.hasErr {
