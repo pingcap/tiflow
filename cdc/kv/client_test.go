@@ -2546,10 +2546,7 @@ func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
 }
 
 // TestKVClientForceReconnect force reconnect gRPC stream can work
-func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-
+func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
@@ -2665,4 +2662,21 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 	}
 
 	cancel()
+}
+
+func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	clientv2 := enableKVClientV2
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
+	// test kv client v1
+	enableKVClientV2 = false
+	s.testKVClientForceReconnect(c)
+
+	enableKVClientV2 = true
+	s.testKVClientForceReconnect(c)
 }
