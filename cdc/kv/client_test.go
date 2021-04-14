@@ -21,8 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -1344,6 +1342,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer close(eventCh)
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
@@ -1403,37 +1402,37 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 		return errors.New("message is not sent")
 	})
 	c.Assert(err, check.IsNil)
-	expected := []*model.RegionFeedEvent{
-		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
-			},
-			RegionID: regionID,
-		},
-		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 120,
-			},
-			RegionID: regionID,
-		},
-		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 120,
-			},
-			RegionID: regionID,
-		},
-	}
 
+	resolved = &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  regionID,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 130},
+		},
+	}}
+	ch1 <- resolved
+
+	received := make([]*model.RegionFeedEvent, 0, 4)
 	defer cancel()
-	for i, expectedEv := range expected {
+ReceiveLoop:
+	for {
 		select {
 		case event := <-eventCh:
-			c.Assert(event, check.DeepEquals, expectedEv, check.Commentf("index:%d, %s", i, cmp.Diff(event, expectedEv)))
+			if event == nil {
+				break ReceiveLoop
+			}
+			received = append(received, event)
+			if event.Resolved.ResolvedTs == 130 {
+				break ReceiveLoop
+			}
 		case <-time.After(time.Second):
-			c.Errorf("expected event %v not received, index: %d", expectedEv, i)
+			c.Errorf("event received timeout")
+		}
+	}
+	var lastResolvedTs uint64
+	for _, e := range received {
+		if lastResolvedTs > e.Resolved.ResolvedTs {
+			c.Errorf("the resolvedTs is back off %#v", resolved)
 		}
 	}
 }
