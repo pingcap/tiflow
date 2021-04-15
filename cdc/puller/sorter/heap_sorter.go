@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/workerpool"
 	"go.uber.org/zap"
@@ -43,8 +44,10 @@ type flushTask struct {
 	maxResolvedTs uint64
 	finished      chan error
 	dealloc       func() error
+	isDeallocated int32
 	dataSize      int64
 	lastTs        uint64 // for debugging TODO remove
+	canceller     *asyncCanceller
 }
 
 type heapSorter struct {
@@ -53,6 +56,7 @@ type heapSorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *flushTask
 	heap        sortHeap
+	canceller   *asyncCanceller
 
 	poolHandle    workerpool.EventHandle
 	internalState *heapSorterInternalState
@@ -60,10 +64,11 @@ type heapSorter struct {
 
 func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 	return &heapSorter{
-		id:       id,
-		inputCh:  make(chan *model.PolymorphicEvent, 1024*1024),
-		outputCh: out,
-		heap:     make(sortHeap, 0, 65536),
+		id:        id,
+		inputCh:   make(chan *model.PolymorphicEvent, 1024*1024),
+		outputCh:  out,
+		heap:      make(sortHeap, 0, 65536),
+		canceller: new(asyncCanceller),
 	}
 }
 
@@ -115,12 +120,16 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		tsLowerBound:  lowerBound,
 		maxResolvedTs: maxResolvedTs,
 		finished:      finishCh,
+		canceller:     h.canceller,
 	}
 	h.taskCounter++
 
 	var oldHeap sortHeap
 	if !isEmptyFlush {
 		task.dealloc = func() error {
+			if atomic.SwapInt32(&task.isDeallocated, 1) == 1 {
+				return nil
+			}
 			if task.backend != nil {
 				task.backend = nil
 				return pool.dealloc(backEnd)
@@ -135,8 +144,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 	}
 	failpoint.Inject("sorterDebug", func() {
+		tableID, tableName := util.TableIDFromCtx(ctx)
 		log.Debug("Unified Sorter new flushTask",
-			zap.String("table", tableNameFromCtx(ctx)),
+			zap.Int64("table-id", tableID),
+			zap.String("table-name", tableName),
 			zap.Int("heap-id", task.heapSorterID),
 			zap.Uint64("resolvedTs", task.maxResolvedTs))
 	})
@@ -144,6 +155,21 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	if !isEmptyFlush {
 		backEndFinal := backEnd
 		err := heapSorterIOPool.Go(ctx, func() {
+			failpoint.Inject("asyncFlushStartDelay", func() {
+				log.Debug("asyncFlushStartDelay")
+			})
+
+			h.canceller.EnterAsyncOp()
+			defer h.canceller.FinishAsyncOp()
+
+			if h.canceller.IsCanceled() {
+				if backEndFinal != nil {
+					_ = task.dealloc()
+				}
+				task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
+				return
+			}
+
 			writer, err := backEnd.writer()
 			if err != nil {
 				if backEndFinal != nil {
@@ -164,7 +190,18 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 				close(task.finished)
 			}()
 
+			counter := 0
 			for oldHeap.Len() > 0 {
+				failpoint.Inject("asyncFlushInProcessDelay", func() {
+					log.Debug("asyncFlushInProcessDelay")
+				})
+				// no need to check for cancellation so frequently.
+				if counter%10000 == 0 && h.canceller.IsCanceled() {
+					task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
+					return
+				}
+				counter++
+
 				event := heap.Pop(&oldHeap).(*sortItem).entry
 				err := writer.writeNext(event)
 				if err != nil {
@@ -188,9 +225,11 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			backEndFinal = nil
 
 			failpoint.Inject("sorterDebug", func() {
+				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter flushTask finished",
 					zap.Int("heap-id", task.heapSorterID),
-					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int64("table-id", tableID),
+					zap.String("table-name", tableName),
 					zap.Uint64("resolvedTs", task.maxResolvedTs),
 					zap.Uint64("data-size", dataSize),
 					zap.Int("size", eventCount))
@@ -228,7 +267,7 @@ type heapSorterInternalState struct {
 
 func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	state := &heapSorterInternalState{
-		sorterConfig: config.GetSorterConfig(),
+		sorterConfig: config.GetGlobalServerConfig().Sorter,
 	}
 
 	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
@@ -280,9 +319,45 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	h.internalState = state
 }
 
+// asyncCanceller is a shared object used to cancel async IO operations.
+// We do not use `context.Context` because (1) selecting on `ctx.Done()` is expensive
+// especially if the context is shared by many goroutines, and (2) due to the complexity
+// of managing contexts through the workerpools, using a special shared object seems more reasonable
+// and readable.
+type asyncCanceller struct {
+	exitRWLock sync.RWMutex // held when an asynchronous flush is taking place
+	hasExited  int32        // this flag should be accessed atomically
+}
+
+func (c *asyncCanceller) EnterAsyncOp() {
+	c.exitRWLock.RLock()
+}
+
+func (c *asyncCanceller) FinishAsyncOp() {
+	c.exitRWLock.RUnlock()
+}
+
+func (c *asyncCanceller) IsCanceled() bool {
+	return atomic.LoadInt32(&c.hasExited) == 1
+}
+
+func (c *asyncCanceller) Cancel() {
+	// Sets the flag
+	atomic.StoreInt32(&c.hasExited, 1)
+
+	// By taking the lock, we are making sure that all IO operations that started before setting the flag have finished,
+	// so that by the returning of this function, no more IO operations will finish successfully.
+	// Since IO operations that are NOT successful will clean up themselves, the goroutine in which this
+	// function was called is responsible for releasing files written by only those IO operations that complete BEFORE
+	// this function returns.
+	// In short, we are creating a linearization point here.
+	c.exitRWLock.Lock()
+	defer c.exitRWLock.Unlock()
+}
+
 func lazyInitWorkerPool() {
 	poolOnce.Do(func() {
-		sorterConfig := config.GetSorterConfig()
+		sorterConfig := config.GetGlobalServerConfig().Sorter
 		heapSorterPool = workerpool.NewDefaultWorkerPool(sorterConfig.NumWorkerPoolGoroutine)
 		heapSorterIOPool = workerpool.NewDefaultAsyncPool(sorterConfig.NumWorkerPoolGoroutine * 2)
 	})
