@@ -109,9 +109,10 @@ type regionWorker struct {
 	rtsUpdateCh chan *regionResolvedTs
 
 	enableOldValue bool
+	storeAddr      string
 }
 
-func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter) *regionWorker {
+func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *regionWorker {
 	worker := &regionWorker{
 		session:        s,
 		limiter:        limiter,
@@ -121,6 +122,7 @@ func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter) *regionWorker {
 		rtsManager:     newResolvedTsManager(),
 		rtsUpdateCh:    make(chan *regionResolvedTs, 1024),
 		enableOldValue: s.enableOldValue,
+		storeAddr:      addr,
 	}
 	return worker
 }
@@ -193,6 +195,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
+			failpoint.Inject("kvClientForceReconnect", func() {
+				log.Warn("kv client reconnect triggered by failpoint")
+				failpoint.Return(errReconnect)
+			})
 			if !w.session.isPullerInit.IsInitialized() {
 				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
 				continue
@@ -229,6 +235,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
 				if sinceLastResolvedTs >= resolveLockInterval && state.initialized {
+					if sinceLastResolvedTs > reconnectInterval {
+						log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastResolvedTs))
+						return errReconnect
+					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.sri.span),
 						zap.Duration("duration", sinceLastResolvedTs),
@@ -267,13 +277,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case event, ok := <-w.inputCh:
-			if !ok {
-				log.Debug("region worker receiver closed")
-				return nil
-			}
 			// event == nil means the region worker should exit and re-establish
 			// all existing regions.
-			if event == nil {
+			if !ok || event == nil {
 				log.Info("region worker closed by error")
 				return w.evictAllRegions(ctx)
 			}
@@ -329,7 +335,22 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 func (w *regionWorker) run(ctx context.Context) error {
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		return w.resolveLock(ctx)
+		err := w.resolveLock(ctx)
+		if errors.Cause(err) == errReconnect {
+			cancel, ok := w.session.getStreamCancel(w.storeAddr)
+			if ok {
+				// cancel the stream to trigger strem.Recv with context cancel error
+				// Note use context cancel is the only way to terminate a gRPC stream
+				cancel()
+				// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+				// should be called after stream has been deleted. Add a delay here
+				// to avoid too frequent region rebuilt.
+				time.Sleep(time.Second)
+			}
+			// if stream is already deleted, just ignore errReconnect
+			return nil
+		}
+		return err
 	})
 	wg.Go(func() error {
 		return w.eventHandler(ctx)
@@ -502,6 +523,9 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			}
 			state.markStopped()
 			singleRegionInfo := state.sri.partialClone()
+			if state.lastResolvedTs > singleRegionInfo.ts {
+				singleRegionInfo.ts = state.lastResolvedTs
+			}
 			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
