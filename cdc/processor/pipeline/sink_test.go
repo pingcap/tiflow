@@ -36,12 +36,18 @@ type mockSink struct {
 	}
 }
 
+// mockFlowController is created because a real tableFlowController cannot be used
+// we are testing sinkNode by itself.
 type mockFlowController struct{}
 
-func (c *mockFlowController) Consume(commitTs uint64, size uint64) {
+func (c *mockFlowController) Consume(commitTs uint64, size uint64) error {
+	return nil
 }
 
 func (c *mockFlowController) Release(resolvedTs uint64) {
+}
+
+func (c *mockFlowController) Abort() {
 }
 
 func (s *mockSink) Initialize(ctx stdContext.Context, tableInfo []*model.SimpleTableInfo) error {

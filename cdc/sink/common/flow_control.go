@@ -156,7 +156,10 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64) error {
 		}
 	} else {
 		// commitTs == lastCommitTs
-		c.memoryController.ForceConsume(size)
+		err := c.memoryController.ForceConsume(size)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	c.mu.Lock()

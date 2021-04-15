@@ -280,6 +280,8 @@ func (s *flowControlSuite) TestFlowControlAbort(c *check.C) {
 		c.Assert(err, check.IsNil)
 		err = controller.Consume(2, 1000)
 		c.Assert(err, check.ErrorMatches, ".*ErrFlowControllerAborted.*")
+		err = controller.Consume(2, 10)
+		c.Assert(err, check.ErrorMatches, ".*ErrFlowControllerAborted.*")
 	}()
 
 	time.Sleep(3 * time.Second)

@@ -246,6 +246,11 @@ error = '''
 filter rule is invalid
 '''
 
+["CDC:ErrFlowControllerAborted"]
+error = '''
+flow controller is aborted
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed

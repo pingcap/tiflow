@@ -17,6 +17,9 @@ import (
 	"context"
 	"os"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -110,7 +113,17 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				if msg.RawKV != nil {
 					size := uint64(msg.RawKV.ApproximateSize() * 2)
 					commitTs := msg.CRTs
-					n.flowController.Consume(commitTs, size)
+					err := n.flowController.Consume(commitTs, size)
+					if err != nil {
+						if cerror.ErrFlowControllerAborted.Equal(err) {
+							log.Info("flow control cancelled for table",
+								zap.Int64("tableID", n.tableID),
+								zap.String("tableName", n.tableName))
+						} else {
+							ctx.Throw(err)
+						}
+						return nil
+					}
 				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 			}

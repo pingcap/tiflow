@@ -74,8 +74,9 @@ type tablePipelineImpl struct {
 // TODO find a better name or avoid using an interface
 // We use an interface here for ease in unit testing.
 type tableFlowController interface {
-	Consume(commitTs uint64, size uint64)
+	Consume(commitTs uint64, size uint64) error
 	Release(resolvedTs uint64)
+	Abort()
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
