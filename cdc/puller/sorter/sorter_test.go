@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -381,6 +383,9 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer UnifiedSorterCleanUp()
+
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
 
 	conf := config.GetDefaultServerConfig()
 	conf.Sorter = &config.SorterConfig{

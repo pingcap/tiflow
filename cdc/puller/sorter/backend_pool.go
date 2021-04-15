@@ -232,10 +232,12 @@ func (p *backEndPool) terminate() {
 	defer close(p.cancelCh)
 	// the background goroutine can be considered terminated here
 
+	log.Debug("Unified Sorter terminating...")
 	p.cancelRWLock.Lock()
 	defer p.cancelRWLock.Unlock()
 	p.isTerminating = true
 
+	log.Debug("Unified Sorter cleaning up before exiting")
 	// any new allocs and deallocs will not succeed from this point
 	// accessing p.cache without atomics is safe from now
 
@@ -258,11 +260,14 @@ func (p *backEndPool) terminate() {
 		log.Warn("Unified Sorter clean-up failed", zap.Error(err))
 	}
 	for _, file := range files {
+		log.Debug("Unified Sorter backEnd removing file", zap.String("file", file))
 		err = os.RemoveAll(file)
 		if err != nil {
 			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
 		}
 	}
+
+	log.Debug("Unified Sorter backEnd terminated")
 }
 
 func (p *backEndPool) sorterMemoryUsage() int64 {
