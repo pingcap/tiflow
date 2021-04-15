@@ -370,7 +370,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 		close(finishedCh)
 	}()
 
-	after = time.After(10 * time.Second)
+	after = time.After(20 * time.Second)
 	select {
 	case <-after:
 		c.Fatal("TestSorterIOError timed out")
