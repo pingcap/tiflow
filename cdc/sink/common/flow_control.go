@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 
 	"github.com/edwingeng/deque"
+	"github.com/pingcap/errors"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -27,6 +29,8 @@ import (
 // A higher-level controller more suitable for direct use by the processor is TableFlowController.
 type TableMemorySizeController struct {
 	Quota uint64 // should not be changed once intialized
+
+	IsAborted uint32
 
 	mu       sync.Mutex
 	Consumed uint64
@@ -50,24 +54,37 @@ func NewTableMemorySizeController(quota uint64) *TableMemorySizeController {
 // ConsumeWithBlocking is called when a hard-limit is needed. The method will
 // block until enough memory has been freed up by Release.
 // Should be used with care to prevent deadlock.
-func (c *TableMemorySizeController) ConsumeWithBlocking(nBytes uint64) {
+func (c *TableMemorySizeController) ConsumeWithBlocking(nBytes uint64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for c.Consumed+nBytes >= c.Quota {
+	for {
+		if atomic.LoadUint32(&c.IsAborted) == 1 {
+			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
+		}
+		if c.Consumed+nBytes < c.Quota {
+			break
+		}
+
 		c.cond.Wait()
 	}
 
 	c.Consumed += nBytes
+	return nil
 }
 
 // ForceConsume is called when blocking is not acceptable and the limit can be violated
 // for the sake of avoid deadlock. It merely records the increased memory consumption.
-func (c *TableMemorySizeController) ForceConsume(nBytes uint64) {
+func (c *TableMemorySizeController) ForceConsume(nBytes uint64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if atomic.LoadUint32(&c.IsAborted) == 1 {
+		return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
+	}
+
 	c.Consumed += nBytes
+	return nil
 }
 
 // Release is called when a chuck of memory is done being used.
@@ -89,6 +106,12 @@ func (c *TableMemorySizeController) Release(nBytes uint64) {
 	}
 
 	c.mu.Unlock()
+}
+
+// Abort interrupts any ongoing ConsumeWithBlocking call
+func (c *TableMemorySizeController) Abort() {
+	atomic.StoreUint32(&c.IsAborted, 1)
+	c.cond.Signal()
 }
 
 // TableFlowController provides a convenient interface to control the memory consumption of a per table event stream
@@ -116,7 +139,7 @@ func NewTableFlowController(quota uint64) *TableFlowController {
 
 // Consume is called when an event has arrived for being processed by the sink.
 // It will handle transaction boundaries automatically, and will not block intra-transaction.
-func (c *TableFlowController) Consume(commitTs uint64, size uint64) {
+func (c *TableFlowController) Consume(commitTs uint64, size uint64) error {
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 
 	if commitTs < lastCommitTs {
@@ -127,7 +150,10 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64) {
 
 	if commitTs > lastCommitTs {
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
-		c.memoryController.ConsumeWithBlocking(size)
+		err := c.memoryController.ConsumeWithBlocking(size)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	} else {
 		// commitTs == lastCommitTs
 		c.memoryController.ForceConsume(size)
@@ -139,6 +165,8 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64) {
 		CommitTs: commitTs,
 		Size:     size,
 	})
+
+	return nil
 }
 
 // Release is called when all events committed before resolvedTs has been freed from memory.
@@ -164,4 +192,9 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 	c.mu.Unlock()
 
 	c.memoryController.Release(nBytesToRelease)
+}
+
+// Abort interrupts any ongoing Consume call
+func (c *TableFlowController) Abort() {
+	c.memoryController.Abort()
 }

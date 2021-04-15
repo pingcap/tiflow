@@ -45,7 +45,8 @@ func (s *flowControlSuite) TestMemoryControlBasic(c *check.C) {
 
 		for i := 0; i < 100000; i++ {
 			size := (rand.Int() % 128) + 128
-			controller.ConsumeWithBlocking(uint64(size))
+			err := controller.ConsumeWithBlocking(uint64(size))
+			c.Assert(err, check.IsNil)
 
 			c.Assert(atomic.AddUint64(&consumed, uint64(size)), check.Less, uint64(1024))
 			sizeCh <- uint64(size)
@@ -87,10 +88,12 @@ func (s *flowControlSuite) TestMemoryControlForceConsume(c *check.C) {
 			size := (rand.Int() % 128) + 128
 
 			if rand.Int()%3 == 0 {
-				controller.ConsumeWithBlocking(uint64(size))
+				err := controller.ConsumeWithBlocking(uint64(size))
+				c.Assert(err, check.IsNil)
 				c.Assert(atomic.AddUint64(&consumed, uint64(size)), check.Less, uint64(1024))
 			} else {
-				controller.ForceConsume(uint64(size))
+				err := controller.ForceConsume(uint64(size))
+				c.Assert(err, check.IsNil)
 				atomic.AddUint64(&consumed, uint64(size))
 			}
 			sizeCh <- uint64(size)
@@ -112,6 +115,31 @@ func (s *flowControlSuite) TestMemoryControlForceConsume(c *check.C) {
 
 	wg.Wait()
 	c.Assert(atomic.LoadUint64(&consumed), check.Equals, uint64(0))
+}
+
+// TestMemoryControlAbort verifies that Abort works
+func (s *flowControlSuite) TestMemoryControlAbort(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	controller := NewTableMemorySizeController(1024)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := controller.ConsumeWithBlocking(700)
+		c.Assert(err, check.IsNil)
+
+		err = controller.ConsumeWithBlocking(700)
+		c.Assert(err, check.ErrorMatches, ".*ErrFlowControllerAborted.*")
+
+		err = controller.ForceConsume(700)
+		c.Assert(err, check.ErrorMatches, ".*ErrFlowControllerAborted.*")
+	}()
+
+	time.Sleep(2 * time.Second)
+	controller.Abort()
+
+	wg.Wait()
 }
 
 // TestMemoryControlReleaseZero verifies that releasing 0 bytes is successful
@@ -187,7 +215,8 @@ func (s *flowControlSuite) TestFlowControlBasic(c *check.C) {
 				resolvedTs = mockedRow.CommitTs
 				updatedResolvedTs = true
 			}
-			flowController.Consume(mockedRow.CommitTs, mockedRow.Size)
+			err := flowController.Consume(mockedRow.CommitTs, mockedRow.Size)
+			c.Check(err, check.IsNil)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -236,4 +265,25 @@ func (s *flowControlSuite) TestFlowControlBasic(c *check.C) {
 
 	c.Assert(errg.Wait(), check.IsNil)
 	c.Assert(atomic.LoadUint64(&consumedBytes), check.Equals, uint64(0))
+}
+
+func (s *flowControlSuite) TestFlowControlAbort(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	controller := NewTableFlowController(1024)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		err := controller.Consume(1, 1000)
+		c.Assert(err, check.IsNil)
+		err = controller.Consume(2, 1000)
+		c.Assert(err, check.ErrorMatches, ".*ErrFlowControllerAborted.*")
+	}()
+
+	time.Sleep(3 * time.Second)
+	controller.Abort()
+
+	wg.Wait()
 }
