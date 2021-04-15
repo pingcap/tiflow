@@ -278,7 +278,7 @@ func newMockServiceSpecificAddr(
 
 // waitRequestID waits request ID larger than the given allocated ID
 func waitRequestID(c *check.C, allocatedID uint64) {
-	err := retry.Run(time.Millisecond*20, 10, func() error {
+	err := retry.Run(time.Millisecond*10, 20, func() error {
 		if currentRequestID() > allocatedID {
 			return nil
 		}
@@ -2767,7 +2767,6 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	// The second TiKV could start up slowly, which causes the kv client retries
 	// to TiKV for more than one time, so we can't determine the correct requestID
 	// here, we must use the real request ID received by TiKV server
-
 	err = retry.Run(time.Millisecond*300, 10, func() error {
 		_, ok := requestIds.Load(regionID3)
 		if ok {
@@ -2784,7 +2783,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
 		{
 			RegionId:  regionID3,
-			RequestId: currentRequestID(),
+			RequestId: requestID.(uint64),
 			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 135},
 		},
 	}}
