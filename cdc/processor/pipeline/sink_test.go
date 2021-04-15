@@ -36,6 +36,14 @@ type mockSink struct {
 	}
 }
 
+type mockFlowController struct{}
+
+func (c *mockFlowController) Consume(commitTs uint64, size uint64) {
+}
+
+func (c *mockFlowController) Release(resolvedTs uint64) {
+}
+
 func (s *mockSink) Initialize(ctx stdContext.Context, tableInfo []*model.SimpleTableInfo) error {
 	return nil
 }
@@ -90,7 +98,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
 
 	// test stop at targetTs
-	node := newSinkNode(&mockSink{}, 0, 10)
+	node := newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -116,7 +124,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(10))
 
 	// test the stop at ts command
-	node = newSinkNode(&mockSink{}, 0, 10)
+	node = newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -138,7 +146,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(6))
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
-	node = newSinkNode(&mockSink{}, 0, 10)
+	node = newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -164,7 +172,7 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 0, 10)
+	node := newSinkNode(sink, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 

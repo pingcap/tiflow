@@ -37,6 +37,8 @@ type sorterNode struct {
 	tableID      model.TableID
 	tableName    string // quoted schema and table, used in metircs only
 
+	flowController tableFlowController
+
 	wg     errgroup.Group
 	cancel context.CancelFunc
 }
@@ -45,7 +47,8 @@ func newSorterNode(
 	sortEngine model.SortEngine,
 	sortDir string,
 	changeFeedID model.ChangeFeedID,
-	tableName string, tableID model.TableID) pipeline.Node {
+	tableName string, tableID model.TableID,
+	flowController tableFlowController) pipeline.Node {
 	return &sorterNode{
 		sortEngine: sortEngine,
 		sortDir:    sortDir,
@@ -53,6 +56,8 @@ func newSorterNode(
 		changeFeedID: changeFeedID,
 		tableID:      tableID,
 		tableName:    tableName,
+
+		flowController: flowController,
 	}
 }
 
@@ -101,6 +106,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			case msg := <-sorter.Output():
 				if msg == nil {
 					continue
+				}
+				if msg.RawKV != nil {
+					size := uint64(msg.RawKV.ApproximateSize() * 2)
+					commitTs := msg.CRTs
+					n.flowController.Consume(commitTs, size)
 				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 			}

@@ -17,18 +17,23 @@ import (
 	stdContext "context"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sink"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/security"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"
+)
+
+const (
+	// TODO move this to server configuration
+	perTableMemoryQuota = 50 * 1024 * 1024 // 50MB
 )
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
@@ -64,6 +69,13 @@ type tablePipelineImpl struct {
 
 	sinkNode *sinkNode
 	cancel   stdContext.CancelFunc
+}
+
+// TODO find a better name or avoid using an interface
+// We use an interface here for ease in unit testing.
+type tableFlowController interface {
+	Consume(commitTs uint64, size uint64)
+	Release(resolvedTs uint64)
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
@@ -154,15 +166,16 @@ func NewTablePipeline(ctx context.Context,
 		cancel:      cancel,
 	}
 
+	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	ctx, p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
 	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID))
+	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	config := ctx.Vars().Config
 	if config.Cyclic != nil && config.Cyclic.IsEnabled() {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
-	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs)
+	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
 	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
 	tablePipeline.p = p
 	return ctx, tablePipeline
