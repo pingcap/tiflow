@@ -404,11 +404,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 
 		var actualTz *time.Location
 		if col.Type != mysql.TypeTimestamp {
-			var err error
-			actualTz, err = time.LoadLocation("UTC")
-			if err != nil {
-				return nil, "", cerror.ErrAvroEncodeFailed.Wrap(err)
-			}
+			actualTz = time.UTC
 		} else {
 			actualTz = tz
 		}
