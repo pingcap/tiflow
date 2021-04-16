@@ -251,6 +251,11 @@ error = '''
 flow controller is aborted
 '''
 
+["CDC:ErrFlowControllerEventLargerThanQuota"]
+error = '''
+event is larger than the total memory quota, size: %d, quota: %d
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed

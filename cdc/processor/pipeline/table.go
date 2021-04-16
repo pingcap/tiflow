@@ -74,7 +74,7 @@ type tablePipelineImpl struct {
 // TODO find a better name or avoid using an interface
 // We use an interface here for ease in unit testing.
 type tableFlowController interface {
-	Consume(commitTs uint64, size uint64) error
+	Consume(commitTs uint64, size uint64, blockCallBack func() error) error
 	Release(resolvedTs uint64)
 	Abort()
 }

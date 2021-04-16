@@ -102,6 +102,8 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		return nil
 	})
 	n.wg.Go(func() error {
+		lastSentResolvedTs := uint64(0)
+		lastCRTs := uint64(0)
 		for {
 			select {
 			case <-stdCtx.Done():
@@ -113,7 +115,13 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				if msg.RawKV != nil && msg.RawKV.OpType != model.OpTypeResolved {
 					size := uint64(msg.RawKV.ApproximateSize() * 2)
 					commitTs := msg.CRTs
-					err := n.flowController.Consume(commitTs, size)
+					err := n.flowController.Consume(commitTs, size, func() error {
+						if lastCRTs > lastSentResolvedTs {
+							lastSentResolvedTs = lastCRTs
+							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+						}
+						return nil
+					})
 					if err != nil {
 						if cerror.ErrFlowControllerAborted.Equal(err) {
 							log.Info("flow control cancelled for table",
@@ -124,6 +132,14 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						}
 						return nil
 					}
+					lastCRTs = commitTs
+				}
+
+				if msg.RawKV != nil && msg.RawKV.OpType == model.OpTypeResolved {
+					if msg.CRTs < lastSentResolvedTs {
+						continue
+					}
+					lastSentResolvedTs = msg.CRTs
 				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 			}

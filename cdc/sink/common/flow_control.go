@@ -53,11 +53,17 @@ func NewTableMemorySizeController(quota uint64) *TableMemorySizeController {
 
 // ConsumeWithBlocking is called when a hard-limit is needed. The method will
 // block until enough memory has been freed up by Release.
+// blockCallBack will be called if the function will block.
 // Should be used with care to prevent deadlock.
-func (c *TableMemorySizeController) ConsumeWithBlocking(nBytes uint64) error {
+func (c *TableMemorySizeController) ConsumeWithBlocking(nBytes uint64, blockCallBack func() error) error {
+	if nBytes >= c.Quota {
+		return cerrors.ErrFlowControllerEventLargerThanQuota.GenWithStackByArgs(nBytes, c.Quota)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	calledBack := false
 	for {
 		if atomic.LoadUint32(&c.IsAborted) == 1 {
 			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
@@ -66,6 +72,13 @@ func (c *TableMemorySizeController) ConsumeWithBlocking(nBytes uint64) error {
 			break
 		}
 
+		if !calledBack {
+			calledBack = true
+			err := blockCallBack()
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 		c.cond.Wait()
 	}
 
@@ -139,7 +152,7 @@ func NewTableFlowController(quota uint64) *TableFlowController {
 
 // Consume is called when an event has arrived for being processed by the sink.
 // It will handle transaction boundaries automatically, and will not block intra-transaction.
-func (c *TableFlowController) Consume(commitTs uint64, size uint64) error {
+func (c *TableFlowController) Consume(commitTs uint64, size uint64, blockCallBack func() error) error {
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 
 	if commitTs < lastCommitTs {
@@ -150,7 +163,7 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64) error {
 
 	if commitTs > lastCommitTs {
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
-		err := c.memoryController.ConsumeWithBlocking(size)
+		err := c.memoryController.ConsumeWithBlocking(size, blockCallBack)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -40,7 +40,7 @@ type mockSink struct {
 // we are testing sinkNode by itself.
 type mockFlowController struct{}
 
-func (c *mockFlowController) Consume(commitTs uint64, size uint64) error {
+func (c *mockFlowController) Consume(commitTs uint64, size uint64, blockCallBack func() error) error {
 	return nil
 }
 
