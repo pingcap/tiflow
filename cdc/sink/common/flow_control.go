@@ -174,13 +174,6 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64) error {
 
 // Release is called when all events committed before resolvedTs has been freed from memory.
 func (c *TableFlowController) Release(resolvedTs uint64) {
-	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
-	if lastCommitTs < resolvedTs {
-		log.Panic("lastCommitTs is less than resolvedTs",
-			zap.Uint64("lastCommitTs", lastCommitTs),
-			zap.Uint64("resolvedTs", resolvedTs))
-	}
-
 	var nBytesToRelease uint64
 
 	c.mu.Lock()
