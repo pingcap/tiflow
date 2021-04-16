@@ -54,7 +54,7 @@ function prepare() {
     sleep 5
     export http_proxy=http://127.0.0.1:$proxy_port
     export https_proxy=http://127.0.0.1:$proxy_port
-    ensure curl http://$UP_PD_HOST_1:2379/
+    ensure 10 curl http://$UP_PD_HOST_1:2379/
 
     echo started proxy at $proxy_pid
 
