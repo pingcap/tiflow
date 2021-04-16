@@ -184,7 +184,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 
 				if task.reader == nil {
-					task.reader, err = task.backend.reader()
+					task.reader, err = task.GetBackEnd().reader()
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -452,7 +452,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				return nil
 			}
 
-			if task.backend != nil {
+			if !task.isEmpty {
 				pendingSet[task] = nil
 			} // otherwise it is an empty flush
 
@@ -506,6 +506,7 @@ func printError(err error) error {
 
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}
+	log.Debug("Unified Sorter error debug", zap.Error(err), zap.Stack("stack"))
 	return err
 }
 

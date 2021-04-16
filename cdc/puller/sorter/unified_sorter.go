@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -174,6 +174,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			}
 			// must wait for all writers to exit to close the channel.
 			close(heapSorterCollectCh)
+			failpoint.Inject("InjectHeapSorterExitDelay", func() {})
 		}()
 
 		select {
@@ -224,6 +225,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 						default:
 						}
 						err := sorter.poolHandle.AddEvent(subctx, event)
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						if err != nil {
 							return errors.Trace(err)
 						}
@@ -241,6 +247,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				default:
 					err := heapSorters[targetID].poolHandle.AddEvent(subctx, event)
 					if err != nil {
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						return errors.Trace(err)
 					}
 					metricSorterConsumeCount.WithLabelValues("kv").Inc()
