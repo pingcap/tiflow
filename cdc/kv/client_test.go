@@ -277,7 +277,7 @@ func newMockServiceSpecificAddr(
 
 // waitRequestID waits request ID larger than the given allocated ID
 func waitRequestID(c *check.C, allocatedID uint64) {
-	err := retry.Run(time.Millisecond*20, 10, func() error {
+	err := retry.Run(time.Millisecond*10, 20, func() error {
 		if currentRequestID() > allocatedID {
 			return nil
 		}
@@ -2771,8 +2771,20 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	ch1 <- initialized
 
 	<-server1Stopped
+
+	var requestIds sync.Map
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv2 := newMockChangeDataService(c, ch2)
+	srv2.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				return
+			}
+			requestIds.Store(req.RegionId, req.RequestId)
+		}
+	}
 	// Reuse the same listen addresss as server 1 to simulate TiKV handles the
 	// gRPC stream terminate and reconnect.
 	server2, _ := newMockServiceSpecificAddr(ctx, c, srv2, addr1, wg)
@@ -2782,14 +2794,26 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 		wg.Wait()
 	}()
 
-	waitRequestID(c, baseAllocatedID+2)
-	initialized = mockInitializedEvent(regionID3, currentRequestID())
+	// The second TiKV could start up slowly, which causes the kv client retries
+	// to TiKV for more than one time, so we can't determine the correct requestID
+	// here, we must use the real request ID received by TiKV server
+	err = retry.Run(time.Millisecond*300, 10, func() error {
+		_, ok := requestIds.Load(regionID3)
+		if ok {
+			return nil
+		}
+		return errors.New("waiting for kv client requests received by server")
+	})
+	c.Assert(err, check.IsNil)
+	requestID, _ := requestIds.Load(regionID3)
+
+	initialized = mockInitializedEvent(regionID3, requestID.(uint64))
 	ch2 <- initialized
 
 	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
 		{
 			RegionId:  regionID3,
-			RequestId: currentRequestID(),
+			RequestId: requestID.(uint64),
 			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 135},
 		},
 	}}
