@@ -271,6 +271,11 @@ error = '''
 get tikv grpc context failed
 '''
 
+["CDC:ErrIllegalUnifiedSorterParameter"]
+error = '''
+illegal parameter for unified sorter: %s
+'''
+
 ["CDC:ErrIndexKeyTableNotFound"]
 error = '''
 table not found with index ID %d in index kv

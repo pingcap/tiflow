@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )

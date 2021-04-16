@@ -52,10 +52,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	pendingSet := make(map[*flushTask]*model.PolymorphicEvent)
 	defer func() {
 		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
-<<<<<<< HEAD
-		// clean up resources
-		for task := range pendingSet {
-=======
 		// cancel pending async IO operations.
 		onExit()
 		cleanUpTask := func(task *flushTask) {
@@ -72,7 +68,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				return
 			}
 
->>>>>>> 759fdba... sorter: fix Unified Sorter resource release (#1558)
 			if task.reader != nil {
 				_ = printError(task.reader.resetAndClose())
 				task.reader = nil
@@ -111,28 +106,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
-<<<<<<< HEAD
-		defer func() {
-			// clean up
-			for task := range workingSet {
-				select {
-				case <-ctx.Done():
-					break
-				case err := <-task.finished:
-					_ = printError(err)
-				}
-
-				if task.reader != nil {
-					err := task.reader.resetAndClose()
-					task.reader = nil
-					_ = printError(err)
-				}
-				_ = printError(task.dealloc())
-			}
-		}()
-
-=======
->>>>>>> 759fdba... sorter: fix Unified Sorter resource release (#1558)
 		for task, cache := range pendingSet {
 			if task.tsLowerBound > minResolvedTs {
 				// the condition above implies that for any event in task.backend, CRTs > minResolvedTs.
@@ -232,11 +205,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		counter := 0
 		for sortHeap.Len() > 0 {
-<<<<<<< HEAD
-=======
 			failpoint.Inject("sorterMergeDelay", func() {})
 
->>>>>>> 759fdba... sorter: fix Unified Sorter resource release (#1558)
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
 			event := item.entry
