@@ -21,8 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -76,7 +77,8 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	testSorter(ctx, c, sorter, 10000, true)
+	err = testSorter(ctx, c, sorter, 10000, true)
+	c.Assert(err, check.ErrorMatches, ".*context cancel.*")
 }
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
@@ -102,7 +104,8 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		testSorter(ctx, c, sorter, 10000000, true)
+		err := testSorter(ctx, c, sorter, 10000000, true)
+		c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 		close(finishedCh)
 	}()
 
@@ -116,7 +119,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	log.Info("Sorter successfully cancelled")
 }
 
-func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int, needWorkerPool bool) {
+func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int, needWorkerPool bool) error {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -213,11 +216,7 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 		}
 	})
 
-	err = errg.Wait()
-	if errors.Cause(err) == context.Canceled || errors.Cause(err) == context.DeadlineExceeded {
-		return
-	}
-	c.Assert(err, check.IsNil)
+	return errg.Wait()
 }
 
 func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
@@ -310,7 +309,128 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	for i := 0; i < 5; i++ {
 		sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		testSorter(ctx, c, sorter, 100000000, true)
+		err := testSorter(ctx, c, sorter, 100000000, true)
+		c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 		cancel()
+	}
+}
+
+func (s *sorterSuite) TestSorterIOError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
+	}
+	config.StoreGlobalServerConfig(conf)
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	}()
+
+	finishedCh := make(chan struct{})
+	go func() {
+		err := testSorter(ctx, c, sorter, 100000, true)
+		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
+		close(finishedCh)
+	}()
+
+	after := time.After(60 * time.Second)
+	select {
+	case <-after:
+		c.Fatal("TestSorterIOError timed out")
+	case <-finishedCh:
+	}
+
+	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite")
+	}()
+
+	finishedCh = make(chan struct{})
+	go func() {
+		err := testSorter(ctx, c, sorter, 100000, true)
+		c.Assert(err, check.ErrorMatches, ".*injected write error.*")
+		close(finishedCh)
+	}()
+
+	after = time.After(60 * time.Second)
+	select {
+	case <-after:
+		c.Fatal("TestSorterIOError timed out")
+	case <-finishedCh:
+	}
+}
+
+func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
+	}
+	config.StoreGlobalServerConfig(conf)
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay", "sleep(2000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay")
+	}()
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	}()
+
+	finishedCh := make(chan struct{})
+	go func() {
+		err := testSorter(ctx, c, sorter, 100000, true)
+		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
+		close(finishedCh)
+	}()
+
+	after := time.After(60 * time.Second)
+	select {
+	case <-after:
+		c.Fatal("TestSorterIOError timed out")
+	case <-finishedCh:
 	}
 }
