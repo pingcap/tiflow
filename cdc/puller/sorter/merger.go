@@ -124,7 +124,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 
 				if task.reader == nil {
-					task.reader, err = task.backend.reader()
+					task.reader, err = task.GetBackEnd().reader()
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -344,7 +344,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				return nil
 			}
 
-			if task.backend != nil {
+			if !task.isEmpty {
 				pendingSet[task] = nil
 			} // otherwise it is an empty flush
 

@@ -37,7 +37,6 @@ const (
 type flushTask struct {
 	taskID        int
 	heapSorterID  int
-	backend       backEnd
 	reader        backEndReader
 	tsLowerBound  uint64
 	maxResolvedTs uint64
@@ -45,6 +44,31 @@ type flushTask struct {
 	dealloc       func() error
 	dataSize      int64
 	lastTs        uint64 // for debugging TODO remove
+<<<<<<< HEAD
+=======
+	canceller     *asyncCanceller
+
+	isEmpty bool // read only field
+
+	deallocLock   sync.RWMutex
+	isDeallocated bool    // do not access directly
+	backend       backEnd // do not access directly
+}
+
+func (t *flushTask) markDeallocated() {
+	t.deallocLock.Lock()
+	defer t.deallocLock.Unlock()
+
+	t.backend = nil
+	t.isDeallocated = true
+}
+
+func (t *flushTask) GetBackEnd() backEnd {
+	t.deallocLock.RLock()
+	defer t.deallocLock.RUnlock()
+
+	return t.backend
+>>>>>>> 2277431... sorter: fix Unified Sorter error handling & add more unit test cases (#1619)
 }
 
 type heapSorter struct {
@@ -99,6 +123,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	isEmptyFlush := h.heap.Len() == 0
 	var finishCh chan error
 	if !isEmptyFlush {
+		failpoint.Inject("InjectErrorBackEndAlloc", func() {
+			failpoint.Return(cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected alloc error")).FastGenWithCause())
+		})
+
 		var err error
 		backEnd, err = pool.alloc(ctx)
 		if err != nil {
@@ -115,14 +143,25 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		tsLowerBound:  lowerBound,
 		maxResolvedTs: maxResolvedTs,
 		finished:      finishCh,
+<<<<<<< HEAD
+=======
+		canceller:     h.canceller,
+		isEmpty:       isEmptyFlush,
+>>>>>>> 2277431... sorter: fix Unified Sorter error handling & add more unit test cases (#1619)
 	}
 	h.taskCounter++
 
 	var oldHeap sortHeap
 	if !isEmptyFlush {
 		task.dealloc = func() error {
+<<<<<<< HEAD
 			if task.backend != nil {
 				task.backend = nil
+=======
+			backEnd := task.GetBackEnd()
+			if backEnd != nil {
+				defer task.markDeallocated()
+>>>>>>> 2277431... sorter: fix Unified Sorter error handling & add more unit test cases (#1619)
 				return pool.dealloc(backEnd)
 			}
 			return nil
@@ -131,6 +170,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		h.heap = make(sortHeap, 0, 65536)
 	} else {
 		task.dealloc = func() error {
+			task.markDeallocated()
 			return nil
 		}
 	}
@@ -164,6 +204,15 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 				close(task.finished)
 			}()
 
+<<<<<<< HEAD
+=======
+			failpoint.Inject("InjectErrorBackEndWrite", func() {
+				task.finished <- cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected write error")).FastGenWithCause()
+				failpoint.Return()
+			})
+
+			counter := 0
+>>>>>>> 2277431... sorter: fix Unified Sorter error handling & add more unit test cases (#1619)
 			for oldHeap.Len() > 0 {
 				event := heap.Pop(&oldHeap).(*sortItem).entry
 				err := writer.writeNext(event)

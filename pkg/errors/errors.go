@@ -200,7 +200,13 @@ var (
 
 	// unified sorter errors
 	ErrUnifiedSorterBackendTerminating = errors.Normalize("unified sorter backend is terminating", errors.RFCCodeText("CDC:ErrUnifiedSorterBackendTerminating"))
+<<<<<<< HEAD
 
+=======
+	ErrIllegalUnifiedSorterParameter   = errors.Normalize("illegal parameter for unified sorter: %s", errors.RFCCodeText("CDC:ErrIllegalUnifiedSorterParameter"))
+	ErrAsyncIOCancelled                = errors.Normalize("asynchronous IO operation is cancelled. Internal use only, report a bug if seen in log", errors.RFCCodeText("CDC:ErrAsyncIOCancelled"))
+	ErrUnifiedSorterIOError            = errors.Normalize("unified sorter IO error", errors.RFCCodeText("CDC:ErrUnifiedSorterIOError"))
+>>>>>>> 2277431... sorter: fix Unified Sorter error handling & add more unit test cases (#1619)
 	// processor errors
 	ErrTableProcessorStoppedSafely = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
 
