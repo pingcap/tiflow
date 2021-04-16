@@ -110,7 +110,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				if msg == nil {
 					continue
 				}
-				if msg.RawKV != nil {
+				if msg.RawKV != nil && msg.RawKV.OpType != model.OpTypeResolved {
 					size := uint64(msg.RawKV.ApproximateSize() * 2)
 					commitTs := msg.CRTs
 					err := n.flowController.Consume(commitTs, size)
