@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -145,6 +146,7 @@ type regionWorker struct {
 }
 
 func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *regionWorker {
+	cfg := config.GetGlobalServerConfig().KVClient
 	worker := &regionWorker{
 		session:        s,
 		limiter:        limiter,
@@ -156,8 +158,7 @@ func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *r
 		rtsUpdateCh:    make(chan *regionResolvedTs, 1024),
 		enableOldValue: s.enableOldValue,
 		storeAddr:      addr,
-		// TODO: make this configurable after config file is available in cdc server
-		concurrent: 8,
+		concurrent:     cfg.WorkerConcurrent,
 	}
 	return worker
 }
@@ -715,9 +716,14 @@ func InitWorkerPool() {
 	if !enableKVClientV2 {
 		return
 	}
-	// TODO: make the pool size configurable after config file is available in cdc server
 	workerPoolOnce.Do(func() {
-		size := runtime.NumCPU() * 2
+		cfg := config.GetGlobalServerConfig().KVClient
+		var size int
+		if cfg.WorkerPoolSize > 0 {
+			size = cfg.WorkerPoolSize
+		} else {
+			size = runtime.NumCPU() * 2
+		}
 		regionWorkerPool = workerpool.NewDefaultWorkerPool(size)
 	})
 }

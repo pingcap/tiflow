@@ -161,6 +161,10 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                "/tmp/cdc_sort",
 	},
 	Security: &SecurityConfig{},
+	KVClient: &KVClientConfig{
+		WorkerConcurrent: 8,
+		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+	},
 }
 
 // ServerConfig represents a config for server
@@ -181,6 +185,7 @@ type ServerConfig struct {
 
 	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
 	Security *SecurityConfig `toml:"security" json:"security"`
+	KVClient *KVClientConfig `toml:"kv-client" json:"kv-client"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
