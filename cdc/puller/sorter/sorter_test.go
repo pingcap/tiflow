@@ -345,7 +345,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 10000000, true)
+		err := testSorter(ctx, c, sorter, 100000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()
@@ -367,7 +367,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	finishedCh = make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 10000000, true)
+		err := testSorter(ctx, c, sorter, 100000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected write error.*")
 		close(finishedCh)
 	}()
@@ -401,7 +401,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	c.Assert(err, check.IsNil)
 	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
@@ -419,7 +419,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 10000000, true)
+		err := testSorter(ctx, c, sorter, 100000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()
