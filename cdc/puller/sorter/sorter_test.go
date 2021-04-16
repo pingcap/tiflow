@@ -319,6 +319,9 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer UnifiedSorterCleanUp()
 
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
 	conf := config.GetDefaultServerConfig()
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
@@ -333,7 +336,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
