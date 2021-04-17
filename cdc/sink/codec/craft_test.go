@@ -141,7 +141,7 @@ func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 	encoder := NewCraftEventBatchEncoder().(*CraftEventBatchEncoder)
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
 	c.Assert(encoder.maxMessageSize, check.Equals, 64*1024*1024)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
@@ -152,7 +152,7 @@ func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
 	c.Assert(encoder.maxMessageSize, check.Equals, math.MaxInt32)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})

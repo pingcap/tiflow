@@ -28,23 +28,68 @@ var (
 	codecRowCases = [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+		Columns: []*model.Column{
+			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar")},
+			{Name: "string", Type: mysql.TypeString, Value: []byte("string")},
+			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
+			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
+			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
+			{Name: "float", Type: mysql.TypeFloat, Value: float64(1.0)},
+			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
+			{Name: "null", Type: mysql.TypeNull, Value: nil},
+		},
 	}}, {{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+		Columns: []*model.Column{
+			{Name: "varchar1", Type: mysql.TypeVarchar, Value: []byte("varchar")},
+			{Name: "string1", Type: mysql.TypeString, Value: []byte("string")},
+			{Name: "date1", Type: mysql.TypeDate, Value: "2021/01/01"},
+			{Name: "timestamp1", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
+			{Name: "datetime1", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
+			{Name: "float1", Type: mysql.TypeFloat, Value: float64(1.0)},
+			{Name: "long1", Type: mysql.TypeLong, Value: int64(1000)},
+			{Name: "null1", Type: mysql.TypeNull, Value: nil},
+		},
 	}, {
 		CommitTs: 2,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("bb")}},
+		Columns: []*model.Column{
+			{Name: "varchar2", Type: mysql.TypeVarchar, Value: []byte("varchar")},
+			{Name: "string2", Type: mysql.TypeString, Value: []byte("string")},
+			{Name: "date2", Type: mysql.TypeDate, Value: "2021/01/01"},
+			{Name: "timestamp2", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
+			{Name: "datetime2", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
+			{Name: "float2", Type: mysql.TypeFloat, Value: float64(1.0)},
+			{Name: "long2", Type: mysql.TypeLong, Value: int64(1000)},
+			{Name: "null2", Type: mysql.TypeNull, Value: nil},
+		},
 	}, {
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("bb")}},
+		Columns: []*model.Column{
+			{Name: "varchar3", Type: mysql.TypeVarchar, Value: []byte("varchar")},
+			{Name: "string3", Type: mysql.TypeString, Value: []byte("string")},
+			{Name: "date3", Type: mysql.TypeDate, Value: "2021/01/01"},
+			{Name: "timestamp3", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
+			{Name: "datetime3", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
+			{Name: "float3", Type: mysql.TypeFloat, Value: float64(1.0)},
+			{Name: "long3", Type: mysql.TypeLong, Value: int64(1000)},
+			{Name: "null3", Type: mysql.TypeNull, Value: nil},
+		},
 	}, {
 		CommitTs: 4,
 		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("cc")}},
+		Columns: []*model.Column{
+			{Name: "varchar4", Type: mysql.TypeVarchar, Value: []byte("varchar")},
+			{Name: "string4", Type: mysql.TypeString, Value: []byte("string")},
+			{Name: "date4", Type: mysql.TypeDate, Value: "2021/01/01"},
+			{Name: "timestamp4", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
+			{Name: "datetime4", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
+			{Name: "float4", Type: mysql.TypeFloat, Value: float64(1.0)},
+			{Name: "long4", Type: mysql.TypeLong, Value: int64(1000)},
+			{Name: "null4", Type: mysql.TypeNull, Value: nil},
+		},
 	}}, {}}
 
 	codecDDLCases = [][]*model.DDLEvent{{{

@@ -15,6 +15,7 @@ package codec
 
 import (
 	"math"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -38,6 +39,28 @@ var _ = check.Suite(&batchSuite{
 	resolvedTsCases: codecResolvedTSCases,
 })
 
+type columnsArray []*model.Column
+
+func (a columnsArray) Len() int {
+	return len(a)
+}
+
+func (a columnsArray) Less(i, j int) bool {
+	return a[i].Name < a[j].Name
+}
+
+func (a columnsArray) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func sortColumnsArrays(arrays ...[]*model.Column) {
+	for _, array := range arrays {
+		if array != nil {
+			sort.Sort(columnsArray(array))
+		}
+	}
+}
+
 func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
 	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
@@ -50,6 +73,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
 			row, err := decoder.NextRowChangedEvent()
 			c.Assert(err, check.IsNil)
+			sortColumnsArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
 			c.Assert(row, check.DeepEquals, cs[index])
 			index++
 		}
