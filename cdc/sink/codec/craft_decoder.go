@@ -314,7 +314,7 @@ func decodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 			_, u64, err := decodeUvarint(bits)
 			return u64, err
 		}
-		_, i64, err := decodeUvarint(bits)
+		_, i64, err := decodeVarint(bits)
 		return i64, err
 	case mysql.TypeUnspecified:
 		fallthrough

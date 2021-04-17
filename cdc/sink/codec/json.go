@@ -112,6 +112,26 @@ func formatColumnVal(c column) column {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 		}
+	case mysql.TypeFloat, mysql.TypeDouble:
+		if s, ok := c.Value.(json.Number); ok {
+			f64, err := s.Float64()
+			if err != nil {
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+			c.Value = f64
+		}
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+		if s, ok := c.Value.(json.Number); ok {
+			intNum, err := s.Int64()
+			if err != nil {
+				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+			if c.Flag.IsUnsigned() {
+				c.Value = uint64(intNum)
+			} else {
+				c.Value = intNum
+			}
+		}
 	case mysql.TypeBit:
 		if s, ok := c.Value.(json.Number); ok {
 			intNum, err := s.Int64()
