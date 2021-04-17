@@ -27,7 +27,7 @@ import (
 // the count of sorted data and unmounted data. In current benchmark a single
 // processor can reach 50k-100k QPS, and accumulated data is around
 // 200k-400k in most cases. We need a better chan cache mechanism.
-const defaultOutputChannelSize = 1280000
+const defaultOutputChannelSize = 512
 
 // Pipeline represents a pipeline includes a number of nodes
 type Pipeline struct {
