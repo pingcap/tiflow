@@ -33,7 +33,8 @@ import (
 
 const (
 	// TODO move this to server configuration
-	perTableMemoryQuota = 50 * 1024 * 1024 // 50MB
+	// TODO determine a reasonable default value
+	perTableMemoryQuota = 20 * 1024 * 1024 // 20MB
 )
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
