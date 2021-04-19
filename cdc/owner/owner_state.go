@@ -65,45 +65,6 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 
 	switch k.Tp {
 	case etcd.CDCKeyTypeCapture:
-		captureID := k.CaptureID
-		defer func() {
-			// invalidate cache because captures have changed.
-			s.invalidateTableToCaptureCache()
-		}()
-
-		if value == nil {
-			log.Info("Capture deleted",
-				zap.String("captureID", captureID),
-				zap.Reflect("old-capture", s.Captures[captureID]))
-
-			delete(s.Captures, captureID)
-			return nil
-		}
-
-		var newCaptureInfo model.CaptureInfo
-		err := json.Unmarshal(value, &newCaptureInfo)
-		if err != nil {
-			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
-		}
-
-		if oldCaptureInfo, ok := s.Captures[captureID]; ok {
-			log.Debug("Capture updated",
-				zap.String("captureID", captureID),
-				zap.Reflect("old-capture", oldCaptureInfo),
-				zap.Reflect("new-capture", newCaptureInfo))
-		} else {
-			log.Info("Capture added",
-				zap.String("captureID", captureID),
-				zap.Reflect("new-capture", newCaptureInfo))
-
-			if s.newCaptureHandler != nil {
-				// Notify about the capture-added event
-				failpoint.Inject("sleep-before-watch-capture", nil)
-				s.newCaptureHandler(captureID)
-			}
-		}
-
-		s.Captures[captureID] = &newCaptureInfo
 
 		return nil
 	case etcd.CDCKeyTypeChangeFeedStatus:
@@ -245,6 +206,7 @@ func (s *ownerReactorState) Update(key util.EtcdKey, value []byte, _ bool) error
 		s.ChangeFeedInfos[changeFeedID] = &changeFeedInfo
 		return nil
 	default:
+		log.Warn("receive unknown etcd update event in owner", zap.String("key", key.String()), zap.ByteString("value", value))
 	}
 
 	return nil

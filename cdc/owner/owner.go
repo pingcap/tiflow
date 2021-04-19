@@ -40,7 +40,7 @@ type Owner struct {
 }
 
 func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.Credential) (*Owner, error) {
-	state := newCDCReactorState()
+	state := model.NewGlobalState()
 	bootstrapper := newBootstrapper(pdClient, credential)
 	cfManager := newChangeFeedManager(state, bootstrapper)
 	gcManager := newGCManager(pdClient, 600)
@@ -81,6 +81,7 @@ func (o *Owner) EnqueueJob(adminJob model.AdminJob) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// TODO wait the admin job is executed and check the result, and we need a callback for admin job
 
 	return nil
 }

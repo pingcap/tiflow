@@ -53,7 +53,7 @@ const (
 )
 
 type processor struct {
-	changefeed *changefeedState
+	changefeed *model.ChangefeedReactorState
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
@@ -113,7 +113,7 @@ func newProcessor(
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
-func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
+func (p *processor) Tick(ctx context.Context, state *model.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	_, err := p.tick(ctx, state)
 	p.firstTick = false
 	if err == nil {
@@ -131,7 +131,7 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}
-	state.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+	state.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, error) {
 		if position == nil {
 			position = &model.TaskPosition{}
 		}
@@ -150,12 +150,12 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx context.Context, state *model.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if p.changefeed.TaskStatus.AdminJobType.IsStopState() {
+	if p.changefeed.TaskStatuses[p.captureInfo.ID].AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	if err := p.lazyInit(ctx); err != nil {
@@ -188,14 +188,14 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 // checkPosition create a new task position, and put it into the etcd state.
 // task position maybe be not exist only when the processor is running first time.
 func (p *processor) checkPosition() bool {
-	if p.changefeed.TaskPosition != nil {
+	if p.changefeed.TaskPositions[p.captureInfo.ID] != nil {
 		return false
 	}
 	if !p.firstTick {
 		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, error) {
 		if position == nil {
 			return &model.TaskPosition{
 				CheckPointTs: checkpointTs,
@@ -279,7 +279,7 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
 
 	// Clean up possible residual error states
-	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, error) {
 		if position != nil && position.Error != nil {
 			position.Error = nil
 		}
@@ -321,7 +321,7 @@ func (p *processor) handleErrorCh(ctx context.Context) error {
 // handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
 func (p *processor) handleTableOperation(ctx context.Context) error {
 	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
-		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
+		p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, error) {
 			if status == nil || status.Operation == nil {
 				log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
 				return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
@@ -337,7 +337,8 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
-	for tableID, opt := range p.changefeed.TaskStatus.Operation {
+	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
+	for tableID, opt := range taskStatus.Operation {
 		if opt.TableApplied() {
 			continue
 		}
@@ -376,7 +377,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 					return nil
 				})
 
-				p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
+				p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, error) {
 					if status.Tables == nil {
 						log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
 					}
@@ -406,7 +407,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 		} else {
 			switch opt.Status {
 			case model.OperDispatched:
-				replicaInfo, exist := p.changefeed.TaskStatus.Tables[tableID]
+				replicaInfo, exist := taskStatus.Tables[tableID]
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
 				}
@@ -430,7 +431,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 					log.Panic("table which was added is not found",
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 				}
-				localResolvedTs := p.changefeed.TaskPosition.ResolvedTs
+				localResolvedTs := p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs
 				globalResolvedTs := p.changefeed.Status.ResolvedTs
 				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 					patchOperation(tableID, func(operation *model.TableOperation) error {
@@ -522,16 +523,17 @@ func (p *processor) sendError(err error) {
 // checkTablesNum if the number of table pipelines is equal to the number of TaskStatus in etcd state.
 // if the table number is not right, create or remove the odd tables.
 func (p *processor) checkTablesNum(ctx context.Context) error {
-	if len(p.tables) == len(p.changefeed.TaskStatus.Tables) {
+	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
+	if len(p.tables) == len(taskStatus.Tables) {
 		return nil
 	}
 	// check if a table should be listen but not
 	// this only could be happened in the first tick.
-	for tableID, replicaInfo := range p.changefeed.TaskStatus.Tables {
+	for tableID, replicaInfo := range taskStatus.Tables {
 		if _, exist := p.tables[tableID]; exist {
 			continue
 		}
-		opt := p.changefeed.TaskStatus.Operation
+		opt := taskStatus.Operation
 		// TODO(leoppro): check if the operation is a undone add operation
 		if opt != nil && opt[tableID] != nil {
 			continue
@@ -547,17 +549,17 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 	// check if a table should be removed but still exist
 	// this shouldn't be happened in any time.
 	for tableID, tablePipeline := range p.tables {
-		if _, exist := p.changefeed.TaskStatus.Tables[tableID]; exist {
+		if _, exist := taskStatus.Tables[tableID]; exist {
 			continue
 		}
-		opt := p.changefeed.TaskStatus.Operation
+		opt := taskStatus.Operation
 		if opt != nil && opt[tableID] != nil && opt[tableID].Delete {
 			// table will be removed by normal logic
 			continue
 		}
 		tablePipeline.Cancel()
 		delete(p.tables, tableID)
-		log.Warn("the table was forcibly deleted, this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", p.changefeed.TaskStatus))
+		log.Warn("the table was forcibly deleted, this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
 	}
 	return nil
 }
@@ -593,9 +595,9 @@ func (p *processor) handlePosition() error {
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 
 	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
-	if minResolvedTs != p.changefeed.TaskPosition.ResolvedTs ||
-		minCheckpointTs != p.changefeed.TaskPosition.CheckPointTs {
-		p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+	if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
+		minCheckpointTs != p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs {
+		p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, error) {
 			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 			if position == nil {
 				// when the captureInfo is deleted, the old owner will delete task status, task position, task workload in non-atomic
@@ -613,7 +615,7 @@ func (p *processor) handlePosition() error {
 
 // handleWorkload calculates the workload of all tables
 func (p *processor) handleWorkload() error {
-	p.changefeed.PatchTaskWorkload(func(_ model.TaskWorkload) (model.TaskWorkload, error) {
+	p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(_ model.TaskWorkload) (model.TaskWorkload, error) {
 		workload := make(model.TaskWorkload, len(p.tables))
 		for tableID, table := range p.tables {
 			workload[tableID] = table.Workload()
@@ -747,7 +749,7 @@ func (p *processor) Close() error {
 	p.wg.Wait()
 	// mark tables share the same context with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
-	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, error) {
 		if position == nil {
 			return nil, nil
 		}
@@ -756,10 +758,10 @@ func (p *processor) Close() error {
 		}
 		return nil, nil
 	})
-	p.changefeed.PatchTaskStatus(func(_ *model.TaskStatus) (*model.TaskStatus, error) {
+	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(_ *model.TaskStatus) (*model.TaskStatus, error) {
 		return nil, nil
 	})
-	p.changefeed.PatchTaskWorkload(func(_ model.TaskWorkload) (model.TaskWorkload, error) {
+	p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(_ model.TaskWorkload) (model.TaskWorkload, error) {
 		return nil, nil
 	})
 

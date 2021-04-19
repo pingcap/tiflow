@@ -31,8 +31,9 @@ type PatchFunc = func(old []byte) (newValue []byte, err error)
 
 // DataPatch represents an update to a given Etcd key
 type DataPatch struct {
-	Key util.EtcdKey
-	Fun PatchFunc
+	Key        util.EtcdKey
+	Persistent bool
+	Fun        PatchFunc
 }
 
 // ReactorState models the Etcd state of a reactor

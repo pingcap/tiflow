@@ -79,20 +79,20 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	globalState := state.(*globalState)
+	globalState := state.(*model.GlobalReactorState)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
-		if !changefeedState.Active() {
+		if !changefeedState.Active(m.captureInfo.ID) {
 			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
 		}
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if changefeedState.TaskStatus.AdminJobType.IsStopState() {
+			if changefeedState.TaskStatuses[m.captureInfo.ID].AdminJobType.IsStopState() {
 				continue
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)

@@ -144,7 +144,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 		if len(pendingPatches) > 0 {
 			// Here we have some patches yet to be uploaded to Etcd.
-			err := worker.applyPatches(ctx, pendingPatches)
+			err := worker.applyPatches(ctx, pendingPatches, session)
 			if err != nil {
 				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
 					continue
@@ -258,7 +258,7 @@ func etcdValueEqual(left, right []byte) bool {
 	return bytes.Equal(left, right)
 }
 
-func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch) error {
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch, session *concurrency.Session) error {
 	patches = mergePatch(patches)
 	cmps := make([]clientv3.Cmp, 0, len(patches))
 	ops := make([]clientv3.Op, 0, len(patches))
@@ -289,12 +289,16 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 			// Ignore patches that produce a new value that is the same as the old value.
 			continue
 		}
+		var opOption []clientv3.OpOption
+		if !patch.Persistent && session != nil {
+			opOption = []clientv3.OpOption{clientv3.WithLease(session.Lease())}
+		}
 
 		var op clientv3.Op
 		if value != nil {
-			op = clientv3.OpPut(patch.Key.String(), string(value))
+			op = clientv3.OpPut(patch.Key.String(), string(value), opOption...)
 		} else {
-			op = clientv3.OpDelete(patch.Key.String())
+			op = clientv3.OpDelete(patch.Key.String(), opOption...)
 		}
 		ops = append(ops, op)
 	}
