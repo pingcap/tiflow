@@ -108,19 +108,30 @@ type regionWorker struct {
 	rtsManager  *resolvedTsManager
 	rtsUpdateCh chan *regionResolvedTs
 
+	uninitRegions struct {
+		sync.Mutex
+		m map[uint64]time.Time
+	}
+
 	enableOldValue bool
 	storeAddr      string
 }
 
 func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *regionWorker {
 	worker := &regionWorker{
-		session:        s,
-		limiter:        limiter,
-		inputCh:        make(chan *regionStatefulEvent, 1024),
-		outputCh:       s.eventCh,
-		statesManager:  newRegionStateManager(-1),
-		rtsManager:     newResolvedTsManager(),
-		rtsUpdateCh:    make(chan *regionResolvedTs, 1024),
+		session:       s,
+		limiter:       limiter,
+		inputCh:       make(chan *regionStatefulEvent, 1024),
+		outputCh:      s.eventCh,
+		statesManager: newRegionStateManager(-1),
+		rtsManager:    newResolvedTsManager(),
+		rtsUpdateCh:   make(chan *regionResolvedTs, 1024),
+		uninitRegions: struct {
+			sync.Mutex
+			m map[uint64]time.Time
+		}{
+			m: make(map[uint64]time.Time),
+		},
 		enableOldValue: s.enableOldValue,
 		storeAddr:      addr,
 	}
@@ -180,6 +191,39 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	})
 }
 
+func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
+	checkInterval := time.Minute
+
+	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
+		reconnectInterval = time.Duration(val.(int)) * time.Second
+	})
+	failpoint.Inject("kvClientCheckUnInitRegionInterval", func(val failpoint.Value) {
+		checkInterval = time.Duration(val.(int)) * time.Second
+	})
+
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			w.uninitRegions.Lock()
+			for regionID, lastReceivedEventTime := range w.uninitRegions.m {
+				sinceLastEvent := time.Since(lastReceivedEventTime)
+				if sinceLastEvent > reconnectInterval {
+					log.Warn("kv client reconnect triggered",
+						zap.Duration("duration", sinceLastEvent), zap.Uint64("region", regionID))
+					w.uninitRegions.Unlock()
+					return errReconnect
+				}
+			}
+			w.uninitRegions.Unlock()
+		}
+	}
+}
+
 func (w *regionWorker) resolveLock(ctx context.Context) error {
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
@@ -234,9 +278,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				state.lock.RLock()
 				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
-				if sinceLastResolvedTs >= resolveLockInterval && state.initialized {
+				if sinceLastResolvedTs >= resolveLockInterval {
 					if sinceLastResolvedTs > reconnectInterval {
 						log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastResolvedTs))
+						state.lock.RUnlock()
 						return errReconnect
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
@@ -289,6 +334,11 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			event.state.lock.Lock()
 			if event.changeEvent != nil {
 				metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
+				if !event.state.initialized {
+					w.uninitRegions.Lock()
+					w.uninitRegions.m[event.state.sri.verID.GetID()] = time.Now()
+					w.uninitRegions.Unlock()
+				}
 				switch x := event.changeEvent.Event.(type) {
 				case *cdcpb.Event_Entries_:
 					err = w.handleEventEntry(
@@ -332,25 +382,31 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 	}
 }
 
+func (w *regionWorker) checkErrorReconnect(err error) error {
+	if errors.Cause(err) == errReconnect {
+		cancel, ok := w.session.getStreamCancel(w.storeAddr)
+		if ok {
+			// cancel the stream to trigger strem.Recv with context cancel error
+			// Note use context cancel is the only way to terminate a gRPC stream
+			cancel()
+			// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+			// should be called after stream has been deleted. Add a delay here
+			// to avoid too frequent region rebuilt.
+			time.Sleep(time.Second)
+		}
+		// if stream is already deleted, just ignore errReconnect
+		return nil
+	}
+	return err
+}
+
 func (w *regionWorker) run(ctx context.Context) error {
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		err := w.resolveLock(ctx)
-		if errors.Cause(err) == errReconnect {
-			cancel, ok := w.session.getStreamCancel(w.storeAddr)
-			if ok {
-				// cancel the stream to trigger strem.Recv with context cancel error
-				// Note use context cancel is the only way to terminate a gRPC stream
-				cancel()
-				// Failover in stream.Recv has 0-100ms delay, the onRegionFail
-				// should be called after stream has been deleted. Add a delay here
-				// to avoid too frequent region rebuilt.
-				time.Sleep(time.Second)
-			}
-			// if stream is already deleted, just ignore errReconnect
-			return nil
-		}
-		return err
+		return w.checkErrorReconnect(w.resolveLock(ctx))
+	})
+	wg.Go(func() error {
+		return w.checkErrorReconnect(w.checkUnInitRegions(ctx))
 	})
 	wg.Go(func() error {
 		return w.eventHandler(ctx)
@@ -390,6 +446,17 @@ func (w *regionWorker) handleEventEntry(
 			}
 			metricPullEventInitializedCounter.Inc()
 			state.initialized = true
+			select {
+			case w.rtsUpdateCh <- &regionResolvedTs{regionID: regionID, resolvedTs: state.sri.ts}:
+			default:
+				// rtsUpdateCh block often means too many regions are suffering
+				// lock resolve, the kv client status is not very healthy.
+				log.Warn("region is not upsert into rts manager", zap.Uint64("region-id", regionID))
+			}
+			w.uninitRegions.Lock()
+			delete(w.uninitRegions.m, regionID)
+			w.uninitRegions.Unlock()
+
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)

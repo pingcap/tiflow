@@ -68,7 +68,9 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
+)
 
+var (
 	// time interval to force kv client to terminate gRPC stream and reconnect
 	reconnectInterval = 15 * time.Minute
 )
