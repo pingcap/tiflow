@@ -16,6 +16,7 @@ package pipeline
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -103,6 +104,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	})
 	n.wg.Go(func() error {
 		lastSentResolvedTs := uint64(0)
+		lastSendResolvedTsTime := time.Now()
 		lastCRTs := uint64(0)
 		for {
 			select {
@@ -115,9 +117,18 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				if msg.RawKV != nil && msg.RawKV.OpType != model.OpTypeResolved {
 					size := uint64(msg.RawKV.ApproximateSize() * 2)
 					commitTs := msg.CRTs
+
+					if time.Since(lastSendResolvedTsTime) > time.Millisecond*200 {
+						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
+							lastSentResolvedTs = lastCRTs
+							lastSendResolvedTsTime = time.Now()
+							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+						}
+					}
 					err := n.flowController.Consume(commitTs, size, func() error {
 						if lastCRTs > lastSentResolvedTs {
 							lastSentResolvedTs = lastCRTs
+							lastSendResolvedTsTime = time.Now()
 							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 						}
 						return nil
@@ -140,6 +151,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						continue
 					}
 					lastSentResolvedTs = msg.CRTs
+					lastSendResolvedTsTime = time.Now()
 				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
 			}
