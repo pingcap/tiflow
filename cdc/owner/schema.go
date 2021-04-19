@@ -25,6 +25,69 @@ import (
 	"go.uber.org/zap"
 )
 
+type schema4Owner interface {
+	AllPhysicalTables() []model.TableID
+	FindMarkTableID(id model.TableID) model.TableID
+	HandleDDL(job *timodel.Job) error
+	BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, error)
+}
+
+type schemaWrap4Owner struct {
+	schemaSnapshot *entry.SingleSchemaSnapshot
+	filter         *filter.Filter
+	config         *config.ReplicaConfig
+
+	allPhysicalTablesCache []model.TableID
+}
+
+// AllPhysicalTables returns the table IDs of all tables and partition tables.
+func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
+	if s.allPhysicalTablesCache != nil {
+		return s.allPhysicalTablesCache
+	}
+	tables := s.schemaSnapshot.CloneTables()
+	s.allPhysicalTablesCache = make([]model.TableID, 0, len(tables))
+	for tid := range tables {
+		tblInfo, exist := s.schemaSnapshot.TableByID(tid)
+		if !exist {
+			log.Panic("table not found for table ID", zap.Int64("tid", tid))
+		}
+		if s.shouldIgnoreTable(tblInfo) {
+			continue
+		}
+
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, partition.ID)
+			}
+		} else {
+			s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, tblInfo.ID)
+		}
+	}
+	return s.allPhysicalTablesCache
+}
+
+func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
+	return s.schemaSnapshot.HandleDDL(job)
+}
+
+func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
+	schemaName := tableInfo.TableName.Schema
+	tableName := tableInfo.TableName.Table
+	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
+		return true
+	}
+	if s.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
+		// skip the mark table if cyclic is enabled
+		return true
+	}
+	if !tableInfo.IsEligible(s.config.ForceReplicate) {
+		log.Warn("skip ineligible table", zap.Int64("tid", tableInfo.ID), zap.Stringer("table", tableInfo.TableName))
+		return true
+	}
+	return false
+}
+
 type schemaManager struct {
 	schemas        map[model.SchemaID]map[model.TableID]struct{}
 	partitions     map[model.TableID][]model.TableID
@@ -32,8 +95,6 @@ type schemaManager struct {
 
 	filter *filter.Filter
 	config *config.ReplicaConfig
-
-	pendingDDLJob []*timodel.Job
 }
 
 type ddlJobWithPreTableInfo struct {
@@ -121,27 +182,6 @@ func (m *schemaManager) SinkTableInfos() []*model.SimpleTableInfo {
 	}
 
 	return sinkTableInfos
-}
-
-// AllPhysicalTables returns the table IDs of all tables and partition tables.
-func (m *schemaManager) AllPhysicalTables() []model.TableID {
-	var allPartitions []model.TableID
-
-	for _, tableIDs := range m.schemas {
-		for tableID := range tableIDs {
-			if partitions, ok := m.partitions[tableID]; ok {
-				allPartitions = append(allPartitions, partitions...)
-			} else {
-				allPartitions = append(allPartitions, tableID)
-			}
-		}
-	}
-
-	return allPartitions
-}
-
-func (m *schemaManager) AppendDDLJob(job ...*timodel.Job) {
-	m.pendingDDLJob = append(m.pendingDDLJob, job...)
 }
 
 func (m *schemaManager) TopDDLJobToExec() (*timodel.Job, error) {
@@ -253,7 +293,7 @@ func (m *schemaManager) shouldIgnoreDDL(job *timodel.Job) bool {
 		return true
 	}
 	if job.BinlogInfo == nil || job.BinlogInfo.TableInfo == nil {
-		return false
+		return true
 	}
 
 	postTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName,

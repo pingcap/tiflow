@@ -17,6 +17,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/ticdc/pkg/filter"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/log"
 
 	"github.com/pingcap/errors"
@@ -32,22 +35,23 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type ddlHandler interface {
+type ddlPuller interface {
 	Run(ctx context.Context) error
-	PullDDL() (uint64, []*timodel.Job, error)
+	FrontDDL() (uint64, *timodel.Job)
+	PopFrontDDL() (uint64, *timodel.Job)
 }
 
-type ddlHandlerImpl struct {
+type ddlPullerImpl struct {
 	puller puller.Puller
+	filter *filter.Filter
 
-	mu         sync.Mutex
-	resolvedTS uint64
-	lastDDLTs  uint64 // TODO remove
-	ddlJobs    []*timodel.Job
+	mu             sync.Mutex
+	resolvedTS     uint64
+	pendingDDLJobs []*timodel.Job
 }
 
 // TODO test-case: resolvedTs is initialized to (startTs - 1)
-func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, startTs uint64) *ddlHandlerImpl {
+func newDDLPuller(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, startTs uint64) *ddlPullerImpl {
 	plr := puller.NewPuller(
 		ctx,
 		pdCli,
@@ -58,13 +62,13 @@ func newDDLHandler(ctx context.Context, pdCli pd.Client, credential *security.Cr
 		nil,
 		false)
 
-	return &ddlHandlerImpl{
+	return &ddlPullerImpl{
 		puller:     plr,
 		resolvedTS: startTs - 1,
 	}
 }
 
-func (h *ddlHandlerImpl) Run(ctx context.Context) error {
+func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	log.Debug("DDL puller started")
 	ctx = util.PutTableInfoInCtx(ctx, -1, "")
 	errg, ctx := errgroup.WithContext(ctx)
@@ -75,17 +79,47 @@ func (h *ddlHandlerImpl) Run(ctx context.Context) error {
 
 	rawDDLCh := puller.SortOutput(ctx, h.puller.Output())
 
+	var lastDDLFinishedTs uint64
+	receiveDDL := func(rawDDL *model.RawKVEntry) error {
+		if rawDDL == nil {
+			return nil
+		}
+		if rawDDL.OpType == model.OpTypeResolved {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if rawDDL.CRTs > h.resolvedTS {
+				h.resolvedTS = rawDDL.CRTs
+			}
+			return nil
+		}
+		job, err := entry.UnmarshalDDL(rawDDL)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if job == nil {
+			return nil
+		}
+		if h.filter.ShouldDiscardDDL(job.Type) {
+			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
+			return nil
+		}
+		if job.BinlogInfo.FinishedTS == lastDDLFinishedTs {
+			return nil
+		}
+		lastDDLFinishedTs = job.BinlogInfo.FinishedTS
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.pendingDDLJobs = append(h.pendingDDLJobs, job)
+		return nil
+	}
+
 	errg.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case e := <-rawDDLCh:
-				if e == nil {
-					continue
-				}
-				err := h.receiveDDL(e)
-				if err != nil {
+				if err := receiveDDL(e); err != nil {
 					return errors.Trace(err)
 				}
 			}
@@ -95,37 +129,23 @@ func (h *ddlHandlerImpl) Run(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (h *ddlHandlerImpl) receiveDDL(rawDDL *model.RawKVEntry) error {
-	if rawDDL.OpType == model.OpTypeResolved {
-		h.mu.Lock()
-		h.resolvedTS = rawDDL.CRTs
-		h.mu.Unlock()
-		return nil
-	}
-	job, err := entry.UnmarshalDDL(rawDDL)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if job == nil {
-		return nil
-	}
-
+func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
-	if job.BinlogInfo.FinishedTS == h.lastDDLTs {
-		return nil
+	if len(h.pendingDDLJobs) == 0 {
+		return h.resolvedTS, nil
 	}
-	h.lastDDLTs = job.BinlogInfo.FinishedTS
-	h.ddlJobs = append(h.ddlJobs, job)
-	return nil
+	job := h.pendingDDLJobs[0]
+	return job.BinlogInfo.FinishedTS, job
 }
 
-// TODO test-case: resolvedTs not zero
-func (h *ddlHandlerImpl) PullDDL() (uint64, []*timodel.Job, error) {
+func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	result := h.ddlJobs
-	h.ddlJobs = nil
-	return h.resolvedTS, result, nil
+	if len(h.pendingDDLJobs) == 0 {
+		return h.resolvedTS, nil
+	}
+	job := h.pendingDDLJobs[0]
+	h.pendingDDLJobs = h.pendingDDLJobs[1:]
+	return job.BinlogInfo.FinishedTS, job
 }

@@ -40,18 +40,21 @@ type changeFeedRunner interface {
 }
 
 type changeFeedRunnerImpl struct {
-	cfID   model.ChangeFeedID
+	state *model.ChangefeedReactorState
+
+	barriers *barriers
+
 	config *config.ReplicaConfig
 
 	sink      sink.Sink
 	sinkErrCh <-chan error
 
-	ddlHandler ddlHandler
-	ddlCancel  func()
-	ddlErrCh   <-chan error
+	ddlPuller ddlPuller
+	ddlCancel func()
+	ddlErrCh  <-chan error
 
-	schemaManager *schemaManager
-	filter        *filter.Filter
+	schema schema4Owner
+	filter *filter.Filter
 
 	ownerState      *ownerReactorState
 	changeFeedState *changeFeedState
@@ -133,76 +136,59 @@ func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
 	default:
 	}
 
-	// Update per-table status
-	for _, tableID := range c.ownerState.GetChangeFeedActiveTables(c.cfID) {
-		progress := c.ownerState.GetTableProgress(c.cfID, tableID)
-		if progress == nil {
-			// Possibly the capture that is supposed to run the table is not running yet.
-			continue
-		}
-		c.changeFeedState.SetTableResolvedTs(tableID, progress.resolvedTs)
-		c.changeFeedState.SetTableCheckpointTs(tableID, progress.checkpointTs)
-	}
-
-	// Receive DDL and update DDL intake status
-	ddlResolvedTs, newDDLJobs, err := c.ddlHandler.PullDDL()
-	if err != nil {
+	if err := c.handleBarrier(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	// 2 scheduler.tick
 
-	for _, job := range newDDLJobs {
-		log.Debug("new DDL job received", zap.Reflect("job", job))
-	}
-	c.schemaManager.AppendDDLJob(newDDLJobs...)
-	c.changeFeedState.SetDDLResolvedTs(ddlResolvedTs)
-	jobToExec, err := c.schemaManager.TopDDLJobToExec()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if jobToExec != nil {
-		log.Info("LEOPPRO add barrier", zap.Reflect("job", jobToExec))
-		c.changeFeedState.AddDDLBarrier(jobToExec)
-	}
-
-	c.changeFeedState.CalcResolvedTsAndCheckpointTs()
-
-	log.Info("LEOPPRO show barrier", zap.Any("barriers", c.changeFeedState.barriers.inner))
-	blocked, barrierType, barrierIndex, barrierTs := c.changeFeedState.BlockingByBarrier()
-	if blocked {
-		switch barrierType {
-		case DDLJobBarrier:
-			if barrierIndex != uint64(jobToExec.ID) {
-				log.Panic("LEOPPRO", zap.Any("barrierType", barrierType), zap.Any("barrierIndex", barrierIndex), zap.Any("barrierTs", barrierTs), zap.Any("job", jobToExec))
-			}
-			err := c.execDDL(ctx, jobToExec)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			tableActions, err := c.schemaManager.MarkDDLExecuted()
-			if err != nil {
-				return errors.Trace(err)
-			}
-			c.changeFeedState.ApplyTableActions(tableActions)
-			c.changeFeedState.ClearBarrier(barrierType, barrierIndex)
-		case SyncPointBarrier:
-			// todo
-			panic("not implemented")
-		case DDLResolvedTs:
-			// just go to next tick
-		}
-	}
+	// 3 c.changeFeedState.CalcResolvedTsAndCheckpointTs()
 
 	resolvedTs := c.changeFeedState.ResolvedTs
 	checkpointTs := c.changeFeedState.CheckpointTs
 	log.Debug("Updating changeFeed", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	c.ownerState.UpdateChangeFeedStatus(c.cfID, resolvedTs, checkpointTs)
 
-	c.changeFeedState.SyncTasks()
 	return nil
 }
 
+func (c *changeFeedRunnerImpl) handleBarrier(ctx context.Context) error {
+	barrierTp, barrierTs := c.barriers.Min()
+	blocked := barrierTs == c.state.Status.CheckpointTs
+	switch barrierTp {
+	case DDLJobBarrier:
+		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
+		if ddlJob == nil {
+			c.barriers.Update(DDLJobBarrier, ddlResolvedTs)
+			return nil
+		}
+		if !blocked {
+			return nil
+		}
+		err := c.schema.HandleDDL(ddlJob)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		err = c.execDDL(ctx, ddlJob)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.ddlPuller.PopFrontDDL()
+		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
+		c.barriers.Update(DDLJobBarrier, newDDLResolvedTs)
+	case SyncPointBarrier:
+		// todo
+		panic("not implemented")
+	default:
+		log.Panic("Unknown barrier type", zap.Int("barrier type", barrierTp))
+	}
+}
+
 func (c *changeFeedRunnerImpl) execDDL(ctx context.Context, job *timodel.Job) error {
-	ddlEvent, err := c.schemaManager.BuildDDLEvent(job)
+	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+		return nil
+	}
+	ddlEvent, err := c.schema.BuildDDLEvent(job)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -23,65 +23,60 @@ import (
 type barrierType = int
 
 const (
-	// DDLBarrier denotes a replication barrier caused by a DDL.
+	// DDLJobBarrier denotes a replication barrier caused by a DDL.
 	DDLJobBarrier barrierType = iota
-	DDLResolvedTs
 	// SyncPointBarrier denotes a barrier for snapshot replication.
 	SyncPointBarrier
-	// TODO support snapshot replication.
 )
 
-type barrier struct {
-	tp    barrierType
-	index uint64
-}
-
 type barriers struct {
-	inner map[barrier]model.Ts
+	inner map[barrierType]model.Ts
 	dirty bool
-	min   barrier
+	min   barrierType
 }
 
 func newBarriers() *barriers {
 	return &barriers{
-		inner: make(map[barrier]model.Ts),
+		inner: make(map[barrierType]model.Ts),
 		dirty: true,
 	}
 }
 
-func (b *barriers) Update(tp barrierType, index uint64, barrierTs model.Ts) {
+func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
 	if !b.dirty && barrierTs < b.inner[b.min] {
 		b.dirty = true
 	}
-	b.inner[barrier{tp: tp, index: index}] = barrierTs
+	b.inner[tp] = barrierTs
 }
 
-func (b *barriers) Min() (tp barrierType, index uint64, barrierTs model.Ts) {
+func (b *barriers) Min() (tp barrierType, barrierTs model.Ts) {
 	if !b.dirty {
-		return b.min.tp, b.min.index, b.inner[b.min]
+		return b.min, b.inner[b.min]
 	}
-	tp, index, minTs := b.calcMin()
-	b.min = barrier{tp: tp, index: index}
+	tp, minTs := b.calcMin()
+	b.min = tp
 	b.dirty = false
-	return tp, index, minTs
+	return tp, minTs
 }
 
-func (b *barriers) calcMin() (tp barrierType, index uint64, barrierTs model.Ts) {
+func (b *barriers) calcMin() (tp barrierType, barrierTs model.Ts) {
 	if len(b.inner) == 0 {
 		log.Panic("there are no barrier in owner, please report a bug")
 	}
 	barrierTs = uint64(math.MaxUint64)
 	for br, ts := range b.inner {
 		if ts <= barrierTs {
-			tp = br.tp
-			index = br.index
+			tp = br
 			barrierTs = ts
 		}
+	}
+	if barrierTs == math.MaxUint64 {
+		log.Panic("the barriers is empty, please report a bug")
 	}
 	return
 }
 
-func (b *barriers) Remove(tp barrierType, index uint64) {
-	delete(b.inner, barrier{tp: tp, index: index})
+func (b *barriers) Remove(tp barrierType) {
+	delete(b.inner, tp)
 	b.dirty = true
 }

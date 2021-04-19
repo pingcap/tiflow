@@ -21,11 +21,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type tableSchemaSource interface {
-	AllPhysicalTables() []model.TableID
-	FindMarkTableID(id model.TableID) model.TableID
-}
-
 type schedulerJobType string
 
 const (
@@ -44,13 +39,13 @@ type schedulerJob struct {
 
 type schedulerImpl struct {
 	state  *model.ChangefeedReactorState
-	schema tableSchemaSource
+	schema schema4Owner
 
 	moveTableTarget       map[model.TableID]model.CaptureID
 	needRebalanceNextTick bool
 }
 
-func newScheduler(state *model.ChangefeedReactorState, schema tableSchemaSource) *schedulerImpl {
+func newScheduler(state *model.ChangefeedReactorState, schema schema4Owner) *schedulerImpl {
 	return &schedulerImpl{
 		state:           state,
 		schema:          schema,

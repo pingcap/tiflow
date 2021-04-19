@@ -72,10 +72,6 @@ func (cf *changeFeedState) SyncTasks() {
 	}
 }
 
-func (cf *changeFeedState) SetDDLResolvedTs(ddlResolvedTs uint64) {
-	cf.barriers.Update(DDLResolvedTs, 0, ddlResolvedTs)
-}
-
 func (cf *changeFeedState) AddDDLBarrier(job *timodel.Job) {
 	cf.barriers.Update(DDLJobBarrier, uint64(job.ID), job.BinlogInfo.FinishedTS-1)
 }
