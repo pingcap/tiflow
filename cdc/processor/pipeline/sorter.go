@@ -18,17 +18,16 @@ import (
 	"os"
 	"time"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -41,6 +40,7 @@ type sorterNode struct {
 	tableID      model.TableID
 	tableName    string // quoted schema and table, used in metircs only
 
+	// for per-table flow control
 	flowController tableFlowController
 
 	wg     errgroup.Group
@@ -104,29 +104,39 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	})
 	n.wg.Go(func() error {
 		lastSentResolvedTs := uint64(0)
-		lastSendResolvedTsTime := time.Now()
-		lastCRTs := uint64(0)
+		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
+		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 		for {
 			select {
 			case <-stdCtx.Done():
 				return nil
 			case msg := <-sorter.Output():
-				if msg == nil {
+				if msg == nil || msg.RawKV == nil {
 					continue
 				}
-				if msg.RawKV != nil && msg.RawKV.OpType != model.OpTypeResolved {
-					size := uint64(msg.RawKV.ApproximateSize() * 2)
+				if msg.RawKV.OpType != model.OpTypeResolved {
+					size := uint64(msg.RawKV.ApproximateSize())
 					commitTs := msg.CRTs
-
-					if time.Since(lastSendResolvedTsTime) > time.Millisecond*200 {
+					// We interpolate a resolved-ts if none has been sent for some time.
+					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
+						// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
+						// If this is true, it implies that (1) the last transaction has finished, and we are processing
+						// the first event in a new transaction, (2) a resolved-ts prev_event_commit_ts is safe to be sent,
+						// but it has not yet.
+						// This means that we can interpolate prev_event_commit_ts as a resolved-ts, improving the frequency
+						// at which the sink flushes.
 						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
 							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
 						}
 					}
+					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
+					// Otherwise the pipeline would deadlock.
 					err := n.flowController.Consume(commitTs, size, func() error {
 						if lastCRTs > lastSentResolvedTs {
+							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
+							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
 							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
@@ -144,9 +154,8 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						return nil
 					}
 					lastCRTs = commitTs
-				}
-
-				if msg.RawKV != nil && msg.RawKV.OpType == model.OpTypeResolved {
+				} else {
+					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
 						continue
 					}

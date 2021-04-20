@@ -34,7 +34,8 @@ import (
 const (
 	// TODO move this to server configuration
 	// TODO determine a reasonable default value
-	perTableMemoryQuota = 20 * 1024 * 1024 // 20MB
+	perTableMemoryQuota           = 20 * 1024 * 1024 // 20MB
+	resolvedTsInterpolateInterval = 200 * time.Millisecond
 )
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
