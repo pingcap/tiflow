@@ -84,7 +84,7 @@ type tableFlowController interface {
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tablePipelineImpl) ResolvedTs() model.Ts {
-	return t.pullerNode.ResolvedTs()
+	return t.sinkNode.ResolvedTs()
 }
 
 // CheckpointTs returns the checkpoint ts in this table pipeline
