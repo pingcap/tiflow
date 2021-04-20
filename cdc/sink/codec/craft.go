@@ -19,53 +19,43 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec/craft"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 const (
 	// CraftVersion1 represents the version of craft format
 	CraftVersion1 uint64 = 1
-
-	// default buffer size
-	craftDefaultBufferCapacity = 512
-
-	// Column group types
-	craftColumnGroupTypeDelete = 0x3
-	craftColumnGroupTypeOld    = 0x2
-	craftColumnGroupTypeNew    = 0x1
-
-	// Size tables index
-	craftKeySizeTableIndex              = 0
-	craftValueSizeTableIndex            = 1
-	craftColumnGroupSizeTableStartIndex = 2
 )
 
 // CraftEventBatchEncoder encodes the events into the byte of a batch into craft binary format.
 type CraftEventBatchEncoder struct {
-	rowChangedBuffer *craftRowChangedEventBuffer
+	rowChangedBuffer *craft.RowChangedEventBuffer
 	messageBuf       []*MQMessage
 
 	// configs
 	maxMessageSize int
 	maxBatchSize   int
+
+	allocator *craft.SliceAllocator
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	return newResolvedMQMessage(ProtocolCraft, nil, newCraftResolvedEventEncoder(ts).encode(), ts), nil
+	return newResolvedMQMessage(ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
 }
 
 func (e *CraftEventBatchEncoder) flush() {
-	keys := e.rowChangedBuffer.getKeys()
-	ts := keys.getTs(0)
-	schema := keys.getSchema(0)
-	table := keys.getTable(0)
-	e.messageBuf = append(e.messageBuf, NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.encode(), ts, model.MqMessageTypeRow, &schema, &table))
+	headers := e.rowChangedBuffer.GetHeaders()
+	ts := headers.GetTs(0)
+	schema := headers.GetSchema(0)
+	table := headers.GetTable(0)
+	e.messageBuf = append(e.messageBuf, NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table))
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) (EncoderResult, error) {
-	rows, size := e.rowChangedBuffer.appendRowChangedEvent(ev)
+	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
 	if size > e.maxMessageSize || rows >= e.maxBatchSize {
 		e.flush()
 	}
@@ -79,17 +69,17 @@ func (e *CraftEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, 
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*MQMessage, error) {
-	return newDDLMQMessage(ProtocolCraft, nil, newCraftDDLEventEncoder(ev).encode(), ev), nil
+	return newDDLMQMessage(ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
 // Build implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Build() []*MQMessage {
-	if e.rowChangedBuffer.size() > 0 {
+	if e.rowChangedBuffer.Size() > 0 {
 		// flush buffered data to message buffer
 		e.flush()
 	}
 	ret := e.messageBuf
-	e.messageBuf = make([]*MQMessage, 0)
+	e.messageBuf = make([]*MQMessage, 0, 2)
 	return ret
 }
 
@@ -100,12 +90,12 @@ func (e *CraftEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 
 // Size implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Size() int {
-	return e.rowChangedBuffer.size()
+	return e.rowChangedBuffer.Size()
 }
 
 // Reset implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Reset() {
-	e.rowChangedBuffer.reset()
+	e.rowChangedBuffer.Reset()
 }
 
 // SetParams reads relevant parameters for craft protocol
@@ -141,26 +131,32 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 
 // NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
 func NewCraftEventBatchEncoder() EventBatchEncoder {
+	return NewCraftEventBatchEncoderWithAllocator(craft.NewSliceAllocator(64))
+}
+
+func NewCraftEventBatchEncoderWithAllocator(allocator *craft.SliceAllocator) EventBatchEncoder {
 	return &CraftEventBatchEncoder{
-		rowChangedBuffer: &craftRowChangedEventBuffer{
-			keys: &craftColumnarKeys{},
-		},
+		allocator:        allocator,
+		messageBuf:       make([]*MQMessage, 0, 2),
+		rowChangedBuffer: craft.NewRowChangedEventBuffer(allocator),
 	}
 }
 
 // CraftEventBatchDecoder decodes the byte of a batch into the original messages.
 type CraftEventBatchDecoder struct {
-	keys    *craftColumnarKeys
-	decoder *craftMessageDecoder
+	headers *craft.Headers
+	decoder *craft.MessageDecoder
 	index   int
+
+	allocator *craft.SliceAllocator
 }
 
 // HasNext implements the EventBatchDecoder interface
 func (b *CraftEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
-	if b.index >= b.keys.count {
+	if b.index >= b.headers.Count() {
 		return model.MqMessageTypeUnknown, false, nil
 	}
-	return b.keys.getType(b.index), true, nil
+	return b.headers.GetType(b.index), true, nil
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
@@ -172,7 +168,7 @@ func (b *CraftEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if !hasNext || ty != model.MqMessageTypeResolved {
 		return 0, cerror.ErrCraftCodecInvalidData.GenWithStack("not found resolved event message")
 	}
-	ts := b.keys.getTs(b.index)
+	ts := b.headers.GetTs(b.index)
 	b.index++
 	return ts, nil
 }
@@ -184,29 +180,29 @@ func (b *CraftEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, 
 		return nil, errors.Trace(err)
 	}
 	if !hasNext || ty != model.MqMessageTypeRow {
-		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found resolved event message")
+		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
 	}
-	old, new, err := b.decoder.decodeRowChangedEvent(b.index)
+	old, new, err := b.decoder.RowChangedEvent(b.index)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	ev := &model.RowChangedEvent{}
 	if old != nil {
-		if ev.PreColumns, err = old.toModel(); err != nil {
+		if ev.PreColumns, err = old.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 	if new != nil {
-		if ev.Columns, err = new.toModel(); err != nil {
+		if ev.Columns, err = new.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	ev.CommitTs = b.keys.getTs(b.index)
+	ev.CommitTs = b.headers.GetTs(b.index)
 	ev.Table = &model.TableName{
-		Schema: b.keys.getSchema(b.index),
-		Table:  b.keys.getTable(b.index),
+		Schema: b.headers.GetSchema(b.index),
+		Table:  b.headers.GetTable(b.index),
 	}
-	partition := b.keys.getPartition(b.index)
+	partition := b.headers.GetPartition(b.index)
 	if partition >= 0 {
 		ev.Table.TableID = partition
 		ev.Table.IsPartition = true
@@ -222,19 +218,19 @@ func (b *CraftEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, errors.Trace(err)
 	}
 	if !hasNext || ty != model.MqMessageTypeDDL {
-		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found resolved event message")
+		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found ddl event message")
 	}
-	ddlType, query, err := b.decoder.decodeDDLEvent(b.index)
+	ddlType, query, err := b.decoder.DDLEvent(b.index)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	event := &model.DDLEvent{
-		CommitTs: b.keys.getTs(b.index),
+		CommitTs: b.headers.GetTs(b.index),
 		Query:    query,
 		Type:     ddlType,
 		TableInfo: &model.SimpleTableInfo{
-			Schema: b.keys.getSchema(b.index),
-			Table:  b.keys.getTable(b.index),
+			Schema: b.headers.GetSchema(b.index),
+			Table:  b.headers.GetTable(b.index),
 		},
 	}
 	b.index++
@@ -243,17 +239,22 @@ func (b *CraftEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 
 // NewCraftEventBatchDecoder creates a new CraftEventBatchDecoder.
 func NewCraftEventBatchDecoder(bits []byte) (EventBatchDecoder, error) {
-	decoder, err := newCraftMessageDecoder(bits)
+	return NewCraftEventBatchDecoderWithAllocator(bits, craft.NewSliceAllocator(64))
+}
+
+func NewCraftEventBatchDecoderWithAllocator(bits []byte, allocator *craft.SliceAllocator) (EventBatchDecoder, error) {
+	decoder, err := craft.NewMessageDecoder(bits, allocator)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	keys, err := decoder.decodeKeys()
+	headers, err := decoder.Headers()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &CraftEventBatchDecoder{
-		keys:    keys,
-		decoder: decoder,
+		headers:   headers,
+		decoder:   decoder,
+		allocator: allocator,
 	}, nil
 }
