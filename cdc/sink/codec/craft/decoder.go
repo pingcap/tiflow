@@ -11,11 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package craft
 
 import (
 	"encoding/binary"
 	"math"
+	"unsafe"
 
 	"github.com/pingcap/errors"
 	pmodel "github.com/pingcap/parser/model"
@@ -23,6 +24,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
+
+/// create string from byte slice without copying
+func unsafeBytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
 
 /// Primitive type decoders
 func decodeUint8(bits []byte) ([]byte, byte, error) {
@@ -131,45 +137,64 @@ func decodeBytes(bits []byte) ([]byte, []byte, error) {
 func decodeString(bits []byte) ([]byte, string, error) {
 	bits, bytes, err := decodeBytes(bits)
 	if err == nil {
-		return bits, string(bytes), nil
+		return bits, unsafeBytesToString(bytes), nil
 	}
 	return bits, "", errors.Trace(err)
 }
 
 /// Chunk decoders
-func decodeStringChunk(bits []byte, size int) ([]byte, []string, error) {
-	newBits, data, err := decodeBytesChunk(bits, size)
-	if err != nil {
-		return bits, nil, errors.Trace(err)
-	}
-	result := make([]string, size)
-	for i, d := range data {
-		result[i] = string(d)
-	}
-	return newBits, result, nil
-}
-
-func decodeNullableStringChunk(bits []byte, size int) ([]byte, []*string, error) {
-	newBits, data, err := decodeNullableBytesChunk(bits, size)
-	if err != nil {
-		return bits, nil, errors.Trace(err)
-	}
-	result := make([]*string, size)
-	for i, d := range data {
-		if d != nil {
-			s := string(d)
-			result[i] = &s
+func decodeStringChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, []string, error) {
+	larray := allocator.intSlice(size)
+	newBits := bits
+	var bl int
+	var err error
+	for i := 0; i < size; i++ {
+		newBits, bl, err = decodeUvarintLength(newBits)
+		if err != nil {
+			return bits, nil, errors.Trace(err)
 		}
+		larray[i] = bl
 	}
-	return newBits, result, nil
+
+	data := allocator.stringSlice(size)
+	for i := 0; i < size; i++ {
+		data[i] = unsafeBytesToString(newBits[:larray[i]])
+		newBits = newBits[larray[i]:]
+	}
+	return newBits, data, nil
 }
 
-func decodeBytesChunk(bits []byte, size int) ([]byte, [][]byte, error) {
-	return doDecodeBytesChunk(bits, size, decodeUvarintLength)
+func decodeNullableStringChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, []*string, error) {
+	larray := allocator.intSlice(size)
+	newBits := bits
+	var bl int
+	var err error
+	for i := 0; i < size; i++ {
+		newBits, bl, err = decodeVarintLength(newBits)
+		if err != nil {
+			return bits, nil, errors.Trace(err)
+		}
+		larray[i] = bl
+	}
+
+	data := allocator.nullableStringSlice(size)
+	for i := 0; i < size; i++ {
+		if larray[i] == -1 {
+			continue
+		}
+		s := unsafeBytesToString(newBits[:larray[i]])
+		data[i] = &s
+		newBits = newBits[larray[i]:]
+	}
+	return newBits, data, nil
 }
 
-func doDecodeBytesChunk(bits []byte, size int, lengthDecoder func([]byte) ([]byte, int, error)) ([]byte, [][]byte, error) {
-	larray := make([]int, size)
+func decodeBytesChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, [][]byte, error) {
+	return doDecodeBytesChunk(bits, size, decodeUvarintLength, allocator)
+}
+
+func doDecodeBytesChunk(bits []byte, size int, lengthDecoder func([]byte) ([]byte, int, error), allocator *SliceAllocator) ([]byte, [][]byte, error) {
+	larray := allocator.intSlice(size)
 	newBits := bits
 	var bl int
 	var err error
@@ -181,7 +206,7 @@ func doDecodeBytesChunk(bits []byte, size int, lengthDecoder func([]byte) ([]byt
 		larray[i] = bl
 	}
 
-	data := make([][]byte, size)
+	data := allocator.bytesSlice(size)
 	for i := 0; i < size; i++ {
 		if larray[i] != -1 {
 			data[i] = newBits[:larray[i]]
@@ -191,12 +216,12 @@ func doDecodeBytesChunk(bits []byte, size int, lengthDecoder func([]byte) ([]byt
 	return newBits, data, nil
 }
 
-func decodeNullableBytesChunk(bits []byte, size int) ([]byte, [][]byte, error) {
-	return doDecodeBytesChunk(bits, size, decodeVarintLength)
+func decodeNullableBytesChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, [][]byte, error) {
+	return doDecodeBytesChunk(bits, size, decodeVarintLength, allocator)
 }
 
-func decodeVarintChunk(bits []byte, size int) ([]byte, []int64, error) {
-	array := make([]int64, size)
+func decodeVarintChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, []int64, error) {
+	array := allocator.int64Slice(size)
 	newBits := bits
 	var i64 int64
 	var err error
@@ -210,8 +235,8 @@ func decodeVarintChunk(bits []byte, size int) ([]byte, []int64, error) {
 	return newBits, array, nil
 }
 
-func decodeUvarintChunk(bits []byte, size int) ([]byte, []uint64, error) {
-	array := make([]uint64, size)
+func decodeUvarintChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, []uint64, error) {
+	array := allocator.uint64Slice(size)
 	newBits := bits
 	var u64 uint64
 	var err error
@@ -225,8 +250,8 @@ func decodeUvarintChunk(bits []byte, size int) ([]byte, []uint64, error) {
 	return newBits, array, nil
 }
 
-func decodeDeltaVarintChunk(bits []byte, size int) ([]byte, []int64, error) {
-	array := make([]int64, size)
+func decodeDeltaVarintChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, []int64, error) {
+	array := allocator.int64Slice(size)
 	newBits := bits
 	var err error
 	newBits, array[0], err = decodeVarint(newBits)
@@ -243,8 +268,8 @@ func decodeDeltaVarintChunk(bits []byte, size int) ([]byte, []int64, error) {
 	return newBits, array, nil
 }
 
-func decodeDeltaUvarintChunk(bits []byte, size int) ([]byte, []uint64, error) {
-	array := make([]uint64, size)
+func decodeDeltaUvarintChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, []uint64, error) {
+	array := allocator.uint64Slice(size)
 	newBits := bits
 	var err error
 	newBits, array[0], err = decodeUvarint(newBits)
@@ -262,7 +287,7 @@ func decodeDeltaUvarintChunk(bits []byte, size int) ([]byte, []uint64, error) {
 }
 
 // size tables are always at end of serialized data, there is no unread bytes to return
-func decodeSizeTables(bits []byte) (int, [][]uint64, error) {
+func decodeSizeTables(bits []byte, allocator *SliceAllocator) (int, [][]uint64, error) {
 	nb, size, _ := decodeUvarintReversedLength(bits)
 	sizeOffset := len(bits) - nb
 	tablesOffset := sizeOffset - size
@@ -277,7 +302,7 @@ func decodeSizeTables(bits []byte) (int, [][]uint64, error) {
 		if err != nil {
 			return 0, nil, errors.Trace(err)
 		}
-		tables, table, err = decodeDeltaUvarintChunk(tables, size)
+		tables, table, err = decodeDeltaUvarintChunk(tables, size, allocator)
 		if err != nil {
 			return 0, nil, errors.Trace(err)
 		}
@@ -288,14 +313,14 @@ func decodeSizeTables(bits []byte) (int, [][]uint64, error) {
 }
 
 /// TiDB types decoder
-func decodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{}, error) {
+func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{}, error) {
 	if bits == nil {
 		return nil, nil
 	}
 	switch ty {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeJSON, mysql.TypeNewDecimal:
 		// value type for these mysql types are string
-		return string(bits), nil
+		return unsafeBytesToString(bits), nil
 	case mysql.TypeEnum, mysql.TypeSet, mysql.TypeBit:
 		// value type for thest mysql types are uint64
 		_, u64, err := decodeUvarint(bits)
@@ -327,59 +352,61 @@ func decodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 }
 
 // Message decoder
-type craftMessageDecoder struct {
-	bits            []byte
-	sizeTables      [][]uint64
-	valuesSizeTable []uint64
+type MessageDecoder struct {
+	bits          []byte
+	sizeTables    [][]uint64
+	bodySizeTable []uint64
+	allocator     *SliceAllocator
 }
 
-func newCraftMessageDecoder(bits []byte) (*craftMessageDecoder, error) {
+func NewMessageDecoder(bits []byte, allocator *SliceAllocator) (*MessageDecoder, error) {
 	bits, version, err := decodeUvarint(bits)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if version < CraftVersion1 {
+	if version < Version1 {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("unexpected craft version")
 	}
-	sizeTablesSize, sizeTables, err := decodeSizeTables(bits)
+	sizeTablesSize, sizeTables, err := decodeSizeTables(bits, allocator)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &craftMessageDecoder{
-		bits:            bits[:len(bits)-sizeTablesSize],
-		sizeTables:      sizeTables,
-		valuesSizeTable: sizeTables[craftValueSizeTableIndex],
+	return &MessageDecoder{
+		bits:          bits[:len(bits)-sizeTablesSize],
+		sizeTables:    sizeTables,
+		bodySizeTable: sizeTables[bodySizeTableIndex],
+		allocator:     allocator,
 	}, nil
 }
 
-func (d *craftMessageDecoder) decodeKeys() (*craftColumnarKeys, error) {
-	var pairs, keysSize int
+func (d *MessageDecoder) Headers() (*Headers, error) {
+	var pairs, headersSize int
 	var err error
 	d.bits, pairs, err = decodeUvarintLength(d.bits)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	keysSize = int(d.sizeTables[craftKeySizeTableIndex][0])
-	var keys *craftColumnarKeys
-	keys, err = decodeCraftColumnarKeys(d.bits[:keysSize], pairs)
+	headersSize = int(d.sizeTables[headerSizeTableIndex][0])
+	var headers *Headers
+	headers, err = decodeHeaders(d.bits[:headersSize], pairs, d.allocator)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// skip keys
-	d.bits = d.bits[keysSize:]
-	return keys, nil
+	// skip headers
+	d.bits = d.bits[headersSize:]
+	return headers, nil
 }
 
-func (d *craftMessageDecoder) valueBits(index int) []byte {
+func (d *MessageDecoder) bodyBits(index int) []byte {
 	start := 0
 	if index > 0 {
-		start = int(d.valuesSizeTable[index-1])
+		start = int(d.bodySizeTable[index-1])
 	}
-	return d.bits[start:int(d.valuesSizeTable[index])]
+	return d.bits[start:int(d.bodySizeTable[index])]
 }
 
-func (d *craftMessageDecoder) decodeDDLEvent(index int) (pmodel.ActionType, string, error) {
-	bits, ty, err := decodeUvarint(d.valueBits(index))
+func (d *MessageDecoder) DDLEvent(index int) (pmodel.ActionType, string, error) {
+	bits, ty, err := decodeUvarint(d.bodyBits(index))
 	if err != nil {
 		return pmodel.ActionNone, "", errors.Trace(err)
 	}
@@ -387,24 +414,22 @@ func (d *craftMessageDecoder) decodeDDLEvent(index int) (pmodel.ActionType, stri
 	return pmodel.ActionType(ty), query, err
 }
 
-func (d *craftMessageDecoder) decodeRowChangedEvent(index int) (preColumns, columns *craftColumnarColumnGroup, err error) {
-	bits := d.valueBits(index)
-	columnGroupSizeTable := d.sizeTables[craftColumnGroupSizeTableStartIndex+index]
+func (d *MessageDecoder) RowChangedEvent(index int) (preColumns, columns *columnGroup, err error) {
+	bits := d.bodyBits(index)
+	columnGroupSizeTable := d.sizeTables[columnGroupSizeTableStartIndex+index]
 	columnGroupIndex := 0
 	for len(bits) > 0 {
 		columnGroupSize := columnGroupSizeTable[columnGroupIndex]
-		columnGroup, err := decodeCraftColumnarColumnGroup(bits[:columnGroupSize])
+		columnGroup, err := decodeColumnGroup(bits[:columnGroupSize], d.allocator)
 		bits = bits[columnGroupSize:]
 		columnGroupIndex++
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
 		switch columnGroup.ty {
-		case craftColumnGroupTypeDelete:
-			fallthrough
-		case craftColumnGroupTypeOld:
+		case columnGroupTypeOld:
 			preColumns = columnGroup
-		case craftColumnGroupTypeNew:
+		case columnGroupTypeNew:
 			columns = columnGroup
 		}
 	}

@@ -17,16 +17,19 @@ import (
 	"bytes"
 	"compress/zlib"
 	"fmt"
+	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec/craft"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/ticdc/proto/benchmark"
 )
 
 var (
 	codecRowCases = [][]*model.RowChangedEvent{{{
-		CommitTs: 1,
+		CommitTs: 424316552636792833,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar")},
@@ -39,7 +42,7 @@ var (
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
 	}}, {{
-		CommitTs: 1,
+		CommitTs: 424316553934667777,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{
 			{Name: "varchar1", Type: mysql.TypeVarchar, Value: []byte("varchar")},
@@ -52,7 +55,7 @@ var (
 			{Name: "null1", Type: mysql.TypeNull, Value: nil},
 		},
 	}, {
-		CommitTs: 2,
+		CommitTs: 424316554327097345,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{
 			{Name: "varchar2", Type: mysql.TypeVarchar, Value: []byte("varchar")},
@@ -65,7 +68,7 @@ var (
 			{Name: "null2", Type: mysql.TypeNull, Value: nil},
 		},
 	}, {
-		CommitTs: 3,
+		CommitTs: 424316554746789889,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{
 			{Name: "varchar3", Type: mysql.TypeVarchar, Value: []byte("varchar")},
@@ -78,7 +81,7 @@ var (
 			{Name: "null3", Type: mysql.TypeNull, Value: nil},
 		},
 	}, {
-		CommitTs: 4,
+		CommitTs: 424316555073945601,
 		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
 		Columns: []*model.Column{
 			{Name: "varchar4", Type: mysql.TypeVarchar, Value: []byte("varchar")},
@@ -93,28 +96,28 @@ var (
 	}}, {}}
 
 	codecDDLCases = [][]*model.DDLEvent{{{
-		CommitTs: 1,
+		CommitTs: 424316555979653121,
 		TableInfo: &model.SimpleTableInfo{
 			Schema: "a", Table: "b",
 		},
 		Query: "create table a",
 		Type:  1,
 	}}, {{
-		CommitTs: 1,
+		CommitTs: 424316583965360129,
 		TableInfo: &model.SimpleTableInfo{
 			Schema: "a", Table: "b",
 		},
 		Query: "create table a",
 		Type:  1,
 	}, {
-		CommitTs: 2,
+		CommitTs: 424316586087940097,
 		TableInfo: &model.SimpleTableInfo{
 			Schema: "a", Table: "b",
 		},
 		Query: "create table b",
 		Type:  2,
 	}, {
-		CommitTs: 3,
+		CommitTs: 424316588736118785,
 		TableInfo: &model.SimpleTableInfo{
 			Schema: "a", Table: "b",
 		},
@@ -122,7 +125,16 @@ var (
 		Type:  3,
 	}}, {}}
 
-	codecResolvedTSCases = [][]uint64{{1}, {1, 2, 3}, {}}
+	codecResolvedTSCases = [][]uint64{{424316592563683329}, {424316594097225729, 424316594214141953, 424316594345213953}, {}}
+
+	codecBenchmarkRowChanges = codecRowCases[1]
+
+	codecCraftEncodedRowChanges = []*MQMessage{}
+	codecJSONEncodedRowChanges  = []*MQMessage{}
+	codecPB1EncodedRowChanges   = []*MQMessage{}
+	codecPB2EncodedRowChanges   = []*MQMessage{}
+
+	codecTestSliceAllocator = craft.NewSliceAllocator(512)
 )
 
 var _ = check.Suite(&codecTestSuite{})
@@ -145,32 +157,345 @@ func (s *codecTestSuite) checkCompressedSize(messages []*MQMessage) (int, int) {
 }
 
 func (s *codecTestSuite) encodeRowCase(c *check.C, encoder EventBatchEncoder, events []*model.RowChangedEvent) []*MQMessage {
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+	msg, err := codecEncodeRowCase(encoder, events)
 	c.Assert(err, check.IsNil)
-
-	for _, event := range events {
-		op, err := encoder.AppendRowChangedEvent(event)
-		c.Assert(err, check.IsNil)
-		c.Assert(op, check.Equals, EncoderNoOperation)
-	}
-
-	if len(events) > 0 {
-		return encoder.Build()
-	}
-	return nil
+	return msg
 }
 
-func (s *codecTestSuite) TestJsonVsCraft(c *check.C) {
+func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
 	defer testleak.AfterTest(c)()
-	fmt.Println("| index | craft size | json size | craft compressed | json compressed |")
-	fmt.Println("| ----- | ---------- | --------- | ---------------- | --------------- |")
+	fmt.Println("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
+	fmt.Println("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
 	for i, cs := range codecRowCases {
+		if len(cs) == 0 {
+			continue
+		}
 		craftEncoder := NewCraftEventBatchEncoder()
 		jsonEncoder := NewJSONEventBatchEncoder()
 		craftMessages := s.encodeRowCase(c, craftEncoder, cs)
 		jsonMessages := s.encodeRowCase(c, jsonEncoder, cs)
+		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
+		protobuf2Messages := codecEncodeRowChangedPB2ToMessage(cs)
 		craftOriginal, craftCompressed := s.checkCompressedSize(craftMessages)
 		jsonOriginal, jsonCompressed := s.checkCompressedSize(jsonMessages)
-		fmt.Printf("| %d | %d | %d | %d | %d |\n", i, craftOriginal, jsonOriginal, craftCompressed, jsonCompressed)
+		protobuf1Original, protobuf1Compressed := s.checkCompressedSize(protobuf1Messages)
+		protobuf2Original, protobuf2Compressed := s.checkCompressedSize(protobuf2Messages)
+		fmt.Printf("| case %d | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ |\n", i,
+			craftOriginal, jsonOriginal, 100*jsonOriginal/craftOriginal-100,
+			protobuf1Original, 100*protobuf1Original/craftOriginal-100,
+			protobuf2Original, 100*protobuf2Original/craftOriginal-100,
+			craftCompressed, jsonCompressed, 100*jsonCompressed/craftCompressed-100,
+			protobuf1Compressed, 100*protobuf1Compressed/craftCompressed-100,
+			protobuf2Compressed, 100*protobuf2Compressed/craftCompressed-100)
+	}
+}
+
+func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
+	key := &benchmark.Key{
+		Ts:        event.CommitTs,
+		Schema:    event.Table.Schema,
+		Table:     event.Table.Table,
+		RowId:     event.RowID,
+		Partition: 0,
+	}
+	if b, err := key.Marshal(); err != nil {
+		panic(err)
+	} else {
+		return b
+	}
+}
+
+func codecEncodeColumnPB(column *model.Column) *benchmark.Column {
+	return &benchmark.Column{
+		Name:  column.Name,
+		Type:  uint32(column.Type),
+		Flag:  uint32(column.Flag),
+		Value: craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value),
+	}
+}
+
+func codecEncodeColumnsPB(columns []*model.Column) []*benchmark.Column {
+	converted := make([]*benchmark.Column, len(columns))
+	for i, column := range columns {
+		converted[i] = codecEncodeColumnPB(column)
+	}
+	return converted
+}
+
+func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
+	rowChanged := &benchmark.RowChanged{
+		OldValue: codecEncodeColumnsPB(event.PreColumns),
+		NewValue: codecEncodeColumnsPB(event.Columns),
+	}
+	if b, err := rowChanged.Marshal(); err != nil {
+		panic(err)
+	} else {
+		return b
+	}
+}
+
+func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*MQMessage {
+	result := make([]*MQMessage, len(events))
+	for i, event := range events {
+		result[i] = &MQMessage{
+			Key:   codecEncodeKeyPB(event),
+			Value: codecEncodeRowChangedPB(event),
+		}
+	}
+	return result
+}
+
+func codecEncodeRowChangedPB2ToMessage(events []*model.RowChangedEvent) []*MQMessage {
+	return []*MQMessage{&MQMessage{
+		Key:   codecEncodeKeysPB2(events),
+		Value: codecEncodeRowChangedPB2(events),
+	}}
+}
+
+func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
+	converted := &benchmark.KeysColumnar{}
+
+	for _, event := range events {
+		converted.Ts = append(converted.Ts, event.CommitTs)
+		converted.Schema = append(converted.Schema, event.Table.Schema)
+		converted.Table = append(converted.Table, event.Table.Table)
+		converted.RowId = append(converted.RowId, event.RowID)
+		converted.Partition = append(converted.Partition, 0)
+	}
+
+	if b, err := converted.Marshal(); err != nil {
+		panic(err)
+	} else {
+		return b
+	}
+}
+
+func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
+	converted := &benchmark.ColumnsColumnar{
+		Name:  make([]string, len(columns)),
+		Type:  make([]uint32, len(columns)),
+		Flag:  make([]uint32, len(columns)),
+		Value: make([][]byte, len(columns)),
+	}
+	for i, column := range columns {
+		converted.Name[i] = column.Name
+		converted.Type[i] = uint32(column.Type)
+		converted.Flag[i] = uint32(column.Flag)
+		converted.Value[i] = craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value)
+	}
+	return converted
+}
+
+func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
+	rowChanged := &benchmark.RowChangedColumnar{}
+	for _, event := range events {
+		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.PreColumns))
+		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(event.Columns))
+	}
+	if b, err := rowChanged.Marshal(); err != nil {
+		panic(err)
+	} else {
+		return b
+	}
+}
+
+func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEvent) ([]*MQMessage, error) {
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, event := range events {
+		_, err := encoder.AppendRowChangedEvent(event)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(events) > 0 {
+		return encoder.Build(), nil
+	}
+	return nil, nil
+}
+
+func init() {
+	var err error
+	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(NewCraftEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
+		panic(err)
+	}
+	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(NewJSONEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
+		panic(err)
+	}
+	codecPB1EncodedRowChanges = codecEncodeRowChangedPB1ToMessage(codecBenchmarkRowChanges)
+	codecPB2EncodedRowChanges = codecEncodeRowChangedPB2ToMessage(codecBenchmarkRowChanges)
+}
+
+func BenchmarkCraftEncoding(b *testing.B) {
+	allocator := craft.NewSliceAllocator(128)
+	for i := 0; i < b.N; i++ {
+		_, _ = codecEncodeRowCase(NewCraftEventBatchEncoderWithAllocator(allocator), codecBenchmarkRowChanges)
+	}
+}
+
+func BenchmarkJsonEncoding(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = codecEncodeRowCase(NewJSONEventBatchEncoder(), codecBenchmarkRowChanges)
+	}
+}
+
+func BenchmarkProtobuf1Encoding(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = codecEncodeRowChangedPB1ToMessage(codecBenchmarkRowChanges)
+	}
+}
+
+func BenchmarkProtobuf2Encoding(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = codecEncodeRowChangedPB2ToMessage(codecBenchmarkRowChanges)
+	}
+}
+
+func BenchmarkCraftDecoding(b *testing.B) {
+	allocator := craft.NewSliceAllocator(128)
+	for i := 0; i < b.N; i++ {
+		for _, message := range codecCraftEncodedRowChanges {
+			if decoder, err := NewCraftEventBatchDecoderWithAllocator(message.Value, allocator); err != nil {
+				panic(err)
+			} else {
+				for {
+					if _, hasNext, err := decoder.HasNext(); err != nil {
+						panic(err)
+					} else if hasNext {
+						_, _ = decoder.NextRowChangedEvent()
+					} else {
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+func BenchmarkJsonDecoding(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		for _, message := range codecJSONEncodedRowChanges {
+			if decoder, err := NewJSONEventBatchDecoder(message.Key, message.Value); err != nil {
+				panic(err)
+			} else {
+				for {
+					if _, hasNext, err := decoder.HasNext(); err != nil {
+						panic(err)
+					} else if hasNext {
+						_, _ = decoder.NextRowChangedEvent()
+					} else {
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+func codecDecodeRowChangedPB1(columns []*benchmark.Column) []*model.Column {
+	if len(columns) == 0 {
+		return nil
+	}
+
+	result := make([]*model.Column, len(columns))
+	for i, column := range columns {
+		value, _ := craft.DecodeTiDBType(byte(column.Type), model.ColumnFlagType(column.Flag), column.Value)
+		result[i] = &model.Column{
+			Name:  column.Name,
+			Type:  byte(column.Type),
+			Flag:  model.ColumnFlagType(column.Flag),
+			Value: value,
+		}
+	}
+
+	return result
+}
+
+func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
+	result := make([]*model.RowChangedEvent, 0, 4)
+	for _, message := range codecPB1EncodedRowChanges {
+		key := &benchmark.Key{}
+		key.Unmarshal(message.Key)
+		value := &benchmark.RowChanged{}
+		value.Unmarshal(message.Value)
+		ev := &model.RowChangedEvent{}
+		ev.PreColumns = codecDecodeRowChangedPB1(value.OldValue)
+		ev.Columns = codecDecodeRowChangedPB1(value.NewValue)
+		ev.CommitTs = key.Ts
+		ev.Table = &model.TableName{
+			Schema: key.Schema,
+			Table:  key.Table,
+		}
+		if key.Partition >= 0 {
+			ev.Table.TableID = key.Partition
+			ev.Table.IsPartition = true
+		}
+		result = append(result, ev)
+	}
+	return result
+}
+
+func BenchmarkProtobuf1Decoding(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		for _, row := range benchmarkProtobuf1Decoding() {
+			_ = row
+		}
+	}
+}
+
+func codecDecodeRowChangedPB2(columns *benchmark.ColumnsColumnar) []*model.Column {
+	result := make([]*model.Column, len(columns.Value))
+	for i, value := range columns.Value {
+		v, _ := craft.DecodeTiDBType(byte(columns.Type[i]), model.ColumnFlagType(columns.Flag[i]), value)
+		result[i] = &model.Column{
+			Name:  columns.Name[i],
+			Type:  byte(columns.Type[i]),
+			Flag:  model.ColumnFlagType(columns.Flag[i]),
+			Value: v,
+		}
+	}
+	return result
+}
+
+func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
+	result := make([]*model.RowChangedEvent, 0, 4)
+	for _, message := range codecPB2EncodedRowChanges {
+		keys := &benchmark.KeysColumnar{}
+		keys.Unmarshal(message.Key)
+		values := &benchmark.RowChangedColumnar{}
+		values.Unmarshal(message.Value)
+
+		for i, ts := range keys.Ts {
+			ev := &model.RowChangedEvent{}
+			if len(values.OldValue) > i {
+				ev.PreColumns = codecDecodeRowChangedPB2(values.OldValue[i])
+			}
+			if len(values.NewValue) > i {
+				ev.Columns = codecDecodeRowChangedPB2(values.NewValue[i])
+			}
+			ev.CommitTs = ts
+			ev.Table = &model.TableName{
+				Schema: keys.Schema[i],
+				Table:  keys.Table[i],
+			}
+			if keys.Partition[i] >= 0 {
+				ev.Table.TableID = keys.Partition[i]
+				ev.Table.IsPartition = true
+			}
+			result = append(result, ev)
+		}
+	}
+	return result
+}
+
+func BenchmarkProtobuf2Decoding(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		for _, row := range benchmarkProtobuf2Decoding() {
+			_ = row
+		}
 	}
 }

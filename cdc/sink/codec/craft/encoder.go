@@ -11,41 +11,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package craft
 
 import (
 	"encoding/binary"
 	"math"
+	"unsafe"
 
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+/// create byte slice from string without copying
+func unsafeStringToBytes(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(
+		&struct {
+			string
+			Cap int
+		}{s, len(s)},
+	))
+}
+
 /// Primitive type encoders
 func encodeFloat64(bits []byte, data float64) []byte {
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, math.Float64bits(data))
-	return buf
+	v := math.Float64bits(data)
+	return append(bits, byte(v), byte(v>>8), byte(v>>16), byte(v>>24), byte(v>>32), byte(v>>40), byte(v>>48), byte(v>>56))
 }
 
 func encodeVarint(bits []byte, data int64) []byte {
-	buf := make([]byte, binary.MaxVarintLen64)
-	l := binary.PutVarint(buf, data)
-	buf = buf[:l]
-	if bits == nil {
-		return buf
+	udata := uint64(data) << 1
+	if data < 0 {
+		udata = ^udata
 	}
-	return append(bits, buf...)
+	return encodeUvarint(bits, udata)
 }
 
 func encodeUvarint(bits []byte, data uint64) []byte {
-	buf := make([]byte, binary.MaxVarintLen64)
-	l := binary.PutUvarint(buf, data)
-	buf = buf[:l]
-	if bits == nil {
-		return buf
+	for data >= 0x80 {
+		bits = append(bits, byte(data)|0x80)
+		data >>= 7
 	}
-	return append(bits, buf...)
+	return append(bits, byte(data))
 }
 
 func encodeUvarintReversed(bits []byte, data uint64) ([]byte, int) {
@@ -65,15 +71,14 @@ func encodeUvarintReversed(bits []byte, data uint64) ([]byte, int) {
 
 func encodeBytes(bits []byte, data []byte) []byte {
 	l := len(data)
-	if bits == nil {
-		bits = make([]byte, 0, binary.MaxVarintLen64+len(data))
-	}
 	bits = encodeUvarint(bits, uint64(l))
 	return append(bits, data...)
 }
 
 func encodeString(bits []byte, data string) []byte {
-	return encodeBytes(bits, []byte(data))
+	l := len(data)
+	bits = encodeUvarint(bits, uint64(l))
+	return append(bits, data...)
 }
 
 /// Chunk encoders
@@ -82,7 +87,7 @@ func encodeStringChunk(bits []byte, data []string) []byte {
 		bits = encodeUvarint(bits, uint64(len(s)))
 	}
 	for _, s := range data {
-		bits = append(bits, []byte(s)...)
+		bits = append(bits, s...)
 	}
 	return bits
 }
@@ -97,7 +102,7 @@ func encodeNullableStringChunk(bits []byte, data []*string) []byte {
 	}
 	for _, s := range data {
 		if s != nil {
-			bits = append(bits, []byte(*s)...)
+			bits = append(bits, *s...)
 		}
 	}
 	return bits
@@ -174,30 +179,30 @@ func encodeSizeTables(bits []byte, tables [][]uint64) []byte {
 }
 
 /// TiDB types encoder
-func encodeTiDBType(ty byte, flag model.ColumnFlagType, value interface{}) []byte {
+func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagType, value interface{}) []byte {
 	if value == nil {
 		return nil
 	}
 	switch ty {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeJSON, mysql.TypeNewDecimal:
 		// value type for these mysql types are string
-		return []byte(value.(string))
+		return unsafeStringToBytes(value.(string))
 	case mysql.TypeEnum, mysql.TypeSet, mysql.TypeBit:
 		// value type for thest mysql types are uint64
-		return encodeUvarint(nil, value.(uint64))
+		return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(uint64))
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
 		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		// value type for these mysql types are []byte
 		return value.([]byte)
 	case mysql.TypeFloat, mysql.TypeDouble:
 		// value type for these mysql types are float64
-		return encodeFloat64(nil, value.(float64))
+		return encodeFloat64(allocator.byteSlice(8)[:0], value.(float64))
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
 		// value type for these mysql types are int64 or uint64 depends on flags
 		if flag.IsUnsigned() {
-			return encodeUvarint(nil, value.(uint64))
+			return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(uint64))
 		}
-		return encodeVarint(nil, value.(int64))
+		return encodeVarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(int64))
 	case mysql.TypeUnspecified:
 		fallthrough
 	case mysql.TypeNull:
@@ -209,95 +214,98 @@ func encodeTiDBType(ty byte, flag model.ColumnFlagType, value interface{}) []byt
 }
 
 /// Message encoder
-type craftMessageEncoder struct {
-	bits              []byte
-	sizeTables        [][]uint64
-	valuesStartOffset int
-	valuesSizes       []uint64
-	valuesSizesIndex  int
+type MessageEncoder struct {
+	bits            []byte
+	sizeTables      [][]uint64
+	bodyStartOffset int
+	bodySize        []uint64
+	bodySizeIndex   int
+
+	allocator *SliceAllocator
 }
 
-func newCraftMessageEncoder() *craftMessageEncoder {
-	return &craftMessageEncoder{
-		bits: encodeUvarint(make([]byte, 0, craftDefaultBufferCapacity), CraftVersion1),
+func NewMessageEncoder(allocator *SliceAllocator) *MessageEncoder {
+	return &MessageEncoder{
+		bits:      encodeUvarint(make([]byte, 0, DefaultBufferCapacity), Version1),
+		allocator: allocator,
 	}
 }
 
-func (e *craftMessageEncoder) encodeValueSize() *craftMessageEncoder {
-	e.valuesSizes[e.valuesSizesIndex] = uint64(len(e.bits) - e.valuesStartOffset)
-	e.valuesSizesIndex++
+func (e *MessageEncoder) encodeBodySize() *MessageEncoder {
+	e.bodySize[e.bodySizeIndex] = uint64(len(e.bits) - e.bodyStartOffset)
+	e.bodySizeIndex++
 	return e
 }
 
-func (e *craftMessageEncoder) encodeUvarint(u64 uint64) *craftMessageEncoder {
+func (e *MessageEncoder) encodeUvarint(u64 uint64) *MessageEncoder {
 	e.bits = encodeUvarint(e.bits, u64)
 	return e
 }
 
-func (e *craftMessageEncoder) encodeString(s string) *craftMessageEncoder {
+func (e *MessageEncoder) encodeString(s string) *MessageEncoder {
 	e.bits = encodeString(e.bits, s)
 	return e
 }
 
-func (e *craftMessageEncoder) encodeKeys(keys *craftColumnarKeys) *craftMessageEncoder {
-	e.bits = encodeUvarint(e.bits, uint64(keys.count))
+func (e *MessageEncoder) encodeHeaders(headers *Headers) *MessageEncoder {
+	e.bits = encodeUvarint(e.bits, uint64(headers.count))
 	oldSize := len(e.bits)
-	e.valuesSizes = make([]uint64, keys.count)
-	e.bits = keys.encode(e.bits)
-	e.valuesStartOffset = len(e.bits)
-	e.sizeTables = append(e.sizeTables, []uint64{uint64(len(e.bits) - oldSize)}, e.valuesSizes)
+	e.bodySize = e.allocator.uint64Slice(headers.count)
+	e.bits = headers.encode(e.bits)
+	e.bodyStartOffset = len(e.bits)
+	e.sizeTables = append(e.sizeTables, e.allocator.oneUint64Slice(uint64(len(e.bits)-oldSize)), e.bodySize)
 	return e
 }
 
-func (e *craftMessageEncoder) encode() []byte {
+func (e *MessageEncoder) Encode() []byte {
 	return encodeSizeTables(e.bits, e.sizeTables)
 }
 
-func (e *craftMessageEncoder) encodeRowChangeEvents(events []craftRowChangedEvent) *craftMessageEncoder {
+func (e *MessageEncoder) encodeRowChangeEvents(events []rowChangedEvent) *MessageEncoder {
 	sizeTables := e.sizeTables
 	for _, event := range events {
-		columnGroupSizeTable := make([]uint64, len(event))
+		columnGroupSizeTable := e.allocator.uint64Slice(len(event))
 		for gi, group := range event {
 			oldSize := len(e.bits)
 			e.bits = group.encode(e.bits)
 			columnGroupSizeTable[gi] = uint64(len(e.bits) - oldSize)
 		}
 		sizeTables = append(sizeTables, columnGroupSizeTable)
-		e.encodeValueSize()
+		e.encodeBodySize()
 	}
 	e.sizeTables = sizeTables
 	return e
 }
 
-func newCraftResolvedEventEncoder(ts uint64) *craftMessageEncoder {
-	return newCraftMessageEncoder().encodeKeys(&craftColumnarKeys{
-		ts:        []uint64{uint64(ts)},
-		ty:        []uint64{uint64(model.MqMessageTypeResolved)},
-		rowID:     []int64{int64(-1)},
-		partition: []int64{int64(-1)},
-		schema:    [][]byte{nil},
-		table:     [][]byte{nil},
+func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncoder {
+	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
+		ts:        allocator.oneUint64Slice(ts),
+		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeResolved)),
+		rowID:     allocator.oneInt64Slice(-1),
+		partition: allocator.oneInt64Slice(-1),
+		schema:    allocator.oneNullableStringSlice(nil),
+		table:     allocator.oneNullableStringSlice(nil),
 		count:     1,
-	}).encodeValueSize()
+	}).encodeBodySize()
 }
 
-func newCraftDDLEventEncoder(ev *model.DDLEvent) *craftMessageEncoder {
+func NewDDLEventEncoder(allocator *SliceAllocator, ev *model.DDLEvent) *MessageEncoder {
 	ty := uint64(ev.Type)
 	query := ev.Query
-	var schema, table []byte
+	var schema, table *string
 	if len(ev.TableInfo.Schema) > 0 {
-		schema = []byte(ev.TableInfo.Schema)
+		schema = &ev.TableInfo.Schema
 	}
 	if len(ev.TableInfo.Table) > 0 {
-		table = []byte(ev.TableInfo.Table)
+		table = &ev.TableInfo.Table
 	}
-	return newCraftMessageEncoder().encodeKeys(&craftColumnarKeys{
-		ts:        []uint64{uint64(ev.CommitTs)},
-		ty:        []uint64{uint64(model.MqMessageTypeDDL)},
-		rowID:     []int64{int64(-1)},
-		partition: []int64{int64(-1)},
-		schema:    [][]byte{schema},
-		table:     [][]byte{table},
+	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
+		ts:        allocator.oneUint64Slice(ev.CommitTs),
+		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeDDL)),
+		rowID:     allocator.oneInt64Slice(-1),
+		partition: allocator.oneInt64Slice(-1),
+		schema:    allocator.oneNullableStringSlice(schema),
+		table:     allocator.oneNullableStringSlice(table),
 		count:     1,
-	}).encodeUvarint(ty).encodeString(query).encodeValueSize()
+	}).encodeUvarint(ty).encodeString(query).encodeBodySize()
 }
