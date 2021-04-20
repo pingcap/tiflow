@@ -103,6 +103,14 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		return nil
 	})
 	n.wg.Go(func() error {
+		// Since the flowController is implemented by `Cond`, it is not cancelable
+		// by a context. We need to listen on cancellation and aborts the flowController
+		// manually.
+		<-ctx.Done()
+		n.flowController.Abort()
+		return nil
+	})
+	n.wg.Go(func() error {
 		lastSentResolvedTs := uint64(0)
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
