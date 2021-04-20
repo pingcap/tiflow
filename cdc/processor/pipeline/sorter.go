@@ -106,7 +106,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		// Since the flowController is implemented by `Cond`, it is not cancelable
 		// by a context. We need to listen on cancellation and aborts the flowController
 		// manually.
-		<-ctx.Done()
+		<-stdCtx.Done()
 		n.flowController.Abort()
 		return nil
 	})
