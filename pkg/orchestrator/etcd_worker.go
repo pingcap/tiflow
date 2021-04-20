@@ -14,7 +14,6 @@
 package orchestrator
 
 import (
-	"bytes"
 	"context"
 	"time"
 
@@ -88,7 +87,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
 	var (
-		pendingPatches []*DataPatch
+		pendingPatches []DataPatch
 		exiting        bool
 		sessionDone    <-chan struct{}
 	)
@@ -223,85 +222,55 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 	return nil
 }
 
-func mergePatch(patches []*DataPatch) []*DataPatch {
-	patchMap := make(map[util.EtcdKey][]*DataPatch)
-	for _, patch := range patches {
-		patchMap[patch.Key] = append(patchMap[patch.Key], patch)
+func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
+	ret := make(map[util.EtcdKey][]byte)
+	for k, v := range worker.rawState {
+		ret[k] = v
 	}
-	result := make([]*DataPatch, 0, len(patchMap))
-	for key, patches := range patchMap {
-		patches := patches
-		result = append(result, &DataPatch{
-			Key: key,
-			Fun: func(old []byte) ([]byte, error) {
-				for _, patch := range patches {
-					newValue, err := patch.Fun(old)
-					if err != nil {
-						if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
-							continue
-						}
-						return nil, err
-					}
-					old = newValue
-				}
-				return old, nil
-			},
-		})
-	}
-	return result
+	return ret
 }
 
-func etcdValueEqual(left, right []byte) bool {
-	if len(left) == 0 && len(right) == 0 {
-		return (left == nil && right == nil) || (left != nil && right != nil)
-	}
-	return bytes.Equal(left, right)
-}
-
-func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch, session *concurrency.Session) error {
-	patches = mergePatch(patches)
-	cmps := make([]clientv3.Cmp, 0, len(patches))
-	ops := make([]clientv3.Op, 0, len(patches))
-
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch, session *concurrency.Session) error {
+	stete := worker.cloneRawState()
+	changedSet := make(map[util.EtcdKey]struct{})
 	for _, patch := range patches {
-		old, ok := worker.rawState[patch.Key]
-
-		value, err := patch.Fun(old)
+		err := patch.Patch(stete, changedSet)
 		if err != nil {
 			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
 				continue
 			}
 			return errors.Trace(err)
 		}
-
+	}
+	cmps := make([]clientv3.Cmp, 0, len(changedSet))
+	ops := make([]clientv3.Op, 0, len(changedSet))
+	for key := range changedSet {
 		// make sure someone else has not updated the key after the last snapshot
 		var cmp clientv3.Cmp
-		// if ok is false, it means that the key of this patch is not exist in a committed state
-		if ok {
-			cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "<", worker.revision+1)
+		if _, ok := worker.rawState[key]; ok {
+			cmp = clientv3.Compare(clientv3.ModRevision(key.String()), "<", worker.revision+1)
 		} else {
+			// if ok is false, it means that the key of this patch is not exist in a committed state
 			// this compare is equivalent to `patch.Key` is not exist
-			cmp = clientv3.Compare(clientv3.ModRevision(patch.Key.String()), "=", 0)
+			cmp = clientv3.Compare(clientv3.ModRevision(key.String()), "=", 0)
 		}
 		cmps = append(cmps, cmp)
 
-		if etcdValueEqual(old, value) {
-			// Ignore patches that produce a new value that is the same as the old value.
-			continue
-		}
 		var opOption []clientv3.OpOption
-		if !patch.Persistent && session != nil {
-			opOption = []clientv3.OpOption{clientv3.WithLease(session.Lease())}
+		if session != nil {
+			// TODO !patch.Persistent &&
+			// opOption = []clientv3.OpOption{clientv3.WithLease(session.Lease())}
 		}
-
+		value := stete[key]
 		var op clientv3.Op
 		if value != nil {
-			op = clientv3.OpPut(patch.Key.String(), string(value), opOption...)
+			op = clientv3.OpPut(key.String(), string(value), opOption...)
 		} else {
-			op = clientv3.OpDelete(patch.Key.String(), opOption...)
+			op = clientv3.OpDelete(key.String(), opOption...)
 		}
 		ops = append(ops, op)
 	}
+
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
 	if err != nil {
 		return errors.Trace(err)

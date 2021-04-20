@@ -99,9 +99,9 @@ func (o *Owner) AsyncStop() {
 }
 
 type ownerReactor struct {
-	state             *ownerReactorState
+	state             *model.GlobalReactorState
 	changeFeedManager changeFeedManager
-	changeFeedRunners map[model.ChangeFeedID]changeFeedRunner
+	changeFeedRunners map[model.ChangeFeedID]*changefeed
 
 	gcManager *gcManager
 
@@ -117,10 +117,21 @@ func newOwnerReactor(state *ownerReactorState, cfManager changeFeedManager, gcMa
 	}
 }
 
-func (o *ownerReactor) Tick(ctx context.Context, _ orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (o *ownerReactor) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	o.state = state.(*model.GlobalReactorState)
+	for changefeedID, changefeedState := range o.state.Changefeeds {
+		if changefeedState.Info == nil {
+			// 删除所有其他key
+			continue
+		}
+		changefeedState.Info.CheckErrorHistoryV2()
+
+	}
+
 	if atomic.LoadInt32(&o.close) != 0 {
 		return nil, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
+
 	cfOps, err := o.changeFeedManager.GetChangeFeedOperations(ctx)
 	if err != nil {
 		// TODO graceful exit

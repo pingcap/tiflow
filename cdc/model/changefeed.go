@@ -232,3 +232,25 @@ func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
 	return
 }
+
+// CheckErrorHistoryV2 checks error history of a changefeed
+// if having error record older than GC interval, set needSave to true.
+// if error counts reach threshold, set canInit to false.
+func (info *ChangeFeedInfo) CheckErrorHistoryV2() (newErrorHis []int64, needSave, canInit bool) {
+	i := sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
+	})
+	newErrorHis = make([]int64, len(info.ErrorHis[i:]))
+	copy(newErrorHis, info.ErrorHis[i:])
+	if i > 0 {
+		needSave = true
+	}
+
+	i = sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
+	})
+	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
+	return
+}

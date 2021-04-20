@@ -39,6 +39,7 @@ type ddlPuller interface {
 	Run(ctx context.Context) error
 	FrontDDL() (uint64, *timodel.Job)
 	PopFrontDDL() (uint64, *timodel.Job)
+	Close()
 }
 
 type ddlPullerImpl struct {
@@ -48,6 +49,7 @@ type ddlPullerImpl struct {
 	mu             sync.Mutex
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
+	cancel         context.CancelFunc
 }
 
 // TODO test-case: resolvedTs is initialized to (startTs - 1)
@@ -65,12 +67,15 @@ func newDDLPuller(ctx context.Context, pdCli pd.Client, credential *security.Cre
 	return &ddlPullerImpl{
 		puller:     plr,
 		resolvedTS: startTs - 1,
+		cancel:     func() {},
 	}
 }
 
 func (h *ddlPullerImpl) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	h.cancel = cancel
 	log.Debug("DDL puller started")
-	ctx = util.PutTableInfoInCtx(ctx, -1, "")
+	ctx = util.PutTableInfoInCtx(ctx, -1, "DDL_PULLER")
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
@@ -148,4 +153,8 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	job := h.pendingDDLJobs[0]
 	h.pendingDDLJobs = h.pendingDDLJobs[1:]
 	return job.BinlogInfo.FinishedTS, job
+}
+
+func (h *ddlPullerImpl) Close() {
+	h.cancel()
 }

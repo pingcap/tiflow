@@ -30,6 +30,7 @@ type schema4Owner interface {
 	FindMarkTableID(id model.TableID) model.TableID
 	HandleDDL(job *timodel.Job) error
 	BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, error)
+	IsIneligibleTableID(tableID model.TableID) bool
 }
 
 type schemaWrap4Owner struct {
@@ -69,6 +70,10 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	return s.schemaSnapshot.HandleDDL(job)
+}
+
+func (s *schemaWrap4Owner) IsIneligibleTableID(tableID model.TableID) bool {
+	return s.schemaSnapshot.IsIneligibleTableID(tableID)
 }
 
 func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {

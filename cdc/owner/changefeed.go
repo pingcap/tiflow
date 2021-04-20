@@ -15,52 +15,34 @@ package owner
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"go.uber.org/zap"
 )
 
-type changeFeedRunner interface {
-	Tick(ctx context.Context) error
-	InitTables(ctx context.Context, checkpointTs uint64) error
-	SetOwnerState(state *ownerReactorState)
-	Close()
-}
-
-type changeFeedRunnerImpl struct {
-	state *model.ChangefeedReactorState
-
-	barriers *barriers
-
-	config *config.ReplicaConfig
+type changefeed struct {
+	state     *model.ChangefeedReactorState
+	scheduler scheduler
+	schema    schema4Owner
+	barriers  *barriers
 
 	sink      sink.Sink
 	sinkErrCh <-chan error
 
 	ddlPuller ddlPuller
-	ddlCancel func()
 	ddlErrCh  <-chan error
-
-	schema schema4Owner
-	filter *filter.Filter
-
-	ownerState      *ownerReactorState
-	changeFeedState *changeFeedState
 }
 
-func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, startTs uint64) error {
+/*
+func (c *changeFeed) InitTables(ctx context.Context, startTs uint64) error {
 	if c.changeFeedState != nil {
 		log.Panic("InitTables: unexpected state", zap.String("cfID", c.cfID))
 	}
@@ -120,38 +102,193 @@ func (c *changeFeedRunnerImpl) InitTables(ctx context.Context, startTs uint64) e
 
 	return nil
 }
+*/
 
-func (c *changeFeedRunnerImpl) Tick(ctx context.Context) error {
-	if c.ownerState == nil {
-		log.Panic("InitTables: ownerState not set")
+func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+	c.state = state
+	if !c.preCheck(captures) {
+		return nil
 	}
 
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case err := <-c.sinkErrCh:
+	//select {
+	//case <-ctx.Done():
+	//	return errors.Trace(ctx.Err())
+	//case err := <-c.sinkErrCh:
+	//	return errors.Trace(err)
+	//case err := <-c.ddlErrCh:
+	//	return errors.Trace(err)
+	//default:
+	//}
+
+	barrierTs, err := c.handleBarrier(ctx)
+	if err != nil {
 		return errors.Trace(err)
-	case err := <-c.ddlErrCh:
-		return errors.Trace(err)
-	default:
 	}
+	c.scheduler.Tick(c.state)
+	allListeningTablesNum := len(c.scheduler.AllListeningTables())
+	c.state.PatchStatusByTaskStatusAndPosition(func(status *model.ChangeFeedStatus,
+		taskPositions map[model.CaptureID]*model.TaskPosition,
+		taskStatuses map[model.CaptureID]*model.TaskStatus) (*model.ChangeFeedStatus, bool, error) {
+		// check if the table count in etcd is equal to allListeningTablesNum
+		// if not equals, skip to update resolvedTs and checkpointTs
+		tableCountInEtcd := 0
+		for _, taskStatus := range taskStatuses {
+			tableCountInEtcd += len(taskStatus.Tables)
+			for _, opt := range taskStatus.Operation {
+				if opt.Delete {
+					tableCountInEtcd++
+				}
+			}
+		}
+		if tableCountInEtcd != allListeningTablesNum {
+			return status, false, nil
+		}
 
-	if err := c.handleBarrier(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	// 2 scheduler.tick
-
-	// 3 c.changeFeedState.CalcResolvedTsAndCheckpointTs()
-
-	resolvedTs := c.changeFeedState.ResolvedTs
-	checkpointTs := c.changeFeedState.CheckpointTs
-	log.Debug("Updating changeFeed", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
-	c.ownerState.UpdateChangeFeedStatus(c.cfID, resolvedTs, checkpointTs)
-
+		resolvedTs := barrierTs
+		for _, position := range taskPositions {
+			if resolvedTs > position.ResolvedTs {
+				resolvedTs = position.ResolvedTs
+			}
+		}
+		for _, taskStatus := range taskStatuses {
+			for _, opt := range taskStatus.Operation {
+				if resolvedTs > opt.BoundaryTs {
+					resolvedTs = opt.BoundaryTs
+				}
+			}
+		}
+		checkpointTs := resolvedTs
+		for _, position := range taskPositions {
+			if checkpointTs > position.CheckPointTs {
+				checkpointTs = position.CheckPointTs
+			}
+		}
+		changed := false
+		if status.ResolvedTs != resolvedTs {
+			status.ResolvedTs = resolvedTs
+			changed = true
+		}
+		if status.CheckpointTs != checkpointTs {
+			status.CheckpointTs = checkpointTs
+			changed = true
+		}
+		return status, changed, nil
+	})
 	return nil
 }
 
-func (c *changeFeedRunnerImpl) handleBarrier(ctx context.Context) error {
+func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
+	passCheck = true
+	if c.state.Status == nil {
+		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			if status == nil {
+				status = &model.ChangeFeedStatus{
+					ResolvedTs:   c.state.Info.StartTs - 1,
+					CheckpointTs: c.state.Info.StartTs - 1,
+					AdminJobType: model.AdminNone,
+				}
+				return status, true, nil
+			}
+			return status, false, nil
+		})
+		passCheck = false
+	}
+	for captureID := range captures {
+		if _, exist := c.state.TaskStatuses[captureID]; !exist {
+			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+				if status == nil {
+					status = new(model.TaskStatus)
+					return status, true, nil
+				}
+				return status, false, nil
+			})
+			passCheck = false
+		}
+	}
+	if !passCheck {
+		return
+	}
+	errorsFromProcessor := c.checkErrorReportByProcessor()
+	newErrorHis, needSave, canRun := c.state.Info.CheckErrorHistoryV2()
+	if needSave || len(errorsFromProcessor) != 0 {
+		c.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			for _, err := range errorsFromProcessor {
+				info.Error = err
+				newErrorHis = append(newErrorHis, time.Now().UnixNano()/1e6)
+			}
+			info.ErrorHis = newErrorHis
+			return info, true, nil
+		})
+	}
+	if !canRun {
+		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			if status.AdminJobType != model.AdminStop {
+				status.AdminJobType = model.AdminStop
+				return status, true, nil
+			}
+			return status, false, nil
+		})
+	}
+	if !c.cleanupStatus(captures) || !canRun || len(errorsFromProcessor) != 0 {
+		return false
+	}
+	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		if status.AdminJobType != model.AdminNone {
+			status.AdminJobType = model.AdminNone
+			return status, true, nil
+		}
+		return status, false, nil
+	})
+	return true
+}
+
+func (c *changefeed) checkErrorReportByProcessor() []*model.RunningError {
+	var runningErrors []*model.RunningError
+	for captureID, position := range c.state.TaskPositions {
+		if position.Error != nil {
+			runningErrors = append(runningErrors, position.Error)
+			// TODO log
+		}
+		c.cleanAllStatusByCapture(captureID)
+	}
+	return runningErrors
+}
+
+func (c *changefeed) cleanupStatus(captures map[model.CaptureID]*model.CaptureInfo) (cleared bool) {
+	for captureID := range c.state.TaskStatuses {
+		if _, exist := captures[captureID]; !exist {
+			c.cleanAllStatusByCapture(captureID)
+			cleared = false
+		}
+	}
+	for captureID := range c.state.TaskPositions {
+		if _, exist := captures[captureID]; !exist {
+			c.cleanAllStatusByCapture(captureID)
+			cleared = false
+		}
+	}
+	for captureID := range c.state.Workloads {
+		if _, exist := captures[captureID]; !exist {
+			c.cleanAllStatusByCapture(captureID)
+			cleared = false
+		}
+	}
+	return
+}
+
+func (c *changefeed) cleanAllStatusByCapture(captureID model.CaptureID) {
+	c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		return nil, status != nil, nil
+	})
+	c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+		return nil, position != nil, nil
+	})
+	c.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
+		return nil, workload != nil, nil
+	})
+}
+
+func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	blocked := barrierTs == c.state.Status.CheckpointTs
 	switch barrierTp {
@@ -159,19 +296,19 @@ func (c *changeFeedRunnerImpl) handleBarrier(ctx context.Context) error {
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
 		if ddlJob == nil {
 			c.barriers.Update(DDLJobBarrier, ddlResolvedTs)
-			return nil
+			return barrierTs, nil
 		}
 		if !blocked {
-			return nil
+			return barrierTs, nil
 		}
 		err := c.schema.HandleDDL(ddlJob)
 		if err != nil {
-			return errors.Trace(err)
+			return 0, errors.Trace(err)
 		}
 
 		err = c.execDDL(ctx, ddlJob)
 		if err != nil {
-			return errors.Trace(err)
+			return 0, errors.Trace(err)
 		}
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
@@ -182,54 +319,45 @@ func (c *changeFeedRunnerImpl) handleBarrier(ctx context.Context) error {
 	default:
 		log.Panic("Unknown barrier type", zap.Int("barrier type", barrierTp))
 	}
+	return barrierTs, nil
 }
 
-func (c *changeFeedRunnerImpl) execDDL(ctx context.Context, job *timodel.Job) error {
+func (c *changefeed) execDDL(ctx context.Context, job *timodel.Job) error {
 	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		return nil
 	}
+	cyclicConfig := c.state.Info.Config.Cyclic
+	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
+		return nil
+	}
+	failpoint.Inject("InjectChangefeedDDLError", func() {
+		failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
+	})
 	ddlEvent, err := c.schema.BuildDDLEvent(job)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	executed := false
-	if !c.config.Cyclic.IsEnabled() || c.config.Cyclic.SyncDDL {
-		failpoint.Inject("InjectChangefeedDDLError", func() {
-			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
-		})
-
-		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
-		err := c.sink.EmitDDLEvent(ctx, ddlEvent)
-		// If DDL executing failed, pause the changefeed and print log, rather
-		// than return an error and break the running of this owner.
-		if err != nil {
-			if cerror.ErrDDLEventIgnored.NotEqual(err) {
-				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", c.cfID),
-					zap.Error(err),
-					zap.Reflect("ddlJob", job))
-				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
-			}
-		} else {
-			executed = true
+	ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+	// If DDL executing failed, pause the changefeed and print log, rather
+	// than return an error and break the running of this owner.
+	if err != nil {
+		if cerror.ErrDDLEventIgnored.NotEqual(err) {
+			log.Error("Execute DDL failed",
+				zap.String("ChangeFeedID", c.state.ID),
+				zap.Error(err),
+				zap.Reflect("ddlJob", job))
+			return cerror.ErrExecDDLFailed.GenWithStackByArgs()
 		}
+		log.Info("Execute DDL ignored", zap.String("changefeed", c.state.ID), zap.Reflect("ddlJob", job))
+		return nil
 	}
-
-	if executed {
-		log.Info("Execute DDL succeeded", zap.String("changefeed", c.cfID), zap.Reflect("ddlJob", job))
-	} else {
-		log.Info("Execute DDL ignored", zap.String("changefeed", c.cfID), zap.Reflect("ddlJob", job))
-	}
+	log.Info("Execute DDL succeeded", zap.String("changefeed", c.state.ID), zap.Reflect("ddlJob", job))
 	return nil
 }
 
-func (c *changeFeedRunnerImpl) SetOwnerState(state *ownerReactorState) {
-	c.ownerState = state
-}
-
-func (c *changeFeedRunnerImpl) Close() {
-	c.ddlCancel()
+func (c *changefeed) Close() {
+	c.ddlPuller.Close()
 	err := c.sink.Close()
 	if err != nil {
 		log.Warn("Sink closed with error", zap.Error(err))

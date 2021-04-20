@@ -92,7 +92,7 @@ func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (ne
 		}
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if changefeedState.TaskStatuses[m.captureInfo.ID].AdminJobType.IsStopState() {
+			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[m.captureInfo.ID].AdminJobType.IsStopState() {
 				continue
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)

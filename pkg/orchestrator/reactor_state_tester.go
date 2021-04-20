@@ -13,6 +13,7 @@
 
 package orchestrator
 
+/*
 import (
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -55,9 +56,8 @@ func (t *ReactorStateTester) UpdateKeys(updatedKeys map[string][]byte) error {
 // ApplyPatches calls the GetPatches method on the ReactorState and apply the changes to the mocked kv-store.
 func (t *ReactorStateTester) ApplyPatches() error {
 	patches := t.state.GetPatches()
-	mergedPatches := mergePatch(patches)
 
-	for _, patch := range mergedPatches {
+	for _, patch := range patches {
 		old, ok := t.kvEntries[patch.Key.String()]
 		var (
 			newBytes []byte
@@ -92,3 +92,4 @@ func (t *ReactorStateTester) ApplyPatches() error {
 func (t *ReactorStateTester) KVEntries() map[string]string {
 	return t.kvEntries
 }
+*/

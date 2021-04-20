@@ -97,7 +97,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		if err := changefeedState.UpdateCDCKey(k, value); err != nil {
 			return errors.Trace(err)
 		}
-		if value == nil && !changefeedState.Exist(k.CaptureID) {
+		if value == nil && !changefeedState.Exist() {
 			delete(s.Changefeeds, k.ChangefeedID)
 		}
 	default:
@@ -106,8 +106,8 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	return nil
 }
 
-func (s *GlobalReactorState) GetPatches() []*orchestrator.DataPatch {
-	var pendingPatches []*orchestrator.DataPatch
+func (s *GlobalReactorState) GetPatches() []orchestrator.DataPatch {
+	var pendingPatches []orchestrator.DataPatch
 	for _, changefeedState := range s.Changefeeds {
 		pendingPatches = append(pendingPatches, changefeedState.GetPatches()...)
 	}
@@ -122,7 +122,7 @@ type ChangefeedReactorState struct {
 	TaskStatuses  map[CaptureID]*TaskStatus
 	Workloads     map[CaptureID]TaskWorkload
 
-	pendingPatches []*orchestrator.DataPatch
+	pendingPatches []orchestrator.DataPatch
 }
 
 func newChangefeedState(id ChangeFeedID) *ChangefeedReactorState {
@@ -219,15 +219,15 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 	return nil
 }
 
-func (s *ChangefeedReactorState) Exist(captureID CaptureID) bool {
-	return s.Info != nil || s.Status != nil || s.TaskPositions[captureID] != nil || s.TaskStatuses[captureID] != nil || s.Workloads[captureID] != nil
+func (s *ChangefeedReactorState) Exist() bool {
+	return s.Info != nil || s.Status != nil || len(s.TaskPositions) == 0 || len(s.TaskStatuses) == 0 || len(s.Workloads) == 0
 }
 
 func (s *ChangefeedReactorState) Active(captureID CaptureID) bool {
 	return s.Info != nil && s.Status != nil && s.TaskStatuses[captureID] != nil
 }
 
-func (s *ChangefeedReactorState) GetPatches() []*orchestrator.DataPatch {
+func (s *ChangefeedReactorState) GetPatches() []orchestrator.DataPatch {
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
 	return pendingPatches
@@ -241,12 +241,12 @@ var (
 	changefeedInfoTPI   *ChangeFeedInfo
 )
 
-func (s *ChangefeedReactorState) PatchInfo(fn func(*ChangeFeedInfo) (*ChangeFeedInfo, error)) {
+func (s *ChangefeedReactorState) PatchInfo(fn func(*ChangeFeedInfo) (*ChangeFeedInfo, bool, error)) {
 	key := &etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), changefeedInfoTPI, func(e interface{}) (interface{}, error) {
+	s.patchAny(key.String(), changefeedInfoTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -255,12 +255,12 @@ func (s *ChangefeedReactorState) PatchInfo(fn func(*ChangeFeedInfo) (*ChangeFeed
 	})
 }
 
-func (s *ChangefeedReactorState) PatchStatus(fn func(*ChangeFeedStatus) (*ChangeFeedStatus, error)) {
+func (s *ChangefeedReactorState) PatchStatus(fn func(*ChangeFeedStatus) (*ChangeFeedStatus, bool, error)) {
 	key := &etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), changefeedStatusTPI, func(e interface{}) (interface{}, error) {
+	s.patchAny(key.String(), changefeedStatusTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -269,13 +269,92 @@ func (s *ChangefeedReactorState) PatchStatus(fn func(*ChangeFeedStatus) (*Change
 	})
 }
 
-func (s *ChangefeedReactorState) PatchTaskPosition(captureID CaptureID, fn func(*TaskPosition) (*TaskPosition, error)) {
+func (s *ChangefeedReactorState) PatchStatusByTaskStatusAndPosition(fn func(status *ChangeFeedStatus,
+	taskPositions map[CaptureID]*TaskPosition,
+	taskStatuses map[CaptureID]*TaskStatus) (*ChangeFeedStatus, bool, error)) {
+	patch := orchestrator.MultiDatePath(func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
+		// get status and pos
+		cdcKey := new(etcd.CDCKey)
+		captureIDs := make(map[CaptureID]struct{})
+		taskPositions := make(map[CaptureID]*TaskPosition)
+		taskStatuses := make(map[CaptureID]*TaskStatus)
+
+		// decode ChangeFeedStatus
+		cdcKey.CaptureID = ""
+		cdcKey.ChangefeedID = s.ID
+		cdcKey.Tp = etcd.CDCKeyTypeChangeFeedStatus
+		changefeedStatusKey := util.NewEtcdKey(cdcKey.String())
+		changefeedStatusValue := valueMap[changefeedStatusKey]
+		var status *ChangeFeedStatus
+		if changefeedStatusValue != nil {
+			status = new(ChangeFeedStatus)
+			err := json.Unmarshal(changefeedStatusValue, status)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		// decode TaskPosition and TaskStatus
+		for key, value := range valueMap {
+			err := cdcKey.Parse(key.String())
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if cdcKey.Tp != etcd.CDCKeyTypeCapture {
+				continue
+			}
+			switch cdcKey.Tp {
+			case etcd.CDCKeyTypeCapture:
+				captureIDs[cdcKey.CaptureID] = struct{}{}
+			case etcd.CDCKeyTypeTaskStatus:
+				if value == nil {
+					continue
+				}
+				position := new(TaskPosition)
+				err := json.Unmarshal(value, position)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				taskPositions[cdcKey.CaptureID] = position
+			case etcd.CDCKeyTypeTaskPosition:
+				if value == nil {
+					continue
+				}
+				taskStatus := new(TaskStatus)
+				err := json.Unmarshal(value, taskStatus)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				taskStatuses[cdcKey.CaptureID] = taskStatus
+			default:
+				// do nothing
+			}
+		}
+		status, changed, err := fn(status, taskPositions, taskStatuses)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if !changed {
+			return nil
+		}
+		changefeedStatusValue, err = json.Marshal(status)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		valueMap[changefeedStatusKey] = changefeedStatusValue
+		changedSet[changefeedStatusKey] = struct{}{}
+		return nil
+	})
+	s.pendingPatches = append(s.pendingPatches, patch)
+}
+
+func (s *ChangefeedReactorState) PatchTaskPosition(captureID CaptureID, fn func(*TaskPosition) (*TaskPosition, bool, error)) {
 	key := &etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeTaskPosition,
 		CaptureID:    captureID,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, error) {
+	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -284,13 +363,13 @@ func (s *ChangefeedReactorState) PatchTaskPosition(captureID CaptureID, fn func(
 	})
 }
 
-func (s *ChangefeedReactorState) PatchTaskStatus(captureID CaptureID, fn func(*TaskStatus) (*TaskStatus, error)) {
+func (s *ChangefeedReactorState) PatchTaskStatus(captureID CaptureID, fn func(*TaskStatus) (*TaskStatus, bool, error)) {
 	key := &etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeTaskStatus,
 		CaptureID:    captureID,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, error) {
+	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -299,13 +378,13 @@ func (s *ChangefeedReactorState) PatchTaskStatus(captureID CaptureID, fn func(*T
 	})
 }
 
-func (s *ChangefeedReactorState) PatchTaskWorkload(captureID CaptureID, fn func(TaskWorkload) (TaskWorkload, error)) {
+func (s *ChangefeedReactorState) PatchTaskWorkload(captureID CaptureID, fn func(TaskWorkload) (TaskWorkload, bool, error)) {
 	key := &etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeTaskWorkload,
 		CaptureID:    captureID,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, error) {
+	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -314,27 +393,34 @@ func (s *ChangefeedReactorState) PatchTaskWorkload(captureID CaptureID, fn func(
 	})
 }
 
-func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, error)) {
-	patch := &orchestrator.DataPatch{
+func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, bool, error)) {
+	patch := &orchestrator.SingleDataPatch{
 		Key: util.NewEtcdKey(key),
-		Fun: func(v []byte) ([]byte, error) {
+		Func: func(v []byte) ([]byte, bool, error) {
 			var e interface{}
 			if v != nil {
 				tp := reflect.TypeOf(tpi)
 				e = reflect.New(tp.Elem()).Interface()
 				err := json.Unmarshal(v, e)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, false, errors.Trace(err)
 				}
 			}
-			ne, err := fn(e)
+			ne, changed, err := fn(e)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, false, errors.Trace(err)
+			}
+			if !changed {
+				return v, false, nil
 			}
 			if reflect.ValueOf(ne).IsNil() {
-				return nil, nil
+				return nil, true, nil
 			}
-			return json.Marshal(ne)
+			nv, err := json.Marshal(ne)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
+			return nv, true, nil
 		},
 	}
 	s.pendingPatches = append(s.pendingPatches, patch)
