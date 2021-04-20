@@ -70,10 +70,8 @@ const (
 	regionScheduleReload = false
 )
 
-var (
-	// time interval to force kv client to terminate gRPC stream and reconnect
-	reconnectInterval = 15 * time.Minute
-)
+// time interval to force kv client to terminate gRPC stream and reconnect
+var reconnectInterval = 15 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
