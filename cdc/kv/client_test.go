@@ -2846,6 +2846,9 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 // test mocks the reconnectInterval tool, and simulate un-initialized regions
 // can be reconnected.
 func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
