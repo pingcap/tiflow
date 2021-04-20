@@ -68,8 +68,9 @@ type tablePipelineImpl struct {
 	markTableID int64
 	tableName   string // quoted schema and table, used in metircs only
 
-	sinkNode *sinkNode
-	cancel   stdContext.CancelFunc
+	sinkNode   *sinkNode
+	pullerNode *pullerNode
+	cancel     stdContext.CancelFunc
 }
 
 // TODO find a better name or avoid using an interface
@@ -82,7 +83,7 @@ type tableFlowController interface {
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tablePipelineImpl) ResolvedTs() model.Ts {
-	return t.sinkNode.ResolvedTs()
+	return t.pullerNode.ResolvedTs()
 }
 
 // CheckpointTs returns the checkpoint ts in this table pipeline
@@ -170,7 +171,8 @@ func NewTablePipeline(ctx context.Context,
 
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	ctx, p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
-	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
+	tablePipeline.pullerNode = newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName)
+	p.AppendNode(ctx, "puller", tablePipeline.pullerNode)
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	config := ctx.Vars().Config
