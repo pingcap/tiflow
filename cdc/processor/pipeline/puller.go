@@ -59,6 +59,7 @@ func newPullerNode(
 		tableID:      tableID,
 		replicaInfo:  replicaInfo,
 		tableName:    tableName,
+		resolvedTs:   replicaInfo.StartTs,
 		changefeedID: changefeedID,
 	}
 }
