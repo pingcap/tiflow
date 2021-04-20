@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -46,8 +47,10 @@ import (
 )
 
 func Test(t *testing.T) {
+	conf := config.GetDefaultServerConfig()
+	config.StoreGlobalServerConfig(conf)
+	InitWorkerPool()
 	go func() {
-		InitWorkerPool()
 		RunWorkerPool(context.Background()) //nolint:errcheck
 	}()
 	check.TestingT(t)
