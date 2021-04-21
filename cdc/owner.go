@@ -709,7 +709,7 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	// no running or stopped changefeed, clear gc safepoint.
-	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 { // 检查是否没有changeFeeds
+	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 {
 		if !o.gcSafepointLastUpdate.IsZero() {
 			log.Info("clean service safe point", zap.String("service-id", CDCServiceSafePointID))
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
