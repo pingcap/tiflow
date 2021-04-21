@@ -41,8 +41,8 @@ const (
 	APIOpVarTableID = "table-id"
 	// APIOpForceRemoveChangefeed is used when remove a changefeed
 	APIOpForceRemoveChangefeed = "force-remove"
-	// APIOpVarGcBLT is the key of gcTTL in HTTP API
-	APIOpVarGcBLT = "gc-blt"
+	// APIOpVarGcTTL is the key of gcTTL in HTTP API
+	APIOpVarGcTTL = "gc-ttl"
 )
 
 type commonResp struct {
@@ -288,7 +288,7 @@ func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	writeData(w, struct{}{})
 }
 
-// Use to change gcBLT
+// Use to change gcTTL
 func (s *Server) handleConfigGCTimeToBlock(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
@@ -307,13 +307,13 @@ func (s *Server) handleConfigGCTimeToBlock(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	gcBLTStr := req.Form.Get(APIOpVarGcBLT)
-	gcBLT, err := strconv.ParseInt(gcBLTStr, 10, 64)
+	gcTTLStr := req.Form.Get(APIOpVarGcTTL)
+	gcTTL, err := strconv.ParseInt(gcTTLStr, 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid gcBLT: %s", gcBLTStr))
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid gcTTL: %s", gcTTLStr))
 		return
 	}
-	s.owner.setGcBLT(gcBLT)
+	s.owner.setGcTTL(gcTTL)
 	handleOwnerResp(w, nil)
 }
