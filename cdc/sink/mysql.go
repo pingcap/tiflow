@@ -69,6 +69,8 @@ const (
 // SyncpointTableName is the name of table where all syncpoint maps sit
 const syncpointTableName string = "syncpoint_v1"
 
+const tidbVersionString string = "TiDB"
+
 var validSchemes = map[string]bool{
 	"mysql":     true,
 	"mysql+ssl": true,
@@ -306,21 +308,37 @@ var defaultParams = &sinkParams{
 	safeMode:            defaultSafeMode,
 }
 
-func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
+func checkIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
+	var value string
+	querySQL := "select version();"
+	err := db.QueryRowContext(ctx, querySQL).Scan(&value)
+	if err != nil && err != sql.ErrNoRows {
+		return false, errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), "failed to select version")
+	}
+	return strings.Contains(value, tidbVersionString), nil
+}
+
+func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (
+	sinkURIParameter string,
+	err error,
+) {
 	var name string
 	var value string
 	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
-	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
+	err = db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
 	if err != nil && err != sql.ErrNoRows {
 		errMsg := "fail to query session variable " + variableName
-		return "", errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
+		err = errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
+		return
 	}
-	// session variable works, use given default value
 	if err == nil {
-		return defaultValue, nil
+		// session variable exists, use given default value
+		sinkURIParameter = defaultValue
+	} else {
+		// session variable does not exist, sinkURIParameter is "" and will be ignored
+		err = nil
 	}
-	// session variable not exists, return "" to ignore it
-	return "", nil
+	return
 }
 
 func configureSinkURI(
@@ -357,6 +375,21 @@ func configureSinkURI(
 	}
 	if txnMode != "" {
 		dsnCfg.Params["tidb_txn_mode"] = txnMode
+	}
+
+	isTiDB, err := checkIsTiDB(ctx, testDB)
+	if err != nil {
+		return "", err
+	}
+	// variable `explicit_defaults_for_timestamp` is readonly in TiDB, we don't
+	// need to set it. Yet Default value in MySQL 5.7 is `OFF`
+	// ref: https://docs.pingcap.com/tidb/stable/mysql-compatibility#default-differences
+	if !isTiDB {
+		explicitTs, err := checkTiDBVariable(ctx, testDB, "explicit_defaults_for_timestamp", "ON")
+		if err != nil {
+			return "", err
+		}
+		dsnCfg.Params["explicit_defaults_for_timestamp"] = explicitTs
 	}
 
 	dsnClone := dsnCfg.Clone()
