@@ -105,6 +105,8 @@ type Owner struct {
 
 	// gcTTL is the ttl of cdc gc safepoint ttl.
 	gcTTL int64
+	// gcBLT is the max block time of cdc safepoint.
+	gcBLT int64
 	// last update gc safepoint time. zero time means has not updated or cleared
 	gcSafepointLastUpdate time.Time
 	// record last time that flushes all changefeeds' replication status
@@ -127,14 +129,15 @@ func NewOwner(
 	credential *security.Credential,
 	sess *concurrency.Session,
 	gcTTL int64,
+	gcBLT int64,
 	flushChangefeedInterval time.Duration,
 ) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
 	endpoints := sess.Client().Endpoints()
 
-	failpoint.Inject("ownerFlushIntervalInject", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("ownerFlushIntervalInject")); _err_ == nil {
 		flushChangefeedInterval = time.Millisecond * time.Duration(val.(int))
-	})
+	}
 
 	owner := &Owner{
 		done:                    make(chan struct{}),
@@ -151,6 +154,7 @@ func NewOwner(
 		cfRWriter:               cli,
 		etcdClient:              cli,
 		gcTTL:                   gcTTL,
+		gcBLT:                   gcBLT,
 		flushChangefeedInterval: flushChangefeedInterval,
 		feedChangeNotifier:      new(notify.Notifier),
 	}
@@ -273,13 +277,13 @@ func (o *Owner) newChangeFeed(
 			return nil, errors.Trace(err)
 		}
 	}
-	failpoint.Inject("NewChangefeedNoRetryError", func() {
-		failpoint.Return(nil, cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("NewChangefeedNoRetryError")); _err_ == nil {
+		return nil, cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs)
+	}
 
-	failpoint.Inject("NewChangefeedRetryError", func() {
-		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("NewChangefeedRetryError")); _err_ == nil {
+		return nil, errors.New("failpoint injected retriable error")
+	}
 
 	kvStore, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
@@ -705,7 +709,7 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	// no running or stopped changefeed, clear gc safepoint.
-	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 {
+	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 { // 检查是否没有changeFeeds
 		if !o.gcSafepointLastUpdate.IsZero() {
 			log.Info("clean service safe point", zap.String("service-id", CDCServiceSafePointID))
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
@@ -750,6 +754,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		}
 	}
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
+		if (time.Now().Unix() - int64(minCheckpointTs)) > o.gcBLT {
+			minCheckpointTs = uint64(time.Now().Unix() - o.gcBLT)
+		}
 		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
 			sinceLastUpdate := time.Since(o.gcSafepointLastUpdate)
@@ -763,9 +770,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			o.gcSafepointLastUpdate = time.Now()
 		}
 
-		failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
+		if val, _err_ := failpoint.Eval(_curpkg_("InjectActualGCSafePoint")); _err_ == nil {
 			actual = uint64(val.(int))
-		})
+		}
 
 		if actual > minCheckpointTs {
 			// UpdateServiceGCSafePoint has failed.
@@ -1159,9 +1166,9 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 // Run the owner
 // TODO avoid this tick style, this means we get `tickTime` latency here.
 func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
-	failpoint.Inject("owner-run-with-error", func() {
-		failpoint.Return(errors.New("owner run with injected error"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("owner-run-with-error")); _err_ == nil {
+		return errors.New("owner run with injected error")
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -1484,7 +1491,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 func (o *Owner) watchCapture(ctx context.Context) error {
 	ctx = clientv3.WithRequireLeader(ctx)
 
-	failpoint.Inject("sleep-before-watch-capture", nil)
+	failpoint.Eval(_curpkg_("sleep-before-watch-capture"))
 
 	// When an owner just starts, changefeed information is not updated at once.
 	// Supposing a crased capture should be removed now, the owner will miss deleting
@@ -1525,9 +1532,9 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 
 	for resp := range ch {
 		err := resp.Err()
-		failpoint.Inject("restart-capture-watch", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("restart-capture-watch")); _err_ == nil {
 			err = mvcc.ErrCompacted
-		})
+		}
 		if err != nil {
 			return cerror.WrapError(cerror.ErrOwnerEtcdWatch, resp.Err())
 		}
@@ -1625,4 +1632,10 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// reset gcBLT
+func (o *Owner) setGcBLT(gcBLT int64) {
+	o.gcBLT = gcBLT
+	log.Warn("change gc-ttl", zap.Int64("gc-ttl", o.gcBLT))
 }
