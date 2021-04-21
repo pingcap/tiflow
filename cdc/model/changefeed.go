@@ -20,6 +20,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/filter"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -45,6 +47,7 @@ type FeedState string
 // All FeedStates
 const (
 	StateNormal   FeedState = "normal"
+	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
 	StateRemoved  FeedState = "removed"
@@ -216,11 +219,8 @@ func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 		ts := info.ErrorHis[i]
 		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
 	})
-	if i == len(info.ErrorHis) {
-		info.ErrorHis = info.ErrorHis[:]
-	} else {
-		info.ErrorHis = info.ErrorHis[i:]
-	}
+	info.ErrorHis = info.ErrorHis[i:]
+
 	if i > 0 {
 		needSave = true
 	}
@@ -233,24 +233,29 @@ func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	return
 }
 
+func (info *ChangeFeedInfo) HasFastFailError() bool {
+	if info.Error == nil {
+		return false
+	}
+	return filter.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+}
+
 // CheckErrorHistoryV2 checks error history of a changefeed
 // if having error record older than GC interval, set needSave to true.
 // if error counts reach threshold, set canInit to false.
-func (info *ChangeFeedInfo) CheckErrorHistoryV2() (newErrorHis []int64, needSave, canInit bool) {
+func (info *ChangeFeedInfo) CheckErrorHistoryV2() (canInit bool) {
+	i := sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
+	})
+	return len(info.ErrorHis)-i < ErrorHistoryThreshold
+}
+
+func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory() (needSave bool) {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
 		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
 	})
-	newErrorHis = make([]int64, len(info.ErrorHis[i:]))
-	copy(newErrorHis, info.ErrorHis[i:])
-	if i > 0 {
-		needSave = true
-	}
-
-	i = sort.Search(len(info.ErrorHis), func(i int) bool {
-		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
-	})
-	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
-	return
+	info.ErrorHis = info.ErrorHis[i:]
+	return i > 0
 }

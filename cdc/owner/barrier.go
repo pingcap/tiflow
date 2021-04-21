@@ -27,6 +27,7 @@ const (
 	DDLJobBarrier barrierType = iota
 	// SyncPointBarrier denotes a barrier for snapshot replication.
 	SyncPointBarrier
+	FinishBarrier
 )
 
 type barriers struct {

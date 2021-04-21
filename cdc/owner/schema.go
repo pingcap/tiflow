@@ -189,6 +189,24 @@ func (m *schemaManager) SinkTableInfos() []*model.SimpleTableInfo {
 	return sinkTableInfos
 }
 
+func (m *schemaManager) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
+	schemaName := tableInfo.TableName.Schema
+	tableName := tableInfo.TableName.Table
+	if m.filter.ShouldIgnoreTable(schemaName, tableName) {
+		return true
+	}
+	if m.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
+		// skip the mark table if cyclic is enabled
+		return true
+	}
+	if !tableInfo.IsEligible(m.config.ForceReplicate) {
+		log.Warn("skip ineligible table", zap.Int64("tid", tableInfo.ID), zap.Stringer("table", tableInfo.TableName))
+		return true
+	}
+	return false
+}
+
+/*
 func (m *schemaManager) TopDDLJobToExec() (*timodel.Job, error) {
 	for len(m.pendingDDLJob) > 0 {
 		job := m.pendingDDLJob[0]
@@ -276,22 +294,6 @@ func (m *schemaManager) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, error)
 	return ddlEvent, nil
 }
 
-func (m *schemaManager) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
-	if m.filter.ShouldIgnoreTable(schemaName, tableName) {
-		return true
-	}
-	if m.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
-		// skip the mark table if cyclic is enabled
-		return true
-	}
-	if !tableInfo.IsEligible(m.config.ForceReplicate) {
-		log.Warn("skip ineligible table", zap.Int64("tid", tableInfo.ID), zap.Stringer("table", tableInfo.TableName))
-		return true
-	}
-	return false
-}
 
 func (m *schemaManager) shouldIgnoreDDL(job *timodel.Job) bool {
 	if m.filter.ShouldDiscardDDL(job.Type) {
@@ -434,3 +436,4 @@ func (m *schemaManager) updatePartitions(tableID model.TableID) (startTableIDs [
 
 	return
 }
+*/

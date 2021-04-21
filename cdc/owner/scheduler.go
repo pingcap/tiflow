@@ -37,24 +37,15 @@ type schedulerJob struct {
 	TargetCapture model.CaptureID
 }
 
-type scheduler interface {
-	Tick(state *model.ChangefeedReactorState)
-	MoveTable(tableID model.TableID, target model.CaptureID)
-	Rebalance()
-	AllListeningTables() []model.TableID
-}
-
-type schedulerImpl struct {
-	state  *model.ChangefeedReactorState
-	schema schema4Owner
+type scheduler struct {
+	state *model.ChangefeedReactorState
 
 	moveTableTarget       map[model.TableID]model.CaptureID
 	needRebalanceNextTick bool
 }
 
-func newScheduler(schema schema4Owner) *schedulerImpl {
-	return &schedulerImpl{
-		schema:          schema,
+func newScheduler() *scheduler {
+	return &scheduler{
 		moveTableTarget: make(map[model.TableID]model.CaptureID),
 	}
 }
@@ -63,15 +54,15 @@ func newScheduler(schema schema4Owner) *schedulerImpl {
 // and returns a bool represents Is it possible that there are tables that do not exist in taskStatus
 // if some table are not exist in taskStatus(in taskStatus.Tables nor in taskStatus.Operation),
 // we should not push up resolvedTs
-func (s *schedulerImpl) Tick(state *model.ChangefeedReactorState) {
+func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID) {
 	s.state = state
 	s.cleanUpOperations()
-	pendingJob := s.syncTablesWithSchemaManager()
+	pendingJob := s.syncTablesWithSchemaManager(allTableShouldBeListened)
 	s.handleJobs(pendingJob)
 	s.rebalance()
 }
 
-func (s *schedulerImpl) MoveTable(tableID model.TableID, target model.CaptureID) {
+func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
 	table2CaptureIndex := s.table2CaptureIndex()
 	captureID, exist := table2CaptureIndex[tableID]
 	if !exist {
@@ -92,15 +83,11 @@ func (s *schedulerImpl) MoveTable(tableID model.TableID, target model.CaptureID)
 	})
 }
 
-func (s *schedulerImpl) Rebalance() {
+func (s *scheduler) Rebalance() {
 	s.needRebalanceNextTick = true
 }
 
-func (s *schedulerImpl) AllListeningTables() []model.TableID {
-	return s.schema.AllPhysicalTables()
-}
-
-func (s *schedulerImpl) table2CaptureIndex() map[model.TableID]model.CaptureID {
+func (s *scheduler) table2CaptureIndex() map[model.TableID]model.CaptureID {
 	table2CaptureIndex := make(map[model.TableID]model.CaptureID)
 	for captureID, taskStatus := range s.state.TaskStatuses {
 		for tableID := range taskStatus.Tables {
@@ -119,7 +106,7 @@ func (s *schedulerImpl) table2CaptureIndex() map[model.TableID]model.CaptureID {
 	return table2CaptureIndex
 }
 
-func (s *schedulerImpl) getMinWorkloadCapture(pendingJob []*schedulerJob) model.CaptureID {
+func (s *scheduler) getMinWorkloadCapture(pendingJob []*schedulerJob) model.CaptureID {
 	workloads := make(map[model.CaptureID]uint64)
 
 	for captureID, taskWorkload := range s.state.Workloads {
@@ -155,9 +142,8 @@ func (s *schedulerImpl) getMinWorkloadCapture(pendingJob []*schedulerJob) model.
 	return minCapture
 }
 
-func (s *schedulerImpl) syncTablesWithSchemaManager() []*schedulerJob {
+func (s *scheduler) syncTablesWithSchemaManager(allTableShouldBeListened []model.TableID) []*schedulerJob {
 	var pendingJob []*schedulerJob
-	allTableShouldBeListened := s.schema.AllPhysicalTables()
 	allTableListeningNow := s.table2CaptureIndex()
 	globalCheckpointTs := s.state.Status.CheckpointTs
 	for _, tableID := range allTableShouldBeListened {
@@ -197,7 +183,7 @@ func (s *schedulerImpl) syncTablesWithSchemaManager() []*schedulerJob {
 	return pendingJob
 }
 
-func (s *schedulerImpl) handleJobs(jobs []*schedulerJob) {
+func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 	for _, job := range jobs {
 		s.state.PatchTaskStatus(job.TargetCapture, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			switch job.Tp {
@@ -226,7 +212,7 @@ func (s *schedulerImpl) handleJobs(jobs []*schedulerJob) {
 }
 
 // cleanUpOperations clean up the finished operations.
-func (s *schedulerImpl) cleanUpOperations() {
+func (s *scheduler) cleanUpOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			changed := false
@@ -241,7 +227,7 @@ func (s *schedulerImpl) cleanUpOperations() {
 	}
 }
 
-func (s *schedulerImpl) rebalance() {
+func (s *scheduler) rebalance() {
 	needRebanlance := false
 	totalTableNum := 0
 	for _, taskStatus := range s.state.TaskStatuses {

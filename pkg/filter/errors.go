@@ -23,3 +23,7 @@ import (
 func ChangefeedFastFailError(err error) bool {
 	return cerror.ErrStartTsBeforeGC.Equal(errors.Cause(err))
 }
+
+func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
+	return cerror.ErrStartTsBeforeGC.RFCCode() == errCode
+}
