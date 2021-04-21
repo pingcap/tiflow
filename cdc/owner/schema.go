@@ -27,7 +27,6 @@ import (
 
 type schema4Owner interface {
 	AllPhysicalTables() []model.TableID
-	FindMarkTableID(id model.TableID) model.TableID
 	HandleDDL(job *timodel.Job) error
 	BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, error)
 	IsIneligibleTableID(tableID model.TableID) bool
@@ -39,6 +38,14 @@ type schemaWrap4Owner struct {
 	config         *config.ReplicaConfig
 
 	allPhysicalTablesCache []model.TableID
+}
+
+func newSchemaWrap4Owner(schemaSnapshot *entry.SingleSchemaSnapshot, filter *filter.Filter, config *config.ReplicaConfig) schema4Owner {
+	return &schemaWrap4Owner{
+		schemaSnapshot: schemaSnapshot,
+		filter:         filter,
+		config:         config,
+	}
 }
 
 // AllPhysicalTables returns the table IDs of all tables and partition tables.

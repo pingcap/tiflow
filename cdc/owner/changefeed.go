@@ -16,6 +16,10 @@ package owner
 import (
 	"context"
 
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/filter"
+
 	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/errors"
@@ -36,9 +40,10 @@ type changefeed struct {
 	barriers         *barriers
 	feedStateManager *feedStateManager
 
-	schema    schema4Owner
-	sink      sink.Sink
-	ddlPuller ddlPuller
+	schema      schema4Owner
+	sink        sink.Sink
+	ddlPuller   ddlPuller
+	initialized bool
 
 	sinkErrCh <-chan error
 	ddlErrCh  <-chan error
@@ -54,25 +59,6 @@ func (c *changeFeed) InitTables(ctx context.Context, startTs uint64) error {
 		log.Panic("InitTables: ownerState not set")
 	}
 
-	kvStore, err := util.KVStorageFromCtx(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, c.config.ForceReplicate)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	filter, err := filter.NewFilter(c.config)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.schemaManager = newSchemaManager(schemaSnap, filter, c.config)
 
 	c.sink.Initialize(ctx, c.schemaManager.SinkTableInfos())
 
@@ -109,6 +95,7 @@ func (c *changeFeed) InitTables(ctx context.Context, startTs uint64) error {
 
 func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	if err := c.tick(ctx, state, captures); err != nil {
+		log.Error("an error occurred by Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string
 		if terror, ok := err.(*errors.Error); ok {
 			code = string(terror.RFCCode())
@@ -127,14 +114,14 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
-		// TODO release resource
-		return nil
+		return c.releaseResources(ctx)
 	}
 	if !c.preCheck(captures) {
 		return nil
 	}
-
-	// TODO init
+	if err := c.initialize(ctx); err != nil {
+		return errors.Trace(err)
+	}
 
 	// TODO check error
 
@@ -196,7 +183,33 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 	return nil
 }
 
-func (c *changefeed) initialize() {
+func (c *changefeed) initialize(ctx context.Context) error {
+	startTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	kvStore, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, c.state.Info.Config.ForceReplicate)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	filter, err := filter.NewFilter(c.state.Info.Config)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.schema = newSchemaWrap4Owner(schemaSnap, filter, c.state.Info.Config)
+
+	// TODO
+	return nil
+}
+
+func (c *changefeed) releaseResources(ctx context.Context) error {
 }
 
 func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
