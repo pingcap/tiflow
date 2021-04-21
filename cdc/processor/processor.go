@@ -663,7 +663,7 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 		Config:        p.changefeed.Info.Config,
 	})
 	cdcCtx = cdccontext.WithErrorHandler(cdcCtx, func(err error) error {
-		if cerror.ErrTableProcessorStoppedSafely.Equal(errors.Cause(err)) ||
+		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
 			errors.Cause(errors.Cause(err)) == context.Canceled {
 			return nil
 		}
