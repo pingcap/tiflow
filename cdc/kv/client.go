@@ -168,6 +168,12 @@ func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
 }
 
+func (s *regionFeedState) IsInitialized() bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.initialized
+}
+
 type syncRegionFeedStateMap struct {
 	mu            *sync.Mutex
 	regionInfoMap map[uint64]*regionFeedState

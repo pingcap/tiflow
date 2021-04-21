@@ -2885,7 +2885,8 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval", "return(3)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientCheckUnInitRegionInterval", "return(3)")
+	// check interval is less than reconnect interval, so we can test both the hit and miss case
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientCheckUnInitRegionInterval", "return(1)")
 	c.Assert(err, check.IsNil)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval")

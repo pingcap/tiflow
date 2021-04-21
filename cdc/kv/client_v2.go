@@ -89,9 +89,7 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		worker.setRegionState(event.RegionId, state)
 		// TODO: If a region doesn't receive any event from TiKV, this region
 		// can't be reconnected since the region state is not initialized.
-		worker.uninitRegions.Lock()
-		worker.uninitRegions.m[event.RegionId] = time.Now()
-		worker.uninitRegions.Unlock()
+		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
 
 		// send resolved event when starting a single event feed
 		select {

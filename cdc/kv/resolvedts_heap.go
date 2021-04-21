@@ -13,37 +13,56 @@
 
 package kv
 
-import "container/heap"
+import (
+	"container/heap"
+	"time"
+)
 
-// regionResolvedTs contains region resolvedTs information
-type regionResolvedTs struct {
-	regionID   uint64
+type tsItem struct {
 	resolvedTs uint64
-	index      int
+	eventTime  time.Time
 }
 
-type resolvedTsHeap []*regionResolvedTs
-
-func (rh resolvedTsHeap) Len() int { return len(rh) }
-
-func (rh resolvedTsHeap) Less(i, j int) bool {
-	return rh[i].resolvedTs < rh[j].resolvedTs
+func newResolvedTsItem(ts uint64) tsItem {
+	return tsItem{resolvedTs: ts}
 }
 
-func (rh resolvedTsHeap) Swap(i, j int) {
+func newEventTimeItem() tsItem {
+	return tsItem{eventTime: time.Now()}
+}
+
+// regionTsInfo contains region resolvedTs information
+type regionTsInfo struct {
+	regionID uint64
+	index    int
+	ts       tsItem
+}
+
+type regionTsHeap []*regionTsInfo
+
+func (rh regionTsHeap) Len() int { return len(rh) }
+
+func (rh regionTsHeap) Less(i, j int) bool {
+	if !rh[i].ts.eventTime.IsZero() {
+		return rh[i].ts.eventTime.Before(rh[j].ts.eventTime)
+	}
+	return rh[i].ts.resolvedTs < rh[j].ts.resolvedTs
+}
+
+func (rh regionTsHeap) Swap(i, j int) {
 	rh[i], rh[j] = rh[j], rh[i]
 	rh[i].index = i
 	rh[j].index = j
 }
 
-func (rh *resolvedTsHeap) Push(x interface{}) {
+func (rh *regionTsHeap) Push(x interface{}) {
 	n := len(*rh)
-	item := x.(*regionResolvedTs)
+	item := x.(*regionTsInfo)
 	item.index = n
 	*rh = append(*rh, item)
 }
 
-func (rh *resolvedTsHeap) Pop() interface{} {
+func (rh *regionTsHeap) Pop() interface{} {
 	old := *rh
 	n := len(old)
 	item := old[n-1]
@@ -52,28 +71,35 @@ func (rh *resolvedTsHeap) Pop() interface{} {
 	return item
 }
 
-// resolvedTsManager is a used to maintain resolved ts information for N regions.
+// regionTsManager is a used to maintain resolved ts information for N regions.
 // This struct is not thread safe
-type resolvedTsManager struct {
-	// mapping from regionID to regionResolvedTs object
-	m map[uint64]*regionResolvedTs
-	h resolvedTsHeap
+type regionTsManager struct {
+	// mapping from regionID to regionTsInfo object
+	m map[uint64]*regionTsInfo
+	h regionTsHeap
 }
 
-func newResolvedTsManager() *resolvedTsManager {
-	return &resolvedTsManager{
-		m: make(map[uint64]*regionResolvedTs),
-		h: make(resolvedTsHeap, 0),
+func newRegionTsManager() *regionTsManager {
+	return &regionTsManager{
+		m: make(map[uint64]*regionTsInfo),
+		h: make(regionTsHeap, 0),
 	}
 }
 
 // Upsert implements insert	and update on duplicated key
-func (rm *resolvedTsManager) Upsert(item *regionResolvedTs) {
+func (rm *regionTsManager) Upsert(item *regionTsInfo) {
 	if old, ok := rm.m[item.regionID]; ok {
 		// in a single resolved ts manager, the resolved ts of a region should not be fallen back
-		if item.resolvedTs > old.resolvedTs {
-			old.resolvedTs = item.resolvedTs
-			heap.Fix(&rm.h, old.index)
+		if item.ts.eventTime.IsZero() {
+			if item.ts.resolvedTs > old.ts.resolvedTs {
+				old.ts.resolvedTs = item.ts.resolvedTs
+				heap.Fix(&rm.h, old.index)
+			}
+		} else {
+			if item.ts.eventTime.After(old.ts.eventTime) {
+				old.ts.eventTime = item.ts.eventTime
+				heap.Fix(&rm.h, old.index)
+			}
 		}
 	} else {
 		heap.Push(&rm.h, item)
@@ -81,16 +107,26 @@ func (rm *resolvedTsManager) Upsert(item *regionResolvedTs) {
 	}
 }
 
-// Pop pops a regionResolvedTs from rts heap, delete it from region rts map
-func (rm *resolvedTsManager) Pop() *regionResolvedTs {
+// Pop pops a regionTsInfo from rts heap, delete it from region rts map
+func (rm *regionTsManager) Pop() *regionTsInfo {
 	if rm.Len() == 0 {
 		return nil
 	}
-	item := heap.Pop(&rm.h).(*regionResolvedTs)
+	item := heap.Pop(&rm.h).(*regionTsInfo)
 	delete(rm.m, item.regionID)
 	return item
 }
 
-func (rm *resolvedTsManager) Len() int {
+// Remove removes item from regionTsManager
+func (rm *regionTsManager) Remove(regionID uint64) *regionTsInfo {
+	if item, ok := rm.m[regionID]; ok {
+		delete(rm.m, item.regionID)
+		return heap.Remove(&rm.h, item.index).(*regionTsInfo)
+	}
+	return nil
+}
+
+// Len returns the item count in regionTsManager
+func (rm *regionTsManager) Len() int {
 	return len(rm.m)
 }

@@ -25,35 +25,35 @@ var _ = check.Suite(&rtsHeapSuite{})
 
 func (s *rtsHeapSuite) TestResolvedTsManager(c *check.C) {
 	defer testleak.AfterTest(c)()
-	mgr := newResolvedTsManager()
-	initRegions := []*regionResolvedTs{
-		{regionID: 102, resolvedTs: 1040},
-		{regionID: 100, resolvedTs: 1000},
-		{regionID: 101, resolvedTs: 1020},
+	mgr := newRegionTsManager()
+	initRegions := []*regionTsInfo{
+		{regionID: 102, ts: tsItem{resolvedTs: 1040}},
+		{regionID: 100, ts: tsItem{resolvedTs: 1000}},
+		{regionID: 101, ts: tsItem{resolvedTs: 1020}},
 	}
 	for _, rts := range initRegions {
 		mgr.Upsert(rts)
 	}
 	c.Assert(mgr.Len(), check.Equals, 3)
 	rts := mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionResolvedTs{regionID: 100, resolvedTs: 1000, index: -1})
+	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
 
 	// resolved ts is not updated
 	mgr.Upsert(rts)
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionResolvedTs{regionID: 100, resolvedTs: 1000, index: -1})
+	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
 
 	// resolved ts updated
-	rts.resolvedTs = 1001
+	rts.ts.resolvedTs = 1001
 	mgr.Upsert(rts)
-	mgr.Upsert(&regionResolvedTs{regionID: 100, resolvedTs: 1100})
+	mgr.Upsert(&regionTsInfo{regionID: 100, ts: newResolvedTsItem(1100)})
 
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionResolvedTs{regionID: 101, resolvedTs: 1020, index: -1})
+	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 101, ts: newResolvedTsItem(1020), index: -1})
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionResolvedTs{regionID: 102, resolvedTs: 1040, index: -1})
+	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 102, ts: newResolvedTsItem(1040), index: -1})
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionResolvedTs{regionID: 100, resolvedTs: 1100, index: -1})
+	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1100), index: -1})
 	rts = mgr.Pop()
 	c.Assert(rts, check.IsNil)
 }
