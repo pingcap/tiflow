@@ -105,8 +105,6 @@ type Owner struct {
 
 	// gcTTL is the ttl of cdc gc safepoint ttl.
 	gcTTL int64
-	// gcBLT is the max block time of cdc safepoint.
-	gcBLT int64
 	// last update gc safepoint time. zero time means has not updated or cleared
 	gcSafepointLastUpdate time.Time
 	// record last time that flushes all changefeeds' replication status
@@ -129,7 +127,6 @@ func NewOwner(
 	credential *security.Credential,
 	sess *concurrency.Session,
 	gcTTL int64,
-	gcBLT int64,
 	flushChangefeedInterval time.Duration,
 ) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
@@ -154,7 +151,6 @@ func NewOwner(
 		cfRWriter:               cli,
 		etcdClient:              cli,
 		gcTTL:                   gcTTL,
-		gcBLT:                   gcBLT,
 		flushChangefeedInterval: flushChangefeedInterval,
 		feedChangeNotifier:      new(notify.Notifier),
 	}
@@ -722,13 +718,13 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		return nil
 	}
 
-	minCheckpointTs := uint64(math.MaxUint64)
+	gcSafePoint := uint64(math.MaxUint64)
 	if len(o.changeFeeds) > 0 {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 		for id, changefeed := range o.changeFeeds {
 			snapshot[id] = changefeed.status
-			if changefeed.appliedCheckpointTs < minCheckpointTs {
-				minCheckpointTs = changefeed.appliedCheckpointTs
+			if changefeed.appliedCheckpointTs < gcSafePoint {
+				gcSafePoint = changefeed.appliedCheckpointTs
 			}
 
 			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
@@ -749,15 +745,17 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		}
 	}
 	for _, status := range o.stoppedFeeds {
-		if status.CheckpointTs < minCheckpointTs {
-			minCheckpointTs = status.CheckpointTs
+		if status.CheckpointTs < gcSafePoint {
+			gcSafePoint = status.CheckpointTs
 		}
 	}
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
-		if (time.Now().Unix() - int64(minCheckpointTs)) > o.gcBLT {
-			minCheckpointTs = uint64(time.Now().Unix() - o.gcBLT)
+		// When a changeFeed stagnates, gcSafePoint will also stagnates, and here is guaranteed that
+		// gcSafePoint only can lag the time set by gcTTL at most.
+		if (time.Now().Unix() - int64(gcSafePoint)) > o.gcTTL {
+			gcSafePoint = uint64(time.Now().Unix() - o.gcTTL)
 		}
-		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, gcSafePoint)
 		if err != nil {
 			sinceLastUpdate := time.Since(o.gcSafepointLastUpdate)
 			log.Warn("failed to update service safe point", zap.Error(err),
@@ -774,9 +772,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			actual = uint64(val.(int))
 		})
 
-		if actual > minCheckpointTs {
+		if actual > gcSafePoint {
 			// UpdateServiceGCSafePoint has failed.
-			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("actual-safepoint", actual))
+			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", gcSafePoint), zap.Uint64("actual-safepoint", actual))
 
 			for cfID, cf := range o.changeFeeds {
 				if cf.status.CheckpointTs < actual {
@@ -1634,8 +1632,8 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	}()
 }
 
-// reset gcBLT
-func (o *Owner) setGcBLT(gcBLT int64) {
-	o.gcBLT = gcBLT
-	log.Warn("change gc-ttl", zap.Int64("gc-ttl", o.gcBLT))
+// set gcTTL to a new value
+func (o *Owner) setGcTTL(gcTTL int64) {
+	o.gcTTL = gcTTL
+	log.Warn("change gc-ttl", zap.Int64("gc-ttl", o.gcTTL))
 }

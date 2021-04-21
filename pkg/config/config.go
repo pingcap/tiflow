@@ -144,7 +144,6 @@ var defaultServerConfig = &ServerConfig{
 	LogFile:       "",
 	LogLevel:      "info",
 	GcTTL:         24 * 60 * 60, // 24H
-	GcBLT:         24 * 60 * 60, // 24H
 	TZ:            "System",
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
@@ -173,7 +172,6 @@ type ServerConfig struct {
 	LogLevel string `toml:"log-level" json:"log-level"`
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
-	GcBLT int64  `toml:"gc-blt" json:"gc-blt"`
 	TZ    string `toml:"tz" json:"tz"`
 
 	CaptureSessionTTL int `toml:"capture-session-ttl" json:"capture-session-ttl"`
@@ -245,9 +243,6 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.GcTTL == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
-	}
-	if c.GcBLT == 0 {
-		return cerror.ErrInvalidServerOption.GenWithStack("empty GC BLT is not allowed")
 	}
 	// 5s is minimum lease ttl in etcd(PD)
 	if c.CaptureSessionTTL < 5 {
