@@ -14,6 +14,8 @@
 package kv
 
 import (
+	"time"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -23,13 +25,13 @@ type rtsHeapSuite struct {
 
 var _ = check.Suite(&rtsHeapSuite{})
 
-func (s *rtsHeapSuite) TestResolvedTsManager(c *check.C) {
+func (s *rtsHeapSuite) TestRegionTsManagerResolvedTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mgr := newRegionTsManager()
 	initRegions := []*regionTsInfo{
-		{regionID: 102, ts: tsItem{resolvedTs: 1040}},
-		{regionID: 100, ts: tsItem{resolvedTs: 1000}},
-		{regionID: 101, ts: tsItem{resolvedTs: 1020}},
+		{regionID: 102, ts: newResolvedTsItem(1040)},
+		{regionID: 100, ts: newResolvedTsItem(1000)},
+		{regionID: 101, ts: newResolvedTsItem(1020)},
 	}
 	for _, rts := range initRegions {
 		mgr.Upsert(rts)
@@ -56,4 +58,27 @@ func (s *rtsHeapSuite) TestResolvedTsManager(c *check.C) {
 	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1100), index: -1})
 	rts = mgr.Pop()
 	c.Assert(rts, check.IsNil)
+}
+
+func (s *rtsHeapSuite) TestRegionTsManagerEvTime(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mgr := newRegionTsManager()
+	initRegions := []*regionTsInfo{
+		{regionID: 100, ts: newEventTimeItem()},
+		{regionID: 101, ts: newEventTimeItem()},
+	}
+	for _, item := range initRegions {
+		mgr.Upsert(item)
+	}
+	info := mgr.Remove(101)
+	c.Assert(info.regionID, check.Equals, uint64(101))
+
+	ts := time.Now()
+	mgr.Upsert(&regionTsInfo{regionID: 100, ts: newEventTimeItem()})
+	info = mgr.Pop()
+	c.Assert(info.regionID, check.Equals, uint64(100))
+	c.Assert(ts.Before(info.ts.eventTime), check.IsTrue)
+	c.Assert(time.Now().After(info.ts.eventTime), check.IsTrue)
+	info = mgr.Pop()
+	c.Assert(info, check.IsNil)
 }

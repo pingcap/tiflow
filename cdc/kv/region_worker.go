@@ -108,7 +108,9 @@ type regionWorker struct {
 	rtsManager  *regionTsManager
 	rtsUpdateCh chan *regionTsInfo
 
-	// evTimeManager maintains the last event time of each un-initialized region
+	// evTimeManager maintains the time that last event is received of each
+	// uninitialized region, note the regionTsManager is not thread safe, so we
+	// use a single routine to handle evTimeUpdate and evTimeManager
 	evTimeManager  *regionTsManager
 	evTimeUpdateCh chan *evTimeUpdate
 
