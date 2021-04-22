@@ -50,6 +50,10 @@ func (c *mockFlowController) Release(resolvedTs uint64) {
 func (c *mockFlowController) Abort() {
 }
 
+func (c *mockFlowController) GetConsumption() uint64 {
+	return 0
+}
+
 func (s *mockSink) Initialize(ctx stdContext.Context, tableInfo []*model.SimpleTableInfo) error {
 	return nil
 }

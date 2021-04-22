@@ -82,6 +82,7 @@ func (s *flowControlSuite) TestMemoryControlBasic(c *check.C) {
 
 	wg.Wait()
 	c.Assert(atomic.LoadUint64(&consumed), check.Equals, uint64(0))
+	c.Assert(controller.GetConsumption(), check.Equals, uint64(0))
 }
 
 func (s *flowControlSuite) TestMemoryControlForceConsume(c *check.C) {
@@ -241,6 +242,7 @@ func (s *flowControlSuite) TestFlowControlBasic(c *check.C) {
 			if updatedResolvedTs {
 				// new Txn
 				c.Assert(atomic.LoadUint64(&consumedBytes), check.Less, uint64(2048))
+				c.Assert(flowController.GetConsumption(), check.Less, uint64(2048))
 			}
 		}
 		select {

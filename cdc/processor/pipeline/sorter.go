@@ -31,6 +31,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	flushMemoryMetricsDuration = time.Second * 5
+)
+
 type sorterNode struct {
 	sortEngine model.SortEngine
 	sortDir    string
@@ -114,10 +118,17 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		lastSentResolvedTs := uint64(0)
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
+
+		metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(n.changeFeedID, ctx.Vars().CaptureAddr, n.tableName)
+		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
+		defer metricsTicker.Stop()
+
 		for {
 			select {
 			case <-stdCtx.Done():
 				return nil
+			case <-metricsTicker.C:
+				metricsTableMemoryGauge.Set(float64(n.flowController.GetConsumption()))
 			case msg := <-sorter.Output():
 				if msg == nil || msg.RawKV == nil {
 					continue
@@ -191,6 +202,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
+	defer tableMemoryGauge.DeleteLabelValues(n.changeFeedID, ctx.Vars().CaptureAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
 }

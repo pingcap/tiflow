@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
+	serverConfig "github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
@@ -32,9 +33,8 @@ import (
 )
 
 const (
-	// TODO move this to server configuration
 	// TODO determine a reasonable default value
-	perTableMemoryQuota           = 20 * 1024 * 1024 // 20MB
+	// This is part of sink performance optimization
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
 )
 
@@ -80,6 +80,7 @@ type tableFlowController interface {
 	Consume(commitTs uint64, size uint64, blockCallBack func() error) error
 	Release(resolvedTs uint64)
 	Abort()
+	GetConsumption() uint64
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
@@ -170,6 +171,12 @@ func NewTablePipeline(ctx context.Context,
 		cancel:      cancel,
 	}
 
+	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
+	log.Debug("creating table flow controller",
+		zap.String("changefeed-id", changefeedID),
+		zap.String("table-name", tableName),
+		zap.Int64("table-id", tableID),
+		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	ctx, p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
 	tablePipeline.pullerNode = newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName)

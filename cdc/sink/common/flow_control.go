@@ -127,6 +127,14 @@ func (c *TableMemorySizeController) Abort() {
 	c.cond.Signal()
 }
 
+// GetConsumption returns the current memory consumption
+func (c *TableMemorySizeController) GetConsumption() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.Consumed
+}
+
 // TableFlowController provides a convenient interface to control the memory consumption of a per table event stream
 type TableFlowController struct {
 	memoryController *TableMemorySizeController
@@ -206,4 +214,9 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 // Abort interrupts any ongoing Consume call
 func (c *TableFlowController) Abort() {
 	c.memoryController.Abort()
+}
+
+// GetConsumption returns the current memory consumption
+func (c *TableFlowController) GetConsumption() uint64 {
+	return c.memoryController.GetConsumption()
 }
