@@ -15,57 +15,71 @@ package owner
 
 import (
 	"context"
+	"math"
 	"time"
+
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 
 	"github.com/pingcap/log"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
-const (
-	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	cdcServiceSafePointID = "ticdc"
-	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	gcSafepointUpdateInterval = time.Duration(2 * time.Second)
-)
-
 type gcManager struct {
 	pdClient pd.Client
-	ttl      int64
+	gcTTL    int64
 
-	lastFlushedTime time.Time
+	lastUpdatedTime time.Time
+	lastSucceedTime time.Time
 	lastSafePointTs uint64
 }
 
-func newGCManager(pdClient pd.Client, ttl int64) *gcManager {
+func newGCManager(pdClient pd.Client) *gcManager {
+	serverConfig := config.GetGlobalServerConfig()
 	return &gcManager{
 		pdClient: pdClient,
-		ttl:      ttl,
+		gcTTL:    serverConfig.GcTTL,
 	}
 }
 
-func (m *gcManager) updateGCSafePoint(ctx context.Context, safePointTs uint64) (actual uint64, err error) {
-	if time.Since(m.lastFlushedTime) > gcSafepointUpdateInterval || m.lastSafePointTs == 0 {
-		startTime := time.Now()
-		actual, err = m.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.ttl, safePointTs)
-		if err != nil {
-			log.Warn("updateGCSafePoint failed",
-				zap.Uint64("safePointTs", safePointTs),
-				zap.Error(err))
-
-			if time.Since(startTime) < time.Duration(m.ttl)*time.Second {
-				actual = m.lastSafePointTs
-				err = nil
-				return
-			}
-
-			return
+func (m *gcManager) updateGCSafePoint(ctx context.Context, state *model.GlobalReactorState) error {
+	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
+		return nil
+	}
+	m.lastUpdatedTime = time.Now()
+	minCheckpointTs := uint64(math.MaxUint64)
+	for _, cfState := range state.Changefeeds {
+		if cfState.Info == nil {
+			continue
 		}
-		m.lastFlushedTime = startTime
-		m.lastSafePointTs = safePointTs
-		return
+		switch cfState.Info.State {
+		case model.StateNormal, model.StateStopped, model.StateError:
+		default:
+			continue
+		}
+		checkpointTs := cfState.Info.GetCheckpointTs(cfState.Status)
+		if minCheckpointTs > checkpointTs {
+			minCheckpointTs = checkpointTs
+		}
 	}
 
-	actual = m.lastSafePointTs
-	return
+	actual, err := m.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
+	if err != nil {
+		log.Warn("updateGCSafePoint failed",
+			zap.Uint64("safePointTs", minCheckpointTs),
+			zap.Error(err))
+		if time.Since(m.lastSucceedTime) >= time.Second*time.Duration(m.gcTTL) {
+			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
+		}
+		return nil
+	}
+	m.lastSafePointTs = actual
+	m.lastSucceedTime = time.Now()
+	return nil
+}
+
+func (m gcManager) GcSafePointTs() model.Ts {
+	return m.lastSafePointTs
 }

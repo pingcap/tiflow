@@ -105,7 +105,6 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				return nil, true, nil
 			})
-			break
 		}
 		m.patchState(model.StateRemoved)
 	case model.AdminResume:

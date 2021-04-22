@@ -15,16 +15,16 @@ package owner
 
 import (
 	"context"
+	"math"
 	"sync/atomic"
 	"time"
-
-	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -32,6 +32,13 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+)
+
+const (
+	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	cdcServiceSafePointID = "ticdc"
+	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
+	gcSafepointUpdateInterval = time.Duration(1 * time.Minute)
 )
 
 type Owner struct {
@@ -101,112 +108,82 @@ func (o *Owner) AsyncStop() {
 }
 
 type ownerReactor struct {
-	state             *model.GlobalReactorState
-	changeFeedManager changeFeedManager
-	changeFeedRunners map[model.ChangeFeedID]*changefeed
+	changefeeds map[model.ChangeFeedID]*changefeed
 
-	gcManager *gcManager
+	pdClient   pd.Client
+	credential *security.Credential
+	gcManager  *gcManager
 
 	close int32
 }
 
-func newOwnerReactor(state *ownerReactorState, cfManager changeFeedManager, gcManager *gcManager) *ownerReactor {
+func newOwnerReactor(pdClient pd.Client, credential *security.Credential, gcManager *gcManager) *ownerReactor {
 	return &ownerReactor{
-		state:             state,
-		changeFeedManager: cfManager,
-		changeFeedRunners: make(map[model.ChangeFeedID]changeFeedRunner),
-		gcManager:         gcManager,
+		changefeeds: make(map[model.ChangeFeedID]*changefeed),
+		pdClient:    pdClient,
+		credential:  credential,
+		gcManager:   gcManager,
 	}
 }
 
-func (o *ownerReactor) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	o.state = state.(*model.GlobalReactorState)
-	for changefeedID, changefeedState := range o.state.Changefeeds {
+func (o *ownerReactor) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	state := rawState.(*model.GlobalReactorState)
+	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
-			// 删除所有其他key
+			o.cleanUpChangefeed(changefeedState)
 			continue
 		}
-		changefeedState.Info.CheckErrorHistoryV2()
-
+		cfReactor, exist := o.changefeeds[changefeedID]
+		if !exist {
+			cfReactor = newChangefeed(o.pdClient, o.credential, o.gcManager)
+		}
+		cfReactor.Tick(ctx, changefeedState, state.Captures)
 	}
-
-	if atomic.LoadInt32(&o.close) != 0 {
-		return nil, cerror.ErrReactorFinished.GenWithStackByArgs()
-	}
-
-	cfOps, err := o.changeFeedManager.GetChangeFeedOperations(ctx)
-	if err != nil {
-		// TODO graceful exit
-		return nil, errors.Trace(err)
-	}
-
-	for _, operation := range cfOps {
-		switch operation.op {
-		case startChangeFeedOperation:
-			log.Info("start changeFeed", zap.String("cfID", operation.changeFeedID))
-			o.changeFeedRunners[operation.changeFeedID] = operation.runner
-		case stopChangeFeedOperation:
-			log.Info("stop changeFeed", zap.String("cfID", operation.changeFeedID))
-			// We try to close the changeFeedRunner only if it is not already closed.
-			// It will already have been closed if the changeFeedRunner itself has returned an error in the last tick,
-			// in which case, the changeFeedRunner is closed and an AdminStop is queued to notify the processors.
-			// Since the changeFeedManager is ignorant of the status of the changeFeedRunner, it will process the AdminStop
-			// and ask us to close the feed by returning a stopChangeFeedOperation.
-			if _, ok := o.changeFeedRunners[operation.changeFeedID]; ok {
-				o.changeFeedRunners[operation.changeFeedID].Close()
-				delete(o.changeFeedRunners, operation.changeFeedID)
+	if len(o.changefeeds) != len(state.Changefeeds) {
+		for changefeedID, cfReactor := range o.changefeeds {
+			if _, exist := state.Changefeeds[changefeedID]; exist {
+				continue
 			}
-		default:
-			panic("unreachable")
+			cfReactor.Close()
+			delete(o.changefeeds, changefeedID)
 		}
 	}
 
-	for cfID, runner := range o.changeFeedRunners {
-		err := runner.Tick(ctx)
-		if err != nil {
-			log.Warn("error running changeFeed owner", zap.Error(err))
-			err := o.changeFeedManager.AddAdminJob(ctx, model.AdminJob{
-				CfID: cfID,
-				Type: model.AdminStop,
-				Error: &model.RunningError{
-					Addr:    util.CaptureAddrFromCtx(ctx),
-					Code:    "CDC-owner-1001",
-					Message: err.Error(),
-				},
-			})
-			if err != nil {
-				// TODO is this error recoverable?
-				return nil, errors.Trace(err)
-			}
-			o.changeFeedRunners[cfID].Close()
-			delete(o.changeFeedRunners, cfID)
-		}
-	}
-
-	err = o.doUpdateGCSafePoint(ctx)
+	err = o.gcManager.updateGCSafePoint(ctx, state)
 	if err != nil {
 		return nil, err
 	}
-
-	return o.state, nil
+	if atomic.LoadInt32(&o.close) != 0 {
+		for _, cfReactor := range o.changefeeds {
+			cfReactor.Close()
+		}
+		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
+	}
+	return state, nil
 }
 
-func (o *ownerReactor) doUpdateGCSafePoint(ctx context.Context) error {
-	gcSafePoint := o.changeFeedManager.GetGCSafePointUpperBound()
-	actual, err := o.gcManager.updateGCSafePoint(ctx, gcSafePoint)
-	if err != nil {
-		return errors.Trace(err)
+func (o *ownerReactor) cleanUpChangefeed(state *model.ChangefeedReactorState) {
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return nil, info != nil, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		return nil, status != nil, nil
+	})
+	for captureID := range state.TaskStatuses {
+		state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			return nil, status != nil, nil
+		})
 	}
-
-	if actual > gcSafePoint {
-		log.Warn("gcSafePoint lost",
-			zap.Uint64("expected", gcSafePoint),
-			zap.Uint64("actual", actual))
-
-		// TODO fail all changefeeds whose checkpoint ts is less than the actual safepoint
+	for captureID := range state.TaskPositions {
+		state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return nil, position != nil, nil
+		})
 	}
-
-	return nil
+	for captureID := range state.Workloads {
+		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
+			return nil, workload != nil, nil
+		})
+	}
 }
 
 func (o *ownerReactor) AsyncStop() {

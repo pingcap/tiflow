@@ -15,22 +15,30 @@ package owner
 
 import (
 	"context"
+	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/pkg/filter"
-
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+)
+
+const (
+	defaultErrChSize = 1024
 )
 
 type changefeed struct {
@@ -39,63 +47,42 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
+	gcManager        *gcManager
 
 	schema      schema4Owner
 	sink        sink.Sink
 	ddlPuller   ddlPuller
 	initialized bool
 
-	sinkErrCh <-chan error
-	ddlErrCh  <-chan error
+	pdClient   pd.Client
+	credential *security.Credential
+
+	gcTTL int64
+
+	errCh  chan error
+	cancel context.CancelFunc
 }
 
-/*
-func (c *changeFeed) InitTables(ctx context.Context, startTs uint64) error {
-	if c.changeFeedState != nil {
-		log.Panic("InitTables: unexpected state", zap.String("cfID", c.cfID))
+func newChangefeed(pdClient pd.Client, credential *security.Credential, gcManager *gcManager) *changefeed {
+	serverConfig := config.GetGlobalServerConfig()
+	gcTTL := serverConfig.GcTTL
+	return &changefeed{
+		scheduler:        newScheduler(),
+		barriers:         newBarriers(),
+		feedStateManager: new(feedStateManager),
+		gcTTL:            gcTTL,
+		gcManager:        gcManager,
+
+		pdClient:   pdClient,
+		credential: credential,
+		errCh:      make(chan error, defaultErrChSize),
+		cancel:     func() {},
 	}
-
-	if c.ownerState == nil {
-		log.Panic("InitTables: ownerState not set")
-	}
-
-
-	c.sink.Initialize(ctx, c.schemaManager.SinkTableInfos())
-
-	// We call an unpartitioned table a partition too for simplicity
-	existingPhysicalTables := c.ownerState.GetTableToCaptureMap(c.cfID)
-	allPhysicalTables := c.schemaManager.AllPhysicalTables()
-
-	initTableTasks := make(map[model.TableID]*tableTask)
-
-	for _, tableID := range allPhysicalTables {
-		tableTask := &tableTask{
-			TableID:      tableID,
-			CheckpointTs: startTs - 1,
-			ResolvedTs:   startTs - 1,
-		}
-
-		if _, ok := existingPhysicalTables[tableID]; ok {
-			// The table is currently being replicated by a processor
-			progress := c.ownerState.GetTableProgress(c.cfID, tableID)
-			if progress != nil {
-				tableTask.CheckpointTs = progress.checkpointTs
-				tableTask.ResolvedTs = progress.resolvedTs
-			}
-		}
-
-		initTableTasks[tableID] = tableTask
-	}
-
-	c.changeFeedState = newChangeFeedState(initTableTasks, startTs, newScheduler(c.ownerState, c.cfID))
-
-	return nil
 }
-*/
 
 func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	if err := c.tick(ctx, state, captures); err != nil {
-		log.Error("an error occurred by Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string
 		if terror, ok := err.(*errors.Error); ok {
 			code = string(terror.RFCCode())
@@ -107,6 +94,9 @@ func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorSta
 			Code:    code,
 			Message: err.Error(),
 		})
+		if err := c.releaseResources(); err != nil {
+			log.Error("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		}
 	}
 }
 
@@ -114,7 +104,13 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
-		return c.releaseResources(ctx)
+		return c.releaseResources()
+	}
+
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	gcSafePointTs := c.gcManager.GcSafePointTs()
+	if checkpointTs < gcSafePointTs || time.Since(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(c.gcTTL)*time.Second {
+		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs, gcSafePointTs)
 	}
 	if !c.preCheck(captures) {
 		return nil
@@ -123,7 +119,11 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 		return errors.Trace(err)
 	}
 
-	// TODO check error
+	select {
+	case err := <-c.errCh:
+		return errors.Trace(err)
+	default:
+	}
 
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
@@ -184,7 +184,27 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 }
 
 func (c *changefeed) initialize(ctx context.Context) error {
+	if c.initialized {
+		return nil
+	}
 	startTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
+		zap.Stringer("info", c.state.Info),
+		zap.Uint64("checkpoint ts", startTs))
+	failpoint.Inject("NewChangefeedNoRetryError", func() {
+		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(startTs-300, startTs))
+	})
+
+	failpoint.Inject("NewChangefeedRetryError", func() {
+		failpoint.Return(errors.New("failpoint injected retriable error"))
+	})
+
+	if c.state.Info.Config.CheckGCSafePoint {
+		err := util.CheckSafetyOfStartTs(ctx, c.pdClient, c.state.ID, startTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 	kvStore, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -204,12 +224,35 @@ func (c *changefeed) initialize(ctx context.Context) error {
 	}
 
 	c.schema = newSchemaWrap4Owner(schemaSnap, filter, c.state.Info.Config)
-
-	// TODO
+	cancelCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+	c.sink, err = sink.NewSink(cancelCtx, c.state.ID, c.state.Info.SinkURI, filter, c.state.Info.Config, c.state.Info.Opts, c.errCh)
+	err = c.sink.Initialize(ctx, c.schema.SinkTableInfos())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.ddlPuller = newDDLPuller(cancelCtx, c.pdClient, c.credential, kvStore, startTs)
+	go func() {
+		err := c.ddlPuller.Run(cancelCtx)
+		if err != nil {
+			log.Warn("ddhHandler returned error", zap.Error(err))
+			c.errCh <- err
+		}
+	}()
 	return nil
 }
 
-func (c *changefeed) releaseResources(ctx context.Context) error {
+func (c *changefeed) releaseResources() error {
+	if !c.initialized {
+		return nil
+	}
+	c.cancel()
+	c.cancel = func() {}
+	c.ddlPuller.Close()
+	c.schema = nil
+	c.initialized = false
+	// TODO wait ddlpuller and sink exited
+	return errors.Trace(c.sink.Close())
 }
 
 func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
@@ -240,42 +283,33 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			passCheck = false
 		}
 	}
+	for captureID := range c.state.TaskStatuses {
+		if _, exist := captures[captureID]; !exist {
+			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+				return nil, status != nil, nil
+			})
+			passCheck = false
+		}
+	}
+
+	for captureID := range c.state.TaskPositions {
+		if _, exist := captures[captureID]; !exist {
+			c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				return nil, position != nil, nil
+			})
+			passCheck = false
+		}
+	}
+	for captureID := range c.state.Workloads {
+		if _, exist := captures[captureID]; !exist {
+			c.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
+				return nil, workload != nil, nil
+			})
+			passCheck = false
+		}
+	}
 	return
 }
-
-//func (c *changefeed) cleanupStatus(captures map[model.CaptureID]*model.CaptureInfo) (cleared bool) {
-//	for captureID := range c.state.TaskStatuses {
-//		if _, exist := captures[captureID]; !exist {
-//			c.cleanAllStatusByCapture(captureID)
-//			cleared = false
-//		}
-//	}
-//	for captureID := range c.state.TaskPositions {
-//		if _, exist := captures[captureID]; !exist {
-//			c.cleanAllStatusByCapture(captureID)
-//			cleared = false
-//		}
-//	}
-//	for captureID := range c.state.Workloads {
-//		if _, exist := captures[captureID]; !exist {
-//			c.cleanAllStatusByCapture(captureID)
-//			cleared = false
-//		}
-//	}
-//	return
-//}
-//
-//func (c *changefeed) cleanAllStatusByCapture(captureID model.CaptureID) {
-//	c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-//		return nil, status != nil, nil
-//	})
-//	c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-//		return nil, position != nil, nil
-//	})
-//	c.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-//		return nil, workload != nil, nil
-//	})
-//}
 
 func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
@@ -348,8 +382,7 @@ func (c *changefeed) execDDL(ctx context.Context, job *timodel.Job) error {
 }
 
 func (c *changefeed) Close() {
-	c.ddlPuller.Close()
-	err := c.sink.Close()
+	err := c.releaseResources()
 	if err != nil {
 		log.Warn("Sink closed with error", zap.Error(err))
 	}

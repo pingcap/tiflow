@@ -40,13 +40,15 @@ type schedulerJob struct {
 type scheduler struct {
 	state *model.ChangefeedReactorState
 
-	moveTableTarget       map[model.TableID]model.CaptureID
-	needRebalanceNextTick bool
+	moveTableTarget          map[model.TableID]model.CaptureID
+	boundaryTsOfRemovedTable map[model.TableID]model.Ts
+	needRebalanceNextTick    bool
 }
 
 func newScheduler() *scheduler {
 	return &scheduler{
-		moveTableTarget: make(map[model.TableID]model.CaptureID),
+		moveTableTarget:          make(map[model.TableID]model.CaptureID),
+		boundaryTsOfRemovedTable: make(map[model.TableID]model.Ts),
 	}
 }
 
@@ -158,10 +160,15 @@ func (s *scheduler) syncTablesWithSchemaManager(allTableShouldBeListened []model
 			target = s.getMinWorkloadCapture(pendingJob)
 		}
 		// table which should be listened but not, add adding-table job to pending job list
+		boundaryTs := globalCheckpointTs + 1
+		if boundaryTsOfRemoved, exist := s.boundaryTsOfRemovedTable[tableID]; exist && boundaryTs < boundaryTsOfRemoved {
+			boundaryTs = boundaryTsOfRemoved
+		}
+		// TODO gc about boundaryTsOfRemovedTable
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:            schedulerJobTypeAddTable,
 			TableID:       tableID,
-			BoundaryTs:    globalCheckpointTs + 1,
+			BoundaryTs:    boundaryTs,
 			TargetCapture: target,
 		})
 	}
@@ -218,6 +225,9 @@ func (s *scheduler) cleanUpOperations() {
 			changed := false
 			for tableID, operation := range status.Operation {
 				if operation.Status == model.OperFinished {
+					if operation.Delete {
+						s.boundaryTsOfRemovedTable[tableID] = operation.BoundaryTs
+					}
 					delete(status.Operation, tableID)
 					changed = true
 				}
