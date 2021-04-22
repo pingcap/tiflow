@@ -208,9 +208,6 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
 	checkInterval := time.Minute
 
-	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
-		reconnectInterval = time.Duration(val.(int)) * time.Second
-	})
 	failpoint.Inject("kvClientCheckUnInitRegionInterval", func(val failpoint.Value) {
 		checkInterval = time.Duration(val.(int)) * time.Second
 	})
@@ -255,9 +252,6 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
-	})
-	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
-		reconnectInterval = time.Duration(val.(int)) * time.Second
 	})
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
 	defer advanceCheckTicker.Stop()
