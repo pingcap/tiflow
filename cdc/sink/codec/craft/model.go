@@ -225,6 +225,9 @@ func decodeColumnGroup(bits []byte, allocator *SliceAllocator) (*columnGroup, er
 
 func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column) (int, *columnGroup) {
 	l := len(columns)
+	if l == 0 {
+		return 0, nil
+	}
 	values := allocator.bytesSlice(l)
 	names := allocator.stringSlice(l)
 	types := allocator.uint64Slice(l)
@@ -268,12 +271,15 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) 
 	}
 	groups := allocator.columnGroupSlice(numGroups)
 	estimatedSize := 0
+	idx := 0
 	if size, group := newColumnGroup(allocator, columnGroupTypeNew, ev.Columns); group != nil {
-		groups[0] = group
+		groups[idx] = group
+		idx++
 		estimatedSize += size
 	}
 	if size, group := newColumnGroup(allocator, columnGroupTypeOld, ev.PreColumns); group != nil {
-		groups[1] = group
+		groups[idx] = group
+		idx++
 		estimatedSize += size
 	}
 	return estimatedSize, rowChangedEvent(groups)
