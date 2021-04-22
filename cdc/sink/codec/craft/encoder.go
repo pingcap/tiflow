@@ -197,7 +197,10 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 	case mysql.TypeFloat, mysql.TypeDouble:
 		// value type for these mysql types are float64
 		return encodeFloat64(allocator.byteSlice(8)[:0], value.(float64))
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+	case mysql.TypeYear:
+		// year is encoded as int64
+		return encodeVarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(int64))
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 		// value type for these mysql types are int64 or uint64 depends on flags
 		if flag.IsUnsigned() {
 			return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(uint64))
