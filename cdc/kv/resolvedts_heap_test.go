@@ -25,6 +25,13 @@ type rtsHeapSuite struct {
 
 var _ = check.Suite(&rtsHeapSuite{})
 
+func checkRegionTsInfoWithoutEvTime(c *check.C, obtained, expected *regionTsInfo) {
+	c.Assert(obtained.regionID, check.Equals, expected.regionID)
+	c.Assert(obtained.index, check.Equals, expected.index)
+	c.Assert(obtained.ts.resolvedTs, check.Equals, expected.ts.resolvedTs)
+	c.Assert(obtained.ts.sortByEvTime, check.IsFalse)
+}
+
 func (s *rtsHeapSuite) TestRegionTsManagerResolvedTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mgr := newRegionTsManager()
@@ -38,12 +45,12 @@ func (s *rtsHeapSuite) TestRegionTsManagerResolvedTs(c *check.C) {
 	}
 	c.Assert(mgr.Len(), check.Equals, 3)
 	rts := mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
+	checkRegionTsInfoWithoutEvTime(c, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
 
 	// resolved ts is not updated
 	mgr.Upsert(rts)
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
+	checkRegionTsInfoWithoutEvTime(c, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1000), index: -1})
 
 	// resolved ts updated
 	rts.ts.resolvedTs = 1001
@@ -51,11 +58,11 @@ func (s *rtsHeapSuite) TestRegionTsManagerResolvedTs(c *check.C) {
 	mgr.Upsert(&regionTsInfo{regionID: 100, ts: newResolvedTsItem(1100)})
 
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 101, ts: newResolvedTsItem(1020), index: -1})
+	checkRegionTsInfoWithoutEvTime(c, rts, &regionTsInfo{regionID: 101, ts: newResolvedTsItem(1020), index: -1})
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 102, ts: newResolvedTsItem(1040), index: -1})
+	checkRegionTsInfoWithoutEvTime(c, rts, &regionTsInfo{regionID: 102, ts: newResolvedTsItem(1040), index: -1})
 	rts = mgr.Pop()
-	c.Assert(rts, check.DeepEquals, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1100), index: -1})
+	checkRegionTsInfoWithoutEvTime(c, rts, &regionTsInfo{regionID: 100, ts: newResolvedTsItem(1100), index: -1})
 	rts = mgr.Pop()
 	c.Assert(rts, check.IsNil)
 }

@@ -168,10 +168,22 @@ func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
 }
 
-func (s *regionFeedState) IsInitialized() bool {
+func (s *regionFeedState) isInitialized() bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	return s.initialized
+}
+
+func (s *regionFeedState) getLastResolvedTs() uint64 {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.lastResolvedTs
+}
+
+func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.sri.span
 }
 
 type syncRegionFeedStateMap struct {
@@ -1401,6 +1413,9 @@ func (s *eventFeedSession) singleEventFeed(
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
 	})
+	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
+		reconnectInterval = time.Duration(val.(int)) * time.Second
+	})
 
 	for {
 		var event *regionEvent
@@ -1409,10 +1424,6 @@ func (s *eventFeedSession) singleEventFeed(
 		case <-ctx.Done():
 			return lastResolvedTs, ctx.Err()
 		case <-advanceCheckTicker.C:
-			failpoint.Inject("kvClientForceReconnect", func() {
-				log.Warn("kv client reconnect triggered by failpoint")
-				failpoint.Return(lastResolvedTs, errReconnect)
-			})
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
 			}

@@ -2718,11 +2718,15 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientForceReconnect", "return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval", "return(1)")
+	c.Assert(err, check.IsNil)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval", "return(3)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientForceReconnect")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval")
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval")
 	}()
+
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})

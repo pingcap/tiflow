@@ -19,16 +19,17 @@ import (
 )
 
 type tsItem struct {
-	resolvedTs uint64
-	eventTime  time.Time
+	sortByEvTime bool
+	resolvedTs   uint64
+	eventTime    time.Time
 }
 
 func newResolvedTsItem(ts uint64) tsItem {
-	return tsItem{resolvedTs: ts}
+	return tsItem{resolvedTs: ts, eventTime: time.Now()}
 }
 
 func newEventTimeItem() tsItem {
-	return tsItem{eventTime: time.Now()}
+	return tsItem{sortByEvTime: true, eventTime: time.Now()}
 }
 
 // regionTsInfo contains region resolvedTs information
@@ -43,7 +44,7 @@ type regionTsHeap []*regionTsInfo
 func (rh regionTsHeap) Len() int { return len(rh) }
 
 func (rh regionTsHeap) Less(i, j int) bool {
-	if !rh[i].ts.eventTime.IsZero() {
+	if rh[i].ts.sortByEvTime {
 		return rh[i].ts.eventTime.Before(rh[j].ts.eventTime)
 	}
 	return rh[i].ts.resolvedTs < rh[j].ts.resolvedTs
@@ -90,9 +91,10 @@ func newRegionTsManager() *regionTsManager {
 func (rm *regionTsManager) Upsert(item *regionTsInfo) {
 	if old, ok := rm.m[item.regionID]; ok {
 		// in a single resolved ts manager, the resolved ts of a region should not be fallen back
-		if item.ts.eventTime.IsZero() {
-			if item.ts.resolvedTs > old.ts.resolvedTs {
+		if !item.ts.sortByEvTime {
+			if item.ts.resolvedTs > old.ts.resolvedTs || item.ts.eventTime.After(old.ts.eventTime) {
 				old.ts.resolvedTs = item.ts.resolvedTs
+				old.ts.eventTime = item.ts.eventTime
 				heap.Fix(&rm.h, old.index)
 			}
 		} else {

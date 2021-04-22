@@ -237,7 +237,7 @@ func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
 					break
 				}
 				state, ok := w.getRegionState(item.regionID)
-				if !ok || state.isStopped() || state.IsInitialized() {
+				if !ok || state.isStopped() || state.isInitialized() {
 					// check state is deleted, stopped, or initialized, if
 					// so just ignore this region, and don't need to push the
 					// eventTimeItem back to heap.
@@ -256,6 +256,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
 	})
+	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
+		reconnectInterval = time.Duration(val.(int)) * time.Second
+	})
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
 	defer advanceCheckTicker.Stop()
 
@@ -266,10 +269,6 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
-			failpoint.Inject("kvClientForceReconnect", func() {
-				log.Warn("kv client reconnect triggered by failpoint")
-				failpoint.Return(errReconnect)
-			})
 			if !w.session.isPullerInit.IsInitialized() {
 				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
 				continue
@@ -302,29 +301,27 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					// and don't need to push resolved ts back to heap.
 					continue
 				}
-				state.lock.RLock()
 				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
-				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
+				lastResolvedTs := state.getLastResolvedTs()
+				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
 				if sinceLastResolvedTs >= resolveLockInterval {
-					if sinceLastResolvedTs > reconnectInterval {
-						log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastResolvedTs))
-						state.lock.RUnlock()
+					sinceLastEvent := time.Since(rts.ts.eventTime)
+					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
+						log.Warn("kv client reconnect triggered",
+							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("since last event", sinceLastResolvedTs))
 						return errReconnect
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.sri.span),
-						zap.Duration("duration", sinceLastResolvedTs),
-						zap.Uint64("resolvedTs", state.lastResolvedTs))
+						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.getRegionSpan()),
+						zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("resolvedTs", lastResolvedTs))
 					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
-						state.lock.RUnlock()
 						continue
 					}
 				}
-				rts.ts.resolvedTs = state.lastResolvedTs
+				rts.ts.resolvedTs = lastResolvedTs
 				w.rtsManager.Upsert(rts)
-				state.lock.RUnlock()
 			}
 		}
 	}
