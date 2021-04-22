@@ -105,7 +105,7 @@ func (c *TableMemorySizeController) Release(nBytes uint64) {
 	c.mu.Lock()
 
 	if c.Consumed < nBytes {
-		defer c.mu.Unlock()
+		c.mu.Unlock()
 		log.Panic("TableMemorySizeController: releasing more than consumed, report a bug",
 			zap.Uint64("consumed", c.Consumed),
 			zap.Uint64("released", nBytes))
