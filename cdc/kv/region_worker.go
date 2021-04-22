@@ -235,8 +235,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
 				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
 				if sinceLastResolvedTs >= resolveLockInterval && state.initialized {
-					// Temporarily disable this for testing
-					// TODO fix reconnect for TiKV master branch
+					// This piece of code interferes with testing.
 					/*
 						if sinceLastResolvedTs > reconnectInterval {
 							log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastResolvedTs))
