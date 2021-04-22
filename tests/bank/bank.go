@@ -29,7 +29,6 @@ import (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	_ = ctx
 	defer cancel()
 
 	sc := make(chan os.Signal, 1)
@@ -65,7 +64,7 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			switch {
 			case len(upstream) == 0, len(downstream) == 0:
-				log.Fatal("upstream or downstream should not be emptry")
+				log.Fatal("upstream and downstream should not be empty")
 			}
 			verifyInterval, err := time.ParseDuration(interval)
 			if err != nil {
@@ -78,12 +77,12 @@ func main() {
 	cmd.PersistentFlags().StringVarP(&downstream, "downstream", "d", "", "Downstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVar(&interval, "interval", "2s", "Interval of verify tables")
 	cmd.PersistentFlags().Int64Var(&testRound, "test-round", math.MaxInt64, "Total around of verify tables")
-	cmd.PersistentFlags().IntVar(&accounts, "accounts", 100, "Accounts for each table")
-	cmd.PersistentFlags().IntVar(&tables, "tables", 1, "Accounts for each tables")
+	cmd.PersistentFlags().IntVar(&tables, "tables", 1, "The number of tables for db")
+	cmd.PersistentFlags().IntVar(&accounts, "accounts", 100, "The number of Accounts for each table")
 	cmd.PersistentFlags().IntVar(&concurrency, "concurrency", 10, "concurrency of transaction for each table")
 	cmd.PersistentFlags().BoolVar(&cleanupOnly, "cleanup", false, "cleanup all tables used in the test")
 
-	// Ouputs cmd.Print to stdout.
+	// Outputs cmd.Print to stdout.
 	cmd.SetOut(os.Stdout)
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

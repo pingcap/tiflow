@@ -52,7 +52,7 @@ import (
 //   startts = @@tidb_current_ts
 // WHERE id IN (%d, %d)
 //
-// -- Transcation between accounts.
+// -- Transaction between accounts.
 // SELECT id, balance FROM accounts%d WHERE id IN (%d, %d) FOR UPDATE
 // UPDATE accounts%d SET
 //   balance = CASE id WHEN %d THEN %d WHEN %d THEN %d END,
@@ -147,18 +147,19 @@ func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID i
 	}
 	defer rows.Close()
 
-	var sequence, perviousSequence int
+	var curr, previous int
 	for rows.Next() {
-		err = rows.Scan(&sequence)
-		if err != nil {
+		if err = rows.Scan(&curr); err != nil {
 			log.Warn("select sequence err", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 			return nil
 		}
-		if perviousSequence != 0 && perviousSequence != sequence && perviousSequence+1 != sequence {
-			return errors.Errorf("missing changes sequence %d, perviousSequence %d", sequence, perviousSequence)
+
+		if previous != 0 && previous != curr && previous+1 != curr {
+			return errors.Errorf("missing changes sequence account_seq%d, current sequence=%d, previous sequence=%d", tableID, curr, previous)
 		}
-		perviousSequence = sequence
+		previous = curr
 	}
+
 	log.Info("sequence verify pass", zap.String("tag", tag))
 	return nil
 }
@@ -256,28 +257,27 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 }
 
 func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string) error {
-	var total int
-	var count int
+	var obtained, expect int
 
 	query := fmt.Sprintf("SELECT SUM(balance) as total FROM accounts%d", tableID)
-	err := db.QueryRowContext(ctx, query).Scan(&total)
-	if err != nil {
-		log.Warn("select sum err", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
-		return errors.Trace(err)
-	}
-	check := accounts * 1000
-	if total != check {
-		return errors.Errorf("accouts%d total must %d, but got %d", tableID, check, total)
-	}
-
-	query = fmt.Sprintf("SELECT COUNT(*) as count FROM accounts%d", tableID)
-	err = db.QueryRow(query).Scan(&count)
+	err := db.QueryRowContext(ctx, query).Scan(&obtained)
 	if err != nil {
 		log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 		return errors.Trace(err)
 	}
-	if count != accounts {
-		return errors.Errorf("account mismatch %d != %d", accounts, count)
+	expect = accounts * 1000
+	if obtained != expect {
+		return errors.Errorf("verify balance failed, accounts%d expect %d, but got %d", tableID, expect, obtained)
+	}
+
+	query = fmt.Sprintf("SELECT COUNT(*) as count FROM accounts%d", tableID)
+	err = db.QueryRowContext(ctx, query).Scan(&obtained)
+	if err != nil {
+		log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
+		return errors.Trace(err)
+	}
+	if obtained != accounts {
+		return errors.Errorf("verify count failed, accounts%d expected=%d, obtained=%d", tableID, accounts, obtained)
 	}
 	log.Info("bank verify pass", zap.String("tag", tag))
 	return nil
@@ -300,16 +300,18 @@ func prepareImpl(
 
 	mustExec(ctx, db, createTable)
 
-	// TODO: fix the error is NumAccounts can't be divided by batchSize.
-	// Insert batchSize values in one SQL.
-	batchSize := 100
+	var batchSize = 100
 	jobCount := accounts / batchSize
-	errg := new(errgroup.Group)
+	if accounts % batchSize != 0 {
+		jobCount++
+	}
 
 	insertF := func(query string) error {
 		_, err := db.ExecContext(ctx, query)
 		return err
 	}
+
+	errg := new(errgroup.Group)
 	ch := make(chan int, jobCount)
 	for i := 0; i < concurrency; i++ {
 		errg.Go(func() error {
@@ -319,11 +321,17 @@ func prepareImpl(
 					return nil
 				}
 
-				batchInsertSQL := batchInsertSQLF(batchSize, startIndex)
+				size := batchSize
+				remained := accounts - startIndex + 1
+				if remained < size {
+					size = remained
+				}
+
+				batchInsertSQL := batchInsertSQLF(size, startIndex)
 				start := time.Now()
 				err := retry.Run(100*time.Millisecond, 5, func() error { return insertF(batchInsertSQL) })
 				if err != nil {
-					log.Panic("exec failed", zap.String("query", batchInsertSQL), zap.Error(err))
+					log.Panic("exec batch insert failed", zap.String("query", batchInsertSQL), zap.Error(err))
 				}
 				log.Info(fmt.Sprintf("insert %d takes %s", batchSize, time.Since(start)), zap.String("query", batchInsertSQL))
 			}
@@ -423,14 +431,15 @@ func run(
 
 	upstreamDB := openDB(ctx, upstream)
 	defer upstreamDB.Close()
+
 	downstreamDB := openDB(ctx, downstream)
 	defer downstreamDB.Close()
+
 	errg := new(errgroup.Group)
 	tests := []Test{&sequenceTest{}, &bankTest{}}
 
 	if cleanupOnly {
-		for id := 0; id < tables; id++ {
-			tableID := id
+		for tableID := 0; tableID < tables; tableID++ {
 			for i := range tests {
 				tests[i].cleanup(ctx, upstreamDB, accounts, tableID, true)
 				tests[i].cleanup(ctx, downstreamDB, accounts, tableID, true)
@@ -442,8 +451,7 @@ func run(
 		return
 	}
 
-	for id := 0; id < tables; id++ {
-		tableID := id
+	for tableID := 0; tableID < tables; tableID++ {
 		// Prepare tests
 		for i := range tests {
 			err := tests[i].prepare(ctx, upstreamDB, accounts, tableID, concurrency)
@@ -477,6 +485,7 @@ func run(
 							log.Panic("upstream verify fails", zap.Error(err))
 						}
 						verifyCancel()
+
 						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
 						if err := tests[i].verify(verifyCtx, downstreamDB, accounts, tableID, downstream); err != nil {
 							log.Panic("downstream verify fails", zap.Error(err))
@@ -508,6 +517,7 @@ func run(
 
 				return errors.Trace(tx.Commit())
 			}
+
 			for {
 				select {
 				case <-ctx.Done():
