@@ -1,7 +1,6 @@
 package owner
 
 import (
-	"sync"
 	"time"
 
 	"github.com/pingcap/log"
@@ -13,8 +12,7 @@ type feedStateManager struct {
 	state         *model.ChangefeedReactorState
 	shouldRunning bool
 
-	adminJobQueue   []*model.AdminJob
-	adminJobQueueMu sync.Mutex
+	adminJobQueue []*model.AdminJob
 }
 
 func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
@@ -141,8 +139,6 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 }
 
 func (m *feedStateManager) popAdminJob() *model.AdminJob {
-	m.adminJobQueueMu.Lock()
-	defer m.adminJobQueueMu.Unlock()
 	if len(m.adminJobQueue) == 0 {
 		return nil
 	}
@@ -152,8 +148,6 @@ func (m *feedStateManager) popAdminJob() *model.AdminJob {
 }
 
 func (m *feedStateManager) pushAdminJob(job *model.AdminJob) {
-	m.adminJobQueueMu.Lock()
-	defer m.adminJobQueueMu.Unlock()
 	m.adminJobQueue = append(m.adminJobQueue, job)
 }
 

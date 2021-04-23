@@ -15,7 +15,7 @@ package owner
 
 import (
 	"context"
-	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,14 +24,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	pd "github.com/tikv/pd/client"
-	"go.uber.org/zap"
 )
 
 const (
@@ -50,10 +47,7 @@ type Owner struct {
 
 func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.Credential) (*Owner, error) {
 	state := model.NewGlobalState()
-	bootstrapper := newBootstrapper(pdClient, credential)
-	cfManager := newChangeFeedManager(state, bootstrapper)
-	gcManager := newGCManager(pdClient, 600)
-	reactor := newOwnerReactor(state, cfManager, gcManager)
+	reactor := newOwnerReactor(pdClient, credential, newGCManager(pdClient))
 
 	etcdWorker, err := orchestrator.NewEtcdWorker(etcdClient, kv.EtcdKeyBase, reactor, state)
 	if err != nil {
@@ -76,35 +70,57 @@ func (o *Owner) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	return nil
 }
 
-func (o *Owner) EnqueueJob(adminJob model.AdminJob) error {
-	if o.reactor.changeFeedManager == nil {
-		// TODO better error
-		return errors.New("changeFeed manager is nil")
-	}
-
-	err := o.reactor.changeFeedManager.AddAdminJob(context.TODO(), adminJob)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// TODO wait the admin job is executed and check the result, and we need a callback for admin job
-
-	return nil
+func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
+	o.reactor.pushOwnerJob(&ownerJob{
+		tp:           ownerJobTypeAdminJob,
+		adminJob:     &adminJob,
+		changefeedID: adminJob.CfID,
+	})
 }
 
 func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
-	// TODO
+	o.reactor.pushOwnerJob(&ownerJob{
+		tp:           ownerJobTypeRebalance,
+		changefeedID: cfID,
+	})
 }
 
 func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID) {
-	// TODO
+	o.reactor.pushOwnerJob(&ownerJob{
+		tp:              ownerJobTypeManualSchedule,
+		changefeedID:    cfID,
+		targetCaptureID: toCapture,
+		tableID:         tableID,
+	})
 }
 
 func (o *Owner) AsyncStop() {
 	o.reactor.AsyncStop()
+}
+
+type ownerJobType int
+
+// All AdminJob types
+const (
+	ownerJobTypeRebalance ownerJobType = iota
+	ownerJobTypeManualSchedule
+	ownerJobTypeAdminJob
+)
+
+type ownerJob struct {
+	tp           ownerJobType
+	changefeedID model.ChangeFeedID
+
+	// for ManualSchedule only
+	targetCaptureID model.CaptureID
+	// for ManualSchedule only
+	tableID model.TableID
+
+	// for Admin Job only
+	adminJob *model.AdminJob
 }
 
 type ownerReactor struct {
@@ -113,6 +129,9 @@ type ownerReactor struct {
 	pdClient   pd.Client
 	credential *security.Credential
 	gcManager  *gcManager
+
+	ownerJobQueue   []*ownerJob
+	ownerJobQueueMu sync.Mutex
 
 	close int32
 }
@@ -128,6 +147,7 @@ func newOwnerReactor(pdClient pd.Client, credential *security.Credential, gcMana
 
 func (o *ownerReactor) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	state := rawState.(*model.GlobalReactorState)
+	o.handleJob()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
@@ -184,6 +204,41 @@ func (o *ownerReactor) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 			return nil, workload != nil, nil
 		})
 	}
+}
+
+func (o *ownerReactor) handleJob() {
+	jobs := o.takeOnwerJobs()
+	for _, job := range jobs {
+		changefeedID := job.changefeedID
+		cfReactor, exist := o.changefeeds[changefeedID]
+		if !exist {
+			log.Warn("") // TODO
+		}
+		switch job.tp {
+		case ownerJobTypeAdminJob:
+			cfReactor.feedStateManager.PushAdminJob(job.adminJob)
+		case ownerJobTypeManualSchedule:
+			cfReactor.scheduler.MoveTable(job.tableID, job.targetCaptureID)
+		case ownerJobTypeRebalance:
+			cfReactor.scheduler.Rebalance()
+		}
+	}
+
+}
+
+func (o *ownerReactor) takeOnwerJobs() []*ownerJob {
+	o.ownerJobQueueMu.Lock()
+	defer o.ownerJobQueueMu.Unlock()
+
+	jobs := o.ownerJobQueue
+	o.ownerJobQueue = nil
+	return jobs
+}
+
+func (o *ownerReactor) pushOwnerJob(job *ownerJob) {
+	o.ownerJobQueueMu.Lock()
+	defer o.ownerJobQueueMu.Unlock()
+	o.ownerJobQueue = append(o.ownerJobQueue, job)
 }
 
 func (o *ownerReactor) AsyncStop() {

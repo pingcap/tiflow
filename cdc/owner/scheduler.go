@@ -37,11 +37,18 @@ type schedulerJob struct {
 	TargetCapture model.CaptureID
 }
 
+type moveTableJob struct {
+	tableID model.TableID
+	target  model.CaptureID
+}
+
 type scheduler struct {
 	state *model.ChangefeedReactorState
 
+	// we need a ttl map here
 	moveTableTarget          map[model.TableID]model.CaptureID
 	boundaryTsOfRemovedTable map[model.TableID]model.Ts
+	moveTableJobQueue        []*moveTableJob
 	needRebalanceNextTick    bool
 }
 
@@ -62,27 +69,41 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeLi
 	pendingJob := s.syncTablesWithSchemaManager(allTableShouldBeListened)
 	s.handleJobs(pendingJob)
 	s.rebalance()
+	s.handleMoveTableJob()
 }
 
 func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
-	table2CaptureIndex := s.table2CaptureIndex()
-	captureID, exist := table2CaptureIndex[tableID]
-	if !exist {
+	s.moveTableJobQueue = append(s.moveTableJobQueue, &moveTableJob{
+		tableID: tableID,
+		target:  target,
+	})
+}
+
+func (s *scheduler) handleMoveTableJob() {
+	if len(s.moveTableJobQueue) == 0 {
 		return
 	}
-	s.moveTableTarget[tableID] = target
-	s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		if status == nil {
-			// the capture may be down, just skip remove this table
-			return status, false, nil
+	table2CaptureIndex := s.table2CaptureIndex()
+	for _, job := range s.moveTableJobQueue {
+		source, exist := table2CaptureIndex[job.tableID]
+		if !exist {
+			return
 		}
-		if status.Operation != nil && status.Operation[tableID] != nil {
-			// skip remove this table to avoid the remove operation created by rebalance function to influence the operation created by other function
-			return status, false, nil
-		}
-		status.RemoveTable(tableID, s.state.Status.ResolvedTs, false)
-		return status, true, nil
-	})
+		s.moveTableTarget[job.tableID] = job.target
+		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			if status == nil {
+				// the capture may be down, just skip remove this table
+				return status, false, nil
+			}
+			if status.Operation != nil && status.Operation[job.tableID] != nil {
+				// skip remove this table to avoid the remove operation created by rebalance function to influence the operation created by other function
+				return status, false, nil
+			}
+			status.RemoveTable(job.tableID, s.state.Status.ResolvedTs, false)
+			return status, true, nil
+		})
+	}
+	s.moveTableJobQueue = nil
 }
 
 func (s *scheduler) Rebalance() {
