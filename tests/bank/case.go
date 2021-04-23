@@ -165,7 +165,7 @@ func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID i
 	return nil
 }
 
-//tryDropDB will drop table if data incorrect and panic error likes bad connect.
+// tryDropDB will drop table if data incorrect and panic error likes bad connect.
 func (s *sequenceTest) cleanup(ctx context.Context, db *sql.DB, accounts, tableID int, force bool) bool {
 	return cleanupImpl(ctx, s, fmt.Sprintf("accounts_seq%d", tableID), db, accounts, tableID, force)
 }
@@ -197,7 +197,7 @@ func (*bankTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID
 		return errors.Trace(err)
 	}
 
-	amount := rand.Intn(fromBalance / 2 + 1)
+	amount := rand.Intn(fromBalance/2 + 1)
 	fromBalance -= amount
 	toBalance += amount
 
@@ -259,7 +259,7 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 	return nil
 }
 
-//tryDropDB will drop table if data incorrect and panic error likes bad connect.
+// tryDropDB will drop table if data incorrect and panic error likes bad connect.
 func (s *bankTest) cleanup(ctx context.Context, db *sql.DB, accounts, tableID int, force bool) bool {
 	return cleanupImpl(ctx, s, fmt.Sprintf("accounts%d", tableID), db, accounts, tableID, force)
 }
@@ -276,9 +276,9 @@ func prepareImpl(
 
 	mustExec(ctx, db, createTable)
 
-	var batchSize = 100
+	batchSize := 100
 	jobCount := accounts / batchSize
-	if accounts % batchSize != 0 {
+	if accounts%batchSize != 0 {
 		jobCount++
 	}
 
@@ -372,7 +372,7 @@ func waitTable(ctx context.Context, db *sql.DB, table string) {
 }
 
 func isTableExist(ctx context.Context, db *sql.DB, table string) bool {
-	//if table is not exist ,return true directly
+	// if table is not exist, return true directly
 	query := fmt.Sprintf("SHOW TABLES LIKE '%s'", table)
 	var t string
 	err := db.QueryRowContext(ctx, query).Scan(&t)
