@@ -29,11 +29,11 @@ endif
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration|testing_utils'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto')
-TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration')
+TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
 CDC_PKG := github.com/pingcap/ticdc
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
 FAILPOINT := bin/failpoint-ctl
@@ -41,7 +41,15 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-RELEASE_VERSION ?= $(shell git describe --tags --dirty="-dev")
+RELEASE_VERSION := v5.0.0-master
+ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
+	# If we are in release branch, use tag version.
+	RELEASE_VERSION := $(shell git describe --tags --dirty="-dirty")
+else ifneq ($(shell git status --porcelain),)
+	# Add -dirty if the working tree is dirty for non release branch.
+	RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+endif
+
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -61,6 +69,11 @@ test: unit_test
 
 build: cdc
 
+build-failpoint: 
+	$(FAILPOINT_ENABLE)
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
+	$(FAILPOINT_DISABLE)
+
 cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
 
@@ -71,6 +84,7 @@ install:
 	go install ./...
 
 unit_test: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -79,6 +93,7 @@ unit_test: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 leak_test: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
 	$(GOTEST) -count=1 --tags leak $(PACKAGES) || { $(FAILPOINT_DISABLE); exit 1; }
@@ -164,6 +179,9 @@ endif
 
 check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen
+
+data-flow-diagram: docs/data-flow.dot
+	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
 clean:
 	go clean -i ./...

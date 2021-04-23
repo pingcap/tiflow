@@ -87,7 +87,7 @@ func (ts *tableStream) isEmpty() bool {
 }
 
 func (ts *tableStream) shouldFlush() bool {
-	return ts.sendSize.Load() > maxPartFlushSize
+	return ts.sendSize.Load() > maxRowFileSize
 }
 
 func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
@@ -376,6 +376,8 @@ func NewLocalFileSink(ctx context.Context, sinkURI *url.URL, errCh chan error) (
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()

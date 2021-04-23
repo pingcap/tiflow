@@ -1,4 +1,4 @@
-# ticdc
+# TiCDC
 
 [![Build Status](https://internal.pingcap.net/idc-jenkins/job/build_cdc_multi_branch/job/master/badge/icon)](https://internal.pingcap.net/idc-jenkins/job/build_cdc_multi_branch/job/master)
 [![codecov](https://codecov.io/gh/pingcap/ticdc/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/ticdc)
@@ -6,17 +6,27 @@
 [![LICENSE](https://img.shields.io/github/license/pingcap/ticdc.svg)](https://github.com/pingcap/ticdc/blob/master/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pingcap/ticdc)](https://goreportcard.com/report/github.com/pingcap/ticdc)
 
-**ticdc** is a change data capture for TiDB, it supports to replicate change data to various downstreams, including MySQL protocol compatible database, message queue via open CDC protocol and other systems such as local file storage.
+**TiCDC** is [TiDB](https://docs.pingcap.com/tidb/stable)'s change data capture framework. It supports replicating change data to various downstreams, including MySQL protocol-compatible databases, message queues via the open CDC protocol and other systems such as local file storage.
 
 ## Architecture
 
 <img src="docs/media/cdc_architecture.svg?sanitize=true" alt="architecture" width="600"/>
 
+See a detailed introduction to [the TiCDC architecture](https://docs.pingcap.com/tidb/stable/ticdc-overview#ticdc-architecture).
+
 ## Documentation
 
-[Chinese Document](https://docs.pingcap.com/zh/tidb/dev/ticdc-overview/)
+- [English](https://docs.pingcap.com/tidb/stable/ticdc-overview)
+- [Chinese](https://docs.pingcap.com/zh/tidb/stable/ticdc-overview)
 
-[English Document](https://pingcap.com/docs/dev/reference/tools/ticdc/overview/)
+## Blog
+
+- [English](https://pingcap.com/blog/)
+- [Chinese](https://pingcap.com/blog-cn/)
+
+## TiDB Monthly
+
+[TiDB Monthly](https://pingcap.com/weekly/)
 
 ## Building
 
@@ -27,17 +37,19 @@ $ make
 $ make test
 ```
 
-Notice ticdc supports building with Go version `Go >= 1.13`
+Note that TiCDC supports building with Go version `Go >= 1.13`.
 
-When ticdc is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](tests/README.md).
+When TiCDC is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](tests/README.md).
 
 ## Deployment
 
 You can setup a CDC cluster for replication test manually as following:
 
-1. setup a TiDB cluster.
-2. start a CDC cluster, which contains one or more CDC servers. The command to start on CDC server is `cdc server --pd http://10.0.10.25:2379`, where `http://10.0.10.25:2379` is the client-url of pd-server.
-3. start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The tso is TiDB `timestamp oracle`, if it is not provided or set to zero, the tso of start time will be used. Currently we support MySQL protocol compatible database as downstream sink only, we will add more sink type in the future.
+1. Setup a TiDB cluster.
+2. Start a CDC cluster, which contains one or more CDC servers. The command to start on CDC server is `cdc server --pd http://10.0.10.25:2379`, where `http://10.0.10.25:2379` is the client-url of pd-server.
+3. Start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The TSO is TiDB `timestamp oracle`. If it is not provided or set to zero, the TSO of start time will be used. Currently, we support MySQL protocol-compatible databases as downstream sinks only, and will add more sink types in the future.
+
+For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticdc).
 
 ## Quick start
 
@@ -62,6 +74,7 @@ $ mysql -h 127.0.0.1 -P 5000 -u root -e "SELECT COUNT(*) FROM test.sbtest1"
 ```
 
 ## Contributing
+
 Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](./CONTRIBUTING.md)
 for details on submitting patches and the contribution workflow.
 

@@ -14,58 +14,65 @@
 package cdc
 
 import (
+	"context"
+	"net/url"
+	"time"
+
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"go.etcd.io/etcd/embed"
+	"golang.org/x/sync/errgroup"
 )
 
-type serverOptionSuite struct{}
+type serverSuite struct {
+	e         *embed.Etcd
+	clientURL *url.URL
+	ctx       context.Context
+	cancel    context.CancelFunc
+	errg      *errgroup.Group
+}
 
-var _ = check.Suite(&serverOptionSuite{})
+func (s *serverSuite) SetUpTest(c *check.C) {
+	dir := c.MkDir()
+	var err error
+	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
+	c.Assert(err, check.IsNil)
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
+}
 
-func (s *serverOptionSuite) TestNewServer(c *check.C) {
+func (s *serverSuite) TearDownTest(c *check.C) {
+	s.e.Close()
+	s.cancel()
+	err := s.errg.Wait()
+	if err != nil {
+		c.Errorf("Error group error: %s", err)
+	}
+}
+
+var _ = check.Suite(&serverSuite{})
+
+func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 	defer testleak.AfterTest(c)()
-	svr, err := NewServer()
-	c.Assert(err, check.ErrorMatches, ".*empty PD address")
-	c.Assert(svr, check.IsNil)
+	defer s.TearDownTest(c)
 
-	svr, err = NewServer(PDEndpoints("http://pd"))
-	c.Assert(err, check.ErrorMatches, ".*empty address")
-	c.Assert(svr, check.IsNil)
-
-	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"))
-	c.Assert(err, check.ErrorMatches, ".*empty GC TTL is not allowed")
-	c.Assert(svr, check.IsNil)
-
-	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL))
+	ctx, cancel := context.WithCancel(context.Background())
+	pdEndpoints := []string{
+		"http://" + s.clientURL.Host,
+		"http://invalid-pd-host:2379",
+	}
+	server, err := NewServer(pdEndpoints)
 	c.Assert(err, check.IsNil)
-	c.Assert(svr, check.NotNil)
-	c.Assert(svr.opts.advertiseAddr, check.Equals, "cdc:1234")
+	c.Assert(server, check.NotNil)
 
-	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
-		AdvertiseAddress("advertise:1234"))
-	c.Assert(err, check.IsNil)
-	c.Assert(svr, check.NotNil)
-	c.Assert(svr.opts.addr, check.Equals, "cdc:1234")
-	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise:1234")
-
-	svr, err = NewServer(PDEndpoints("http://pd"), Address("0.0.0.0:1234"), GCTTL(DefaultCDCGCSafePointTTL),
-		AdvertiseAddress("advertise:1234"))
-	c.Assert(err, check.IsNil)
-	c.Assert(svr, check.NotNil)
-	c.Assert(svr.opts.addr, check.Equals, "0.0.0.0:1234")
-	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise:1234")
-
-	svr, err = NewServer(PDEndpoints("http://pd"), Address("0.0.0.0:1234"), GCTTL(DefaultCDCGCSafePointTTL))
-	c.Assert(err, check.ErrorMatches, ".*must be specified.*")
-	c.Assert(svr, check.IsNil)
-
-	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
-		AdvertiseAddress("0.0.0.0:1234"))
-	c.Assert(err, check.ErrorMatches, ".*must be specified.*")
-	c.Assert(svr, check.IsNil)
-
-	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
-		AdvertiseAddress("advertise"))
-	c.Assert(err, check.ErrorMatches, ".*does not contain a port")
-	c.Assert(svr, check.IsNil)
+	s.errg.Go(func() error {
+		err := server.etcdHealthChecker(ctx)
+		c.Assert(err, check.Equals, context.Canceled)
+		return nil
+	})
+	// longer than one check tick 3s
+	time.Sleep(time.Second * 4)
+	cancel()
 }

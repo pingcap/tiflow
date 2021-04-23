@@ -21,6 +21,7 @@ pwd=$pwd
 log_level=debug
 restart=
 failpoint=$GO_FAILPOINTS
+config_path=
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -64,6 +65,10 @@ while [[ ${1} ]]; do
             failpoint=${2}
             shift
             ;;
+        --config)
+            config_path="--config ${2}"
+            shift
+            ;;
         *)
             echo "Unknown parameter: ${1}" >&2
             exit 1
@@ -86,6 +91,8 @@ if [[ "$restart" == "true" ]]; then
       GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
+        --sorter-num-workerpool-goroutine 4 \
+        $config_path \
         $tls \
         $certcn \
         $addr \
@@ -99,6 +106,8 @@ else
   GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
+    --sorter-num-workerpool-goroutine 4 \
+    $config_path \
     $tls \
     $certcn \
     $addr \

@@ -14,10 +14,12 @@
 package cdc
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +43,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
@@ -83,26 +86,161 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 
 type mockPDClient struct {
 	pd.Client
-	invokeCounter int
+	invokeCounter     int
+	mockSafePointLost bool
+	mockPDFailure     bool
 }
 
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 	m.invokeCounter++
-	return 0, errors.New("mock error")
+
+	if m.mockSafePointLost {
+		return 1000, nil
+	}
+	if m.mockPDFailure {
+		return 0, errors.New("injected PD failure")
+	}
+
+	return safePoint, nil
 }
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	c.Assert(err, check.IsNil)
 	mockPDCli := &mockPDClient{}
 	mockOwner := Owner{
+		session:               session,
+		etcdClient:            s.client,
 		pdClient:              mockPDCli,
 		gcSafepointLastUpdate: time.Now(),
 	}
 
-	// Owner should ignore UpdateServiceGCSafePoint error.
-	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+	s.TearDownTest(c)
+}
+
+func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDCli := &mockPDClient{
+		mockPDFailure: true,
+	}
+
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
+		"test_change_feed_1": {
+			info: &model.ChangeFeedInfo{State: model.StateNormal},
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 100,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+	}
+
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	c.Assert(err, check.IsNil)
+	mockOwner := Owner{
+		session:                 session,
+		pdClient:                mockPDCli,
+		etcdClient:              s.client,
+		lastFlushChangefeeds:    time.Now(),
+		flushChangefeedInterval: 1 * time.Hour,
+		gcSafepointLastUpdate:   time.Now(),
+		gcTTL:                   6, // 6 seconds
+		changeFeeds:             changeFeeds,
+	}
+
+	time.Sleep(3 * time.Second)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+
+	time.Sleep(6 * time.Second)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.ErrorMatches, ".*CDC:ErrUpdateServiceSafepointFailed.*")
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
+
+	s.TearDownTest(c)
+}
+
+func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDCli := &mockPDClient{
+		mockSafePointLost: true,
+	}
+
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
+		"test_change_feed_1": {
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 100,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+		"test_change_feed_2": {
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 1100,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+	}
+
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	c.Assert(err, check.IsNil)
+	mockOwner := Owner{
+		pdClient:                mockPDCli,
+		session:                 session,
+		etcdClient:              s.client,
+		lastFlushChangefeeds:    time.Now(),
+		flushChangefeedInterval: 1 * time.Hour,
+		changeFeeds:             changeFeeds,
+		cfRWriter:               s.client,
+		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+	}
+
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
+	c.Assert(changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 	s.TearDownTest(c)
 }
 
@@ -464,6 +602,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
 }
 */
+var cdcGCSafePointTTL4Test = int64(24 * 60 * 60)
 
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -504,13 +643,13 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	defer sink.Close() //nolint:errcheck
 	sampleCF.sink = sink
 
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
-		&security.Credential{}, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, "127.0.0.1:12034", &captureOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	sampleCF.etcdCli = owner.etcdClient
@@ -806,15 +945,15 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
-		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, "127.0.0.1:12034", &captureOpts{})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
 	ctx1, cancel1 := context.WithCancel(ctx)
 	owner, err := NewOwner(ctx1, nil, &security.Credential{}, capture.session,
-		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	// check campaign key deleted can be detected
@@ -864,8 +1003,8 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	defer cancel()
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
-		&security.Credential{}, addr, &processorOpts{})
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, addr, &captureOpts{})
 	c.Assert(err, check.IsNil)
 	err = s.client.PutCaptureInfo(ctx, capture.info, capture.session.Lease())
 	c.Assert(err, check.IsNil)
@@ -896,7 +1035,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 		captures[c.ID] = c
 	}
 	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
-		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 	// It is better to update changefeed information by `loadChangeFeeds`, however
 	// `loadChangeFeeds` is too overweight, just mock enough information here.
@@ -904,15 +1043,29 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 		changefeed: {
 			id:           changefeed,
 			orphanTables: make(map[model.TableID]model.Ts),
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 100,
+			},
 		},
 	}
+
+	// capture information is not built, owner.run does nothing
+	err = owner.run(ctx)
+	c.Assert(err, check.IsNil)
+	statuses, err := s.client.GetAllTaskStatus(ctx, changefeed)
+	c.Assert(err, check.IsNil)
+	// stale tasks are not cleaned up, since `cleanUpStaleTasks` does not run
+	c.Assert(len(statuses), check.Equals, 2)
+	c.Assert(len(owner.captures), check.Equals, 0)
+
 	err = owner.rebuildCaptureEvents(ctx, captures)
 	c.Assert(err, check.IsNil)
 	c.Assert(len(owner.captures), check.Equals, 1)
 	c.Assert(owner.captures, check.HasKey, capture.info.ID)
-	c.Assert(owner.changeFeeds[changefeed].orphanTables, check.DeepEquals, map[model.TableID]model.Ts{51: 100})
+	c.Assert(owner.changeFeeds[changefeed].orphanTables, check.DeepEquals, map[model.TableID]model.Ts{51: 110})
+	c.Assert(atomic.LoadInt32(&owner.captureLoaded), check.Equals, int32(1))
 	// check stale tasks are cleaned up
-	statuses, err := s.client.GetAllTaskStatus(ctx, changefeed)
+	statuses, err = s.client.GetAllTaskStatus(ctx, changefeed)
 	c.Assert(err, check.IsNil)
 	c.Assert(len(statuses), check.Equals, 1)
 	c.Assert(statuses, check.HasKey, capture.info.ID)
@@ -927,4 +1080,129 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 
 	err = capture.etcdClient.Close()
 	c.Assert(err, check.IsNil)
+}
+
+func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr := "127.0.0.1:12034"
+	ctx = util.PutCaptureAddrInCtx(ctx, addr)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
+		&security.Credential{}, addr, &captureOpts{})
+	c.Assert(err, check.IsNil)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+		cdcGCSafePointTTL4Test, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+
+	var (
+		wg              sync.WaitGroup
+		updateCount     = 0
+		recvChangeCount = 0
+	)
+	ctx1, cancel1 := context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		changefeedID := "test-changefeed"
+		pos := &model.TaskPosition{CheckPointTs: 100, ResolvedTs: 102}
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			default:
+			}
+			pos.ResolvedTs++
+			pos.CheckPointTs++
+			updated, err := capture.etcdClient.PutTaskPositionOnChange(ctx1, changefeedID, capture.info.ID, pos)
+			if errors.Cause(err) == context.Canceled {
+				return
+			}
+			c.Assert(err, check.IsNil)
+			c.Assert(updated, check.IsTrue)
+			updateCount++
+			// sleep to avoid other goroutine starvation
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	feedChangeReceiver, err := owner.feedChangeNotifier.NewReceiver(ownerRunInterval)
+	c.Assert(err, check.IsNil)
+	defer feedChangeReceiver.Stop()
+	owner.watchFeedChange(ctx)
+	wg.Add(1)
+	go func() {
+		defer func() {
+			// there could be one message remaining in notification receiver, try to consume it
+			select {
+			case <-feedChangeReceiver.C:
+			default:
+			}
+			wg.Done()
+		}()
+		for {
+			select {
+			case <-ctx1.Done():
+				return
+			case <-feedChangeReceiver.C:
+				recvChangeCount++
+				// sleep to simulate some owner work
+				time.Sleep(time.Millisecond * 50)
+			}
+		}
+	}()
+
+	time.Sleep(time.Second * 2)
+	// use cancel1 to avoid cancel the watchFeedChange
+	cancel1()
+	wg.Wait()
+	c.Assert(recvChangeCount, check.Greater, 0)
+	c.Assert(recvChangeCount, check.Less, updateCount)
+	select {
+	case <-feedChangeReceiver.C:
+		c.Error("should not receive message from feed change chan any more")
+	default:
+	}
+
+	err = capture.etcdClient.Close()
+	if err != nil {
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	}
+}
+
+func (s *ownerSuite) TestWriteDebugInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	owner := &Owner{
+		changeFeeds: map[model.ChangeFeedID]*changeFeed{
+			"test": {
+				id: "test",
+				info: &model.ChangeFeedInfo{
+					SinkURI: "blackhole://",
+					Config:  config.GetDefaultReplicaConfig(),
+				},
+				status: &model.ChangeFeedStatus{
+					ResolvedTs:   120,
+					CheckpointTs: 100,
+				},
+			},
+		},
+		stoppedFeeds: map[model.ChangeFeedID]*model.ChangeFeedStatus{
+			"test-2": {
+				ResolvedTs:   120,
+				CheckpointTs: 100,
+			},
+		},
+		captures: map[model.CaptureID]*model.CaptureInfo{
+			"capture-1": {
+				ID:            "capture-1",
+				AdvertiseAddr: "127.0.0.1:8301",
+			},
+		},
+	}
+	var buf bytes.Buffer
+	owner.writeDebugInfo(&buf)
+	c.Assert(buf.String(), check.Matches, `[\s\S]*active changefeeds[\s\S]*stopped changefeeds[\s\S]*captures[\s\S]*`)
 }

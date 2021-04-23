@@ -126,6 +126,10 @@ func newMqSink(
 		return ret
 	}
 
+	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
@@ -137,7 +141,7 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
+		resolvedReceiver:    resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -148,6 +152,8 @@ func newMqSink(
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
@@ -225,7 +231,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if msg == nil {
 		return nil
 	}
-	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
 
@@ -249,7 +255,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
-	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
 
@@ -293,7 +299,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			}
 
 			for _, msg := range messages {
-				err := k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedAsyncWrite, partition)
+				err := k.writeToProducer(ctx, msg, codec.EncoderNeedAsyncWrite, partition)
 				if err != nil {
 					return 0, err
 				}
@@ -357,27 +363,27 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	}
 }
 
-func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, op codec.EncoderResult, partition int32) error {
+func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, op codec.EncoderResult, partition int32) error {
 	switch op {
 	case codec.EncoderNeedAsyncWrite:
 		if partition >= 0 {
-			return k.mqProducer.SendMessage(ctx, key, value, partition)
+			return k.mqProducer.SendMessage(ctx, message, partition)
 		}
 		return cerror.ErrAsyncBroadcaseNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
-			err := k.mqProducer.SendMessage(ctx, key, value, partition)
+			err := k.mqProducer.SendMessage(ctx, message, partition)
 			if err != nil {
 				return err
 			}
 			return k.mqProducer.Flush(ctx)
 		}
-		return k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+		return k.mqProducer.SyncBroadcastMessage(ctx, message)
 	}
 
 	log.Warn("writeToProducer called with no-op",
-		zap.ByteString("key", key),
-		zap.ByteString("value", value),
+		zap.ByteString("key", message.Key),
+		zap.ByteString("value", message.Value),
 		zap.Int32("partition", partition))
 	return nil
 }
@@ -424,7 +430,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 
 	s = sinkURI.Query().Get("max-batch-size")
 	if s != "" {
-		opts["max-message-bytes"] = s
+		opts["max-batch-size"] = s
 	}
 
 	s = sinkURI.Query().Get("compression")
@@ -494,7 +500,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 
 	s = sinkURI.Query().Get("max-batch-size")
 	if s != "" {
-		opts["max-message-bytes"] = s
+		opts["max-batch-size"] = s
 	}
 	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
 	// and it may needs credential.
