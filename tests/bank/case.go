@@ -104,13 +104,14 @@ func (*sequenceTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tab
 		counter++
 	}
 	counter++
+
 	addSeqCounter := fmt.Sprintf(`
-UPDATE accounts_seq%d SET
-  counter = %d,
-  sequence = %d,
-  startts = @@tidb_current_ts
-WHERE id IN (%d, %d)
-`, tableID, counter, maxSeq+1, sequenceRowID, next)
+	UPDATE accounts_seq%d SET
+  		counter = %d,
+  		sequence = %d,
+  		startts = @@tidb_current_ts
+	WHERE id IN (%d, %d)`, tableID, counter, maxSeq+1, sequenceRowID, next)
+
 	_, err = tx.ExecContext(ctx, addSeqCounter)
 	if err != nil {
 		return errors.Trace(err)
