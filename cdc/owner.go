@@ -719,12 +719,32 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	gcSafePoint := uint64(math.MaxUint64)
+	// Store the lower bound of gcSafePoint
+	minGcSafePoint := uint64(time.Now().Unix() - o.gcTTL)
+	// Try to get tso from pd, use local machine time if it fails.
+	p, _, err := o.pdClient.GetTS(ctx)
+	if err != nil {
+		log.Warn("failed to acquire time from pd, will use this machine time", zap.Error(err))
+	} else {
+		minGcSafePoint = uint64(p - o.gcTTL)
+	}
+
 	if len(o.changeFeeds) > 0 {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 		for id, changefeed := range o.changeFeeds {
 			snapshot[id] = changefeed.status
 			if changefeed.appliedCheckpointTs < gcSafePoint {
 				gcSafePoint = changefeed.appliedCheckpointTs
+			}
+
+			// if changefeed's appliedCheckpoinTs < minGcSafePoint, means this changefeed is stagnant
+			// then set it status to failed
+			if changefeed.appliedCheckpointTs < minGcSafePoint {
+				changefeed.info.State = model.StateFailed
+				err := o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, changefeed.info, id, o.session.Lease())
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 
 			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
@@ -751,9 +771,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
 		// When a changeFeed stagnates, gcSafePoint will also stagnates, and here is guaranteed that
-		// gcSafePoint only can lag the time set by gcTTL at most.
-		if (time.Now().Unix() - int64(gcSafePoint)) > o.gcTTL {
-			gcSafePoint = uint64(time.Now().Unix() - o.gcTTL)
+		// gcSafePoint will only lag the time set by gcTTL at most.
+		if gcSafePoint < minGcSafePoint {
+			gcSafePoint = minGcSafePoint
 		}
 		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, gcSafePoint)
 		if err != nil {
