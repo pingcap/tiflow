@@ -91,12 +91,12 @@ func (*sequenceTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tab
 		return errors.Trace(err)
 	}
 	defer rows.Close()
+
 	var counter, maxSeq int
 	rows.Next()
 	if err = rows.Scan(&counter, &maxSeq); err != nil {
 		return errors.Trace(err)
 	}
-	rows.Close()
 
 	next := counter % accounts
 	if next == sequenceRowID {
@@ -175,12 +175,6 @@ var _ Test = &bankTest{}
 
 func (*bankTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID int) error {
 	var from, to int
-	var (
-		fromBalance int
-		toBalance   int
-		count       int
-	)
-
 	for {
 		from, to = rand.Intn(accounts), rand.Intn(accounts)
 		if from == to {
@@ -189,51 +183,32 @@ func (*bankTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID
 		break
 	}
 
-	rows, err := tx.QueryContext(ctx, fmt.Sprintf("SELECT id, balance FROM accounts%d WHERE id IN (%d, %d) FOR UPDATE", tableID, from, to))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer rows.Close()
+	sqlFormat := fmt.Sprintf("SELECT balance FROM accounts%d WHERE id = ? FOR UPDATE", tableID)
+	var fromBalance, toBalance int
 
-	for rows.Next() {
-		var id, balance int
-		if err = rows.Scan(&id, &balance); err != nil {
-			return errors.Trace(err)
-		}
-		switch id {
-		case from:
-			fromBalance = balance
-		case to:
-			toBalance = balance
-		default:
-			log.Panic(fmt.Sprintf("got unexpected account %d", id))
-		}
-
-		count++
-	}
-
-	if err = rows.Err(); err != nil {
+	row := tx.QueryRowContext(ctx, sqlFormat, from)
+	if err := row.Scan(&fromBalance); err != nil {
 		return errors.Trace(err)
 	}
 
-	if count != 2 {
-		log.Panic(fmt.Sprintf("select %d(%d) -> %d(%d) invalid count %d", from, fromBalance, to, toBalance, count))
+	row = tx.QueryRowContext(ctx, sqlFormat, to)
+	if err := row.Scan(&toBalance); err != nil {
+		return errors.Trace(err)
 	}
 
-	amount := rand.Intn(999)
+	amount := rand.Intn(fromBalance / 2 + 1)
+	fromBalance -= amount
+	toBalance += amount
 
-	if fromBalance >= amount {
-		update := fmt.Sprintf(`
-UPDATE accounts%d SET
-  balance = CASE id WHEN %d THEN %d WHEN %d THEN %d END,
-  startts = @@tidb_current_ts
-WHERE id IN (%d, %d)
-`, tableID, to, toBalance+amount, from, fromBalance-amount, from, to)
-		_, err = tx.ExecContext(ctx, update)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	sqlFormat = fmt.Sprintf("UPDATE accounts%d set balance = ? where id = ?", tableID)
+	if _, err := tx.ExecContext(ctx, sqlFormat, fromBalance, from); err != nil {
+		return errors.Trace(err)
 	}
+
+	if _, err := tx.ExecContext(ctx, sqlFormat, toBalance, to); err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
