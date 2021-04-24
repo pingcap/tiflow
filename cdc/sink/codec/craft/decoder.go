@@ -333,12 +333,15 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 		// value type for these mysql types are float64
 		_, f64, err := decodeFloat64(bits)
 		return f64, err
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 		// value type for these mysql types are int64 or uint64 depends on flags
 		if flag.IsUnsigned() {
 			_, u64, err := decodeUvarint(bits)
 			return u64, err
 		}
+		_, i64, err := decodeVarint(bits)
+		return i64, err
+	case mysql.TypeYear:
 		_, i64, err := decodeVarint(bits)
 		return i64, err
 	case mysql.TypeUnspecified:
