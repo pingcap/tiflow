@@ -761,6 +761,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		}
 	}
 	for id, status := range o.stoppedFeeds {
+		if changefeed, ok := o.changeFeeds[id]; ok {
+			// skip stale changeFeed
+			if changefeed.info.Error != nil && changefeed.info.Error.Code == string(cerror.ErrStartTsBeforeGC.RFCCode()) {
+				continue
+			}
+		}
 		if status.CheckpointTs < minGcSafePoint {
 			staleChangeFeedId = append(staleChangeFeedId, id)
 		}
@@ -895,8 +901,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// Only need to process stoppedFeeds with `AdminStop` command here.
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
-	// if Error.Code == "CDC-owner-1002", means changeFeed is stagnant, we do not put in into stoppedFeeds
-	if job.Type == model.AdminStop && cf.info.Error.Code != "CDC-owner-1002" {
+	if job.Type == model.AdminStop {
 		o.stoppedFeeds[job.CfID] = cf.status
 	}
 	for captureID := range cf.taskStatus {
@@ -1650,12 +1655,15 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	}()
 }
 
+// handle the StaleChangeFeed
+// By setting the AdminJob type to AdminStop and the Error code to indicate that the changeFeed is stagnant
 func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeedId []model.ChangeFeedID, minGcSafePoint uint64) error {
 	for _, id := range staleChangeFeedId {
+
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    "CDC-owner-1002", // changFeed is stagnant
-			Message: cerror.ErrServiceSafepointLost.GenWithStackByArgs(minGcSafePoint).Error(),
+			Code:    string(cerror.ErrStartTsBeforeGC.RFCCode()), // changFeed is stagnant
+			Message: cerror.ErrStartTsBeforeGC.GenWithStackByArgs(minGcSafePoint).Error(),
 		}
 
 		err := o.EnqueueJob(model.AdminJob{
@@ -1663,6 +1671,7 @@ func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeedId []m
 			Type:  model.AdminStop,
 			Error: runningError,
 		})
+
 		if err != nil {
 			return errors.Trace(err)
 		}
