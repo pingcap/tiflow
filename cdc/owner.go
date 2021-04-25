@@ -717,7 +717,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		}
 		return nil
 	}
-
+	staleChangeFeedId := make([]model.ChangeFeedID, 0)
 	gcSafePoint := uint64(math.MaxUint64)
 	// Store the lower bound of gcSafePoint
 	minGcSafePoint := uint64(time.Now().Unix() - o.gcTTL)
@@ -740,11 +740,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			// if changefeed's appliedCheckpoinTs < minGcSafePoint, means this changefeed is stagnant
 			// then set it status to failed
 			if changefeed.appliedCheckpointTs < minGcSafePoint {
-				changefeed.info.State = model.StateFailed
-				err := o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, changefeed.info, id, o.session.Lease())
-				if err != nil {
-					return errors.Trace(err)
-				}
+				staleChangeFeedId = append(staleChangeFeedId, id)
 			}
 
 			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
@@ -764,17 +760,18 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			o.lastFlushChangefeeds = time.Now()
 		}
 	}
-	for _, status := range o.stoppedFeeds {
+	for id, status := range o.stoppedFeeds {
+		if status.CheckpointTs < minGcSafePoint {
+			staleChangeFeedId = append(staleChangeFeedId, id)
+		}
 		if status.CheckpointTs < gcSafePoint {
 			gcSafePoint = status.CheckpointTs
 		}
 	}
+
+	o.handleStaleChangeFeed(ctx, staleChangeFeedId, minGcSafePoint)
+
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
-		// When a changeFeed stagnates, gcSafePoint will also stagnates, and here is guaranteed that
-		// gcSafePoint will only lag the time set by gcTTL at most.
-		if gcSafePoint < minGcSafePoint {
-			gcSafePoint = minGcSafePoint
-		}
 		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, gcSafePoint)
 		if err != nil {
 			sinceLastUpdate := time.Since(o.gcSafepointLastUpdate)
@@ -1652,8 +1649,25 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	}()
 }
 
-// set gcTTL to a new value
-func (o *Owner) setGcTTL(gcTTL int64) {
-	o.gcTTL = gcTTL
-	log.Warn("change gc-ttl", zap.Int64("gc-ttl", o.gcTTL))
+func (o *Owner) handleStaleChangeFeed(ctx context.Context, statleChangeFeedId []model.ChangeFeedID, minGcSafePoint uint64) error {
+	for _, id := range statleChangeFeedId {
+		changefeed := o.changeFeeds[id]
+		changefeed.info.State = model.StateFailed
+
+		runningError := &model.RunningError{
+			Addr:    util.CaptureAddrFromCtx(ctx),
+			Code:    "CDC-owner-1001",
+			Message: cerror.ErrServiceSafepointLost.GenWithStackByArgs(minGcSafePoint).Error(),
+		}
+
+		err := o.EnqueueJob(model.AdminJob{
+			CfID:  id,
+			Type:  model.AdminStop,
+			Error: runningError,
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
