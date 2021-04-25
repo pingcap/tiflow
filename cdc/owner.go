@@ -895,7 +895,8 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// Only need to process stoppedFeeds with `AdminStop` command here.
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
-	if job.Type == model.AdminStop {
+	// if Error.Code == "CDC-owner-1002", means changeFeed is stagnant, we do not put in into stoppedFeeds
+	if job.Type == model.AdminStop && cf.info.Error.Code != "CDC-owner-1002" {
 		o.stoppedFeeds[job.CfID] = cf.status
 	}
 	for captureID := range cf.taskStatus {
@@ -1649,14 +1650,11 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	}()
 }
 
-func (o *Owner) handleStaleChangeFeed(ctx context.Context, statleChangeFeedId []model.ChangeFeedID, minGcSafePoint uint64) error {
-	for _, id := range statleChangeFeedId {
-		changefeed := o.changeFeeds[id]
-		changefeed.info.State = model.StateFailed
-
+func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeedId []model.ChangeFeedID, minGcSafePoint uint64) error {
+	for _, id := range staleChangeFeedId {
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    "CDC-owner-1001",
+			Code:    "CDC-owner-1002", // changFeed is stagnant
 			Message: cerror.ErrServiceSafepointLost.GenWithStackByArgs(minGcSafePoint).Error(),
 		}
 
