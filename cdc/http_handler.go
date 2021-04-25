@@ -140,8 +140,8 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		Type: model.AdminJobType(typ),
 		Opts: opts,
 	}
-	err = s.owner.EnqueueJob(job)
-	handleOwnerResp(w, err)
+	s.owner.EnqueueJob(job)
+	handleOwnerResp(w, nil)
 }
 
 func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {

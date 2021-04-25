@@ -255,7 +255,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			}
 			startTs = oracle.ComposeTS(ts, logical)
 		}
-		if err := verifyStartTs(ctx, startTs); err != nil {
+		if err := verifyStartTs(ctx, changefeedID, startTs); err != nil {
 			return nil, err
 		}
 		if err := confirmLargeDataGap(ctx, cmd, startTs); err != nil {
