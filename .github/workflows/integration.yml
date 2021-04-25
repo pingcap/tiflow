@@ -65,7 +65,7 @@ jobs:
           $GITHUB_WORKSPACE/scripts/avro-local-test.sh down
 
   OldValue-integration:
-    needs: [MySQL-integration]
+    # needs: [MySQL-integration]
     runs-on: ubuntu-latest
 
     steps:
@@ -121,7 +121,7 @@ jobs:
           $GITHUB_WORKSPACE/scripts/avro-local-test.sh down
 
   CanalJson-integration:
-    needs: [OldValue-integration]
+    # needs: [OldValue-integration]
     runs-on: ubuntu-latest
 
     steps:
@@ -178,7 +178,7 @@ jobs:
 
 
   Canal-integration:
-    needs: [CanalJson-integration]
+    # needs: [CanalJson-integration]
     runs-on: ubuntu-latest
 
     steps:
@@ -234,7 +234,7 @@ jobs:
           $GITHUB_WORKSPACE/scripts/canal/canal-local-test.sh down
 
   Avro-integration:
-    needs: [Canal-integration]
+    # needs: [Canal-integration]
     runs-on: ubuntu-latest
 
     steps:
