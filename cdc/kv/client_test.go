@@ -1312,8 +1312,19 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
+	var requestID uint64
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv1 := newMockChangeDataService(c, ch1)
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				return
+			}
+			atomic.StoreUint64(&requestID, req.RequestId)
+		}
+	}
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
 
 	defer func() {
@@ -1350,6 +1361,14 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 
 	// wait request id allocated with: new session, new request
 	waitRequestID(c, baseAllocatedID+1)
+	err = retry.Run(time.Millisecond*50, 10, func() error {
+		if atomic.LoadUint64(&requestID) == currentRequestID() {
+			return nil
+		}
+		return errors.Errorf("request is not received, requestID: %d, expected: %d",
+			atomic.LoadUint64(&requestID), currentRequestID())
+	})
+	c.Assert(err, check.IsNil)
 	initialized1 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized1
 	err = retry.Run(time.Millisecond*200, 10, func() error {
@@ -1393,6 +1412,14 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 
 	// wait request id allocated with: new session, new request*2
 	waitRequestID(c, baseAllocatedID+2)
+	err = retry.Run(time.Millisecond*50, 10, func() error {
+		if atomic.LoadUint64(&requestID) == currentRequestID() {
+			return nil
+		}
+		return errors.Errorf("request is not received, requestID: %d, expected: %d",
+			atomic.LoadUint64(&requestID), currentRequestID())
+	})
+	c.Assert(err, check.IsNil)
 	initialized2 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized2
 	err = retry.Run(time.Millisecond*200, 10, func() error {
