@@ -256,7 +256,9 @@ func (p *oldProcessor) Run(ctx context.Context) {
 	})
 
 	wg.Go(func() error {
-		return p.ddlPuller.Run(ddlPullerCtx)
+		err := p.ddlPuller.Run(ddlPullerCtx)
+		failpoint.Inject("ProcessorDDLPullerExitDelaying", nil)
+		return err
 	})
 
 	wg.Go(func() error {
@@ -480,12 +482,10 @@ func (p *oldProcessor) workloadWorker(ctx context.Context) error {
 }
 
 func (p *oldProcessor) flushTaskPosition(ctx context.Context) error {
-	failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
-		time.Sleep(1 * time.Second)
-	})
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
+	failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
 	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
@@ -1143,19 +1143,32 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	p.globalResolvedTsNotifier.Close()
 	p.localCheckpointTsNotifier.Close()
 	p.localResolvedNotifier.Close()
+	var errRes error
+	if err := p.sinkManager.Close(); err != nil {
+		log.Warn("an error occurred when stopping the processor", zap.Error(err))
+		errRes = err
+	}
 	failpoint.Inject("processorStopDelay", nil)
+	// send an admin stop error to make goroutine created by processor.Run() exit
+	p.sendError(cerror.ErrAdminStopProcessor.GenWithStackByArgs())
 	atomic.StoreInt32(&p.stopped, 1)
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(0)
+	if p.wg != nil {
+		p.wg.Wait() //nolint:errcheck
+	}
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
-		return err
+		log.Warn("an error occurred when stopping the processor", zap.Error(err))
+		errRes = err
 	}
 	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
-		return err
+		log.Warn("an error occurred when stopping the processor", zap.Error(err))
+		errRes = err
 	}
 	if err := p.etcdCli.DeleteTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
-		return err
+		log.Warn("an error occurred when stopping the processor", zap.Error(err))
+		errRes = err
 	}
-	return p.sinkManager.Close()
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(0)
+	return errRes
 }
 
 func (p *oldProcessor) isStopped() bool {
