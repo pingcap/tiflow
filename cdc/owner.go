@@ -721,12 +721,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	gcSafePoint := uint64(math.MaxUint64)
 	// Store the lower bound of gcSafePoint
 	minGcSafePoint := uint64(time.Now().Unix() - o.gcTTL)
-	// Try to get tso from pd, use local machine time if it fails.
+	// Try to get physical timestamp from pd, use local machine time if it fails.
 	p, _, err := o.pdClient.GetTS(ctx)
 	if err != nil {
 		log.Warn("failed to acquire time from pd, will use this machine time", zap.Error(err))
 	} else {
-		minGcSafePoint = uint64(p - o.gcTTL)
+		minGcSafePoint = uint64(p/1000 - o.gcTTL)
 	}
 
 	if len(o.changeFeeds) > 0 {
