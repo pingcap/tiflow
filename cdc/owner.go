@@ -720,9 +720,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	staleChangeFeedId := make([]model.ChangeFeedID, 0)
 	gcSafePoint := uint64(math.MaxUint64)
 
-	// Store the lower bound of gcSafePoint
+	// init the lower bound of gcSafePoint, the logical part is zero.
 	minGcSafePoint := oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
-	// Try to get physical and logical timestamp from pd, use local machine time if it fails.
+	// Try to get physical and logical timestamp from pd
 	pyTs, lgTs, err := o.pdClient.GetTS(ctx)
 	if err != nil {
 		log.Warn("failed to acquire time from pd, will use this machine time", zap.Error(err))
@@ -739,7 +739,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			}
 
 			// if changefeed's appliedCheckpoinTs < minGcSafePoint, means this changefeed is stagnant
-			// then set it status to failed
+			// They are collected into this queue, and then a function is called to deal with these stagnant changefeed.
 			if changefeed.appliedCheckpointTs < minGcSafePoint {
 				staleChangeFeedId = append(staleChangeFeedId, id)
 			}
@@ -768,6 +768,8 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 				continue
 			}
 		}
+		// if changefeed's CheckpoinTs < minGcSafePoint, means this changefeed is stagnant
+		// They are collected into this queue, and then a function is called to deal with these stagnant changefeed.
 		if status.CheckpointTs < minGcSafePoint {
 			staleChangeFeedId = append(staleChangeFeedId, id)
 		}
@@ -776,6 +778,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		}
 	}
 
+	// handle stagnant changefeed collected above
 	o.handleStaleChangeFeed(ctx, staleChangeFeedId, minGcSafePoint)
 
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
