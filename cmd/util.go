@@ -65,7 +65,7 @@ func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 	if isServer {
-		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use , to separate multiple CN")
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 	}
 }
 
