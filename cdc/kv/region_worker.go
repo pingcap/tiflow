@@ -263,10 +263,6 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
-			if !w.session.isPullerInit.IsInitialized() {
-				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
-				continue
-			}
 			version, err := w.session.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
