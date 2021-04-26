@@ -19,6 +19,8 @@ import (
 	"io"
 	"time"
 
+	"go.etcd.io/etcd/clientv3"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -53,6 +55,7 @@ type Manager struct {
 	captureInfo *model.CaptureInfo
 
 	commandQueue chan *command
+	leaseID      clientv3.LeaseID
 
 	newProcessor func(
 		pdCli pd.Client,
@@ -63,12 +66,13 @@ type Manager struct {
 }
 
 // NewManager creates a new processor manager
-func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *model.CaptureInfo) *Manager {
+func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *model.CaptureInfo, leaseID clientv3.LeaseID) *Manager {
 	return &Manager{
 		processors:  make(map[model.ChangeFeedID]*processor),
 		pdCli:       pdCli,
 		credential:  credential,
 		captureInfo: captureInfo,
+		leaseID:     leaseID,
 
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
@@ -80,6 +84,7 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*model.GlobalReactorState)
+	globalState.CheckLeaseExpired(m.leaseID)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}

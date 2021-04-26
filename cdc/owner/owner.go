@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.etcd.io/etcd/clientv3"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -41,13 +43,14 @@ const (
 type Owner struct {
 	etcdWorker *orchestrator.EtcdWorker
 	reactor    *ownerReactor
+	leaseID    clientv3.LeaseID
 
 	tickInterval time.Duration
 }
 
-func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.Credential) (*Owner, error) {
+func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.Credential, leaseID clientv3.LeaseID) (*Owner, error) {
 	state := model.NewGlobalState()
-	reactor := newOwnerReactor(pdClient, credential, newGCManager(pdClient))
+	reactor := newOwnerReactor(pdClient, credential, newGCManager(pdClient), leaseID)
 
 	etcdWorker, err := orchestrator.NewEtcdWorker(etcdClient, kv.EtcdKeyBase, reactor, state)
 	if err != nil {
@@ -58,6 +61,7 @@ func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.
 		etcdWorker:   etcdWorker,
 		reactor:      reactor,
 		tickInterval: 100 * time.Millisecond,
+		leaseID:      leaseID,
 	}, nil
 }
 
@@ -133,20 +137,24 @@ type ownerReactor struct {
 	ownerJobQueue   []*ownerJob
 	ownerJobQueueMu sync.Mutex
 
+	leaseID clientv3.LeaseID
+
 	close int32
 }
 
-func newOwnerReactor(pdClient pd.Client, credential *security.Credential, gcManager *gcManager) *ownerReactor {
+func newOwnerReactor(pdClient pd.Client, credential *security.Credential, gcManager *gcManager, leaseID clientv3.LeaseID) *ownerReactor {
 	return &ownerReactor{
 		changefeeds: make(map[model.ChangeFeedID]*changefeed),
 		pdClient:    pdClient,
 		credential:  credential,
 		gcManager:   gcManager,
+		leaseID:     leaseID,
 	}
 }
 
 func (o *ownerReactor) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	state := rawState.(*model.GlobalReactorState)
+	state.CheckLeaseExpired(o.leaseID)
 	o.handleJob()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
@@ -223,7 +231,6 @@ func (o *ownerReactor) handleJob() {
 			cfReactor.scheduler.Rebalance()
 		}
 	}
-
 }
 
 func (o *ownerReactor) takeOnwerJobs() []*ownerJob {

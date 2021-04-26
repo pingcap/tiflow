@@ -16,6 +16,9 @@ package model
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
+
+	"go.etcd.io/etcd/clientv3"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -27,13 +30,16 @@ import (
 )
 
 type GlobalReactorState struct {
-	Captures    map[CaptureID]*CaptureInfo
-	Changefeeds map[ChangeFeedID]*ChangefeedReactorState
+	Owner          map[string]struct{}
+	Captures       map[CaptureID]*CaptureInfo
+	Changefeeds    map[ChangeFeedID]*ChangefeedReactorState
+	pendingPatches []orchestrator.DataPatch
 }
 
 // NewGlobalState creates a new global state for processor manager
 func NewGlobalState() orchestrator.ReactorState {
 	return &GlobalReactorState{
+		Owner:       map[string]struct{}{},
 		Captures:    make(map[CaptureID]*CaptureInfo),
 		Changefeeds: make(map[ChangeFeedID]*ChangefeedReactorState),
 	}
@@ -50,7 +56,11 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	}
 	switch k.Tp {
 	case etcd.CDCKeyTypeOwner:
-		// just skip owner key
+		if value != nil {
+			s.Owner[k.OwnerLeaseID] = struct{}{}
+		} else {
+			delete(s.Owner, k.OwnerLeaseID)
+		}
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
@@ -107,11 +117,30 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 }
 
 func (s *GlobalReactorState) GetPatches() []orchestrator.DataPatch {
-	var pendingPatches []orchestrator.DataPatch
+	pendingPatches := s.pendingPatches
 	for _, changefeedState := range s.Changefeeds {
 		pendingPatches = append(pendingPatches, changefeedState.GetPatches()...)
 	}
+	s.pendingPatches = nil
 	return pendingPatches
+}
+
+func (s *GlobalReactorState) CheckLeaseExpired(leaseID clientv3.LeaseID) {
+	k := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeOwner,
+		OwnerLeaseID: strconv.FormatInt(int64(leaseID), 10),
+	}
+	key := k.String()
+	patch := &orchestrator.SingleDataPatch{
+		Key: util.NewEtcdKey(key),
+		Func: func(v []byte) ([]byte, bool, error) {
+			if len(v) == 0 {
+				return v, false, cerrors.ErrLeaseExpired.GenWithStackByArgs()
+			}
+			return v, false, nil
+		},
+	}
+	s.pendingPatches = append(s.pendingPatches, patch)
 }
 
 type ChangefeedReactorState struct {

@@ -164,7 +164,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 		captureID := s.capture.info.ID
 		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := owner.NewOwner(etcd.Wrap(s.capture.session.Client(), map[string]prometheus.Counter{}), s.pdClient, conf.Security)
+		owner, err := owner.NewOwner(etcd.Wrap(s.capture.session.Client(), map[string]prometheus.Counter{}), s.pdClient, conf.Security, s.capture.session.Lease())
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
