@@ -41,13 +41,10 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-<<<<<<< HEAD
-RELEASE_VERSION ?= $(shell git describe --tags --dirty="-dev")
-=======
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v5.0.0-master
-	release_version_regex := ^v5\..*$$
+	RELEASE_VERSION := v4.0.0-dev
+	release_version_regex := ^v4\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
 		# If we are in release branch, try to use tag version.
@@ -60,7 +57,6 @@ ifeq ($(RELEASE_VERSION),)
 	endif
 endif
 
->>>>>>> 5946026... Makefile: fix incorrect version number on macOS (#1689)
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(shell git rev-parse HEAD)"
