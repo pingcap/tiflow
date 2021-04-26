@@ -108,7 +108,7 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	defer s.ownerLock.RUnlock()
 	if s.owner != nil {
 		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
-		// s.owner.writeDebugInfo(w)
+		s.owner.WriteDebugInfo(w)
 	}
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")

@@ -171,7 +171,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 
 		s.setOwner(owner)
-		if err := owner.Run(ctx); err != nil {
+		if err := owner.Run(ctx,s.capture.session); err != nil {
 			if errors.Cause(err) == context.Canceled {
 				log.Info("owner exited", zap.String("capture-id", captureID))
 				select {

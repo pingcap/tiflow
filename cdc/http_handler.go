@@ -236,7 +236,6 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-
 	panic("unimplemented")
 	/*
 		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)

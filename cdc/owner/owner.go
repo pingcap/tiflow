@@ -15,6 +15,8 @@ package owner
 
 import (
 	"context"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,12 +67,11 @@ func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.
 	}, nil
 }
 
-func (o *Owner) Run(ctx context.Context) error {
+func (o *Owner) Run(ctx context.Context, session *concurrency.Session,) error {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(errors.New("owner run with injected error"))
 	})
-	// TODO pass session here
-	err := o.etcdWorker.Run(ctx, nil, o.tickInterval)
+	err := o.etcdWorker.Run(ctx, session, o.tickInterval)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -82,6 +83,7 @@ func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
 		tp:           ownerJobTypeAdminJob,
 		adminJob:     &adminJob,
 		changefeedID: adminJob.CfID,
+		done: make(chan struct{}),
 	})
 }
 
@@ -89,6 +91,7 @@ func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
 	o.reactor.pushOwnerJob(&ownerJob{
 		tp:           ownerJobTypeRebalance,
 		changefeedID: cfID,
+		done: make(chan struct{}),
 	})
 }
 
@@ -98,11 +101,21 @@ func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureI
 		changefeedID:    cfID,
 		targetCaptureID: toCapture,
 		tableID:         tableID,
+		done: make(chan struct{}),
 	})
 }
 
 func (o *Owner) AsyncStop() {
 	o.reactor.AsyncStop()
+}
+
+func (o *Owner) WriteDebugInfo(w http.ResponseWriter) {
+	o.reactor.pushOwnerJob(&ownerJob{
+		tp:              ownerJobTypeDebugInfo,
+		httpWriter: w,
+		done: make(chan struct{}),
+	})
+
 }
 
 type ownerJobType int
@@ -112,6 +125,7 @@ const (
 	ownerJobTypeRebalance ownerJobType = iota
 	ownerJobTypeManualSchedule
 	ownerJobTypeAdminJob
+	ownerJobTypeDebugInfo
 )
 
 type ownerJob struct {
@@ -125,6 +139,11 @@ type ownerJob struct {
 
 	// for Admin Job only
 	adminJob *model.AdminJob
+
+	// for debug info only
+	httpWriter http.ResponseWriter
+
+	done chan struct{}
 }
 
 type ownerReactor struct {
@@ -229,6 +248,8 @@ func (o *ownerReactor) handleJob() {
 			cfReactor.scheduler.MoveTable(job.tableID, job.targetCaptureID)
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
+		case ownerJobTypeDebugInfo:
+			panic("unimplemented") // TODO
 		}
 	}
 }
