@@ -18,26 +18,27 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
+
+	"go.etcd.io/etcd/pkg/logutil"
+	"go.uber.org/zap/zapcore"
+
+	"github.com/pingcap/ticdc/cdc/capture"
+	"go.etcd.io/etcd/clientv3"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -48,11 +49,11 @@ const (
 
 // Server is the capture server
 type Server struct {
-	capture      *Capture
-	owner        *owner.Owner
-	ownerLock    sync.RWMutex
+	capture *capture.Capture
+
 	statusServer *http.Server
 	pdClient     pd.Client
+	etcdClient   *clientv3.Client
 	pdEndpoints  []string
 }
 
@@ -98,6 +99,37 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.pdClient = pdClient
 
+	tlsConfig, err := conf.Security.ToTLSConfig()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   s.pdEndpoints,
+		TLS:         tlsConfig,
+		Context:     ctx,
+		LogConfig:   &logConfig,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
+	if err != nil {
+		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+	}
+	s.etcdClient = etcdCli
+
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
@@ -126,71 +158,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
 			return err
 		}
-		log.Info("server recovered", zap.String("capture-id", s.capture.info.ID))
-	}
-}
-
-func (s *Server) setOwner(owner *owner.Owner) {
-	s.ownerLock.Lock()
-	defer s.ownerLock.Unlock()
-	s.owner = owner
-}
-
-func (s *Server) campaignOwnerLoop(ctx context.Context) error {
-	// In most failure cases, we don't return error directly, just run another
-	// campaign loop. We treat campaign loop as a special background routine.
-
-	conf := config.GetGlobalServerConfig()
-	rl := rate.NewLimiter(0.05, 2)
-	for {
-		err := rl.Wait(ctx)
-		if err != nil {
-			if errors.Cause(err) == context.Canceled {
-				return nil
-			}
-			return errors.Trace(err)
-		}
-
-		// Campaign to be an owner, it blocks until it becomes the owner
-		if err := s.capture.Campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
-				return nil
-			case mvcc.ErrCompacted:
-				continue
-			}
-			log.Warn("campaign owner failed", zap.Error(err))
-			continue
-		}
-		captureID := s.capture.info.ID
-		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := owner.NewOwner(etcd.Wrap(s.capture.session.Client(), map[string]prometheus.Counter{}), s.pdClient, conf.Security, s.capture.session.Lease())
-		if err != nil {
-			log.Warn("create new owner failed", zap.Error(err))
-			continue
-		}
-
-		s.setOwner(owner)
-		if err := owner.Run(ctx,s.capture.session); err != nil {
-			if errors.Cause(err) == context.Canceled {
-				log.Info("owner exited", zap.String("capture-id", captureID))
-				select {
-				case <-ctx.Done():
-					// only exits the campaignOwnerLoop if parent context is done
-					return ctx.Err()
-				default:
-				}
-				log.Info("owner exited", zap.String("capture-id", captureID))
-			}
-			err2 := s.capture.Resign(ctx)
-			if err2 != nil {
-				// if regisn owner failed, return error to let capture exits
-				return errors.Annotatef(err2, "resign owner failed, capture: %s", captureID)
-			}
-			log.Warn("run owner failed", zap.Error(err))
-		}
-		// owner is resigned by API, reset owner and continue the campaign loop
-		s.setOwner(nil)
+		log.Info("server recovered", zap.String("capture-id", s.capture.Info().ID))
 	}
 }
 
@@ -237,13 +205,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	conf := config.GetGlobalServerConfig()
-
-	opts := &captureOpts{
-		flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval),
-		captureSessionTTL:       conf.CaptureSessionTTL,
-	}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
+	capture, err := capture.NewCapture(ctx, s.etcdClient, s.pdClient)
 	if err != nil {
 		return err
 	}
@@ -252,10 +214,6 @@ func (s *Server) run(ctx context.Context) (err error) {
 	defer cancel()
 
 	wg, cctx := errgroup.WithContext(ctx)
-
-	wg.Go(func() error {
-		return s.campaignOwnerLoop(cctx)
-	})
 
 	wg.Go(func() error {
 		return s.etcdHealthChecker(cctx)
@@ -275,15 +233,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 // Close closes the server.
 func (s *Server) Close() {
 	if s.capture != nil {
-		if !config.NewReplicaImpl {
-			s.capture.Cleanup()
-		}
-		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
-		err := s.capture.Close(closeCtx)
-		if err != nil {
-			log.Error("close capture", zap.Error(err))
-		}
-		closeCancel()
+		s.capture.AsyncClose()
 	}
 	if s.statusServer != nil {
 		err := s.statusServer.Close()

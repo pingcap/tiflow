@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -23,13 +22,9 @@ import (
 
 	"go.etcd.io/etcd/clientv3"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
 	pd "github.com/tikv/pd/client"
@@ -41,82 +36,6 @@ const (
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
 	gcSafepointUpdateInterval = time.Duration(1 * time.Minute)
 )
-
-type Owner struct {
-	etcdWorker *orchestrator.EtcdWorker
-	reactor    *ownerReactor
-	leaseID    clientv3.LeaseID
-
-	tickInterval time.Duration
-}
-
-func NewOwner(etcdClient *etcd.Client, pdClient pd.Client, credential *security.Credential, leaseID clientv3.LeaseID) (*Owner, error) {
-	state := model.NewGlobalState()
-	reactor := newOwnerReactor(pdClient, credential, newGCManager(pdClient), leaseID)
-
-	etcdWorker, err := orchestrator.NewEtcdWorker(etcdClient, kv.EtcdKeyBase, reactor, state)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return &Owner{
-		etcdWorker:   etcdWorker,
-		reactor:      reactor,
-		tickInterval: 100 * time.Millisecond,
-		leaseID:      leaseID,
-	}, nil
-}
-
-func (o *Owner) Run(ctx context.Context, session *concurrency.Session,) error {
-	failpoint.Inject("owner-run-with-error", func() {
-		failpoint.Return(errors.New("owner run with injected error"))
-	})
-	err := o.etcdWorker.Run(ctx, session, o.tickInterval)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
-	o.reactor.pushOwnerJob(&ownerJob{
-		tp:           ownerJobTypeAdminJob,
-		adminJob:     &adminJob,
-		changefeedID: adminJob.CfID,
-		done: make(chan struct{}),
-	})
-}
-
-func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
-	o.reactor.pushOwnerJob(&ownerJob{
-		tp:           ownerJobTypeRebalance,
-		changefeedID: cfID,
-		done: make(chan struct{}),
-	})
-}
-
-func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID) {
-	o.reactor.pushOwnerJob(&ownerJob{
-		tp:              ownerJobTypeManualSchedule,
-		changefeedID:    cfID,
-		targetCaptureID: toCapture,
-		tableID:         tableID,
-		done: make(chan struct{}),
-	})
-}
-
-func (o *Owner) AsyncStop() {
-	o.reactor.AsyncStop()
-}
-
-func (o *Owner) WriteDebugInfo(w http.ResponseWriter) {
-	o.reactor.pushOwnerJob(&ownerJob{
-		tp:              ownerJobTypeDebugInfo,
-		httpWriter: w,
-		done: make(chan struct{}),
-	})
-
-}
 
 type ownerJobType int
 
@@ -146,7 +65,7 @@ type ownerJob struct {
 	done chan struct{}
 }
 
-type ownerReactor struct {
+type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
 
 	pdClient   pd.Client
@@ -161,17 +80,17 @@ type ownerReactor struct {
 	close int32
 }
 
-func newOwnerReactor(pdClient pd.Client, credential *security.Credential, gcManager *gcManager, leaseID clientv3.LeaseID) *ownerReactor {
-	return &ownerReactor{
+func NewOwner(pdClient pd.Client, credential *security.Credential, leaseID clientv3.LeaseID) *Owner {
+	return &Owner{
 		changefeeds: make(map[model.ChangeFeedID]*changefeed),
 		pdClient:    pdClient,
 		credential:  credential,
-		gcManager:   gcManager,
+		gcManager:   newGCManager(pdClient),
 		leaseID:     leaseID,
 	}
 }
 
-func (o *ownerReactor) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (o *Owner) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	state := rawState.(*model.GlobalReactorState)
 	state.CheckLeaseExpired(o.leaseID)
 	o.handleJob()
@@ -209,7 +128,46 @@ func (o *ownerReactor) Tick(ctx context.Context, rawState orchestrator.ReactorSt
 	return state, nil
 }
 
-func (o *ownerReactor) cleanUpChangefeed(state *model.ChangefeedReactorState) {
+func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
+	o.pushOwnerJob(&ownerJob{
+		tp:           ownerJobTypeAdminJob,
+		adminJob:     &adminJob,
+		changefeedID: adminJob.CfID,
+		done:         make(chan struct{}),
+	})
+}
+
+func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
+	o.pushOwnerJob(&ownerJob{
+		tp:           ownerJobTypeRebalance,
+		changefeedID: cfID,
+		done:         make(chan struct{}),
+	})
+}
+
+func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID) {
+	o.pushOwnerJob(&ownerJob{
+		tp:              ownerJobTypeManualSchedule,
+		changefeedID:    cfID,
+		targetCaptureID: toCapture,
+		tableID:         tableID,
+		done:            make(chan struct{}),
+	})
+}
+
+func (o *Owner) WriteDebugInfo(w http.ResponseWriter) {
+	o.pushOwnerJob(&ownerJob{
+		tp:         ownerJobTypeDebugInfo,
+		httpWriter: w,
+		done:       make(chan struct{}),
+	})
+}
+
+func (o *Owner) AsyncStop() {
+	atomic.StoreInt32(&o.close, 1)
+}
+
+func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, info != nil, nil
 	})
@@ -233,7 +191,7 @@ func (o *ownerReactor) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 	}
 }
 
-func (o *ownerReactor) handleJob() {
+func (o *Owner) handleJob() {
 	jobs := o.takeOnwerJobs()
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
@@ -254,7 +212,7 @@ func (o *ownerReactor) handleJob() {
 	}
 }
 
-func (o *ownerReactor) takeOnwerJobs() []*ownerJob {
+func (o *Owner) takeOnwerJobs() []*ownerJob {
 	o.ownerJobQueueMu.Lock()
 	defer o.ownerJobQueueMu.Unlock()
 
@@ -263,12 +221,8 @@ func (o *ownerReactor) takeOnwerJobs() []*ownerJob {
 	return jobs
 }
 
-func (o *ownerReactor) pushOwnerJob(job *ownerJob) {
+func (o *Owner) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueueMu.Lock()
 	defer o.ownerJobQueueMu.Unlock()
 	o.ownerJobQueue = append(o.ownerJobQueue, job)
-}
-
-func (o *ownerReactor) AsyncStop() {
-	atomic.StoreInt32(&o.close, 1)
 }

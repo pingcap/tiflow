@@ -104,39 +104,39 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.W
 }
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner != nil {
-		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
-		s.owner.WriteDebugInfo(w)
-	}
-
-	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-	if config.NewReplicaImpl {
-		s.capture.processorManager.WriteDebugInfo(w)
-	} else {
-		for _, p := range s.capture.processors {
-			p.writeDebugInfo(w)
-			fmt.Fprintf(w, "\n")
-		}
-	}
-
-	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	s.writeEtcdInfo(req.Context(), s.capture.etcdClient, w)
+	panic("unimplemented")
+	//s.ownerLock.RLock()
+	//defer s.ownerLock.RUnlock()
+	//if s.owner != nil {
+	//	fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
+	//	s.owner.WriteDebugInfo(w)
+	//}
+	//
+	//fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
+	//if config.NewReplicaImpl {
+	//	s.capture.processorManager.WriteDebugInfo(w)
+	//} else {
+	//	for _, p := range s.capture.processors {
+	//		p.writeDebugInfo(w)
+	//		fmt.Fprintf(w, "\n")
+	//	}
+	//}
+	//s.capture.DebugInfo()
+	//
+	//fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
+	//s.writeEtcdInfo(req.Context(), s.capture.etcdClient, w)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
 	st := status{
 		Version: version.ReleaseVersion,
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
 	if s.capture != nil {
-		st.ID = s.capture.info.ID
+		st.ID = s.capture.Info().ID
+		st.IsOwner = s.capture.IsOwner()
 	}
-	st.IsOwner = s.owner != nil
 	writeData(w, st)
 }
 
