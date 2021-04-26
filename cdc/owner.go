@@ -719,14 +719,15 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 	staleChangeFeedId := make([]model.ChangeFeedID, 0)
 	gcSafePoint := uint64(math.MaxUint64)
+
 	// Store the lower bound of gcSafePoint
-	minGcSafePoint := uint64(time.Now().Unix() - o.gcTTL)
-	// Try to get physical timestamp from pd, use local machine time if it fails.
-	p, _, err := o.pdClient.GetTS(ctx)
+	minGcSafePoint := oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
+	// Try to get physical and logical timestamp from pd, use local machine time if it fails.
+	pyTs, lgTs, err := o.pdClient.GetTS(ctx)
 	if err != nil {
 		log.Warn("failed to acquire time from pd, will use this machine time", zap.Error(err))
 	} else {
-		minGcSafePoint = uint64(p/1000 - o.gcTTL)
+		minGcSafePoint = oracle.ComposeTS(pyTs-(o.gcTTL*1000), lgTs)
 	}
 
 	if len(o.changeFeeds) > 0 {
