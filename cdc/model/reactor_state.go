@@ -51,9 +51,6 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if k.Tp == etcd.CDCKeyTypeOwner {
-		return nil
-	}
 	switch k.Tp {
 	case etcd.CDCKeyTypeOwner:
 		if value != nil {
@@ -64,10 +61,6 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
-			log.Info("Capture deleted",
-				zap.String("captureID", k.CaptureID),
-				zap.Reflect("old-capture", s.Captures[k.CaptureID]))
-
 			delete(s.Captures, k.CaptureID)
 			return nil
 		}
@@ -78,36 +71,29 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
-		if oldCaptureInfo, ok := s.Captures[k.CaptureID]; ok {
-			log.Debug("Capture updated",
-				zap.String("captureID", k.CaptureID),
-				zap.Reflect("old-capture", oldCaptureInfo),
-				zap.Reflect("new-capture", newCaptureInfo))
-		} else {
-			log.Info("Capture added",
-				zap.String("captureID", k.CaptureID),
-				zap.Reflect("new-capture", newCaptureInfo))
-		}
-
 		s.Captures[k.CaptureID] = &newCaptureInfo
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,
 		etcd.CDCKeyTypeTaskPosition,
 		etcd.CDCKeyTypeTaskStatus,
 		etcd.CDCKeyTypeTaskWorkload:
-		if len(k.CaptureID) != 0 {
+		if len(k.CaptureID) == 0 {
 			log.Warn("receive an unexpected etcd event", zap.String("key", key.String()), zap.ByteString("value", value))
 			return nil
 		}
 		changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 		if !exist {
-			changefeedState = newChangefeedState(k.ChangefeedID)
+			if value == nil{
+				return nil
+			}
+			changefeedState = newChangefeedReactorState(k.ChangefeedID)
 			s.Changefeeds[k.ChangefeedID] = changefeedState
 		}
 		if err := changefeedState.UpdateCDCKey(k, value); err != nil {
 			return errors.Trace(err)
 		}
 		if value == nil && !changefeedState.Exist() {
+			s.pendingPatches = append(s.pendingPatches, changefeedState.GetPatches()...)
 			delete(s.Changefeeds, k.ChangefeedID)
 		}
 	default:
@@ -154,7 +140,7 @@ type ChangefeedReactorState struct {
 	pendingPatches []orchestrator.DataPatch
 }
 
-func newChangefeedState(id ChangeFeedID) *ChangefeedReactorState {
+func newChangefeedReactorState(id ChangeFeedID) *ChangefeedReactorState {
 	return &ChangefeedReactorState{
 		ID:            id,
 		TaskPositions: make(map[CaptureID]*TaskPosition),
@@ -165,8 +151,7 @@ func newChangefeedState(id ChangeFeedID) *ChangefeedReactorState {
 
 func (s *ChangefeedReactorState) Update(key util.EtcdKey, value []byte, _ bool) error {
 	k := new(etcd.CDCKey)
-	err := k.Parse(key.String())
-	if err != nil {
+	if err := k.Parse(key.String()); err != nil {
 		return errors.Trace(err)
 	}
 	if err := s.UpdateCDCKey(k, value); err != nil {
@@ -231,17 +216,15 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		}
 		workload := make(TaskWorkload)
 		s.Workloads[key.CaptureID] = workload
-		e = workload
+		e = &workload
 	default:
 		return nil
 	}
-	err := json.Unmarshal(value, e)
-	if err != nil {
+	if err := json.Unmarshal(value, e); err != nil {
 		return errors.Trace(err)
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
-		err = s.Info.VerifyAndFix()
-		if err != nil {
+		if err := s.Info.VerifyAndFix(); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -249,7 +232,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 }
 
 func (s *ChangefeedReactorState) Exist() bool {
-	return s.Info != nil || s.Status != nil || len(s.TaskPositions) == 0 || len(s.TaskStatuses) == 0 || len(s.Workloads) == 0
+	return s.Info != nil || s.Status != nil || len(s.TaskPositions) != 0 || len(s.TaskStatuses) != 0 || len(s.Workloads) != 0
 }
 
 func (s *ChangefeedReactorState) Active(captureID CaptureID) bool {

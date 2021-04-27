@@ -155,7 +155,7 @@ func (s *Server) Run(ctx context.Context) error {
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 	// When a capture suicided, restart it
 	for {
-		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
+		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(errors.Cause(err)) {
 			return err
 		}
 		log.Info("server recovered", zap.String("capture-id", s.capture.Info().ID))

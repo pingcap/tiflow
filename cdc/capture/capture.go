@@ -91,9 +91,10 @@ func (c *Capture) Run(ctx context.Context) error {
 	}
 	defer func() {
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := c.etcdCli.DeleteCaptureInfo(timeoutCtx, c.info.ID)
+		if err := c.etcdCli.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
+			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
+		}
 		cancel()
-		log.Warn("failed to delete capture info when capture exited", zap.Error(err))
 	}()
 	ctx, cancel := context.WithCancel(ctx)
 	wg, ctx := errgroup.WithContext(ctx)
