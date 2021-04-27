@@ -1106,7 +1106,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if config.NewReplicaImpl {
+			if config.IsNewReplicaEnabled() {
 				// remove all positions because the old positions may be include an error
 				err = o.etcdClient.RemoveAllTaskPositions(ctx, job.CfID)
 				if err != nil {

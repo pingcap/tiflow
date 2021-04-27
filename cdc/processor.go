@@ -1231,6 +1231,16 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
+
+	failpoint.Inject("ProcessorContextCancel", func() {
+		go func() {
+			log.Info("ProcessorContextCancel, waiting for 10 seconds")
+			time.Sleep(10 * time.Second)
+			log.Info("ProcessorContextCancel canceling")
+			cancel()
+		}()
+	})
+
 	// processor only receives one error from the channel, all producers to this
 	// channel must use the non-blocking way to send error.
 	errCh := make(chan error, 1)

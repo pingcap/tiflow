@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/failpoint"
 	"io"
 	"net"
 	"net/http"
@@ -53,6 +54,7 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
 
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
+	serverMux.Handle("/fail", &failpoint.HttpHandler{})
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
@@ -112,7 +114,7 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-	if config.NewReplicaImpl {
+	if config.IsNewReplicaEnabled() {
 		s.capture.processorManager.WriteDebugInfo(w)
 	} else {
 		for _, p := range s.capture.processors {

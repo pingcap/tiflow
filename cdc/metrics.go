@@ -36,12 +36,14 @@ func init() {
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	sorter.InitMetrics(registry)
-	if config.NewReplicaImpl {
+
+	if config.IsNewReplicaEnabled() {
 		processor.InitMetrics(registry)
 		tablepipeline.InitMetrics(registry)
 	} else {
 		initProcessorMetrics(registry)
 	}
+
 	initOwnerMetrics(registry)
 	initServerMetrics(registry)
 }

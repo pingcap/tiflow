@@ -29,9 +29,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewReplicaImpl is true if we using new processor
-// new owner should be also switched on after it implemented
-const NewReplicaImpl = true
+// IsNewReplicaEnabled returns whether the new replication model, i.e. owner and processor, is enabled.
+func IsNewReplicaEnabled() bool {
+	return false
+	//return !GetGlobalServerConfig().EnableLegacyReplicationModel
+}
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
@@ -161,6 +163,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                "/tmp/cdc_sort",
 	},
 	Security: &SecurityConfig{},
+	EnableLegacyReplicationModel: false,
 }
 
 // ServerConfig represents a config for server
@@ -181,6 +184,9 @@ type ServerConfig struct {
 
 	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
 	Security *SecurityConfig `toml:"security" json:"security"`
+
+	// Internal use only for now
+	EnableLegacyReplicationModel bool `toml:"enable-legacy-replication-model" json:"enable-legacy-replication-model"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig

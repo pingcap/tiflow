@@ -154,7 +154,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if config.NewReplicaImpl {
+	if config.IsNewReplicaEnabled() {
 		sessionCli := c.session.Client()
 		etcdWorker, err := orchestrator.NewEtcdWorker(kv.NewCDCEtcdClient(ctx, sessionCli).Client, kv.EtcdKeyBase, c.processorManager, processor.NewGlobalState(c.info.ID))
 		if err != nil {
@@ -258,7 +258,7 @@ func (c *Capture) Cleanup() {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
-	if config.NewReplicaImpl {
+	if config.IsNewReplicaEnabled() {
 		c.processorManager.AsyncClose()
 		select {
 		case <-c.closed:
