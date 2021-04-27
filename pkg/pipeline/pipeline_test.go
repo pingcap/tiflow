@@ -103,7 +103,11 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, p := NewPipeline(ctx, -1)
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		c.Fatal(err)
+		return err
+	})
+	p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
@@ -176,8 +180,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 	}))
 	c.Assert(err, check.IsNil)
 	cancel()
-	errs := p.Wait()
-	c.Assert(len(errs), check.Equals, 0)
+	p.Wait()
 }
 
 type errorNode struct {
@@ -211,7 +214,11 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, p := NewPipeline(ctx, -1)
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		c.Assert(err.Error(), check.Equals, "error node throw an error, index: 3")
+		return nil
+	})
+	p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &errorNode{c: c})
 	p.AppendNode(ctx, "check node", &checkNode{
@@ -254,9 +261,7 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 			},
 		},
 	}))
-	errs := p.Wait()
-	c.Assert(len(errs), check.Equals, 1)
-	c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
+	p.Wait()
 }
 
 type throwNode struct {
@@ -291,7 +296,12 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, p := NewPipeline(ctx, -1)
+	var errs []error
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		errs = append(errs, err)
+		return nil
+	})
+	p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -318,13 +328,13 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	if err != nil {
 		// pipeline closed before the second message was sent
 		c.Assert(cerror.ErrSendToClosedPipeline.Equal(err), check.IsTrue)
-		errs := p.Wait()
+		p.Wait()
 		c.Assert(len(errs), check.Equals, 2)
 		c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
 		c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
 	} else {
 		// the second message was sent before pipeline closed
-		errs := p.Wait()
+		p.Wait()
 		c.Assert(len(errs), check.Equals, 4)
 		c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
 		c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
@@ -337,7 +347,11 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, p := NewPipeline(ctx, -1)
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		c.Fatal(err)
+		return err
+	})
+	p := NewPipeline(ctx, -1)
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -413,8 +427,7 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 	})
 
 	cancel()
-	errs := p.Wait()
-	c.Assert(len(errs), check.Equals, 0)
+	p.Wait()
 }
 
 type panicNode struct {
@@ -446,7 +459,14 @@ func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
 	ctx := context.NewContext(stdCtx.Background(), &context.Vars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, p := NewPipeline(ctx, -1)
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		c.Fatal(err)
+		return err
+	})
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		return nil
+	})
+	p := NewPipeline(ctx, -1)
 	p.AppendNode(ctx, "panic", panicNode{})
-	c.Assert(p.Wait(), check.HasLen, 0)
+	p.Wait()
 }
