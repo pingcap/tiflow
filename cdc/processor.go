@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	context2 "github.com/pingcap/ticdc/pkg/context"
+
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -290,7 +292,7 @@ func (p *oldProcessor) Run(ctx context.Context) {
 // wait blocks until all routines in processor are returned
 func (p *oldProcessor) wait() {
 	err := p.wg.Wait()
-	if err != nil && errors.Cause(err) != context.Canceled {
+	if err != nil && cerror.ErrProcessorTableCanceled.NotEqual(err) {
 		log.Error("processor wait error",
 			zap.String("capture-id", p.captureInfo.ID),
 			zap.String("capture", p.captureInfo.AdvertiseAddr),
@@ -324,7 +326,7 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
-				if errors.Cause(inErr) != context.Canceled {
+				if cerror.ErrProcessorTableCanceled.NotEqual(inErr) {
 					logError := log.Error
 					errField := zap.Error(inErr)
 					if cerror.ErrAdminStopProcessor.Equal(inErr) {
@@ -354,7 +356,7 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 
 		if !p.isStopped() {
 			err := retryFlushTaskStatusAndPosition()
-			if err != nil && errors.Cause(err) != context.Canceled {
+			if err != nil && cerror.ErrProcessorTableCanceled.NotEqual(err) {
 				log.Warn("failed to update info before exit", util.ZapFieldChangefeed(ctx), zap.Error(err))
 			}
 		}
@@ -496,7 +498,7 @@ func (p *oldProcessor) flushTaskPosition(ctx context.Context) error {
 	// p.position.Count = p.sink.Count()
 	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
-		if errors.Cause(err) != context.Canceled {
+		if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 			log.Error("failed to flush task position", util.ZapFieldChangefeed(ctx), zap.Error(err))
 			return errors.Trace(err)
 		}
@@ -803,7 +805,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		zap.Uint64("globalResolvedTs", globalResolvedTs))
 
 	ctx = util.PutTableInfoInCtx(ctx, tableID, tableName)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context2.WithCustomErrCancel(ctx)
 	table := &tableInfo{
 		id:         tableID,
 		name:       tableName,
@@ -821,7 +823,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
-			if errors.Cause(err) != context.Canceled {
+			if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 				p.sendError(err)
 			}
 		}()
@@ -867,7 +869,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		})
 		go func() {
 			err := sorter.Run(ctx)
-			if errors.Cause(err) != context.Canceled {
+			if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 				p.sendError(err)
 			}
 		}()
@@ -906,7 +908,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	atomic.StoreUint64(&p.localResolvedTs, p.position.ResolvedTs)
 	tableSink = startPuller(tableID, &table.resolvedTs, &table.checkpointTs)
 	table.cancel = func() {
-		cancel()
+		cancel(cerror.ErrProcessorTableCanceled.GenWithStackByArgs(tableID))
 		if tableSink != nil {
 			tableSink.Close()
 		}
@@ -1062,7 +1064,7 @@ func (p *oldProcessor) sorterConsume(
 			checkDoneTicker.Stop()
 			select {
 			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
+				if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 					p.sendError(ctx.Err())
 				}
 				return
@@ -1123,7 +1125,7 @@ func (p *oldProcessor) sorterConsume(
 
 	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(500 * time.Millisecond)
 	if err != nil {
-		if errors.Cause(err) != context.Canceled {
+		if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 			p.errCh <- errors.Trace(err)
 		}
 		return
@@ -1160,7 +1162,7 @@ func (p *oldProcessor) sorterConsume(
 
 		checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
 		if err != nil {
-			if errors.Cause(err) != context.Canceled {
+			if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 				p.sendError(errors.Trace(err))
 			}
 			return err
@@ -1191,7 +1193,7 @@ func (p *oldProcessor) sorterConsume(
 	for {
 		select {
 		case <-ctx.Done():
-			if errors.Cause(ctx.Err()) != context.Canceled {
+			if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 				p.sendError(ctx.Err())
 			}
 			return
@@ -1205,7 +1207,7 @@ func (p *oldProcessor) sorterConsume(
 			pEvent.SetUpFinishedChan()
 			select {
 			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
+				if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 					p.sendError(ctx.Err())
 				}
 				return
@@ -1218,7 +1220,7 @@ func (p *oldProcessor) sorterConsume(
 				}
 				err := flushRowChangedEvents()
 				if err != nil {
-					if errors.Cause(err) != context.Canceled {
+					if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 						p.errCh <- errors.Trace(err)
 					}
 					return
@@ -1247,7 +1249,7 @@ func (p *oldProcessor) sorterConsume(
 			})
 			err := processRowChangedEvent(pEvent)
 			if err != nil {
-				if errors.Cause(err) != context.Canceled {
+				if cerror.ErrProcessorTableCanceled.NotEqual(err) {
 					p.sendError(ctx.Err())
 				}
 				return
@@ -1275,7 +1277,7 @@ func (p *oldProcessor) pullerConsume(
 	for {
 		select {
 		case <-ctx.Done():
-			if errors.Cause(ctx.Err()) != context.Canceled {
+			if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 				p.sendError(ctx.Err())
 			}
 			return
@@ -1360,6 +1362,16 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
+
+	failpoint.Inject("ProcessorContextCancel", func() {
+		go func() {
+			log.Info("ProcessorContextCancel, waiting for 10 seconds")
+			time.Sleep(10 * time.Second)
+			log.Info("ProcessorContextCancel canceling")
+			cancel()
+		}()
+	})
+
 	// processor only receives one error from the channel, all producers to this
 	// channel must use the non-blocking way to send error.
 	errCh := make(chan error, 1)

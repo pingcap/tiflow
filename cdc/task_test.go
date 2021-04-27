@@ -79,7 +79,7 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 	// NewCapture can not be used because it requires to
 	// initialize the PD service witch does not support to
 	// be embeded.
-	if config.NewReplicaImpl {
+	if config.IsNewReplicaEnabled() {
 		c.Skip("this case is designed for old processor")
 	}
 	capture := &Capture{

@@ -23,14 +23,13 @@ import (
 	"net/http/pprof"
 	"os"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -56,6 +55,7 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
 
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
+	serverMux.Handle("/fail", &failpoint.HttpHandler{})
 
 	if util.FailpointBuild {
 		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
@@ -120,7 +120,7 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-	if config.NewReplicaImpl {
+	if config.IsNewReplicaEnabled() {
 		s.capture.processorManager.WriteDebugInfo(w)
 	} else {
 		for _, p := range s.capture.processors {
