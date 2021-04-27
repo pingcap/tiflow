@@ -144,7 +144,7 @@ func (s *contextSuite) TestThrowPanic(c *check.C) {
 		c.Assert(panicMsg, check.Equals, "an error has escaped, please report a bug{error 26 0  mock error}")
 	}()
 	stdCtx := context.Background()
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx.Throw(nil)
 	ctx.Throw(errors.New("mock error"))
 }

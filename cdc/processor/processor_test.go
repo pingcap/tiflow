@@ -695,8 +695,8 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 
 func (s *processorSuite) TestPositionDeleted(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.Background()
-	p := newProcessor4Test()
+	ctx := context.NewBackendContext4Test(true)
+	p := newProcessor4Test(ctx)
 	p.changefeed.TaskStatus.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
 	p.changefeed.TaskStatus.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
 	var err error
