@@ -53,7 +53,6 @@ func (s *contextSuite) TestStdCancel(c *check.C) {
 	stdCtx, cancel := context.WithCancel(stdCtx)
 	ctx := NewContext(stdCtx, &GlobalVars{})
 	cancel()
-	<-ctx.StdContext().Done()
 	<-ctx.Done()
 }
 
@@ -63,7 +62,6 @@ func (s *contextSuite) TestCancel(c *check.C) {
 	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
 	cancel()
-	<-ctx.StdContext().Done()
 	<-ctx.Done()
 }
 
@@ -75,11 +73,8 @@ func (s *contextSuite) TestCancelCascade(c *check.C) {
 	ctx1, _ := WithCancel(ctx)
 	ctx2, cancel2 := WithCancel(ctx)
 	cancel2()
-	<-ctx2.StdContext().Done()
 	<-ctx2.Done()
 	c.Assert(time.Since(startTime), check.Less, time.Second)
-	<-ctx1.StdContext().Done()
-	c.Assert(time.Since(startTime), check.GreaterEqual, time.Second)
 	<-ctx1.Done()
 	c.Assert(time.Since(startTime), check.GreaterEqual, time.Second)
 	cancel()

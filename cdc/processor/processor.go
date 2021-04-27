@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -243,7 +245,7 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	stdCtx := util.PutChangefeedIDInCtx(ctx.StdContext(), p.changefeed.ID)
+	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
@@ -437,11 +439,11 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	stdCtx := ctx.StdContext()
+	conf := config.GetGlobalServerConfig()
 	ddlPuller := puller.NewPuller(
-		stdCtx,
+		ctx,
 		ctx.GlobalVars().PDClient,
-		ctx.GlobalVars().Credential,
+		conf.Security,
 		ctx.GlobalVars().KVStorage,
 		checkpointTs, ddlspans, p.limitter, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
@@ -455,9 +457,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.sendError(ddlPuller.Run(stdCtx))
+		p.sendError(ddlPuller.Run(ctx))
 	}()
-	ddlRawKVCh := puller.SortOutput(stdCtx, ddlPuller.Output())
+	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()

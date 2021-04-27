@@ -16,9 +16,9 @@ package context
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/security"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
@@ -30,7 +30,6 @@ import (
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
 	PDClient    pd.Client
-	Credential  *security.Credential
 	KVStorage   tidbkv.Storage
 	CaptureInfo *model.CaptureInfo
 }
@@ -46,6 +45,7 @@ type ChangefeedVars struct {
 // Context contains Vars(), Done(), Throw(error) and StdContext() context.Context
 // Context is used to instead of standard context
 type Context interface {
+	context.Context
 
 	// GlobalVars return the `GlobalVars` store by the root context created by `NewContext`
 	// Note that the `GlobalVars` should be READ-ONLY and THREAD-SAFE
@@ -60,19 +60,9 @@ type Context interface {
 	// ChangefeedVars could be return nil when the `ChangefeedVars` is not set by `WithChangefeedVars`
 	ChangefeedVars() *ChangefeedVars
 
-	// Done return a channel which will be closed in the following cases:
-	// - the `cancel()` returned from `WithCancel` is called.
-	// - the `stdCtx` specified in `NewContext` is done.
-	Done() <-chan struct{}
-
 	// Throw an error to parents nodes
 	// we can using `WatchThrow` to listen the errors thrown by children nodes
 	Throw(error)
-
-	// StdContext return a simple struct implement the stdcontext.Context interface
-	// The Context in this package and the StdContext returned by this function have the same life cycle
-	// It means the `StdContext.Done()` will done when the `Context` is done.
-	StdContext() context.Context
 }
 
 type rootContext struct {
@@ -85,7 +75,7 @@ func NewContext(stdCtx context.Context, globalVars *GlobalVars) Context {
 	ctx := &rootContext{
 		globalVars: globalVars,
 	}
-	return withStdCancel(ctx, stdCtx)
+	return withStd(ctx, stdCtx)
 }
 
 func (ctx *rootContext) GlobalVars() *GlobalVars {
@@ -126,16 +116,24 @@ type stdContext struct {
 	Context
 }
 
+func (ctx *stdContext) Deadline() (deadline time.Time, ok bool) {
+	return ctx.stdCtx.Deadline()
+}
+
+func (ctx *stdContext) Err() error {
+	return ctx.stdCtx.Err()
+}
+
+func (ctx *stdContext) Value(key interface{}) interface{} {
+	return ctx.stdCtx.Value(key)
+}
+
 func (ctx *stdContext) Done() <-chan struct{} {
 	return ctx.stdCtx.Done()
 }
 
-func (ctx *stdContext) StdContext() context.Context {
-	return ctx.stdCtx
-}
-
 //revive:disable:context-as-argument
-func withStdCancel(ctx Context, stdCtx context.Context) Context {
+func withStd(ctx Context, stdCtx context.Context) Context {
 	return &stdContext{
 		stdCtx:  stdCtx,
 		Context: ctx,
@@ -144,8 +142,8 @@ func withStdCancel(ctx Context, stdCtx context.Context) Context {
 
 // WithCancel return a Context with the cancel function
 func WithCancel(ctx Context) (Context, context.CancelFunc) {
-	stdCtx, cancel := context.WithCancel(ctx.StdContext())
-	return withStdCancel(ctx, stdCtx), cancel
+	stdCtx, cancel := context.WithCancel(ctx)
+	return withStd(ctx, stdCtx), cancel
 }
 
 type throwContext struct {

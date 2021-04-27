@@ -31,8 +31,8 @@ type managerSuite struct{}
 
 var _ = check.Suite(&managerSuite{})
 
-func newManager4Test(ctx context.Context) *Manager {
-	m := NewManager(nil, nil, nil, ctx.GlobalVars().CaptureInfo)
+func newManager4Test() *Manager {
+	m := NewManager()
 	m.newProcessor = func(ctx context.Context) *processor {
 		return newProcessor4Test(ctx)
 	}
@@ -42,7 +42,7 @@ func newManager4Test(ctx context.Context) *Manager {
 func (s *managerSuite) TestChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewBackendContext4Test(false)
-	m := newManager4Test(ctx)
+	m := newManager4Test()
 	state := &globalState{
 		CaptureID:   "test-captureID",
 		Changefeeds: make(map[model.ChangeFeedID]*changefeedState),
@@ -50,12 +50,12 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 	var err error
 
 	// no changefeed
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 
 	// an inactive changefeed
 	state.Changefeeds["test-changefeed"] = newChangeFeedState("test-changefeed", state.CaptureID)
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 0)
 
@@ -71,13 +71,13 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 	state.Changefeeds["test-changefeed"].TaskStatus = &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 	}
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 1)
 
 	// processor return errors
 	state.Changefeeds["test-changefeed"].TaskStatus.AdminJobType = model.AdminStop
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 0)
 }
@@ -85,7 +85,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 func (s *managerSuite) TestDebugInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewBackendContext4Test(false)
-	m := newManager4Test(ctx)
+	m := newManager4Test()
 	state := &globalState{
 		CaptureID:   "test-captureID",
 		Changefeeds: make(map[model.ChangeFeedID]*changefeedState),
@@ -93,7 +93,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 	var err error
 
 	// no changefeed
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 
 	// an active changefeed
@@ -109,14 +109,14 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 	state.Changefeeds["test-changefeed"].TaskStatus = &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 	}
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 1)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for {
-			_, err := m.Tick(ctx.StdContext(), state)
+			_, err := m.Tick(ctx, state)
 			if err != nil {
 				c.Assert(cerrors.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
 				return
@@ -134,7 +134,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 func (s *managerSuite) TestClose(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewBackendContext4Test(false)
-	m := newManager4Test(ctx)
+	m := newManager4Test()
 	state := &globalState{
 		CaptureID:   "test-captureID",
 		Changefeeds: make(map[model.ChangeFeedID]*changefeedState),
@@ -142,7 +142,7 @@ func (s *managerSuite) TestClose(c *check.C) {
 	var err error
 
 	// no changefeed
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 
 	// an active changefeed
@@ -158,12 +158,12 @@ func (s *managerSuite) TestClose(c *check.C) {
 	state.Changefeeds["test-changefeed"].TaskStatus = &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 	}
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 1)
 
 	m.AsyncClose()
-	_, err = m.Tick(ctx.StdContext(), state)
+	_, err = m.Tick(ctx, state)
 	c.Assert(cerrors.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(m.processors, check.HasLen, 0)
 }

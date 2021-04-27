@@ -80,7 +80,7 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil)
 	c.Assert(err, check.IsNil)
 
 	var wg sync.WaitGroup
@@ -111,7 +111,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil)
 	c.Assert(err, check.IsNil)
 
 	runProcessorCount := 0

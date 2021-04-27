@@ -14,11 +14,9 @@
 package cdc
 
 import (
-	"context"
+	stdContext "context"
 	"sync"
 	"time"
-
-	"github.com/pingcap/ticdc/pkg/version"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -28,11 +26,12 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/processor"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/ticdc/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -66,10 +65,9 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(
-	stdCtx context.Context,
+	stdCtx stdContext.Context,
 	pdEndpoints []string,
 	pdCli pd.Client,
-	kvStorage tidbkv.Storage,
 ) (c *Capture, err error) {
 	conf := config.GetGlobalServerConfig()
 	credential := conf.Security
@@ -119,7 +117,7 @@ func NewCapture(
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-	processorManager := processor.NewManager(pdCli, credential, kvStorage, info)
+	processorManager := processor.NewManager()
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(stdCtx))
 
 	c = &Capture{
@@ -138,11 +136,21 @@ func NewCapture(
 }
 
 // Run runs the Capture mainloop
-func (c *Capture) Run(ctx context.Context) (err error) {
-	ctx, cancel := context.WithCancel(ctx)
+func (c *Capture) Run(ctx stdContext.Context) (err error) {
+	ctx, cancel := stdContext.WithCancel(ctx)
 	// TODO: we'd better to add some wait mechanism to ensure no routine is blocked
 	defer cancel()
 	defer close(c.closed)
+
+	kvStorage, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	ctx = context.NewContext(ctx, &context.GlobalVars{
+		PDClient:    c.pdCli,
+		KVStorage:   kvStorage,
+		CaptureInfo: c.info,
+	})
 	err = c.register(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -189,7 +197,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			// so we must cancel context to let all sub routines exit.
 			select {
 			case <-c.session.Done():
-				if ctx.Err() != context.Canceled {
+				if ctx.Err() != stdContext.Canceled {
 					log.Info("capture session done, capture suicide itself", zap.String("capture-id", c.info.ID))
 					return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 				}
@@ -224,7 +232,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 }
 
 // Campaign to be an owner
-func (c *Capture) Campaign(ctx context.Context) error {
+func (c *Capture) Campaign(ctx stdContext.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
@@ -232,7 +240,7 @@ func (c *Capture) Campaign(ctx context.Context) error {
 }
 
 // Resign lets a owner start a new election.
-func (c *Capture) Resign(ctx context.Context) error {
+func (c *Capture) Resign(ctx stdContext.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
@@ -250,7 +258,7 @@ func (c *Capture) Cleanup() {
 }
 
 // Close closes the capture by unregistering it from etcd
-func (c *Capture) Close(ctx context.Context) error {
+func (c *Capture) Close(ctx stdContext.Context) error {
 	if config.NewReplicaImpl {
 		c.processorManager.AsyncClose()
 		select {
@@ -261,7 +269,7 @@ func (c *Capture) Close(ctx context.Context) error {
 	return errors.Trace(c.etcdClient.DeleteCaptureInfo(ctx, c.info.ID))
 }
 
-func (c *Capture) handleTaskEvent(ctx context.Context, ev *TaskEvent) error {
+func (c *Capture) handleTaskEvent(ctx stdContext.Context, ev *TaskEvent) error {
 	task := ev.Task
 	if ev.Op == TaskOpCreate {
 		if _, ok := c.processors[task.ChangeFeedID]; !ok {
@@ -282,7 +290,7 @@ func (c *Capture) handleTaskEvent(ctx context.Context, ev *TaskEvent) error {
 	return nil
 }
 
-func (c *Capture) assignTask(ctx context.Context, task *Task) (*oldProcessor, error) {
+func (c *Capture) assignTask(ctx stdContext.Context, task *Task) (*oldProcessor, error) {
 	cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
 	if err != nil {
 		log.Error("get change feed info failed",
@@ -314,7 +322,7 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*oldProcessor, er
 }
 
 // register registers the capture information in etcd
-func (c *Capture) register(ctx context.Context) error {
+func (c *Capture) register(ctx stdContext.Context) error {
 	err := c.etcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	return cerror.WrapError(cerror.ErrCaptureRegister, err)
 }

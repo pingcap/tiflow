@@ -46,7 +46,7 @@ func newSorterNode(tableName string, tableID model.TableID) pipeline.Node {
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
-	stdCtx, cancel := context.WithCancel(ctx.StdContext())
+	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 	var sorter puller.EventSorter
 	sortEngine := ctx.ChangefeedVars().Info.Engine
@@ -107,7 +107,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
-		n.sorter.AddEntry(ctx.StdContext(), msg.PolymorphicEvent)
+		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 	default:
 		ctx.SendToNextNode(msg)
 	}

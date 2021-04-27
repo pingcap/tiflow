@@ -26,9 +26,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/security"
-	tidbkv "github.com/pingcap/tidb/kv"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -50,25 +47,14 @@ type command struct {
 type Manager struct {
 	processors map[model.ChangeFeedID]*processor
 
-	gloablVars *context.GlobalVars
-
 	commandQueue chan *command
 
 	newProcessor func(context.Context) *processor
 }
 
 // NewManager creates a new processor manager
-func NewManager(pdClient pd.Client,
-	credential *security.Credential,
-	kvStorage tidbkv.Storage,
-	captureInfo *model.CaptureInfo) *Manager {
+func NewManager() *Manager {
 	return &Manager{
-		gloablVars: &context.GlobalVars{
-			PDClient:    pdClient,
-			Credential:  credential,
-			KVStorage:   kvStorage,
-			CaptureInfo: captureInfo,
-		},
 		processors:   make(map[model.ChangeFeedID]*processor),
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
@@ -80,10 +66,10 @@ func NewManager(pdClient pd.Client,
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
 func (m *Manager) Tick(stdCtx stdContext.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*globalState)
+	ctx := stdCtx.(context.Context)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
-	ctx := context.NewContext(stdCtx, m.gloablVars)
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active() {
