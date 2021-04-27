@@ -2531,7 +2531,7 @@ func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(true)")
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(\"injected stream recv error\")")
 	c.Assert(err, check.IsNil)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay", "1*sleep(0)->2*sleep(1000)")
 	c.Assert(err, check.IsNil)
