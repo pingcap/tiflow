@@ -38,7 +38,7 @@ const (
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes
 	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
-	DefaultMaxBatchSize int = 4096
+	DefaultMaxBatchSize int = 16
 )
 
 type column struct {
