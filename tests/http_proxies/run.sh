@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -exu
 
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
@@ -20,9 +20,10 @@ export UP_TIDB_HOST=$lan_addr \
 
 
 proxy_pid=""
+proxy_port=$(shuf -i 10081-20081 -n1)
 function start_proxy() {
     echo "dumpling grpc packet to $WORK_DIR/packets.dump..."
-    GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=8080 >$WORK_DIR/packets.dump &
+    GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=$proxy_port >$WORK_DIR/packets.dump &
     proxy_pid=$!
 }
 
@@ -31,7 +32,7 @@ function stop_proxy() {
 }
 
 function prepare() {
-    for host in ${TEST_HOST_LIST[@]}; do
+    for host in "${TEST_HOST_LIST[@]}"; do
         echo "$host $(printenv $host)"
         case $(printenv $host) in
             # Should we handle ::1/128 here?
@@ -49,13 +50,17 @@ function prepare() {
     start_tidb_cluster --workdir $WORK_DIR
 
     start_proxy
+    # TODO: make sure the proxy is started.
+    sleep 5
+    export http_proxy=http://127.0.0.1:$proxy_port
+    export https_proxy=http://127.0.0.1:$proxy_port
+    ensure 10 curl http://$UP_PD_HOST_1:2379/
+
     echo started proxy at $proxy_pid
 
     cd $WORK_DIR
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
-    export http_proxy=http://127.0.0.1:8080
-    export https_proxy=http://127.0.0.1:8080
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     SINK_URI="blackhole:///"
