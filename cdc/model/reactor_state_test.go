@@ -44,7 +44,16 @@ func newMockReactorStatePatcher(c *check.C, state orchestrator.ReactorState) *mo
 	}
 }
 
-func (m *mockReactorStatePatcher) applyPatches() {
+func (m *mockReactorStatePatcher) updateKV(key util.EtcdKey, value []byte) error {
+	err := m.state.Update(key, value, false)
+	if err != nil {
+		return err
+	}
+	m.rawState[key] = value
+	return nil
+}
+
+func (m *mockReactorStatePatcher) applyPatches() error {
 	patches := m.state.GetPatches()
 	m.c.Assert(m.state.GetPatches(), check.HasLen, 0)
 	rawStateClone := make(map[util.EtcdKey][]byte)
@@ -54,13 +63,34 @@ func (m *mockReactorStatePatcher) applyPatches() {
 	changedSet := make(map[util.EtcdKey]struct{})
 	for _, patch := range patches {
 		err := patch.Patch(rawStateClone, changedSet)
-		m.c.Assert(err, check.IsNil)
+		if err != nil {
+			return err
+		}
 	}
 	for k := range changedSet {
 		err := m.state.Update(k, rawStateClone[k], false)
-		m.c.Assert(err, check.IsNil)
+		if err != nil {
+			return err
+		}
 		m.rawState[k] = rawStateClone[k]
 	}
+	return nil
+}
+
+func (m *mockReactorStatePatcher) mustApplyPatches() {
+	m.c.Assert(m.applyPatches(), check.IsNil)
+}
+
+func (s *stateSuite) TestCheckLeaseExpired(c *check.C) {
+	defer testleak.AfterTest(c)()
+	state := NewGlobalState().(*GlobalReactorState)
+	patcher := newMockReactorStatePatcher(c, state)
+	state.CheckLeaseExpired(0x22317526c4fc9a37)
+	c.Assert(patcher.applyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
+	err := patcher.updateKV(util.NewEtcdKey("/tidb/cdc/owner/22317526c4fc9a37"), []byte("abcd"))
+	c.Assert(err, check.IsNil)
+	state.CheckLeaseExpired(0x22317526c4fc9a37)
+	c.Assert(patcher.applyPatches(), check.IsNil)
 }
 
 func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
@@ -347,6 +377,74 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 	}
 }
 
+func (s *stateSuite) TestPatchInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	state := newChangefeedReactorState("test1")
+	patcher := newMockReactorStatePatcher(c, state)
+	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+		c.Assert(info, check.IsNil)
+		return &ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	patcher.mustApplyPatches()
+	defaultConfig := config.GetDefaultReplicaConfig()
+	c.Assert(state.Info, check.DeepEquals, &ChangeFeedInfo{
+		SinkURI: "123",
+		Engine:  SortUnified,
+		Config: &config.ReplicaConfig{
+			Filter:    defaultConfig.Filter,
+			Mounter:   defaultConfig.Mounter,
+			Sink:      defaultConfig.Sink,
+			Cyclic:    defaultConfig.Cyclic,
+			Scheduler: defaultConfig.Scheduler,
+		},
+	})
+	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+		info.StartTs = 6
+		return info, true, nil
+	})
+	patcher.mustApplyPatches()
+	c.Assert(state.Info, check.DeepEquals, &ChangeFeedInfo{
+		SinkURI: "123",
+		StartTs: 6,
+		Engine:  SortUnified,
+		Config: &config.ReplicaConfig{
+			Filter:    defaultConfig.Filter,
+			Mounter:   defaultConfig.Mounter,
+			Sink:      defaultConfig.Sink,
+			Cyclic:    defaultConfig.Cyclic,
+			Scheduler: defaultConfig.Scheduler,
+		},
+	})
+	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+		return nil, true, nil
+	})
+	patcher.mustApplyPatches()
+	c.Assert(state.Info, check.IsNil)
+}
+
+func (s *stateSuite) TestPatchStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	state := newChangefeedReactorState("test1")
+	patcher := newMockReactorStatePatcher(c, state)
+	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+		c.Assert(status, check.IsNil)
+		return &ChangeFeedStatus{CheckpointTs: 5}, true, nil
+	})
+	patcher.mustApplyPatches()
+	c.Assert(state.Status, check.DeepEquals, &ChangeFeedStatus{CheckpointTs: 5})
+	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+		status.ResolvedTs = 6
+		return status, true, nil
+	})
+	patcher.mustApplyPatches()
+	c.Assert(state.Status, check.DeepEquals, &ChangeFeedStatus{CheckpointTs: 5, ResolvedTs: 6})
+	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+		return nil, true, nil
+	})
+	patcher.mustApplyPatches()
+	c.Assert(state.Status, check.IsNil)
+}
+
 func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := newChangefeedReactorState("test1")
@@ -365,7 +463,7 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 			CheckPointTs: 2,
 		}, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
 		captureID1: {
 			CheckPointTs: 1,
@@ -382,7 +480,7 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 		position.ResolvedTs = 2
 		return position, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
@@ -402,7 +500,7 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 		position.Count = 6
 		return position, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
@@ -429,7 +527,7 @@ func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 			Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 1}},
 		}, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
 		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}}},
 		captureID2: {Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 1}}},
@@ -442,7 +540,7 @@ func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 		status.Tables[46].StartTs++
 		return status, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
 		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
 		captureID2: {Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 2}}},
@@ -450,7 +548,7 @@ func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 	state.PatchTaskStatus(captureID2, func(status *TaskStatus) (*TaskStatus, bool, error) {
 		return nil, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
 		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
 	})
@@ -470,7 +568,7 @@ func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 		c.Assert(workload, check.IsNil)
 		return TaskWorkload{46: {Workload: 1}}, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
 		captureID1: {45: {Workload: 1}},
 		captureID2: {46: {Workload: 1}},
@@ -483,7 +581,7 @@ func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 		workload[45] = WorkloadInfo{Workload: 3}
 		return workload, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 		captureID2: {45: {Workload: 3}, 46: {Workload: 1}},
@@ -491,7 +589,7 @@ func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 	state.PatchTaskWorkload(captureID2, func(workload TaskWorkload) (TaskWorkload, bool, error) {
 		return nil, true, nil
 	})
-	patcher.applyPatches()
+	patcher.mustApplyPatches()
 	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 	})

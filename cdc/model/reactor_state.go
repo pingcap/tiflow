@@ -83,7 +83,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		}
 		changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 		if !exist {
-			if value == nil{
+			if value == nil {
 				return nil
 			}
 			changefeedState = newChangefeedReactorState(k.ChangefeedID)
@@ -114,7 +114,7 @@ func (s *GlobalReactorState) GetPatches() []orchestrator.DataPatch {
 func (s *GlobalReactorState) CheckLeaseExpired(leaseID clientv3.LeaseID) {
 	k := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeOwner,
-		OwnerLeaseID: strconv.FormatInt(int64(leaseID), 10),
+		OwnerLeaseID: strconv.FormatInt(int64(leaseID), 16),
 	}
 	key := k.String()
 	patch := &orchestrator.SingleDataPatch{
