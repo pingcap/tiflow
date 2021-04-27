@@ -16,6 +16,7 @@ package context
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,6 +31,9 @@ func WithCustomErrCancel(ctx context.Context) (context.Context, CustomErrCancele
 	}
 
 	cancelF := func(err error) {
+		if atomic.SwapInt32(&ret.isCanceled, 1) == 1 {
+			return
+		}
 		ret.cancelCh <- err
 		close(ret.cancelCh)
 	}
@@ -45,8 +49,9 @@ type CustomCancelContext struct {
 	errRWLock sync.RWMutex
 	err       error
 
-	inner    context.Context
-	cancelCh chan error
+	inner      context.Context
+	cancelCh   chan error
+	isCanceled int32
 }
 
 // Deadline implements context.Context

@@ -55,6 +55,20 @@ func (s *customCancelSuite) TestCustomCancelInnerCanceled(c *check.C) {
 	c.Assert(ctx.Err(), check.ErrorMatches, ".*canceled.*")
 }
 
+func (s *customCancelSuite) TestCustomCancelDoubleCancel(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := WithCustomErrCancel(context.TODO())
+
+	go func() {
+		time.Sleep(time.Second)
+		cancel(errors.New("test custom error"))
+		cancel(errors.New("test custom double error"))
+	}()
+
+	<-ctx.Done()
+	c.Assert(ctx.Err(), check.ErrorMatches, "test custom error")
+}
+
 func (s *customCancelSuite) TestDeadlinePropagated(c *check.C) {
 	defer testleak.AfterTest(c)()
 
