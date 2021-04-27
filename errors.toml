@@ -551,6 +551,11 @@ error = '''
 sort dir error
 '''
 
+["CDC:ErrProcessorTableCanceled"]
+error = '''
+table has been canceled, table-id is %d. Report a bug if seen externally
+'''
+
 ["CDC:ErrProcessorTableNotFound"]
 error = '''
 table not found in processor cache

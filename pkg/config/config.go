@@ -32,7 +32,7 @@ import (
 // IsNewReplicaEnabled returns whether the new replication model, i.e. owner and processor, is enabled.
 func IsNewReplicaEnabled() bool {
 	return false
-	//return !GetGlobalServerConfig().EnableLegacyReplicationModel
+	// return !GetGlobalServerConfig().EnableLegacyReplicationModel
 }
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -162,7 +162,7 @@ var defaultServerConfig = &ServerConfig{
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                "/tmp/cdc_sort",
 	},
-	Security: &SecurityConfig{},
+	Security:                     &SecurityConfig{},
 	EnableLegacyReplicationModel: false,
 }
 
