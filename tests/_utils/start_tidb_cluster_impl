@@ -111,9 +111,9 @@ cat - >"$OUT_DIR/tikv-config.toml" <<EOF
 # Disable creating a large temp file.
 reserve-space = "0MB"
 [rocksdb]
-max-open-files = 4096
+max-open-files = 1024
 [raftdb]
-max-open-files = 4096
+max-open-files = 1024
 [raftstore]
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
@@ -296,24 +296,6 @@ max-open-files = 1000
 [raftdb.defaultcf]
 block-cache-size = "1GB"
 EOF
-
-echo "Starting Upstream TiFlash..."
-mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
-tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
-
-echo "Verifying Upstream TiFlash is started..."
-# Make sure TiFlash is started.
-while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; do
-    i=$((i + 1))
-    if [ "$i" -gt 10 ]; then
-        cat ${OUT_DIR}/tiflash/log/proxy.log
-        cat ${OUT_DIR}/tiflash/log/server.log
-        cat ${OUT_DIR}/tiflash/log/error.log
-        echo 'Failed to start TiFlash'
-        exit 1
-    fi
-    sleep 2
-done
 
 echo "Starting CDC state checker..."
 cd $CUR/../../testing_utils/cdc_state_checker

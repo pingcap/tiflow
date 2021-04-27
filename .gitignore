@@ -45,5 +45,6 @@ docker/logs
 
 # Binary file when running intergration test
 integration/integration
+testing_utils/cdc_state_checker/cdc_state_checker
 
 *.tmp
