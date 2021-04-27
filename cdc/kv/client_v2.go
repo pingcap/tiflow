@@ -171,6 +171,8 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
+
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			err := s.onRegionFail(ctx, regionErrorInfo{
@@ -193,7 +195,7 @@ func (s *eventFeedSession) receiveFromStreamV2(
 
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
-	worker := newRegionWorker(s, limiter)
+	worker := newRegionWorker(s, limiter, addr)
 	s.workersLock.Lock()
 	s.workers[addr] = worker
 	s.workersLock.Unlock()
@@ -205,13 +207,19 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	for {
 		cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientStreamRecvError", func() {
-			err = errors.New("injected stream recv error")
+		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
+			if op.(string) == "error" {
+				worker.inputCh <- nil
+			}
 		})
-		if err == io.EOF {
-			close(worker.inputCh)
-			return nil
-		}
+		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+			errStr := msg.(string)
+			if errStr == io.EOF.Error() {
+				err = io.EOF
+			} else {
+				err = errors.New(errStr)
+			}
+		})
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(

@@ -15,6 +15,7 @@ package context
 
 import (
 	"context"
+	"log"
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -95,7 +96,13 @@ func (ctx *rootContext) ChangefeedVars() *ChangefeedVars {
 	return nil
 }
 
-func (ctx *rootContext) Throw(error) { /* do nothing */ }
+func (ctx *rootContext) Throw(err error) {
+	if err == nil {
+		return
+	}
+	// make sure all error has been catched
+	log.Panic("an error has escaped, please report a bug", zap.Error(err))
+}
 
 // WithChangefeedVars return a Context with the `ChangefeedVars`
 func WithChangefeedVars(ctx Context, changefeedVars *ChangefeedVars) Context {
@@ -143,11 +150,13 @@ func WithCancel(ctx Context) (Context, context.CancelFunc) {
 
 type throwContext struct {
 	Context
-	f func(error)
+	f func(error) error
 }
 
 // WithErrorHandler creates a new context that can watch the Throw function
-func WithErrorHandler(ctx Context, f func(error)) Context {
+// if the function `f` specified in WithErrorHandler returns an error,
+// the error will be thrown to the parent context.
+func WithErrorHandler(ctx Context, f func(error) error) Context {
 	return &throwContext{
 		Context: ctx,
 		f:       f,
@@ -158,8 +167,9 @@ func (ctx *throwContext) Throw(err error) {
 	if err == nil {
 		return
 	}
-	ctx.f(err)
-	ctx.Context.Throw(err)
+	if err := ctx.f(err); err != nil {
+		ctx.Context.Throw(err)
+	}
 }
 
 // NewBackendContext4Test returns a new pipeline context for test

@@ -90,9 +90,10 @@ func (s *contextSuite) TestThrow(c *check.C) {
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
-	ctx = WithErrorHandler(ctx, func(err error) {
+	ctx = WithErrorHandler(ctx, func(err error) error {
 		c.Assert(err.Error(), check.Equals, "mock error")
 		cancel()
+		return nil
 	})
 	ctx.Throw(nil)
 	ctx.Throw(errors.New("mock error"))
@@ -104,8 +105,8 @@ func (s *contextSuite) TestThrowCascade(c *check.C) {
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
-	var errNum1, errNum2 int
-	ctx = WithErrorHandler(ctx, func(err error) {
+	var errNum1, errNum2, errNum3 int
+	ctx = WithErrorHandler(ctx, func(err error) error {
 		if err.Error() == "mock error" {
 			errNum1++
 		} else if err.Error() == "mock error2" {
@@ -113,13 +114,37 @@ func (s *contextSuite) TestThrowCascade(c *check.C) {
 		} else {
 			c.Fail()
 		}
+		return nil
 	})
-	ctx2 := WithErrorHandler(ctx, func(err error) {
-		errNum2++
-		c.Assert(err.Error(), check.Equals, "mock error2")
+	ctx2 := WithErrorHandler(ctx, func(err error) error {
+		if err.Error() == "mock error2" {
+			errNum2++
+			return err
+		} else if err.Error() == "mock error3" {
+			errNum3++
+		} else {
+			c.Fail()
+		}
+		return nil
 	})
 	ctx2.Throw(errors.New("mock error2"))
+	ctx2.Throw(errors.New("mock error3"))
 	ctx.Throw(errors.New("mock error"))
+	c.Assert(errNum1, check.Equals, 1)
+	c.Assert(errNum2, check.Equals, 2)
+	c.Assert(errNum3, check.Equals, 1)
 	cancel()
 	<-ctx.Done()
+}
+
+func (s *contextSuite) TestThrowPanic(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer func() {
+		panicMsg := recover()
+		c.Assert(panicMsg, check.Equals, "an error has escaped, please report a bug{error 26 0  mock error}")
+	}()
+	stdCtx := context.Background()
+	ctx := NewContext(stdCtx, &Vars{})
+	ctx.Throw(nil)
+	ctx.Throw(errors.New("mock error"))
 }

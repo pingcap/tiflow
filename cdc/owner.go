@@ -158,7 +158,7 @@ func NewOwner(
 	return owner, nil
 }
 
-func (o *Owner) addCapture(info *model.CaptureInfo) {
+func (o *Owner) addCapture(_ context.Context, info *model.CaptureInfo) {
 	o.l.Lock()
 	o.captures[info.ID] = info
 	o.l.Unlock()
@@ -167,7 +167,36 @@ func (o *Owner) addCapture(info *model.CaptureInfo) {
 	o.rebalanceMu.Unlock()
 }
 
-func (o *Owner) removeCapture(info *model.CaptureInfo) {
+// When a table is moved from one capture to another, the workflow is as follows
+// 1. Owner deletes the table from the original capture (we call it capture-1),
+//    and adds an table operation record in the task status
+// 2. The processor in capture-1 reads the operation record, and waits the table
+//    checkpoint ts reaches the boundary ts in operation, which often equals to
+//    the global resovled ts, larger the current checkpoint ts of this table.
+// 3. After table checkpoint ts reaches boundary ts, capture-1 marks the table
+//    operation as finished.
+// 4. Owner reads the finished mark and re-dispatches this table to another capture.
+//
+// When capture-1 crashes between step-2 and step-3, this function should be
+// called to let owner re dispatch the table. Besides owner could also crash at
+// the same time, in that case this function should also be called. In addtition,
+// this function only handles move table job: 1) the add table job persists both
+// table replicaInfo and operation, we can recover enough information from table
+// replicaInfo; 2) if a table is deleted from a capture and that capture crashes,
+// we just ignore this table.
+func (o *Owner) rebuildTableFromOperations(cf *changeFeed, taskStatus *model.TaskStatus, startTs uint64) {
+	for tableID, op := range taskStatus.Operation {
+		if op.Delete && op.Flag&model.OperFlagMoveTable > 0 {
+			cf.orphanTables[tableID] = startTs
+			if job, ok := cf.moveTableJobs[tableID]; ok {
+				log.Info("remove outdated move table job", zap.Reflect("job", job), zap.Uint64("start-ts", startTs))
+				delete(cf.moveTableJobs, tableID)
+			}
+		}
+	}
+}
+
+func (o *Owner) removeCapture(ctx context.Context, info *model.CaptureInfo) {
 	o.l.Lock()
 	defer o.l.Unlock()
 
@@ -202,19 +231,22 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 			}
 		}
 
-		ctx := context.TODO()
-		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
+		o.rebuildTableFromOperations(feed, task, startTs)
+
+		if err := o.etcdClient.LeaseGuardDeleteTaskStatus(ctx, feed.id, info.ID, o.session.Lease()); err != nil {
 			log.Warn("failed to delete task status",
 				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
-		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
+		if err := o.etcdClient.LeaseGuardDeleteTaskPosition(ctx, feed.id, info.ID, o.session.Lease()); err != nil {
 			log.Warn("failed to delete task position",
 				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
-		if err := o.etcdClient.DeleteTaskWorkload(ctx, feed.id, info.ID); err != nil {
+		if err := o.etcdClient.LeaseGuardDeleteTaskWorkload(ctx, feed.id, info.ID, o.session.Lease()); err != nil {
 			log.Warn("failed to delete task workload",
 				zap.String("capture-id", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
+		ownerMaintainTableNumGauge.DeleteLabelValues(feed.id, info.AdvertiseAddr, maintainTableTypeTotal)
+		ownerMaintainTableNumGauge.DeleteLabelValues(feed.id, info.AdvertiseAddr, maintainTableTypeWip)
 	}
 }
 
@@ -267,6 +299,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
+	// TODO delete
 	if info.Engine == model.SortInFile {
 		err = os.MkdirAll(info.SortDir, 0o755)
 		if err != nil {
@@ -367,6 +400,8 @@ func (o *Owner) newChangeFeed(
 		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
 		sinkTableInfo[j-1].TableID = tid
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
+		sinkTableInfo[j-1].Schema = table.Schema
+		sinkTableInfo[j-1].Table = table.Table
 
 		for i, colInfo := range tblInfo.Cols() {
 			sinkTableInfo[j-1].ColumnInfo[i] = new(model.ColumnInfo)
@@ -439,6 +474,7 @@ func (o *Owner) newChangeFeed(
 		taskStatus:          processorsInfos,
 		taskPositions:       taskPositions,
 		etcdCli:             o.etcdClient,
+		leaseID:             o.session.Lease(),
 		filter:              filter,
 		sink:                primarySink,
 		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
@@ -463,7 +499,7 @@ func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 			if cerror.ErrDecodeFailed.NotEqual(err) {
 				return errors.Trace(err)
 			}
-			err := o.cfRWriter.RemoveAllTaskStatus(ctx, changefeedID)
+			err := o.cfRWriter.LeaseGuardRemoveAllTaskStatus(ctx, changefeedID, o.session.Lease())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -524,7 +560,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		needSave, canInit := cfInfo.CheckErrorHistory()
 		if needSave {
-			err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			err := o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, cfInfo, changeFeedID, o.session.Lease())
 			if err != nil {
 				return err
 			}
@@ -589,14 +625,14 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
 					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
-				err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+				err := o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, cfInfo, changeFeedID, o.session.Lease())
 				if err != nil {
 					return err
 				}
 				continue
 			}
 
-			err2 := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			err2 := o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, cfInfo, changeFeedID, o.session.Lease())
 			if err2 != nil {
 				return err2
 			}
@@ -698,7 +734,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			changefeedCheckpointTsLagGauge.WithLabelValues(id).Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 		}
 		if time.Since(o.lastFlushChangefeeds) > o.flushChangefeedInterval {
-			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
+			err := o.cfRWriter.LeaseGuardPutAllChangeFeedStatus(ctx, snapshot, o.session.Lease())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -807,16 +843,20 @@ func (o *Owner) handleSyncPoint(ctx context.Context) error {
 }
 
 // dispatchJob dispatches job to processors
+// Note job type in this function contains pause, remove and finish
 func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	cf, ok := o.changeFeeds[job.CfID]
 	if !ok {
 		return cerror.ErrOwnerChangefeedNotFound.GenWithStackByArgs(job.CfID)
 	}
 	for captureID := range cf.taskStatus {
-		newStatus, _, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
-			taskStatus.AdminJobType = job.Type
-			return true, nil
-		})
+		newStatus, _, err := cf.etcdCli.LeaseGuardAtomicPutTaskStatus(
+			ctx, cf.id, captureID, o.session.Lease(),
+			func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+				taskStatus.AdminJobType = job.Type
+				return true, nil
+			},
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -825,7 +865,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// record admin job in changefeed status
 	cf.status.AdminJobType = job.Type
 	infos := map[model.ChangeFeedID]*model.ChangeFeedStatus{job.CfID: cf.status}
-	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, infos)
+	err := o.cfRWriter.LeaseGuardPutAllChangeFeedStatus(ctx, infos, o.session.Lease())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -835,6 +875,15 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
 	if job.Type == model.AdminStop {
 		o.stoppedFeeds[job.CfID] = cf.status
+	}
+	for captureID := range cf.taskStatus {
+		capture, ok := o.captures[captureID]
+		if !ok {
+			log.Warn("capture not found", zap.String("capture-id", captureID))
+			continue
+		}
+		ownerMaintainTableNumGauge.DeleteLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeTotal)
+		ownerMaintainTableNumGauge.DeleteLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeWip)
 	}
 	delete(o.changeFeeds, job.CfID)
 	return nil
@@ -899,6 +948,17 @@ func (o *Owner) checkClusterHealth(_ context.Context) error {
 			}
 		}
 	}
+	for _, cf := range o.changeFeeds {
+		for captureID, pinfo := range cf.taskStatus {
+			capture, ok := o.captures[captureID]
+			if !ok {
+				log.Warn("capture not found", zap.String("capture-id", captureID))
+				continue
+			}
+			ownerMaintainTableNumGauge.WithLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeTotal).Set(float64(len(pinfo.Tables)))
+			ownerMaintainTableNumGauge.WithLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(pinfo.Operation)))
+		}
+	}
 	// TODO: check processor normal exited
 	return nil
 }
@@ -922,7 +982,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if feedState == model.StateFailed && job.Type == model.AdminRemove {
 				// changefeed in failed state, but changefeed status has not
 				// been created yet. Try to remove changefeed info only.
-				err := o.etcdClient.DeleteChangeFeedInfo(ctx, job.CfID)
+				err := o.etcdClient.LeaseGuardDeleteChangeFeedInfo(ctx, job.CfID, o.session.Lease())
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -955,7 +1015,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
 			}
 
-			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
+			err := o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, cf.info, job.CfID, o.session.Lease())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -977,7 +1037,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				case model.StateRemoved, model.StateFinished:
 					// remove a removed or finished changefeed
 					if job.Opts != nil && job.Opts.ForceRemove {
-						err := o.etcdClient.RemoveChangeFeedStatus(ctx, job.CfID)
+						err := o.etcdClient.LeaseGuardRemoveChangeFeedStatus(ctx, job.CfID, o.session.Lease())
 						if err != nil {
 							return errors.Trace(err)
 						}
@@ -988,7 +1048,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				case model.StateStopped, model.StateFailed:
 					// remove a paused or failed changefeed
 					status.AdminJobType = model.AdminRemove
-					err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, status)
+					err = o.etcdClient.LeaseGuardPutChangeFeedStatus(ctx, job.CfID, status, o.session.Lease())
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -1004,7 +1064,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			}
 			if job.Opts != nil && job.Opts.ForceRemove {
 				// if `ForceRemove` is enabled, remove all information related to this changefeed
-				err := o.etcdClient.RemoveChangeFeedStatus(ctx, job.CfID)
+				err := o.etcdClient.LeaseGuardRemoveChangeFeedStatus(ctx, job.CfID, o.session.Lease())
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -1032,7 +1092,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 			// set admin job in changefeed status to tell owner resume changefeed
 			status.AdminJobType = model.AdminResume
-			err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, status)
+			err = o.etcdClient.LeaseGuardPutChangeFeedStatus(ctx, job.CfID, status, o.session.Lease())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -1042,7 +1102,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			// clear last running error
 			cfInfo.State = model.StateNormal
 			cfInfo.Error = nil
-			err = o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, job.CfID)
+			err = o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, cfInfo, job.CfID, o.session.Lease())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -1143,7 +1203,14 @@ loop:
 
 		err = o.run(ctx)
 		if err != nil {
-			if errors.Cause(err) != context.Canceled {
+			switch errors.Cause(err) {
+			case context.DeadlineExceeded:
+				// context timeout means the o.run doesn't finish in a safe owner
+				// lease cycle, it is safe to retry. If the lease is revoked,
+				// another run loop will detect it.
+				continue loop
+			case context.Canceled:
+			default:
 				log.Error("owner exited with error", zap.Error(err))
 			}
 			break loop
@@ -1393,15 +1460,18 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 						}
 						o.addOrphanTable(changeFeedID, tableID, startTs)
 					}
+					if cf, ok := o.changeFeeds[changeFeedID]; ok {
+						o.rebuildTableFromOperations(cf, status, cf.status.CheckpointTs)
+					}
 				}
 
-				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
+				if err := o.etcdClient.LeaseGuardDeleteTaskStatus(ctx, changeFeedID, captureID, o.session.Lease()); err != nil {
 					return errors.Trace(err)
 				}
-				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
+				if err := o.etcdClient.LeaseGuardDeleteTaskPosition(ctx, changeFeedID, captureID, o.session.Lease()); err != nil {
 					return errors.Trace(err)
 				}
-				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
+				if err := o.etcdClient.LeaseGuardDeleteTaskWorkload(ctx, changeFeedID, captureID, o.session.Lease()); err != nil {
 					return errors.Trace(err)
 				}
 				log.Info("cleanup stale task", zap.String("capture-id", captureID), zap.String("changefeed", changeFeedID))
@@ -1471,7 +1541,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				log.Info("delete capture",
 					zap.String("capture-id", c.ID),
 					zap.String("capture", c.AdvertiseAddr))
-				o.removeCapture(c)
+				o.removeCapture(ctx, c)
 			case clientv3.EventTypePut:
 				if !ev.IsCreate() {
 					continue
@@ -1482,7 +1552,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				log.Info("add capture",
 					zap.String("capture-id", c.ID),
 					zap.String("capture", c.AdvertiseAddr))
-				o.addCapture(c)
+				o.addCapture(ctx, c)
 			}
 		}
 	}
@@ -1491,11 +1561,11 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 
 func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	for _, c := range captures {
-		o.addCapture(c)
+		o.addCapture(ctx, c)
 	}
 	for _, c := range o.captures {
 		if _, ok := captures[c.ID]; !ok {
-			o.removeCapture(c)
+			o.removeCapture(ctx, c)
 		}
 	}
 	// captureLoaded is used to check whether the owner can execute cleanup stale tasks job.

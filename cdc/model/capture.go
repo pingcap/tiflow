@@ -24,6 +24,7 @@ import (
 type CaptureInfo struct {
 	ID            CaptureID `json:"id"`
 	AdvertiseAddr string    `json:"address"`
+	Version       string    `json:"version"`
 }
 
 // Marshal using json.Marshal.

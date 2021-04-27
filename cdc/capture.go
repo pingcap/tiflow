@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/version"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -42,15 +44,6 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-const (
-	captureSessionTTL = 3
-)
-
-// processorOpts records options for processor
-type processorOpts struct {
-	flushCheckpointInterval time.Duration
-}
-
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	etcdClient kv.CDCEtcdClient
@@ -68,7 +61,6 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	opts   *processorOpts
 	closed chan struct{}
 }
 
@@ -77,11 +69,10 @@ func NewCapture(
 	stdCtx context.Context,
 	pdEndpoints []string,
 	pdCli pd.Client,
-	credential *security.Credential,
 	kvStorage tidbkv.Storage,
-	advertiseAddr string,
-	opts *processorOpts,
 ) (c *Capture, err error) {
+	conf := config.GetGlobalServerConfig()
+	credential := conf.Security
 	tlsConfig, err := credential.ToTLSConfig()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -116,7 +107,7 @@ func NewCapture(
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 	sess, err := concurrency.NewSession(etcdCli,
-		concurrency.WithTTL(captureSessionTTL))
+		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
@@ -125,7 +116,8 @@ func NewCapture(
 	id := uuid.New().String()
 	info := &model.CaptureInfo{
 		ID:            id,
-		AdvertiseAddr: advertiseAddr,
+		AdvertiseAddr: conf.AdvertiseAddr,
+		Version:       version.ReleaseVersion,
 	}
 	processorManager := processor.NewManager(pdCli, credential, kvStorage, info)
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(stdCtx))
@@ -137,7 +129,6 @@ func NewCapture(
 		session:          sess,
 		election:         elec,
 		info:             info,
-		opts:             opts,
 		pdCli:            pdCli,
 		processorManager: processorManager,
 		closed:           make(chan struct{}),
@@ -308,9 +299,9 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*oldProcessor, er
 	log.Info("run processor",
 		zap.String("capture-id", c.info.ID), util.ZapFieldCapture(ctx),
 		zap.String("changefeed", task.ChangeFeedID))
-
+	conf := config.GetGlobalServerConfig()
 	p, err := runProcessorImpl(
-		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
+		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, time.Duration(conf.ProcessorFlushInterval))
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeed", task.ChangeFeedID),

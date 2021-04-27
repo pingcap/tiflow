@@ -51,9 +51,11 @@ func newProcessor4Test(ctx context.Context) *processor {
 	}
 	p.createTablePipeline = func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
-			tableID: tableID,
-			name:    fmt.Sprintf("`test`.`table%d`", tableID),
-			status:  pipeline.TableStatusRunning,
+			tableID:      tableID,
+			name:         fmt.Sprintf("`test`.`table%d`", tableID),
+			status:       pipeline.TableStatusRunning,
+			resolvedTs:   replicaInfo.StartTs,
+			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	}
 	p.changefeed = newChangeFeedState(changefeedID, p.captureInfo.ID)
@@ -161,7 +163,7 @@ func (m *mockTablePipeline) Cancel() {
 	m.canceled = true
 }
 
-func (m *mockTablePipeline) Wait() []error {
+func (m *mockTablePipeline) Wait() {
 	panic("not implemented") // TODO: Implement
 }
 
@@ -235,7 +237,9 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
 	p.changefeed.Status.CheckpointTs = 90
+	p.changefeed.Status.ResolvedTs = 90
 	p.changefeed.TaskPosition.ResolvedTs = 100
+	p.schemaStorage.AdvanceResolvedTs(200)
 
 	// no operation
 	_, err = p.Tick(ctx, p.changefeed)
@@ -270,9 +274,23 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 		},
 	})
 
-	// add table, finished
+	// add table, push the resolvedTs
 	table66 := p.tables[66].(*mockTablePipeline)
 	table66.resolvedTs = 101
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskStatus, check.DeepEquals, &model.TaskStatus{
+		Tables: map[int64]*model.TableReplicaInfo{
+			66: {StartTs: 60},
+		},
+		Operation: map[int64]*model.TableOperation{
+			66: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+		},
+	})
+	c.Assert(p.changefeed.TaskPosition.ResolvedTs, check.Equals, uint64(101))
+
+	// finish the operation
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
@@ -297,7 +315,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	})
 
 	// remove table, in processing
-	p.changefeed.TaskStatus.RemoveTable(66, 120)
+	p.changefeed.TaskStatus.RemoveTable(66, 120, false)
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
@@ -345,8 +363,11 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
+	p.schemaStorage.AdvanceResolvedTs(200)
 	p.changefeed.Status.CheckpointTs = 90
+	p.changefeed.Status.ResolvedTs = 90
 	p.changefeed.TaskPosition.ResolvedTs = 100
+	p.changefeed.TaskPosition.CheckPointTs = 90
 
 	// no operation
 	_, err = p.Tick(ctx, p.changefeed)
@@ -376,6 +397,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 		},
 	})
 	c.Assert(p.tables, check.HasLen, 4)
+	c.Assert(p.changefeed.TaskPosition.CheckPointTs, check.Equals, uint64(30))
+	c.Assert(p.changefeed.TaskPosition.ResolvedTs, check.Equals, uint64(30))
 
 	// add table, not finished
 	_, err = p.Tick(ctx, p.changefeed)
@@ -396,16 +419,17 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	})
 	c.Assert(p.tables, check.HasLen, 4)
 
-	// add table, finished
+	// add table, push the resolvedTs
 	table1 := p.tables[1].(*mockTablePipeline)
 	table2 := p.tables[2].(*mockTablePipeline)
 	table3 := p.tables[3].(*mockTablePipeline)
 	table4 := p.tables[4].(*mockTablePipeline)
-	// table 1 and table 2 finished the add operation
 	table1.resolvedTs = 101
 	table2.resolvedTs = 101
-	// table 3 removed
-	p.changefeed.TaskStatus.RemoveTable(3, 60)
+	table3.resolvedTs = 102
+	table4.resolvedTs = 103
+	// removed table 3
+	p.changefeed.TaskStatus.RemoveTable(3, 60, false)
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
@@ -416,16 +440,17 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 			4: {StartTs: 30},
 		},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Done: true, Status: model.OperFinished},
-			2: {Delete: false, BoundaryTs: 50, Done: true, Status: model.OperFinished},
+			1: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+			2: {Delete: false, BoundaryTs: 50, Done: false, Status: model.OperProcessed},
 			3: {Delete: true, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
 		},
 	})
 	c.Assert(p.tables, check.HasLen, 4)
 	c.Assert(table3.canceled, check.IsFalse)
 	c.Assert(table3.stopTs, check.Equals, uint64(60))
+	c.Assert(p.changefeed.TaskPosition.ResolvedTs, check.Equals, uint64(101))
 
-	// finish remove table3
+	// finish remove and add operations
 	table3.status = pipeline.TableStatusStopped
 	table3.checkpointTs = 65
 	_, err = p.Tick(ctx, p.changefeed)
@@ -461,8 +486,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(p.tables, check.HasLen, 3)
 
 	// remove table, in processing
-	p.changefeed.TaskStatus.RemoveTable(1, 120)
-	p.changefeed.TaskStatus.RemoveTable(4, 120)
+	p.changefeed.TaskStatus.RemoveTable(1, 120, false)
+	p.changefeed.TaskStatus.RemoveTable(4, 120, false)
 	delete(p.changefeed.TaskStatus.Tables, 2)
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
@@ -666,4 +691,47 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	c.Assert(p.changefeed.Workload, check.IsNil)
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
+}
+
+func (s *processorSuite) TestPositionDeleted(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := context.Background()
+	p := newProcessor4Test()
+	p.changefeed.TaskStatus.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
+	p.changefeed.TaskStatus.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
+	var err error
+	// init tick
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	p.schemaStorage.AdvanceResolvedTs(200)
+
+	// cal position
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
+		CheckPointTs: 30,
+		ResolvedTs:   30,
+	})
+
+	// some other delete the task position
+	p.changefeed.TaskPosition = nil
+	// position created again
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
+		CheckPointTs: 0,
+		ResolvedTs:   0,
+	})
+
+	// cal position
+	_, err = p.Tick(ctx, p.changefeed)
+	c.Assert(err, check.IsNil)
+	applyPatches(c, p.changefeed)
+	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
+		CheckPointTs: 30,
+		ResolvedTs:   30,
+	})
 }
