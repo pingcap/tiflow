@@ -727,6 +727,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	if err != nil {
 		log.Warn("failed to acquire time from pd, will use this machine time", zap.Error(err))
 	} else {
+		// o.gcTTl * 1000 to cover from second to millisecond
 		minGcSafePoint = oracle.ComposeTS(pyTs-(o.gcTTL*1000), lgTs)
 	}
 
@@ -1659,7 +1660,7 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 }
 
 // handle the StaleChangeFeed
-// By setting the AdminJob type to AdminStop and the Error code to indicate that the changeFeed is stagnant
+// By setting the AdminJob type to AdminStop and the Error code to indicate that the changefeed is stagnant
 func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeedId []model.ChangeFeedID, minGcSafePoint, gcSafePoint uint64) error {
 	for _, id := range staleChangeFeedId {
 		message := cerror.ErrStartTsBeforeGC.GenWithStackByArgs(minGcSafePoint, gcSafePoint).Error()
@@ -1667,7 +1668,7 @@ func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeedId []m
 
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    string(cerror.ErrStartTsBeforeGC.RFCCode()), // changFeed is stagnant
+			Code:    string(cerror.ErrStartTsBeforeGC.RFCCode()), // changfeed is stagnant
 			Message: message,
 		}
 
