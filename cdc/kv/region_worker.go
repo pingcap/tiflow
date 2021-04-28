@@ -267,13 +267,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case event, ok := <-w.inputCh:
-			if !ok {
-				log.Debug("region worker receiver closed")
-				return nil
-			}
 			// event == nil means the region worker should exit and re-establish
 			// all existing regions.
-			if event == nil {
+			if !ok || event == nil {
 				log.Info("region worker closed by error")
 				return w.evictAllRegions(ctx)
 			}
@@ -502,6 +498,9 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			}
 			state.markStopped()
 			singleRegionInfo := state.sri.partialClone()
+			if state.lastResolvedTs > singleRegionInfo.ts {
+				singleRegionInfo.ts = state.lastResolvedTs
+			}
 			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
