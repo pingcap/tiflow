@@ -17,9 +17,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"math"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -61,13 +62,13 @@ func newProcessor4Test(c *check.C) *processor {
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	}
-	p.changefeed=model.NewChangefeedReactorState(changefeedID)
-	initKV:=map[string]string{
-		"":"",
+	p.changefeed = model.NewChangefeedReactorState(changefeedID)
+	initKV := map[string]string{
+		"": "",
 	}
-	for k,v:=range initKV{
-		err:=p.changefeed.Update(util.NewEtcdKey(k),[]byte(v),true)
-		c.Assert(err,check.IsNil)
+	for k, v := range initKV {
+		err := p.changefeed.Update(util.NewEtcdKey(k), []byte(v), true)
+		c.Assert(err, check.IsNil)
 	}
 	p.changefeed = model.New(changefeedID, p.captureInfo.ID)
 	p.changefeed.Info = &model.ChangeFeedInfo{
@@ -84,7 +85,6 @@ func newProcessor4Test(c *check.C) *processor {
 	p.cancel = func() {}
 	return p
 }
-
 
 type mockTablePipeline struct {
 	tableID      model.TableID

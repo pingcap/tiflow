@@ -129,8 +129,8 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 	if err != nil {
 		return errors.Trace(err)
 	}
-	allTableInListened:= c.scheduler.Tick(c.state, c.schema.AllPhysicalTables())
-	if allTableInListened{
+	allTableInListened := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables())
+	if allTableInListened {
 		c.updateStatus(barrierTs)
 	}
 	return nil
@@ -334,7 +334,7 @@ func (c *changefeed) execDDL(ctx context.Context, job *timodel.Job) error {
 	return nil
 }
 
-func (c *changefeed) updateStatus(barrierTs model.Ts){
+func (c *changefeed) updateStatus(barrierTs model.Ts) {
 	resolvedTs := barrierTs
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
@@ -364,7 +364,7 @@ func (c *changefeed) updateStatus(barrierTs model.Ts){
 			status.CheckpointTs = checkpointTs
 			changed = true
 		}
-		return status,changed,nil
+		return status, changed, nil
 	})
 }
 

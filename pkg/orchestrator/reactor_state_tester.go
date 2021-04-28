@@ -21,39 +21,39 @@ import (
 
 // ReactorStateTester is a helper struct for unit-testing an implementer of ReactorState
 type ReactorStateTester struct {
-	c *check.C
+	c         *check.C
 	state     ReactorState
 	kvEntries map[string]string
 }
 
 // NewReactorStateTester creates a new ReactorStateTester
 func NewReactorStateTester(c *check.C, state ReactorState, initKVEntries map[string]string) *ReactorStateTester {
-	if initKVEntries == nil{
+	if initKVEntries == nil {
 		initKVEntries = make(map[string]string)
 	}
-	for k,v:=range initKVEntries{
-		err:=state.Update(util.NewEtcdKey(k),[]byte(v),true)
-		c.Assert(err,check.IsNil)
+	for k, v := range initKVEntries {
+		err := state.Update(util.NewEtcdKey(k), []byte(v), true)
+		c.Assert(err, check.IsNil)
 	}
 	return &ReactorStateTester{
-		c:c,
+		c:         c,
 		state:     state,
 		kvEntries: initKVEntries,
 	}
 }
 
 // Update is used to update keys in the mocked kv-store.
-func (t *ReactorStateTester) Update(key string,value []byte) error {
-		k := util.NewEtcdKey(key)
-		err := t.state.Update(k, value, false)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if value != nil {
-			t.kvEntries[key] = string(value)
-		} else {
-			delete(t.kvEntries, key)
-		}
+func (t *ReactorStateTester) Update(key string, value []byte) error {
+	k := util.NewEtcdKey(key)
+	err := t.state.Update(k, value, false)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if value != nil {
+		t.kvEntries[key] = string(value)
+	} else {
+		delete(t.kvEntries, key)
+	}
 	return nil
 }
 
@@ -77,21 +77,21 @@ func (t *ReactorStateTester) ApplyPatches() error {
 		if err != nil {
 			return err
 		}
-		if value:=tmpKVEntries[k];value !=nil{
+		if value := tmpKVEntries[k]; value != nil {
 			t.kvEntries[k.String()] = string(value)
-		}else{
-			delete(t.kvEntries,k.String())
+		} else {
+			delete(t.kvEntries, k.String())
 		}
 	}
 	return nil
 }
 
-func (t *ReactorStateTester) MustApplyPatches(){
-	t.c.Assert(t.ApplyPatches(),check.IsNil)
+func (t *ReactorStateTester) MustApplyPatches() {
+	t.c.Assert(t.ApplyPatches(), check.IsNil)
 }
 
-func (t *ReactorStateTester) MustUpdateKey(key string,value []byte)  {
-	t.c.Assert(t.Update(key,value),check.IsNil)
+func (t *ReactorStateTester) MustUpdateKey(key string, value []byte) {
+	t.c.Assert(t.Update(key, value), check.IsNil)
 }
 
 // KVEntries returns the contents of the mocked KV store.

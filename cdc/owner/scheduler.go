@@ -63,14 +63,14 @@ func newScheduler() *scheduler {
 // and returns a bool represents Is it possible that there are tables that do not exist in taskStatus
 // if some table are not exist in taskStatus(in taskStatus.Tables nor in taskStatus.Operation),
 // we should not push up resolvedTs
-func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID) (allTableInListened bool){
+func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID) (allTableInListened bool) {
 	s.state = state
 	s.cleanUpOperations()
 	pendingJob := s.syncTablesWithSchemaManager(allTableShouldBeListened)
 	s.handleJobs(pendingJob)
 	s.rebalance()
 	s.handleMoveTableJob()
-	return len(pendingJob)== 0
+	return len(pendingJob) == 0
 }
 
 func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
