@@ -80,7 +80,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 	valueCtx := context.WithValue(ctx, ctxKey{}, s)
 
-	sorterConfig := config.GetSorterConfig()
+	sorterConfig := config.GetGlobalServerConfig().Sorter
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
 	errg, subctx := errgroup.WithContext(valueCtx)

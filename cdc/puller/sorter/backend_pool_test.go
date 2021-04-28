@@ -38,10 +38,10 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
 
-	config.SetSorterConfig(&config.SorterConfig{
-		MaxMemoryPressure:    90,                      // 90%
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024, // 16G
-	})
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
+	config.StoreGlobalServerConfig(conf)
 
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
@@ -104,10 +104,10 @@ func (s *backendPoolSuite) TestCleanUp(c *check.C) {
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
 
-	config.SetSorterConfig(&config.SorterConfig{
-		MaxMemoryPressure:    90,                      // 90%
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024, // 16G
-	})
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
+	config.StoreGlobalServerConfig(conf)
 
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)

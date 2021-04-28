@@ -63,8 +63,7 @@ func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 	if isServer {
-		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity "+
-			"(cert Common Name). Use `,` to separate multiple CN")
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 	}
 }
 
@@ -89,7 +88,7 @@ func initCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
 	}
-	log.Info("init log", zap.String("file", logFile), zap.String("level", logCfg.Level))
+	log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
