@@ -59,6 +59,7 @@ var (
 	noConfirm  bool
 	sortEngine string
 	sortDir    string
+	timezone   string
 
 	cyclicReplicaID        uint64
 	cyclicFilterReplicaIDs []uint
