@@ -86,7 +86,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			if value == nil {
 				return nil
 			}
-			changefeedState = newChangefeedReactorState(k.ChangefeedID)
+			changefeedState = NewChangefeedReactorState(k.ChangefeedID)
 			s.Changefeeds[k.ChangefeedID] = changefeedState
 		}
 		if err := changefeedState.UpdateCDCKey(k, value); err != nil {
@@ -140,7 +140,7 @@ type ChangefeedReactorState struct {
 	pendingPatches []orchestrator.DataPatch
 }
 
-func newChangefeedReactorState(id ChangeFeedID) *ChangefeedReactorState {
+func NewChangefeedReactorState(id ChangeFeedID) *ChangefeedReactorState {
 	return &ChangefeedReactorState{
 		ID:            id,
 		TaskPositions: make(map[CaptureID]*TaskPosition),

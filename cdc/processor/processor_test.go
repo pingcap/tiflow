@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"math"
 	"time"
 
@@ -38,7 +39,7 @@ type processorSuite struct{}
 
 var _ = check.Suite(&processorSuite{})
 
-func newProcessor4Test() *processor {
+func newProcessor4Test(c *check.C) *processor {
 	changefeedID := "test-changefeed"
 	p := newProcessor(nil, "test-changefeed", nil, &model.CaptureInfo{
 		ID:            "test-captureID",
@@ -60,7 +61,15 @@ func newProcessor4Test() *processor {
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	}
-	p.changefeed = newChangeFeedState(changefeedID, p.captureInfo.ID)
+	p.changefeed=model.NewChangefeedReactorState(changefeedID)
+	initKV:=map[string]string{
+		"":"",
+	}
+	for k,v:=range initKV{
+		err:=p.changefeed.Update(util.NewEtcdKey(k),[]byte(v),true)
+		c.Assert(err,check.IsNil)
+	}
+	p.changefeed = model.New(changefeedID, p.captureInfo.ID)
 	p.changefeed.Info = &model.ChangeFeedInfo{
 		SinkURI:    "blackhole://",
 		CreateTime: time.Now(),
@@ -76,44 +85,6 @@ func newProcessor4Test() *processor {
 	return p
 }
 
-func applyPatches(c *check.C, state *changefeedState) {
-	for _, patch := range state.pendingPatches {
-		key := &etcd.CDCKey{}
-		c.Assert(key.Parse(patch.Key.String()), check.IsNil)
-		var value []byte
-		var err error
-		switch key.Tp {
-		case etcd.CDCKeyTypeTaskPosition:
-			if state.TaskPosition == nil {
-				value = nil
-				break
-			}
-			value, err = json.Marshal(state.TaskPosition)
-			c.Assert(err, check.IsNil)
-		case etcd.CDCKeyTypeTaskStatus:
-			if state.TaskStatus == nil {
-				value = nil
-				break
-			}
-			value, err = json.Marshal(state.TaskStatus)
-			c.Assert(err, check.IsNil)
-		case etcd.CDCKeyTypeTaskWorkload:
-			if state.Workload == nil {
-				value = nil
-				break
-			}
-			value, err = json.Marshal(state.Workload)
-			c.Assert(err, check.IsNil)
-		default:
-			c.Fatal("unexpected key type")
-		}
-		newValue, err := patch.Fun(value)
-		c.Assert(err, check.IsNil)
-		err = state.UpdateCDCKey(key, newValue)
-		c.Assert(err, check.IsNil)
-	}
-	state.pendingPatches = state.pendingPatches[:0]
-}
 
 type mockTablePipeline struct {
 	tableID      model.TableID

@@ -61,7 +61,11 @@ func (s *SingleDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map
 		return nil
 	}
 	changedSet[s.Key] = struct{}{}
-	valueMap[s.Key] = newValue
+	if newValue == nil{
+		delete(valueMap,s.Key)
+	}else{
+		valueMap[s.Key] = newValue
+	}
 	return nil
 }
 

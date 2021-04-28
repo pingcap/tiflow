@@ -129,57 +129,10 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 	if err != nil {
 		return errors.Trace(err)
 	}
-	allTableShouldBeListened := c.schema.AllPhysicalTables()
-	allListeningTablesNum := len(allTableShouldBeListened)
-	c.scheduler.Tick(c.state, allTableShouldBeListened)
-	c.state.PatchStatusByTaskStatusAndPosition(func(status *model.ChangeFeedStatus,
-		taskPositions map[model.CaptureID]*model.TaskPosition,
-		taskStatuses map[model.CaptureID]*model.TaskStatus) (*model.ChangeFeedStatus, bool, error) {
-		// check if the table count in etcd is equal to allListeningTablesNum
-		// if not equals, skip to update resolvedTs and checkpointTs
-		tableCountInEtcd := 0
-		for _, taskStatus := range taskStatuses {
-			tableCountInEtcd += len(taskStatus.Tables)
-			for _, opt := range taskStatus.Operation {
-				if opt.Delete {
-					tableCountInEtcd++
-				}
-			}
-		}
-		if tableCountInEtcd != allListeningTablesNum {
-			return status, false, nil
-		}
-
-		resolvedTs := barrierTs
-		for _, position := range taskPositions {
-			if resolvedTs > position.ResolvedTs {
-				resolvedTs = position.ResolvedTs
-			}
-		}
-		for _, taskStatus := range taskStatuses {
-			for _, opt := range taskStatus.Operation {
-				if resolvedTs > opt.BoundaryTs {
-					resolvedTs = opt.BoundaryTs
-				}
-			}
-		}
-		checkpointTs := resolvedTs
-		for _, position := range taskPositions {
-			if checkpointTs > position.CheckPointTs {
-				checkpointTs = position.CheckPointTs
-			}
-		}
-		changed := false
-		if status.ResolvedTs != resolvedTs {
-			status.ResolvedTs = resolvedTs
-			changed = true
-		}
-		if status.CheckpointTs != checkpointTs {
-			status.CheckpointTs = checkpointTs
-			changed = true
-		}
-		return status, changed, nil
-	})
+	allTableInListened:= c.scheduler.Tick(c.state, c.schema.AllPhysicalTables())
+	if allTableInListened{
+		c.updateStatus(barrierTs)
+	}
 	return nil
 }
 
@@ -379,6 +332,40 @@ func (c *changefeed) execDDL(ctx context.Context, job *timodel.Job) error {
 	}
 	log.Info("Execute DDL succeeded", zap.String("changefeed", c.state.ID), zap.Reflect("ddlJob", job))
 	return nil
+}
+
+func (c *changefeed) updateStatus(barrierTs model.Ts){
+	resolvedTs := barrierTs
+	for _, position := range c.state.TaskPositions {
+		if resolvedTs > position.ResolvedTs {
+			resolvedTs = position.ResolvedTs
+		}
+	}
+	for _, taskStatus := range c.state.TaskStatuses {
+		for _, opt := range taskStatus.Operation {
+			if resolvedTs > opt.BoundaryTs {
+				resolvedTs = opt.BoundaryTs
+			}
+		}
+	}
+	checkpointTs := resolvedTs
+	for _, position := range c.state.TaskPositions {
+		if checkpointTs > position.CheckPointTs {
+			checkpointTs = position.CheckPointTs
+		}
+	}
+	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		changed := false
+		if status.ResolvedTs != resolvedTs {
+			status.ResolvedTs = resolvedTs
+			changed = true
+		}
+		if status.CheckpointTs != checkpointTs {
+			status.CheckpointTs = checkpointTs
+			changed = true
+		}
+		return status,changed,nil
+	})
 }
 
 func (c *changefeed) Close() {

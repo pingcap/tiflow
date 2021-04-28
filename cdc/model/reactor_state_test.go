@@ -30,67 +30,16 @@ type stateSuite struct{}
 
 var _ = check.Suite(&stateSuite{})
 
-type mockReactorStatePatcher struct {
-	state    orchestrator.ReactorState
-	rawState map[util.EtcdKey][]byte
-	c        *check.C
-}
-
-func newMockReactorStatePatcher(c *check.C, state orchestrator.ReactorState) *mockReactorStatePatcher {
-	return &mockReactorStatePatcher{
-		state:    state,
-		rawState: make(map[util.EtcdKey][]byte),
-		c:        c,
-	}
-}
-
-func (m *mockReactorStatePatcher) updateKV(key util.EtcdKey, value []byte) error {
-	err := m.state.Update(key, value, false)
-	if err != nil {
-		return err
-	}
-	m.rawState[key] = value
-	return nil
-}
-
-func (m *mockReactorStatePatcher) applyPatches() error {
-	patches := m.state.GetPatches()
-	m.c.Assert(m.state.GetPatches(), check.HasLen, 0)
-	rawStateClone := make(map[util.EtcdKey][]byte)
-	for k, v := range m.rawState {
-		rawStateClone[k] = v
-	}
-	changedSet := make(map[util.EtcdKey]struct{})
-	for _, patch := range patches {
-		err := patch.Patch(rawStateClone, changedSet)
-		if err != nil {
-			return err
-		}
-	}
-	for k := range changedSet {
-		err := m.state.Update(k, rawStateClone[k], false)
-		if err != nil {
-			return err
-		}
-		m.rawState[k] = rawStateClone[k]
-	}
-	return nil
-}
-
-func (m *mockReactorStatePatcher) mustApplyPatches() {
-	m.c.Assert(m.applyPatches(), check.IsNil)
-}
-
 func (s *stateSuite) TestCheckLeaseExpired(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewGlobalState().(*GlobalReactorState)
-	patcher := newMockReactorStatePatcher(c, state)
+	stateTester := orchestrator.NewReactorStateTester(c,state,nil)
 	state.CheckLeaseExpired(0x22317526c4fc9a37)
-	c.Assert(patcher.applyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
-	err := patcher.updateKV(util.NewEtcdKey("/tidb/cdc/owner/22317526c4fc9a37"), []byte("abcd"))
+	c.Assert(stateTester.ApplyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
+	err := stateTester.Update("/tidb/cdc/owner/22317526c4fc9a37", []byte("abcd"))
 	c.Assert(err, check.IsNil)
 	state.CheckLeaseExpired(0x22317526c4fc9a37)
-	c.Assert(patcher.applyPatches(), check.IsNil)
+	stateTester.MustApplyPatches()
 }
 
 func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
@@ -363,7 +312,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 		},
 	}
 	for _, tc := range testCases {
-		state := newChangefeedReactorState(tc.changefeedID)
+		state := NewChangefeedReactorState(tc.changefeedID)
 		for i, k := range tc.updateKey {
 			value := []byte(tc.updateValue[i])
 			if len(value) == 0 {
@@ -379,13 +328,13 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 
 func (s *stateSuite) TestPatchInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
-	state := newChangefeedReactorState("test1")
-	patcher := newMockReactorStatePatcher(c, state)
+	state := NewChangefeedReactorState("test1")
+	stateTester := orchestrator.NewReactorStateTester(c,state,nil)
 	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
 		return &ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	defaultConfig := config.GetDefaultReplicaConfig()
 	c.Assert(state.Info, check.DeepEquals, &ChangeFeedInfo{
 		SinkURI: "123",
@@ -402,7 +351,7 @@ func (s *stateSuite) TestPatchInfo(c *check.C) {
 		info.StartTs = 6
 		return info, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Info, check.DeepEquals, &ChangeFeedInfo{
 		SinkURI: "123",
 		StartTs: 6,
@@ -418,37 +367,37 @@ func (s *stateSuite) TestPatchInfo(c *check.C) {
 	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
 		return nil, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Info, check.IsNil)
 }
 
 func (s *stateSuite) TestPatchStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
-	state := newChangefeedReactorState("test1")
-	patcher := newMockReactorStatePatcher(c, state)
+	state := NewChangefeedReactorState("test1")
+	stateTester := orchestrator.NewReactorStateTester(c,state,nil)
 	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
 		return &ChangeFeedStatus{CheckpointTs: 5}, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Status, check.DeepEquals, &ChangeFeedStatus{CheckpointTs: 5})
 	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
 		status.ResolvedTs = 6
 		return status, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Status, check.DeepEquals, &ChangeFeedStatus{CheckpointTs: 5, ResolvedTs: 6})
 	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
 		return nil, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Status, check.IsNil)
 }
 
 func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 	defer testleak.AfterTest(c)()
-	state := newChangefeedReactorState("test1")
-	patcher := newMockReactorStatePatcher(c, state)
+	state := NewChangefeedReactorState("test1")
+	stateTester := orchestrator.NewReactorStateTester(c,state,nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
 	state.PatchTaskPosition(captureID1, func(position *TaskPosition) (*TaskPosition, bool, error) {
@@ -463,7 +412,7 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 			CheckPointTs: 2,
 		}, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
 		captureID1: {
 			CheckPointTs: 1,
@@ -480,7 +429,7 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 		position.ResolvedTs = 2
 		return position, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
@@ -500,7 +449,7 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 		position.Count = 6
 		return position, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
@@ -511,8 +460,8 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 
 func (s *stateSuite) TestPatchStatusByTaskStatusAndPosition(c *check.C) {
 	defer testleak.AfterTest(c)()
-	state := newChangefeedReactorState("test1")
-	patcher := newMockReactorStatePatcher(c, state)
+	state := NewChangefeedReactorState("test1")
+	stateTester := orchestrator.NewReactorStateTester(c,state,nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
 	state.PatchStatusByTaskStatusAndPosition(func(status *ChangeFeedStatus,
@@ -553,8 +502,9 @@ func (s *stateSuite) TestPatchStatusByTaskStatusAndPosition(c *check.C) {
 			ResolvedTs: 6,
 		}, true, nil
 	})
-	patcher.mustApplyPatches()
-	err := patcher.updateKV(util.NewEtcdKey("/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test2"), []byte(`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`))
+	stateTester.MustApplyPatches()
+	err := stateTester.Update("/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test2",
+		[]byte(`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`))
 	c.Assert(err, check.IsNil)
 	state.PatchStatusByTaskStatusAndPosition(func(status *ChangeFeedStatus,
 		taskPositions map[CaptureID]*TaskPosition, taskStatuses map[CaptureID]*TaskStatus) (*ChangeFeedStatus, bool, error) {
@@ -572,7 +522,7 @@ func (s *stateSuite) TestPatchStatusByTaskStatusAndPosition(c *check.C) {
 		status.CheckpointTs = 7
 		return status, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	state.PatchTaskStatus(captureID2, func(status *TaskStatus) (*TaskStatus, bool, error) {
 		c.Assert(status, check.IsNil)
 		return &TaskStatus{
@@ -588,7 +538,7 @@ func (s *stateSuite) TestPatchStatusByTaskStatusAndPosition(c *check.C) {
 	state.PatchTaskPosition(captureID2, func(position *TaskPosition) (*TaskPosition, bool, error) {
 		return nil, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	state.PatchStatusByTaskStatusAndPosition(func(status *ChangeFeedStatus,
 		taskPositions map[CaptureID]*TaskPosition, taskStatuses map[CaptureID]*TaskStatus) (*ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.DeepEquals, &ChangeFeedStatus{
@@ -608,14 +558,14 @@ func (s *stateSuite) TestPatchStatusByTaskStatusAndPosition(c *check.C) {
 		})
 		return nil, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Status, check.IsNil)
 }
 
 func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
-	state := newChangefeedReactorState("test1")
-	patcher := newMockReactorStatePatcher(c, state)
+	state := NewChangefeedReactorState("test1")
+	stateTester := orchestrator.NewReactorStateTester(c,state,nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
 	state.PatchTaskStatus(captureID1, func(status *TaskStatus) (*TaskStatus, bool, error) {
@@ -630,7 +580,7 @@ func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 			Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 1}},
 		}, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
 		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}}},
 		captureID2: {Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 1}}},
@@ -643,7 +593,7 @@ func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 		status.Tables[46].StartTs++
 		return status, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
 		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
 		captureID2: {Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 2}}},
@@ -651,7 +601,7 @@ func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 	state.PatchTaskStatus(captureID2, func(status *TaskStatus) (*TaskStatus, bool, error) {
 		return nil, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
 		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
 	})
@@ -659,8 +609,8 @@ func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 
 func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 	defer testleak.AfterTest(c)()
-	state := newChangefeedReactorState("test1")
-	patcher := newMockReactorStatePatcher(c, state)
+	state := NewChangefeedReactorState("test1")
+	stateTester := orchestrator.NewReactorStateTester(c,state,nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
 	state.PatchTaskWorkload(captureID1, func(workload TaskWorkload) (TaskWorkload, bool, error) {
@@ -671,7 +621,7 @@ func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 		c.Assert(workload, check.IsNil)
 		return TaskWorkload{46: {Workload: 1}}, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
 		captureID1: {45: {Workload: 1}},
 		captureID2: {46: {Workload: 1}},
@@ -684,7 +634,7 @@ func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 		workload[45] = WorkloadInfo{Workload: 3}
 		return workload, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 		captureID2: {45: {Workload: 3}, 46: {Workload: 1}},
@@ -692,7 +642,7 @@ func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 	state.PatchTaskWorkload(captureID2, func(workload TaskWorkload) (TaskWorkload, bool, error) {
 		return nil, true, nil
 	})
-	patcher.mustApplyPatches()
+	stateTester.MustApplyPatches()
 	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 	})
