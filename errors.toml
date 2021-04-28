@@ -726,6 +726,11 @@ error = '''
 unified sorter backend is terminating
 '''
 
+["CDC:ErrUnifiedSorterIOError"]
+error = '''
+unified sorter IO error
+'''
+
 ["CDC:ErrUnknownKVEventType"]
 error = '''
 unknown kv event type: %v, entry: %v
