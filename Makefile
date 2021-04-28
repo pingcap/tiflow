@@ -41,7 +41,22 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-RELEASE_VERSION ?= $(shell git describe --tags --dirty="-dev")
+RELEASE_VERSION =
+ifeq ($(RELEASE_VERSION),)
+	RELEASE_VERSION := v4.0.0-dev
+	release_version_regex := ^v4\..*$$
+	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
+	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
+		# If we are in release branch, try to use tag version.
+		ifneq ($(shell git describe --tags --dirty | egrep $(release_version_regex)),)
+			RELEASE_VERSION := $(shell git describe --tags --dirty)
+		endif
+	else ifneq ($(shell git status --porcelain),)
+		# Add -dirty if the working tree is dirty for non release branch.
+		RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+	endif
+endif
+
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -61,7 +76,7 @@ test: unit_test
 
 build: cdc
 
-build-failpoint: 
+build-failpoint:
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
 	$(FAILPOINT_DISABLE)
