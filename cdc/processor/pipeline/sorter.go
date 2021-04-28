@@ -129,9 +129,13 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				return nil
 			case <-metricsTicker.C:
 				metricsTableMemoryGauge.Set(float64(n.flowController.GetConsumption()))
-			case msg := <-sorter.Output():
+			case msg, ok := <-sorter.Output():
+				if !ok {
+					// sorter output channel closed
+					return nil
+				}
 				if msg == nil || msg.RawKV == nil {
-					continue
+					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
 				if msg.RawKV.OpType != model.OpTypeResolved {
 					size := uint64(msg.RawKV.ApproximateSize())
