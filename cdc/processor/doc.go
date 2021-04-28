@@ -30,7 +30,5 @@ One Capture(with processor role)  -> Processr Manager -> Processor(changefeed1) 
                                                           -> Processor(changefeed2) -> TablePipeline(tableC)
                                                                                     ╲
                                                                                      -> TablePipeline(tableD)
-
-
 */
 package processor
