@@ -61,7 +61,6 @@ func (s *captureSuite) SetUpTest(c *check.C) {
 	s.client = kv.NewCDCEtcdClient(context.Background(), client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
-	config.StoreGlobalServerConfig(config.GetDefaultServerConfig())
 }
 
 func (s *captureSuite) TearDownTest(c *check.C) {
@@ -80,7 +79,7 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
 	c.Assert(err, check.IsNil)
 
 	var wg sync.WaitGroup
@@ -111,7 +110,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
 	c.Assert(err, check.IsNil)
 
 	runProcessorCount := 0

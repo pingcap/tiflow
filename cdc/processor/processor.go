@@ -83,20 +83,22 @@ type processor struct {
 
 // newProcessor creates a new processor
 func newProcessor(ctx context.Context) *processor {
+	changefeedID := ctx.ChangefeedVars().ID
+	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p := &processor{
 		limitter:     puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
 		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:        make(chan error, 1),
 		firstTick:    true,
-		changefeedID: ctx.ChangefeedVars().ID,
+		changefeedID: changefeedID,
 		captureInfo:  ctx.GlobalVars().CaptureInfo,
 
-		metricResolvedTsGauge:       context.WithLabelValuesGauge(ctx, resolvedTsGauge),
-		metricResolvedTsLagGauge:    context.WithLabelValuesGauge(ctx, resolvedTsLagGauge),
-		metricCheckpointTsGauge:     context.WithLabelValuesGauge(ctx, checkpointTsGauge),
-		metricCheckpointTsLagGauge:  context.WithLabelValuesGauge(ctx, checkpointTsLagGauge),
-		metricSyncTableNumGauge:     context.WithLabelValuesGauge(ctx, syncTableNumGauge),
-		metricProcessorErrorCounter: context.WithLabelValuesCounter(ctx, processorErrorCounter),
+		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl

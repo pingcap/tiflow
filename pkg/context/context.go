@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/model"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -187,7 +186,6 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 }
 
 // ZapFieldCapture returns a zap field containing capture address
-// TODO: log redact for capture address
 func ZapFieldCapture(ctx Context) zap.Field {
 	return zap.String("capture", ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 }
@@ -195,28 +193,4 @@ func ZapFieldCapture(ctx Context) zap.Field {
 // ZapFieldChangefeed returns a zap field containing changefeed id
 func ZapFieldChangefeed(ctx Context) zap.Field {
 	return zap.String("changefeed", ctx.ChangefeedVars().ID)
-}
-
-type gauge interface {
-	WithLabelValues(lvs ...string) prometheus.Gauge
-}
-
-type counter interface {
-	WithLabelValues(lvs ...string) prometheus.Counter
-}
-
-// WithLabelValuesGauge return a Gauge with captureAddr and changefeedID labels
-func WithLabelValuesGauge(ctx Context, gauge gauge) prometheus.Gauge {
-	if ctx.ChangefeedVars() != nil {
-		return gauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-	}
-	return gauge.WithLabelValues(ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-}
-
-// WithLabelValuesCounter return a Counter with captureAddr and changefeedID labels
-func WithLabelValuesCounter(ctx Context, counter counter) prometheus.Counter {
-	if ctx.ChangefeedVars() != nil {
-		return counter.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-	}
-	return counter.WithLabelValues(ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 }

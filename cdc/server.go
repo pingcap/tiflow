@@ -235,7 +235,11 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient)
+	kvStorage, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 	if err != nil {
 		return err
 	}

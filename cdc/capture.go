@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	tidbkv "github.com/pingcap/tidb/kv"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -47,6 +49,7 @@ import (
 type Capture struct {
 	etcdClient kv.CDCEtcdClient
 	pdCli      pd.Client
+	kvStorage  tidbkv.Storage
 	credential *security.Credential
 
 	processorManager *processor.Manager
@@ -68,6 +71,7 @@ func NewCapture(
 	stdCtx context.Context,
 	pdEndpoints []string,
 	pdCli pd.Client,
+	kvStorage tidbkv.Storage,
 ) (c *Capture, err error) {
 	conf := config.GetGlobalServerConfig()
 	credential := conf.Security
@@ -128,6 +132,7 @@ func NewCapture(
 		election:         elec,
 		info:             info,
 		pdCli:            pdCli,
+		kvStorage:        kvStorage,
 		processorManager: processorManager,
 		closed:           make(chan struct{}),
 	}
@@ -142,13 +147,9 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	defer cancel()
 	defer close(c.closed)
 
-	kvStorage, err := util.KVStorageFromCtx(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	ctx = cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
 		PDClient:    c.pdCli,
-		KVStorage:   kvStorage,
+		KVStorage:   c.kvStorage,
 		CaptureInfo: c.info,
 	})
 	err = c.register(ctx)
