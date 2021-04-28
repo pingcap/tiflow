@@ -287,7 +287,6 @@ func (s *ChangefeedReactorState) PatchStatusByTaskStatusAndPosition(fn func(stat
 	patch := orchestrator.MultiDatePath(func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
 		// get status and pos
 		cdcKey := new(etcd.CDCKey)
-		captureIDs := make(map[CaptureID]struct{})
 		taskPositions := make(map[CaptureID]*TaskPosition)
 		taskStatuses := make(map[CaptureID]*TaskStatus)
 
@@ -312,13 +311,11 @@ func (s *ChangefeedReactorState) PatchStatusByTaskStatusAndPosition(fn func(stat
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if cdcKey.Tp != etcd.CDCKeyTypeCapture {
+			if cdcKey.ChangefeedID != s.ID {
 				continue
 			}
 			switch cdcKey.Tp {
-			case etcd.CDCKeyTypeCapture:
-				captureIDs[cdcKey.CaptureID] = struct{}{}
-			case etcd.CDCKeyTypeTaskStatus:
+			case etcd.CDCKeyTypeTaskPosition:
 				if value == nil {
 					continue
 				}
@@ -328,7 +325,7 @@ func (s *ChangefeedReactorState) PatchStatusByTaskStatusAndPosition(fn func(stat
 					return errors.Trace(err)
 				}
 				taskPositions[cdcKey.CaptureID] = position
-			case etcd.CDCKeyTypeTaskPosition:
+			case etcd.CDCKeyTypeTaskStatus:
 				if value == nil {
 					continue
 				}
@@ -349,12 +346,16 @@ func (s *ChangefeedReactorState) PatchStatusByTaskStatusAndPosition(fn func(stat
 		if !changed {
 			return nil
 		}
+		changedSet[changefeedStatusKey] = struct{}{}
+		if status == nil {
+			delete(valueMap, changefeedStatusKey)
+			return nil
+		}
 		changefeedStatusValue, err = json.Marshal(status)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		valueMap[changefeedStatusKey] = changefeedStatusValue
-		changedSet[changefeedStatusKey] = struct{}{}
 		return nil
 	})
 	s.pendingPatches = append(s.pendingPatches, patch)
