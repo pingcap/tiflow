@@ -600,6 +600,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
 }
 */
+var cdcGCSafePointTTL4Test = int64(24 * 60 * 60)
 
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -646,7 +647,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	sampleCF.etcdCli = owner.etcdClient
@@ -950,7 +951,7 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 
 	ctx1, cancel1 := context.WithCancel(ctx)
 	owner, err := NewOwner(ctx1, nil, &security.Credential{}, capture.session,
-		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	// check campaign key deleted can be detected
@@ -1032,7 +1033,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 		captures[c.ID] = c
 	}
 	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
-		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 	// It is better to update changefeed information by `loadChangeFeeds`, however
 	// `loadChangeFeeds` is too overweight, just mock enough information here.
@@ -1091,7 +1092,7 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 		&security.Credential{}, addr, &captureOpts{})
 	c.Assert(err, check.IsNil)
 	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
-		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	var (
