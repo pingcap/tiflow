@@ -21,9 +21,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
