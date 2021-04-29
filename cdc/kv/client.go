@@ -1051,7 +1051,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Info("get partialSpan", zap.Stringer("span", partialSpan), zap.Uint64("regionID", region.Id))
+			log.Debug("get partialSpan", zap.Stringer("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			nextSpan.Start = region.EndKey
 
