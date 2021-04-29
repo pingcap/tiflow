@@ -2912,7 +2912,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 			count++
 			return true
 		})
-		if count == regionNum-1 {
+		if count == regionNum {
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
@@ -2942,7 +2942,7 @@ checkEvent:
 		select {
 		case <-eventCh:
 			resolvedCount++
-			if resolvedCount == (regionNum-1)*2 {
+			if resolvedCount == regionNum*2 {
 				break checkEvent
 			}
 		case <-time.After(time.Second):

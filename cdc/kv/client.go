@@ -663,6 +663,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	failpoint.Inject("kvClientMockRangeLock", func(val failpoint.Value) {
 		// short sleep to wait region has split
 		time.Sleep(time.Second)
+		s.rangeLock.UnlockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer(), sri.ts)
 		regionNum := val.(int)
 		retryRanges := make([]regionspan.ComparableSpan, 0, regionNum)
 		start := []byte("a")
