@@ -19,6 +19,8 @@ import (
 	"io"
 	"time"
 
+	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
+
 	"go.etcd.io/etcd/clientv3"
 
 	"github.com/pingcap/errors"
@@ -62,6 +64,20 @@ func NewManager() *Manager {
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
 	}
+}
+
+func NewManager4Test(
+	lazyInit func(ctx context.Context) error,
+	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+) *Manager {
+	m := NewManager()
+	m.newProcessor = func(ctx context.Context) *processor {
+		p := newProcessor(ctx)
+		p.lazyInit = lazyInit
+		p.createTablePipeline = createTablePipeline
+		return p
+	}
+	return m
 }
 
 // Tick implements the `orchestrator.State` interface

@@ -278,15 +278,15 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
-
-	// Clean up possible residual error states
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		if position != nil && position.Error != nil {
-			position.Error = nil
-			return position, true, nil
-		}
-		return position, false, nil
-	})
+	//
+	//// Clean up possible residual error states
+	//p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+	//	if position != nil && position.Error != nil {
+	//		position.Error = nil
+	//		return position, true, nil
+	//	}
+	//	return position, false, nil
+	//})
 
 	log.Info("run processor", context.ZapFieldCapture(ctx), context.ZapFieldChangefeed(ctx))
 	return nil
