@@ -69,3 +69,5 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+replace github.com/pingcap/tidb v1.1.0-beta.0.20210316111949-26ccbe972ac5 => github.com/sticnarf/tidb v1.1.0-beta.0.20210429165026-832e1ac53f9c

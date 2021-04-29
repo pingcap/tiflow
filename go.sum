@@ -516,8 +516,6 @@ github.com/pingcap/parser v0.0.0-20210310110710-c7333a4927e6/go.mod h1:GbEr2PgY7
 github.com/pingcap/sysutil v0.0.0-20200206130906-2bfa6dc40bcd/go.mod h1:EB/852NMQ+aRKioCpToQ94Wl7fktV+FNnxf3CX/TTXI=
 github.com/pingcap/sysutil v0.0.0-20210221112134-a07bda3bde99 h1:/ogXgm4guJzow4UafiyXZ6ciAIPzxImaXYiFvTpKzKY=
 github.com/pingcap/sysutil v0.0.0-20210221112134-a07bda3bde99/go.mod h1:EB/852NMQ+aRKioCpToQ94Wl7fktV+FNnxf3CX/TTXI=
-github.com/pingcap/tidb v1.1.0-beta.0.20210316111949-26ccbe972ac5 h1:GVYHbzxNrM59/PFytA0tJv8sRH1GHD4dwXa8cO5bWBE=
-github.com/pingcap/tidb v1.1.0-beta.0.20210316111949-26ccbe972ac5/go.mod h1:Fn9Sdoi9V1SJvX9sfaObSbLy7eFyvTCPzDo+590fy4o=
 github.com/pingcap/tidb-dashboard v0.0.0-20210312062513-eef5d6404638/go.mod h1:OzFN8H0EDMMqeulPhPMw2i2JaiZWOKFQ7zdRPhENNgo=
 github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible h1:ceznmu/lLseGHP/jKyOa/3u/5H3wtLLLqkH2V3ssSjg=
 github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
@@ -608,6 +606,8 @@ github.com/spf13/pflag v1.0.5 h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=
 github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/spf13/viper v1.3.2/go.mod h1:ZiWeW+zYFKm7srdB9IoDzzZXaJaI5eL9QjNiN/DMA2s=
 github.com/spf13/viper v1.4.0/go.mod h1:PTJ7Z/lr49W6bUbkmS1V3by4uWynFiR9p7+dSq/yZzE=
+github.com/sticnarf/tidb v1.1.0-beta.0.20210429165026-832e1ac53f9c h1:IrEdApvRfsOCvOlmUJ3NkL13fzQphWa97MbA7VNs5LA=
+github.com/sticnarf/tidb v1.1.0-beta.0.20210429165026-832e1ac53f9c/go.mod h1:Fn9Sdoi9V1SJvX9sfaObSbLy7eFyvTCPzDo+590fy4o=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.2.0 h1:Hbg2NidpLE8veEBkEZTL3CvlkUIVzuU9jDplZO54c48=

@@ -294,10 +294,12 @@ func (c *Locker) lockBatch(ctx context.Context, keys [][]byte, primary []byte) (
 		}
 
 		prewrite := &kvrpcpb.PrewriteRequest{
-			Mutations:    mutations,
-			PrimaryLock:  primary,
-			StartVersion: startTs,
-			LockTtl:      uint64(c.lockTTL.Milliseconds()),
+			Mutations:      mutations,
+			PrimaryLock:    primary,
+			StartVersion:   startTs,
+			LockTtl:        uint64(c.lockTTL.Milliseconds()),
+			MinCommitTs:    startTs,
+			UseAsyncCommit: true,
 		}
 		req := tikvrpc.NewRequest(tikvrpc.CmdPrewrite, prewrite)
 
