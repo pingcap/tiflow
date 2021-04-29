@@ -231,7 +231,8 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 	}
-	config.SetSorterConfig(conf)
+	serverConfig := config.GetGlobalServerConfig()
+	serverConfig.Sorter = conf
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
