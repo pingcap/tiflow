@@ -24,6 +24,7 @@ import (
 	"os"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -53,6 +54,9 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
 
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
+
+	// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
+	serverMux.Handle("/fail/", http.StripPrefix("/fail", &failpoint.HttpHandler{}))
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
