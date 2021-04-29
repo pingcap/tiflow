@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -30,7 +32,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	_ "net/http/pprof"
 )
 
 const (
@@ -57,13 +58,15 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer UnifiedSorterCleanUp()
 
-	config.SetSorterConfig(&config.SorterConfig{
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
 		NumWorkerPoolGoroutine: 4,
-	})
+	}
+	config.StoreGlobalServerConfig(conf)
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
@@ -78,13 +81,15 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer UnifiedSorterCleanUp()
 
-	config.SetSorterConfig(&config.SorterConfig{
+	conf := config.GetDefaultServerConfig()
+	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
-	})
+	}
+	config.StoreGlobalServerConfig(conf)
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)

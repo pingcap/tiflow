@@ -741,27 +741,25 @@ MainLoop:
 				ExtraOp:      extraOp,
 			}
 
-			// The receiver thread need to know the span, which is only known in the sender thread. So create the
-			// receiver thread for region here so that it can know the span.
-			// TODO: Find a better way to handle this.
-			// TODO: Make sure there will not be goroutine leak.
-			// TODO: Here we use region id to index the regionInfo. However, in case that region merge is enabled, there
-			// may be multiple streams to the same regions. Maybe we need to add a requestID field to the protocol for it.
-
-			// Get region info collection of the addr
-			pendingRegions, ok := storePendingRegions[rpcCtx.Addr]
-			if !ok {
-				pendingRegions = newSyncRegionFeedStateMap()
-				storePendingRegions[rpcCtx.Addr] = pendingRegions
-			}
-
-			state := newRegionFeedState(sri, requestID)
-			pendingRegions.insert(requestID, state)
 			failpoint.Inject("kvClientPendingRegionDelay", nil)
 
+			// each TiKV store has an independent pendingRegions.
+			var pendingRegions *syncRegionFeedStateMap
+
 			stream, ok := s.getStream(rpcCtx.Addr)
-			// Establish the stream if it has not been connected yet.
-			if !ok {
+			if ok {
+				var ok bool
+				pendingRegions, ok = storePendingRegions[rpcCtx.Addr]
+				if !ok {
+					// Should never happen
+					log.Panic("pending regions is not found for store", zap.String("store", rpcCtx.Addr))
+				}
+			} else {
+				// when a new stream is established, always create a new pending
+				// regions map, the old map will be used in old `receiveFromStream`
+				// and won't be deleted until that goroutine exits.
+				pendingRegions = newSyncRegionFeedStateMap()
+				storePendingRegions[rpcCtx.Addr] = pendingRegions
 				storeID := rpcCtx.Peer.GetStoreId()
 				log.Info("creating new stream to store to send request",
 					zap.Uint64("regionID", sri.verID.GetID()),
@@ -786,12 +784,6 @@ MainLoop:
 					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-					// Take the pendingRegion from `pendingRegions`, if the region
-					// is deleted already, we don't retry for this region. Otherwise,
-					// retry to connect and send request for this region.
-					if _, exists := pendingRegions.take(requestID); !exists {
-						continue MainLoop
-					}
 					continue
 				}
 				s.addStream(rpcCtx.Addr, stream)
@@ -804,6 +796,9 @@ MainLoop:
 					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				})
 			}
+
+			state := newRegionFeedState(sri, requestID)
+			pendingRegions.insert(requestID, state)
 
 			logReq := log.Debug
 			if s.isPullerInit.IsInitialized() {
@@ -1088,6 +1083,8 @@ func (s *eventFeedSession) receiveFromStream(
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
+
 		remainingRegions := pendingRegions.takeAll()
 
 		for _, state := range remainingRegions {
@@ -1112,16 +1109,14 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientStreamRecvError", func() {
-			err = errors.New("injected stream recv error")
-		})
-		// TODO: Should we have better way to handle the errors?
-		if err == io.EOF {
-			for _, state := range regionStates {
-				close(state.regionEventCh)
+		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+			errStr := msg.(string)
+			if errStr == io.EOF.Error() {
+				err = io.EOF
+			} else {
+				err = errors.New(errStr)
 			}
-			return nil
-		}
+		})
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(
@@ -1205,7 +1200,7 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 	isNewSubscription := !ok
 	if ok {
 		if state.requestID < event.RequestId {
-			log.Debug("region state entry will be replaced because received message of newer requestID",
+			log.Info("region state entry will be replaced because received message of newer requestID",
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("oldRequestID", state.requestID),
 				zap.Uint64("requestID", event.RequestId),
@@ -1409,12 +1404,8 @@ func (s *eventFeedSession) singleEventFeed(
 			continue
 		case event, ok = <-receiverCh:
 		}
-		if !ok {
-			log.Debug("singleEventFeed receiver closed")
-			return lastResolvedTs, nil
-		}
 
-		if event == nil {
+		if !ok || event == nil {
 			log.Debug("singleEventFeed closed by error")
 			return lastResolvedTs, cerror.ErrEventFeedAborted.GenWithStackByArgs()
 		}

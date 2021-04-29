@@ -263,7 +263,7 @@ type heapSorterInternalState struct {
 
 func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	state := &heapSorterInternalState{
-		sorterConfig: config.GetSorterConfig(),
+		sorterConfig: config.GetGlobalServerConfig().Sorter,
 	}
 
 	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
@@ -353,7 +353,7 @@ func (c *asyncCanceller) Cancel() {
 
 func lazyInitWorkerPool() {
 	poolOnce.Do(func() {
-		sorterConfig := config.GetSorterConfig()
+		sorterConfig := config.GetGlobalServerConfig().Sorter
 		heapSorterPool = workerpool.NewDefaultWorkerPool(sorterConfig.NumWorkerPoolGoroutine)
 		heapSorterIOPool = workerpool.NewDefaultAsyncPool(sorterConfig.NumWorkerPoolGoroutine * 2)
 	})

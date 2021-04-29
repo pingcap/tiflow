@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -63,8 +65,7 @@ func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 	if isServer {
-		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity "+
-			"(cert Common Name). Use `,` to separate multiple CN")
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 	}
 }
 
@@ -89,7 +90,7 @@ func initCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
 	}
-	log.Info("init log", zap.String("file", logFile), zap.String("level", logCfg.Level))
+	log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -314,6 +315,29 @@ func strictDecodeFile(path, component string, cfg interface{}) error {
 	}
 
 	return errors.Trace(err)
+}
+
+// logHTTPProxies logs HTTP proxy relative environment variables.
+func logHTTPProxies() {
+	fields := proxyFields()
+	if len(fields) > 0 {
+		log.Info("using proxy config", fields...)
+	}
+}
+
+func proxyFields() []zap.Field {
+	proxyCfg := httpproxy.FromEnvironment()
+	fields := make([]zap.Field, 0, 3)
+	if proxyCfg.HTTPProxy != "" {
+		fields = append(fields, zap.String("http_proxy", proxyCfg.HTTPProxy))
+	}
+	if proxyCfg.HTTPSProxy != "" {
+		fields = append(fields, zap.String("https_proxy", proxyCfg.HTTPSProxy))
+	}
+	if proxyCfg.NoProxy != "" {
+		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
+	}
+	return fields
 }
 
 func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64) error {
