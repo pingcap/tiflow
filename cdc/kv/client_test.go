@@ -1317,6 +1317,14 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 // stream in kv client meets error, and kv client reconnection with tikv with the current tso
 func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	defer testleak.AfterTest(c)()
+
+	// test client v2 only
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = true
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
 	defer s.TearDownTest(c)
 	if !util.FailpointBuild {
 		c.Skip("skip when this is not a failpoint build")
