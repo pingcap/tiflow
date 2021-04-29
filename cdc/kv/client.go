@@ -68,10 +68,10 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
-
-	// time interval to force kv client to terminate gRPC stream and reconnect
-	reconnectInterval = 15 * time.Minute
 )
+
+// time interval to force kv client to terminate gRPC stream and reconnect
+var reconnectInterval = 15 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
@@ -166,6 +166,24 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
+}
+
+func (s *regionFeedState) isInitialized() bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.initialized
+}
+
+func (s *regionFeedState) getLastResolvedTs() uint64 {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.lastResolvedTs
+}
+
+func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.sri.span
 }
 
 type syncRegionFeedStateMap struct {
@@ -1395,6 +1413,9 @@ func (s *eventFeedSession) singleEventFeed(
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
 	})
+	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
+		reconnectInterval = time.Duration(val.(int)) * time.Second
+	})
 
 	for {
 		var event *regionEvent
@@ -1403,10 +1424,6 @@ func (s *eventFeedSession) singleEventFeed(
 		case <-ctx.Done():
 			return lastResolvedTs, ctx.Err()
 		case <-advanceCheckTicker.C:
-			failpoint.Inject("kvClientForceReconnect", func() {
-				log.Warn("kv client reconnect triggered by failpoint")
-				failpoint.Return(lastResolvedTs, errReconnect)
-			})
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
 			}

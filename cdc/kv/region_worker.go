@@ -137,9 +137,17 @@ type regionWorker struct {
 	// how many workers in worker pool will be used for this region worker
 	concurrent    int
 	statesManager *regionStateManager
-	rtsManager    *resolvedTsManager
-	rtsUpdateCh   chan *regionResolvedTs
-	metrics       *regionWorkerMetrics
+
+	rtsManager  *regionTsManager
+	rtsUpdateCh chan *regionTsInfo
+
+	metrics *regionWorkerMetrics
+
+	// evTimeManager maintains the time that last event is received of each
+	// uninitialized region, note the regionTsManager is not thread safe, so we
+	// use a single routine to handle evTimeUpdate and evTimeManager
+	evTimeManager  *regionTsManager
+	evTimeUpdateCh chan *evTimeUpdate
 
 	enableOldValue bool
 	storeAddr      string
@@ -154,8 +162,10 @@ func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *r
 		outputCh:       s.eventCh,
 		errorCh:        make(chan error, 1),
 		statesManager:  newRegionStateManager(-1),
-		rtsManager:     newResolvedTsManager(),
-		rtsUpdateCh:    make(chan *regionResolvedTs, 1024),
+		rtsManager:     newRegionTsManager(),
+		evTimeManager:  newRegionTsManager(),
+		rtsUpdateCh:    make(chan *regionTsInfo, 1024),
+		evTimeUpdateCh: make(chan *evTimeUpdate, 1024),
 		enableOldValue: s.enableOldValue,
 		storeAddr:      addr,
 		concurrent:     cfg.WorkerConcurrent,
@@ -179,6 +189,23 @@ func (w *regionWorker) initMetrics(ctx context.Context) {
 	metrics.metricSendEventCommittedCounter = sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
 	w.metrics = metrics
+}
+
+type evTimeUpdate struct {
+	info     *regionTsInfo
+	isDelete bool
+}
+
+// notifyEvTimeUpdate trys to send a evTimeUpdate to evTimeUpdateCh in region worker
+// to upsert or delete the last received event time for a region
+func (w *regionWorker) notifyEvTimeUpdate(regionID uint64, isDelete bool) {
+	select {
+	case w.evTimeUpdateCh <- &evTimeUpdate{
+		info:     &regionTsInfo{regionID: regionID, ts: newEventTimeItem()},
+		isDelete: isDelete,
+	}:
+	default:
+	}
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
@@ -234,6 +261,49 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	})
 }
 
+func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
+	checkInterval := time.Minute
+
+	failpoint.Inject("kvClientCheckUnInitRegionInterval", func(val failpoint.Value) {
+		checkInterval = time.Duration(val.(int)) * time.Second
+	})
+
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case update := <-w.evTimeUpdateCh:
+			if update.isDelete {
+				w.evTimeManager.Remove(update.info.regionID)
+			} else {
+				w.evTimeManager.Upsert(update.info)
+			}
+		case <-ticker.C:
+			for w.evTimeManager.Len() > 0 {
+				item := w.evTimeManager.Pop()
+				sinceLastEvent := time.Since(item.ts.eventTime)
+				if sinceLastEvent < reconnectInterval {
+					w.evTimeManager.Upsert(item)
+					break
+				}
+				state, ok := w.getRegionState(item.regionID)
+				if !ok || state.isStopped() || state.isInitialized() {
+					// check state is deleted, stopped, or initialized, if
+					// so just ignore this region, and don't need to push the
+					// eventTimeItem back to heap.
+					continue
+				}
+				log.Warn("kv client reconnect triggered",
+					zap.Duration("duration", sinceLastEvent), zap.Uint64("region", item.regionID))
+				return errReconnect
+			}
+		}
+	}
+}
+
 func (w *regionWorker) resolveLock(ctx context.Context) error {
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
@@ -249,24 +319,16 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case rtsUpdate := <-w.rtsUpdateCh:
 			w.rtsManager.Upsert(rtsUpdate)
 		case <-advanceCheckTicker.C:
-			failpoint.Inject("kvClientForceReconnect", func() {
-				log.Warn("kv client reconnect triggered by failpoint")
-				failpoint.Return(errReconnect)
-			})
-			if !w.session.isPullerInit.IsInitialized() {
-				// Initializing a puller may take a long time, skip resolved lock to save unnecessary overhead.
-				continue
-			}
 			version, err := w.session.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
 			}
 			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
-			expired := make([]*regionResolvedTs, 0)
+			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()
-				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.resolvedTs))
+				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.ts.resolvedTs))
 				// region does not reach resolve lock boundary, put it back
 				if sinceLastResolvedTs < resolveLockInterval {
 					w.rtsManager.Upsert(item)
@@ -285,28 +347,27 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					// and don't need to push resolved ts back to heap.
 					continue
 				}
-				state.lock.RLock()
 				// recheck resolved ts from region state, which may be larger than that in resolved ts heap
-				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(state.lastResolvedTs))
-				if sinceLastResolvedTs >= resolveLockInterval && state.initialized {
-					if sinceLastResolvedTs > reconnectInterval {
-						log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastResolvedTs))
+				lastResolvedTs := state.getLastResolvedTs()
+				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
+				if sinceLastResolvedTs >= resolveLockInterval {
+					sinceLastEvent := time.Since(rts.ts.eventTime)
+					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
+						log.Warn("kv client reconnect triggered",
+							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("since last event", sinceLastResolvedTs))
 						return errReconnect
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.sri.span),
-						zap.Duration("duration", sinceLastResolvedTs),
-						zap.Uint64("resolvedTs", state.lastResolvedTs))
+						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.getRegionSpan()),
+						zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("resolvedTs", lastResolvedTs))
 					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
-						state.lock.RUnlock()
 						continue
 					}
 				}
-				rts.resolvedTs = state.lastResolvedTs
+				rts.ts.resolvedTs = lastResolvedTs
 				w.rtsManager.Upsert(rts)
-				state.lock.RUnlock()
 			}
 		}
 	}
@@ -501,6 +562,24 @@ func (w *regionWorker) collectWorkpoolError(ctx context.Context) error {
 	return value.Interface().(error)
 }
 
+func (w *regionWorker) checkErrorReconnect(err error) error {
+	if errors.Cause(err) == errReconnect {
+		cancel, ok := w.session.getStreamCancel(w.storeAddr)
+		if ok {
+			// cancel the stream to trigger strem.Recv with context cancel error
+			// Note use context cancel is the only way to terminate a gRPC stream
+			cancel()
+			// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+			// should be called after stream has been deleted. Add a delay here
+			// to avoid too frequent region rebuilt.
+			time.Sleep(time.Second)
+		}
+		// if stream is already deleted, just ignore errReconnect
+		return nil
+	}
+	return err
+}
+
 func (w *regionWorker) run(ctx context.Context) error {
 	defer func() {
 		for _, h := range w.handles {
@@ -511,22 +590,10 @@ func (w *regionWorker) run(ctx context.Context) error {
 	w.initMetrics(ctx)
 	w.initPoolHandles(ctx, w.concurrent)
 	wg.Go(func() error {
-		err := w.resolveLock(ctx)
-		if errors.Cause(err) == errReconnect {
-			cancel, ok := w.session.getStreamCancel(w.storeAddr)
-			if ok {
-				// cancel the stream to trigger strem.Recv with context cancel error
-				// Note use context cancel is the only way to terminate a gRPC stream
-				cancel()
-				// Failover in stream.Recv has 0-100ms delay, the onRegionFail
-				// should be called after stream has been deleted. Add a delay here
-				// to avoid too frequent region rebuilt.
-				time.Sleep(time.Second)
-			}
-			// if stream is already deleted, just ignore errReconnect
-			return nil
-		}
-		return err
+		return w.checkErrorReconnect(w.resolveLock(ctx))
+	})
+	wg.Go(func() error {
+		return w.checkErrorReconnect(w.checkUnInitRegions(ctx))
 	})
 	wg.Go(func() error {
 		return w.eventHandler(ctx)
@@ -561,6 +628,15 @@ func (w *regionWorker) handleEventEntry(
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
+
+			select {
+			case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(state.sri.ts)}:
+			default:
+				// rtsUpdateCh block often means too many regions are suffering
+				// lock resolve, the kv client status is not very healthy.
+				log.Warn("region is not upsert into rts manager", zap.Uint64("region-id", regionID))
+			}
+			w.notifyEvTimeUpdate(regionID, true /* isDelete */)
 			state.initialized = true
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
@@ -666,7 +742,7 @@ func (w *regionWorker) handleResolvedTs(
 	// Send resolved ts update in non blocking way, since we can re-query real
 	// resolved ts from region state even if resolved ts update is discarded.
 	select {
-	case w.rtsUpdateCh <- &regionResolvedTs{regionID: regionID, resolvedTs: resolvedTs}:
+	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)}:
 	default:
 	}
 
