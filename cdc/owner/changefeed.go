@@ -14,11 +14,8 @@
 package owner
 
 import (
-	"context"
+	stdContext "context"
 	"time"
-
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -28,12 +25,13 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
-	pd "github.com/tikv/pd/client"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -54,16 +52,13 @@ type changefeed struct {
 	ddlPuller   ddlPuller
 	initialized bool
 
-	pdClient   pd.Client
-	credential *security.Credential
-
 	gcTTL int64
 
 	errCh  chan error
-	cancel context.CancelFunc
+	cancel stdContext.CancelFunc
 }
 
-func newChangefeed(pdClient pd.Client, credential *security.Credential, gcManager *gcManager) *changefeed {
+func newChangefeed(gcManager *gcManager) *changefeed {
 	serverConfig := config.GetGlobalServerConfig()
 	gcTTL := serverConfig.GcTTL
 	return &changefeed{
@@ -73,10 +68,8 @@ func newChangefeed(pdClient pd.Client, credential *security.Credential, gcManage
 		gcTTL:            gcTTL,
 		gcManager:        gcManager,
 
-		pdClient:   pdClient,
-		credential: credential,
-		errCh:      make(chan error, defaultErrChSize),
-		cancel:     func() {},
+		errCh:  make(chan error, defaultErrChSize),
+		cancel: func() {},
 	}
 }
 
@@ -153,7 +146,8 @@ func (c *changefeed) initialize(ctx context.Context) error {
 	})
 
 	if c.state.Info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, c.pdClient, c.state.ID, startTs)
+
+		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, startTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -184,7 +178,7 @@ func (c *changefeed) initialize(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller = newDDLPuller(cancelCtx, c.pdClient, c.credential, kvStore, startTs)
+	c.ddlPuller = newDDLPuller(cancelCtx, startTs)
 	go func() {
 		err := c.ddlPuller.Run(cancelCtx)
 		if err != nil {

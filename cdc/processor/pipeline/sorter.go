@@ -29,45 +29,36 @@ import (
 )
 
 type sorterNode struct {
-	sortEngine model.SortEngine
-	sortDir    string
-	sorter     puller.EventSorter
+	sorter puller.EventSorter
 
-	changeFeedID model.ChangeFeedID
-	tableID      model.TableID
-	tableName    string // quoted schema and table, used in metircs only
+	tableID   model.TableID
+	tableName string // quoted schema and table, used in metircs only
 
 	wg     errgroup.Group
 	cancel context.CancelFunc
 }
 
-func newSorterNode(
-	sortEngine model.SortEngine,
-	sortDir string,
-	changeFeedID model.ChangeFeedID,
-	tableName string, tableID model.TableID) pipeline.Node {
+func newSorterNode(tableName string, tableID model.TableID) pipeline.Node {
 	return &sorterNode{
-		sortEngine: sortEngine,
-		sortDir:    sortDir,
-
-		changeFeedID: changeFeedID,
-		tableID:      tableID,
-		tableName:    tableName,
+		tableName: tableName,
+		tableID:   tableID,
 	}
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
-	stdCtx, cancel := context.WithCancel(ctx.StdContext())
+	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 	var sorter puller.EventSorter
-	switch n.sortEngine {
+	sortEngine := ctx.ChangefeedVars().Info.Engine
+	switch sortEngine {
 	case model.SortInMemory:
 		sorter = puller.NewEntrySorter()
 	case model.SortInFile:
-		err := util.IsDirAndWritable(n.sortDir)
+		sortDir := ctx.ChangefeedVars().Info.SortDir
+		err := util.IsDirAndWritable(sortDir)
 		if err != nil {
 			if os.IsNotExist(errors.Cause(err)) {
-				err = os.MkdirAll(n.sortDir, 0o755)
+				err = os.MkdirAll(sortDir, 0o755)
 				if err != nil {
 					return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 				}
@@ -76,15 +67,16 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			}
 		}
 
-		sorter = puller.NewFileSorter(n.sortDir)
+		sorter = puller.NewFileSorter(sortDir)
 	case model.SortUnified:
-		err := psorter.UnifiedSorterCheckDir(n.sortDir)
+		sortDir := ctx.ChangefeedVars().Info.SortDir
+		err := psorter.UnifiedSorterCheckDir(sortDir)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		sorter = psorter.NewUnifiedSorter(n.sortDir, n.changeFeedID, n.tableName, n.tableID, ctx.Vars().CaptureAddr)
+		sorter = psorter.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	default:
-		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
+		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
 	}
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
@@ -115,7 +107,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
-		n.sorter.AddEntry(ctx.StdContext(), msg.PolymorphicEvent)
+		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 	default:
 		ctx.SendToNextNode(msg)
 	}

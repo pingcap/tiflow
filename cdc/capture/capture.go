@@ -14,9 +14,11 @@
 package capture
 
 import (
-	"context"
+	stdContext "context"
 	"sync"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/context"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -29,10 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
-	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -44,9 +43,6 @@ import (
 type Capture struct {
 	info *model.CaptureInfo
 
-	etcdCli kv.CDCEtcdClient
-	pdCli   pd.Client
-
 	owner            *owner.Owner
 	ownerMu          sync.Mutex
 	processorManager *processor.Manager
@@ -57,31 +53,19 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(ctx context.Context, etcdCli *clientv3.Client, pdCli pd.Client) (c *Capture, err error) {
+func NewCapture() *Capture {
 	conf := config.GetGlobalServerConfig()
-	sess, err := concurrency.NewSession(etcdCli,
-		concurrency.WithTTL(conf.CaptureSessionTTL))
-	if err != nil {
-		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
-	}
-	elec := concurrency.NewElection(sess, kv.CaptureOwnerKey)
-	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
 	info := &model.CaptureInfo{
 		ID:            uuid.New().String(),
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-	processorManager := processor.NewManager(pdCli, conf.Security, info, sess.Lease())
-	log.Info("creating capture", zap.String("capture-id", info.ID), util.ZapFieldCapture(ctx))
-	c = &Capture{
-		etcdCli:          cli,
-		session:          sess,
-		election:         elec,
+	processorManager := processor.NewManager()
+	log.Info("creating capture", zap.String("capture-id", info.ID), zap.String("capture-addr", info.AdvertiseAddr))
+	return &Capture{
 		info:             info,
-		pdCli:            pdCli,
 		processorManager: processorManager,
 	}
-	return
 }
 
 func (c *Capture) Run(ctx context.Context) error {
@@ -90,14 +74,15 @@ func (c *Capture) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer func() {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := c.etcdCli.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
+		timeoutCtx, cancel := stdContext.WithTimeout(stdContext.Background(), 5*time.Second)
+		if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
 			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
 		}
 		cancel()
 	}()
 	ctx, cancel := context.WithCancel(ctx)
-	wg, ctx := errgroup.WithContext(ctx)
+	wg, stdCtx := errgroup.WithContext(ctx)
+	ctx = context.WithStd(ctx, stdCtx)
 	wg.Go(func() error {
 		defer cancel()
 		return c.campaignOwner(ctx)
@@ -117,12 +102,11 @@ func (c *Capture) Info() model.CaptureInfo {
 func (c *Capture) campaignOwner(ctx context.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
-	conf := config.GetGlobalServerConfig()
 	rl := rate.NewLimiter(0.05, 2)
 	for {
 		err := rl.Wait(ctx)
 		if err != nil {
-			if errors.Cause(err) == context.Canceled {
+			if errors.Cause(err) == stdContext.Canceled {
 				return nil
 			}
 			return errors.Trace(err)
@@ -130,7 +114,7 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 		// Campaign to be an owner, it blocks until it becomes the owner
 		if err := c.campaign(ctx); err != nil {
 			switch errors.Cause(err) {
-			case context.Canceled:
+			case stdContext.Canceled:
 				return nil
 			case mvcc.ErrCompacted:
 				continue
@@ -140,7 +124,7 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 		}
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
-		owner := owner.NewOwner(c.pdCli, conf.Security, c.session.Lease())
+		owner := owner.NewOwner(c.session.Lease())
 		c.setOwner(owner)
 		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState())
 		c.setOwner(nil)
@@ -157,7 +141,7 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 }
 
 func (c *Capture) runEtcdWorker(ctx context.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(c.etcdCli.Client, kv.EtcdKeyBase, reactor, reactorState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, kv.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -172,7 +156,7 @@ func (c *Capture) runEtcdWorker(ctx context.Context, reactor orchestrator.Reacto
 			cerror.ErrLeaseExpired.Equal(errors.Cause(err)):
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
-		lease, inErr := c.etcdCli.Client.TimeToLive(ctx, c.session.Lease())
+		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
 			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
 		}
@@ -218,8 +202,20 @@ func (c *Capture) resign(ctx context.Context) error {
 
 // register registers the capture information in etcd
 func (c *Capture) register(ctx context.Context) error {
-	err := c.etcdCli.PutCaptureInfo(ctx, c.info, c.session.Lease())
-	return cerror.WrapError(cerror.ErrCaptureRegister, err)
+	conf := config.GetGlobalServerConfig()
+	sess, err := concurrency.NewSession(ctx.GlobalVars().EtcdClient.Client.Unwrap(),
+		concurrency.WithTTL(conf.CaptureSessionTTL))
+	if err != nil {
+		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+	}
+	elec := concurrency.NewElection(sess, kv.CaptureOwnerKey)
+	err = ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
+	if err != nil {
+		return cerror.WrapError(cerror.ErrCaptureRegister, err)
+	}
+	c.session = sess
+	c.election = elec
+	return nil
 }
 
 // Close closes the capture by unregistering it from etcd

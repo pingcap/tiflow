@@ -14,11 +14,13 @@
 package owner
 
 import (
-	"context"
+	stdContext "context"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/context"
 
 	"go.etcd.io/etcd/clientv3"
 
@@ -26,8 +28,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/security"
-	pd "github.com/tikv/pd/client"
 )
 
 const (
@@ -68,9 +68,7 @@ type ownerJob struct {
 type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
 
-	pdClient   pd.Client
-	credential *security.Credential
-	gcManager  *gcManager
+	gcManager *gcManager
 
 	ownerJobQueue   []*ownerJob
 	ownerJobQueueMu sync.Mutex
@@ -80,17 +78,16 @@ type Owner struct {
 	close int32
 }
 
-func NewOwner(pdClient pd.Client, credential *security.Credential, leaseID clientv3.LeaseID) *Owner {
+func NewOwner(leaseID clientv3.LeaseID) *Owner {
 	return &Owner{
 		changefeeds: make(map[model.ChangeFeedID]*changefeed),
-		pdClient:    pdClient,
-		credential:  credential,
-		gcManager:   newGCManager(pdClient),
+		gcManager:   newGCManager(),
 		leaseID:     leaseID,
 	}
 }
 
-func (o *Owner) Tick(ctx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	ctx := stdCtx.(context.Context)
 	state := rawState.(*model.GlobalReactorState)
 	state.CheckLeaseExpired(o.leaseID)
 	o.handleJob()
@@ -101,7 +98,7 @@ func (o *Owner) Tick(ctx context.Context, rawState orchestrator.ReactorState) (n
 		}
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			cfReactor = newChangefeed(o.pdClient, o.credential, o.gcManager)
+			cfReactor = newChangefeed(o.gcManager)
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
 	}

@@ -14,33 +14,30 @@
 package owner
 
 import (
-	"context"
 	"math"
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 
 	"github.com/pingcap/log"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 type gcManager struct {
-	pdClient pd.Client
-	gcTTL    int64
+	gcTTL int64
 
 	lastUpdatedTime time.Time
 	lastSucceedTime time.Time
 	lastSafePointTs uint64
 }
 
-func newGCManager(pdClient pd.Client) *gcManager {
+func newGCManager() *gcManager {
 	serverConfig := config.GetGlobalServerConfig()
 	return &gcManager{
-		pdClient: pdClient,
-		gcTTL:    serverConfig.GcTTL,
+		gcTTL: serverConfig.GcTTL,
 	}
 }
 
@@ -65,7 +62,7 @@ func (m *gcManager) updateGCSafePoint(ctx context.Context, state *model.GlobalRe
 		}
 	}
 
-	actual, err := m.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
+	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
 			zap.Uint64("safePointTs", minCheckpointTs),

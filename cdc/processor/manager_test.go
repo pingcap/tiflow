@@ -16,7 +16,6 @@ package processor
 /*
 import (
 	"bytes"
-	"context"
 	"math"
 	"time"
 
@@ -24,10 +23,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	pd "github.com/tikv/pd/client"
 )
 
 type managerSuite struct{}
@@ -37,24 +35,16 @@ var _ = check.Suite(&managerSuite{})
 const mockLeaseID = 0xa987edf3
 
 func newManager4Test() *Manager {
-	m := NewManager(nil, nil, &model.CaptureInfo{
-		ID:            "test-captureID",
-		AdvertiseAddr: "127.0.0.1:0000",
-	},mockLeaseID)
-	m.newProcessor = func(
-		pdCli pd.Client,
-		changefeedID model.ChangeFeedID,
-		credential *security.Credential,
-		captureInfo *model.CaptureInfo,
-	) *processor {
-		return newProcessor4Test()
+	m := NewManager()
+	m.newProcessor = func(ctx context.Context) *processor {
+		return newProcessor4Test(ctx)
 	}
 	return m
 }
 
 func (s *managerSuite) TestChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.Background()
+	ctx := context.NewBackendContext4Test(false)
 	m := newManager4Test()
 	state := &globalState{
 		CaptureID:   "test-captureID",
@@ -97,7 +87,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 
 func (s *managerSuite) TestDebugInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.Background()
+	ctx := context.NewBackendContext4Test(false)
 	m := newManager4Test()
 	state := &globalState{
 		CaptureID:   "test-captureID",
@@ -146,7 +136,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 
 func (s *managerSuite) TestClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.Background()
+	ctx := context.NewBackendContext4Test(false)
 	m := newManager4Test()
 	state := &globalState{
 		CaptureID:   "test-captureID",

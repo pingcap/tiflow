@@ -14,24 +14,21 @@
 package owner
 
 import (
-	"context"
+	stdContext "context"
 	"sync"
 
-	"github.com/pingcap/ticdc/pkg/filter"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/log"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/context"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	tidbkv "github.com/pingcap/tidb/kv"
-	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -49,15 +46,18 @@ type ddlPullerImpl struct {
 	mu             sync.Mutex
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
-	cancel         context.CancelFunc
+	cancel         stdContext.CancelFunc
 }
 
 // TODO test-case: resolvedTs is initialized to (startTs - 1)
-func newDDLPuller(ctx context.Context, pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, startTs uint64) *ddlPullerImpl {
+func newDDLPuller(ctx context.Context, startTs uint64) *ddlPullerImpl {
+	pdCli := ctx.GlobalVars().PDClient
+	conf := config.GetGlobalServerConfig()
+	kvStorage := ctx.GlobalVars().KVStorage
 	plr := puller.NewPuller(
 		ctx,
 		pdCli,
-		credential,
+		conf.Security,
 		kvStorage,
 		startTs,
 		[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
@@ -75,8 +75,9 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 	log.Debug("DDL puller started")
-	ctx = util.PutTableInfoInCtx(ctx, -1, "DDL_PULLER")
-	errg, ctx := errgroup.WithContext(ctx)
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, "DDL_PULLER")
+	errg, stdCtx := errgroup.WithContext(stdCtx)
+	ctx = context.WithStd(ctx, stdCtx)
 
 	errg.Go(func() error {
 		return h.puller.Run(ctx)

@@ -20,6 +20,9 @@ import (
 	"strings"
 	"time"
 
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	tidbkv "github.com/pingcap/tidb/kv"
+
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap/zapcore"
 
@@ -53,7 +56,8 @@ type Server struct {
 
 	statusServer *http.Server
 	pdClient     pd.Client
-	etcdClient   *clientv3.Client
+	etcdClient   *kv.CDCEtcdClient
+	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
 
@@ -128,7 +132,8 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-	s.etcdClient = etcdCli
+	etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+	s.etcdClient = &etcdClient
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
@@ -152,6 +157,7 @@ func (s *Server) Run(ctx context.Context) error {
 			log.Warn("kv store close failed", zap.Error(err))
 		}
 	}()
+	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 	// When a capture suicided, restart it
 	for {
@@ -205,10 +211,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := capture.NewCapture(ctx, s.etcdClient, s.pdClient)
-	if err != nil {
-		return err
-	}
+	capture := capture.NewCapture()
 	s.capture = capture
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -224,7 +227,13 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return s.capture.Run(cctx)
+		captureInfo := capture.Info()
+		return s.capture.Run(cdcContext.NewContext(cctx, &cdcContext.GlobalVars{
+			PDClient:    s.pdClient,
+			KVStorage:   s.kvStorage,
+			CaptureInfo: &captureInfo,
+			EtcdClient:  s.etcdClient,
+		}))
 	})
 
 	return wg.Wait()
