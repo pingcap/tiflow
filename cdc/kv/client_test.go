@@ -3114,6 +3114,9 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 		wg.Done()
 	}()
 
+	// the kv client is blocked by failpoint injection, and after region has split
+	// into more sub regions, the kv client will continue to handle and will find
+	// stale region requests (which is also caused by failpoint injection).
 	regionNum := 20
 	for i := 1; i < regionNum; i++ {
 		regionID := uint64(i + 1000)
@@ -3122,7 +3125,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 		cluster.SplitRaw(regionID-1, regionID, []byte(fmt.Sprintf("b%d", regionID)), []uint64{peerID}, peerID)
 	}
 
-	// wait all regions requested from cdc kv client
+	// wait for all regions requested from cdc kv client
 	err = retry.Run(time.Millisecond*200, 20, func() error {
 		count := 0
 		requestIDs.Range(func(_, _ interface{}) bool {
@@ -3136,6 +3139,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 
+	// send initialized event and a resolved ts event to each region
 	requestIDs.Range(func(key, value interface{}) bool {
 		regionID := key.(uint64)
 		requestID := value.(uint64)
