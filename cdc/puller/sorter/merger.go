@@ -26,11 +26,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
-func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent) error {
+func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	_, tableName := util.TableIDFromCtx(ctx)
@@ -47,16 +48,38 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
 
+	var workingSet map[*flushTask]struct{}
 	pendingSet := make(map[*flushTask]*model.PolymorphicEvent)
 	defer func() {
 		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
-		// clean up resources
-		for task := range pendingSet {
+		// cancel pending async IO operations.
+		onExit()
+		cleanUpTask := func(task *flushTask) {
+			select {
+			case err := <-task.finished:
+				_ = printError(err)
+			default:
+				// The task has not finished, so we give up.
+				// It does not matter because:
+				// 1) if the async workerpool has exited, it means the CDC process is exiting, UnifiedSorterCleanUp will
+				// take care of the temp files,
+				// 2) if the async workerpool is not exiting, the unfinished tasks will eventually be executed,
+				// and by that time, since the `onExit` have canceled them, they will not do any IO and clean up themselves.
+				return
+			}
+
 			if task.reader != nil {
 				_ = printError(task.reader.resetAndClose())
 				task.reader = nil
 			}
 			_ = printError(task.dealloc())
+		}
+
+		for task := range pendingSet {
+			cleanUpTask(task)
+		}
+		for task := range workingSet {
+			cleanUpTask(task)
 		}
 	}()
 
@@ -80,28 +103,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 	onMinResolvedTsUpdate := func() error {
 		metricSorterMergerStartTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
-
-		workingSet := make(map[*flushTask]struct{})
+		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
-
-		defer func() {
-			// clean up
-			for task := range workingSet {
-				select {
-				case <-ctx.Done():
-					break
-				case err := <-task.finished:
-					_ = printError(err)
-				}
-
-				if task.reader != nil {
-					err := task.reader.resetAndClose()
-					task.reader = nil
-					_ = printError(err)
-				}
-				_ = printError(task.dealloc())
-			}
-		}()
 
 		for task, cache := range pendingSet {
 			if task.tsLowerBound > minResolvedTs {
@@ -202,6 +205,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		counter := 0
 		for sortHeap.Len() > 0 {
+			failpoint.Inject("sorterMergeDelay", func() {})
+
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
 			event := item.entry
@@ -389,7 +394,8 @@ func printError(err error) error {
 	if err != nil && errors.Cause(err) != context.Canceled &&
 		errors.Cause(err) != context.DeadlineExceeded &&
 		!strings.Contains(err.Error(), "context canceled") &&
-		!strings.Contains(err.Error(), "context deadline exceeded") {
+		!strings.Contains(err.Error(), "context deadline exceeded") &&
+		cerrors.ErrAsyncIOCancelled.NotEqual(errors.Cause(err)) {
 
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}

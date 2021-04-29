@@ -93,13 +93,19 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	heapSorterErrOnce := &sync.Once{}
 	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
 	for i := range heapSorters {
-		finalI := i
-		heapSorters[finalI] = newHeapSorter(finalI, heapSorterCollectCh)
-		heapSorters[finalI].init(subctx, func(err error) {
+		heapSorters[i] = newHeapSorter(i, heapSorterCollectCh)
+		heapSorters[i].init(subctx, func(err error) {
 			heapSorterErrOnce.Do(func() {
 				heapSorterErrCh <- err
 			})
 		})
+	}
+
+	ioCancelFunc := func() {
+		for _, heapSorter := range heapSorters {
+			// cancels async IO operations
+			heapSorter.canceller.Cancel()
+		}
 	}
 
 	errg.Go(func() error {
@@ -112,18 +118,16 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			close(heapSorterCollectCh)
 		}()
 
-		for {
-			select {
-			case <-subctx.Done():
-				return errors.Trace(subctx.Err())
-			case err := <-heapSorterErrCh:
-				return errors.Trace(err)
-			}
+		select {
+		case <-subctx.Done():
+			return errors.Trace(subctx.Err())
+		case err := <-heapSorterErrCh:
+			return errors.Trace(err)
 		}
 	})
 
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
 	})
 
 	errg.Go(func() error {

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package puller
+package sorter
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	sorter2 "github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
@@ -56,7 +56,7 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer sorter2.UnifiedSorterCleanUp()
+	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.Sorter = &config.SorterConfig{
@@ -70,16 +70,16 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
+	sorter := NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	testSorter(ctx, c, sorter, 10000)
+	testSorter(ctx, c, sorter, 10000, true)
 }
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer sorter2.UnifiedSorterCleanUp()
+	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
 	conf.Sorter = &config.SorterConfig{
@@ -93,28 +93,28 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := sorter2.NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
+	sorter := NewUnifiedSorter("/tmp/sorter", "test", "0.0.0.0:0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	finishedCh := make(chan struct{})
 	go func() {
-		testSorter(ctx, c, sorter, 10000000)
+		testSorter(ctx, c, sorter, 10000000, true)
 		close(finishedCh)
 	}()
 
 	after := time.After(30 * time.Second)
 	select {
 	case <-after:
-		c.FailNow()
+		c.Fatal("TestSorterCancel timed out")
 	case <-finishedCh:
 	}
 
 	log.Info("Sorter successfully cancelled")
 }
 
-func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) {
+func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int, needWorkerPool bool) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -126,9 +126,11 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 		return sorter.Run(ctx)
 	})
 
-	errg.Go(func() error {
-		return sorter2.RunWorkerPool(ctx)
-	})
+	if needWorkerPool {
+		errg.Go(func() error {
+			return RunWorkerPool(ctx)
+		})
+	}
 
 	producerProgress := make([]uint64, numProducers)
 
@@ -156,7 +158,7 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 
 	// launch the resolver
 	errg.Go(func() error {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
@@ -214,4 +216,45 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 		return
 	}
 	c.Assert(err, check.IsNil)
+}
+
+// TestSorterCancelRestart tests the situation where the Unified Sorter is repeatedly canceled and
+// restarted. There should not be any problem, especially file corruptions.
+func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	conf := &config.SorterConfig{
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      0, // disable memory sort
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
+	}
+	serverConfig := config.GetGlobalServerConfig()
+	serverConfig.Sorter = conf
+
+	err := os.MkdirAll("/tmp/sorter", 0o755)
+	c.Assert(err, check.IsNil)
+
+	// enable the failpoint to simulate delays
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushStartDelay", "sleep(100)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushStartDelay")
+	}()
+
+	// enable the failpoint to simulate delays
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushInProcessDelay", "1%sleep(1)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/asyncFlushInProcessDelay")
+	}()
+
+	for i := 0; i < 5; i++ {
+		sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		testSorter(ctx, c, sorter, 100000000, true)
+		cancel()
+	}
 }
