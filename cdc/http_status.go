@@ -17,12 +17,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/util"
 	"io"
 	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
+
+	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
