@@ -68,12 +68,15 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
+
+	// time interval to force kv client to terminate gRPC stream and reconnect
+	reconnectInterval = 15 * time.Minute
 )
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
 // false: use kv client v1, which runs a goroutine for every single region
-var enableKVClientV2 = true
+var enableKVClientV2 = false
 
 type singleRegionInfo struct {
 	verID  tikv.RegionVerID
@@ -94,7 +97,9 @@ var (
 var (
 	// unreachable error, only used in unit test
 	errUnreachable = errors.New("kv client unreachable error")
-	logPanic       = log.Panic
+	// internal error, force the gPRC stream terminate and reconnect
+	errReconnect = errors.New("internal error, reconnect all regions")
+	logPanic     = log.Panic
 )
 
 func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
@@ -499,8 +504,9 @@ type eventFeedSession struct {
 	errChSizeGauge    prometheus.Gauge
 	rangeChSizeGauge  prometheus.Gauge
 
-	streams     map[string]cdcpb.ChangeData_EventFeedClient
-	streamsLock sync.RWMutex
+	streams          map[string]cdcpb.ChangeData_EventFeedClient
+	streamsLock      sync.RWMutex
+	streamsCanceller map[string]context.CancelFunc
 
 	workers     map[string]*regionWorker
 	workersLock sync.RWMutex
@@ -542,6 +548,7 @@ func newEventFeedSession(
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
+		streamsCanceller:  make(map[string]context.CancelFunc),
 		workers:           make(map[string]*regionWorker),
 	}
 }
@@ -766,7 +773,9 @@ MainLoop:
 					zap.Uint64("requestID", requestID),
 					zap.Uint64("storeID", storeID),
 					zap.String("addr", rpcCtx.Addr))
-				stream, err = s.client.newStream(ctx, rpcCtx.Addr, storeID)
+				streamCtx, streamCancel := context.WithCancel(ctx)
+				_ = streamCancel // to avoid possible context leak warning from govet
+				stream, err = s.client.newStream(streamCtx, rpcCtx.Addr, storeID)
 				if err != nil {
 					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
 					log.Warn("get grpc stream client failed",
@@ -786,7 +795,7 @@ MainLoop:
 					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
 					continue
 				}
-				s.addStream(rpcCtx.Addr, stream)
+				s.addStream(rpcCtx.Addr, stream, streamCancel)
 
 				limiter := s.client.getRegionLimiter(regionID)
 				g.Go(func() error {
@@ -886,6 +895,20 @@ func (s *eventFeedSession) partialRegionFeed(
 
 	if err == nil || errors.Cause(err) == context.Canceled {
 		return nil
+	}
+
+	if errors.Cause(err) == errReconnect {
+		cancel, ok := s.getStreamCancel(state.sri.rpcCtx.Addr)
+		if ok {
+			// cancel the stream to trigger strem.Recv with context cancel error
+			// Note use context cancel is the only way to terminate a gRPC stream
+			cancel()
+			// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+			// should be called after stream has been deleted. Add a delay here
+			// to avoid too frequent region rebuilt.
+			time.Sleep(time.Second)
+		}
+		// if stream is already deleted, just ignore errReconnect
 	}
 
 	failpoint.Inject("kvClientErrUnreachable", func() {
@@ -1370,6 +1393,10 @@ func (s *eventFeedSession) singleEventFeed(
 		case <-ctx.Done():
 			return lastResolvedTs, ctx.Err()
 		case <-advanceCheckTicker.C:
+			failpoint.Inject("kvClientForceReconnect", func() {
+				log.Warn("kv client reconnect triggered by failpoint")
+				failpoint.Return(lastResolvedTs, errReconnect)
+			})
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
 			}
@@ -1381,6 +1408,10 @@ func (s *eventFeedSession) singleEventFeed(
 			if sinceLastEvent > resolveLockInterval {
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
+			}
+			if sinceLastEvent > reconnectInterval {
+				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
+				return lastResolvedTs, errReconnect
 			}
 			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			if err != nil {
@@ -1524,22 +1555,31 @@ func (s *eventFeedSession) singleEventFeed(
 	}
 }
 
-func (s *eventFeedSession) addStream(storeAddr string, stream cdcpb.ChangeData_EventFeedClient) {
+func (s *eventFeedSession) addStream(storeAddr string, stream cdcpb.ChangeData_EventFeedClient, cancel context.CancelFunc) {
 	s.streamsLock.Lock()
 	defer s.streamsLock.Unlock()
 	s.streams[storeAddr] = stream
+	s.streamsCanceller[storeAddr] = cancel
 }
 
 func (s *eventFeedSession) deleteStream(storeAddr string) {
 	s.streamsLock.Lock()
 	defer s.streamsLock.Unlock()
 	delete(s.streams, storeAddr)
+	delete(s.streamsCanceller, storeAddr)
 }
 
 func (s *eventFeedSession) getStream(storeAddr string) (stream cdcpb.ChangeData_EventFeedClient, ok bool) {
 	s.streamsLock.RLock()
 	defer s.streamsLock.RUnlock()
 	stream, ok = s.streams[storeAddr]
+	return
+}
+
+func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.CancelFunc, ok bool) {
+	s.streamsLock.RLock()
+	defer s.streamsLock.RUnlock()
+	cancel, ok = s.streamsCanceller[storeAddr]
 	return
 }
 
