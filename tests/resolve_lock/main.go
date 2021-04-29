@@ -298,6 +298,7 @@ func (c *Locker) lockBatch(ctx context.Context, keys [][]byte, primary []byte) (
 			PrimaryLock:  primary,
 			StartVersion: startTs,
 			LockTtl:      uint64(c.lockTTL.Milliseconds()),
+			MinCommitTs:  startTs,
 		}
 		req := tikvrpc.NewRequest(tikvrpc.CmdPrewrite, prewrite)
 
