@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/util"
 	"io"
 	"net"
 	"net/http"
@@ -55,8 +56,10 @@ func (s *Server) startStatusHTTP() error {
 
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
 
-	// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
-	serverMux.Handle("/fail/", http.StripPrefix("/fail", &failpoint.HttpHandler{}))
+	if util.FailpointBuild {
+		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
+		serverMux.Handle("/fail/", http.StripPrefix("/fail", &failpoint.HttpHandler{}))
+	}
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
