@@ -291,10 +291,10 @@ func prepareImpl(
 		return err
 	}
 
-	errg := new(errgroup.Group)
+	g := new(errgroup.Group)
 	ch := make(chan int, jobCount)
 	for i := 0; i < concurrency; i++ {
-		errg.Go(func() error {
+		g.Go(func() error {
 			for {
 				startIndex, ok := <-ch
 				if !ok {
@@ -322,7 +322,7 @@ func prepareImpl(
 		ch <- i * batchSize
 	}
 	close(ch)
-	_ = errg.Wait()
+	_ = g.Wait()
 	return nil
 }
 
