@@ -138,7 +138,7 @@ func testRequestNonOwnerFailed(c *check.C, uri string) {
 
 func testHandleFailpoint(c *check.C) {
 	fp := "github.com/pingcap/ticdc/cdc/TestHandleFailpoint"
-	uri := fmt.Sprintf("http://%s/fail/%s", advertiseAddr4Test, fp)
+	uri := fmt.Sprintf("http://%s/debug/fail/%s", advertiseAddr4Test, fp)
 	body := bytes.NewReader([]byte("return(true)"))
 	req, err := http.NewRequest("PUT", uri, body)
 	c.Assert(err, check.IsNil)
