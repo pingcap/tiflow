@@ -37,8 +37,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
+	tikvstore "github.com/pingcap/tidb/store/tikv/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
@@ -1113,7 +1113,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 
 func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, tidbkv.ReplicaReadLeader, 0)
+	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, tikvstore.ReplicaReadLeader, 0)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrGetTiKVRPCContext, err)
 	}
