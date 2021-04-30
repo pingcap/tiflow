@@ -71,6 +71,11 @@ import (
 // test.prepare
 // go { loop { test.workload } }
 // go { loop { test.verify } }
+
+const (
+	initBalance = 1000
+)
+
 type Test interface {
 	prepare(ctx context.Context, db *sql.DB, accounts int, tableID int, concurrency int) error
 	workload(ctx context.Context, tx *sql.Tx, accounts int, tableID int) error
@@ -175,23 +180,23 @@ type bankTest struct{}
 var _ Test = &bankTest{}
 
 func (*bankTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID int) error {
-	var from, to int
+	var (
+		from, fromBalance int
+		to, toBalance     int
+	)
+
 	for {
 		from, to = rand.Intn(accounts), rand.Intn(accounts)
-		if from == to {
-			continue
+		if from != to {
+			break
 		}
-		break
 	}
 
 	sqlFormat := fmt.Sprintf("SELECT balance FROM accounts%d WHERE id = ? FOR UPDATE", tableID)
-	var fromBalance, toBalance int
-
 	row := tx.QueryRowContext(ctx, sqlFormat, from)
 	if err := row.Scan(&fromBalance); err != nil {
 		return errors.Trace(err)
 	}
-
 	row = tx.QueryRowContext(ctx, sqlFormat, to)
 	if err := row.Scan(&toBalance); err != nil {
 		return errors.Trace(err)
@@ -205,7 +210,6 @@ func (*bankTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID
 	if _, err := tx.ExecContext(ctx, sqlFormat, fromBalance, from); err != nil {
 		return errors.Trace(err)
 	}
-
 	if _, err := tx.ExecContext(ctx, sqlFormat, toBalance, to); err != nil {
 		return errors.Trace(err)
 	}
@@ -223,7 +227,7 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 	batchInsertSQLF := func(batchSize, offset int) string {
 		args := make([]string, batchSize)
 		for j := 0; j < batchSize; j++ {
-			args[j] = fmt.Sprintf("(%d, 1000, 0)", offset+j)
+			args[j] = fmt.Sprintf("(%d, %d, 0)", offset+j, initBalance)
 		}
 		return fmt.Sprintf("INSERT IGNORE INTO accounts%d (id, balance, startts) VALUES %s", tableID, strings.Join(args, ","))
 	}
@@ -236,25 +240,25 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 	var obtained, expect int
 
 	query := fmt.Sprintf("SELECT SUM(balance) as total FROM accounts%d", tableID)
-	err := db.QueryRowContext(ctx, query).Scan(&obtained)
-	if err != nil {
+	if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
 		log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 		return errors.Trace(err)
 	}
-	expect = accounts * 1000
+
+	expect = accounts * initBalance
 	if obtained != expect {
 		return errors.Errorf("verify balance failed, accounts%d expect %d, but got %d", tableID, expect, obtained)
 	}
 
 	query = fmt.Sprintf("SELECT COUNT(*) as count FROM accounts%d", tableID)
-	err = db.QueryRowContext(ctx, query).Scan(&obtained)
-	if err != nil {
+	if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
 		log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 		return errors.Trace(err)
 	}
 	if obtained != accounts {
 		return errors.Errorf("verify count failed, accounts%d expected=%d, obtained=%d", tableID, accounts, obtained)
 	}
+
 	log.Info("bank verify pass", zap.String("tag", tag))
 	return nil
 }
@@ -411,7 +415,6 @@ func run(
 	downstreamDB := openDB(ctx, downstream)
 	defer downstreamDB.Close()
 
-	errg := new(errgroup.Group)
 	tests := []Test{&sequenceTest{}, &bankTest{}}
 
 	if cleanupOnly {
@@ -427,11 +430,10 @@ func run(
 		return
 	}
 
-	for tableID := 0; tableID < tables; tableID++ {
-		// Prepare tests
-		for i := range tests {
-			err := tests[i].prepare(ctx, upstreamDB, accounts, tableID, concurrency)
-			if err != nil {
+	// prepare data for upstream db.
+	for _, test := range tests {
+		for tableID := 0; tableID < tables; tableID++ {
+			if err := test.prepare(ctx, upstreamDB, accounts, tableID, concurrency); err != nil {
 				log.Panic("prepare failed", zap.Error(err))
 			}
 		}
@@ -445,30 +447,42 @@ func run(
 	waitCancel()
 	log.Info("all tables synced")
 
-	verifiedRound := int64(0)
-	for id := 0; id < tables; id++ {
-		tableID := id
+	g := new(errgroup.Group)
+	var (
+		verifiedRound int64 = 0
+		passed              = true
+	)
+
+	for tableID := 0; tableID < tables; tableID++ {
 		// Verify
-		errg.Go(func() error {
+		g.Go(func() error {
 			for {
+				passed = true
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-time.After(interval):
-					for i := range tests {
+					for _, test := range tests {
 						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*10)
-						if err := tests[i].verify(verifyCtx, upstreamDB, accounts, tableID, upstream); err != nil {
-							log.Panic("upstream verify fails", zap.Error(err))
+						if err := test.verify(verifyCtx, upstreamDB, accounts, tableID, upstream); err != nil {
+							passed = false
+							log.Error("upstream verify fails", zap.Error(err))
 						}
 						verifyCancel()
 
 						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
-						if err := tests[i].verify(verifyCtx, downstreamDB, accounts, tableID, downstream); err != nil {
-							log.Panic("downstream verify fails", zap.Error(err))
+						if err := test.verify(verifyCtx, downstreamDB, accounts, tableID, downstream); err != nil {
+							passed = false
+							log.Error("downstream verify fails", zap.Error(err))
 						}
 						verifyCancel()
 					}
 				}
+
+				if !passed {
+					continue
+				}
+
 				if atomic.AddInt64(&verifiedRound, 1) == testRound {
 					cancel()
 				}
@@ -476,7 +490,7 @@ func run(
 		})
 
 		// Workload
-		errg.Go(func() error {
+		g.Go(func() error {
 			workload := func(workloadCtx context.Context) error {
 				tx, err := upstreamDB.BeginTx(workloadCtx, nil)
 				if err != nil {
@@ -484,9 +498,8 @@ func run(
 				}
 				defer func() { _ = tx.Rollback() }()
 
-				for i := range tests {
-					err := tests[i].workload(workloadCtx, tx, accounts, tableID)
-					if err != nil {
+				for _, test := range tests {
+					if err := test.workload(workloadCtx, tx, accounts, tableID); err != nil {
 						return errors.Trace(err)
 					}
 				}
@@ -509,5 +522,5 @@ func run(
 			}
 		})
 	}
-	_ = errg.Wait()
+	_ = g.Wait()
 }

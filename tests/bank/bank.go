@@ -62,15 +62,16 @@ func main() {
 		Use:   "bank",
 		Short: "bank is a test case that simulates bank scenarios",
 		Run: func(cmd *cobra.Command, args []string) {
-			switch {
-			case len(upstream) == 0, len(downstream) == 0:
+			if len(upstream) == 0 || len(downstream) == 0 {
 				log.Fatal("upstream and downstream should not be empty")
 			}
-			verifyInterval, err := time.ParseDuration(interval)
+
+			verifiedInterval, err := time.ParseDuration(interval)
 			if err != nil {
 				log.Fatal("fail to parse interval", zap.String("interval", interval), zap.Error(err))
 			}
-			run(ctx, upstream, downstream, accounts, tables, concurrency, verifyInterval, testRound, cleanupOnly)
+
+			run(ctx, upstream, downstream, accounts, tables, concurrency, verifiedInterval, testRound, cleanupOnly)
 		},
 	}
 	cmd.PersistentFlags().StringVarP(&upstream, "upstream", "u", "", "Upstream TiDB DSN, please specify target database in DSN")
