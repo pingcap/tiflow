@@ -72,6 +72,28 @@ func (o *ownership) inc() {
 	}
 }
 
+type minGcSafePointCacheEntry struct {
+	ts          model.Ts
+	lastUpdated time.Time
+}
+
+func getGcMinSafePointCache(ctx context.Context, pdClient pd.Client, gcTTL int64) (model.Ts, error) {
+	if time.Now().After(minGcSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval)) {
+		physicalTs, logicalTs, err := pdClient.GetTS(ctx)
+		if err != nil {
+			return 0, err
+		}
+		minGcSafePointCache.ts = oracle.ComposeTS(physicalTs-(gcTTL*1000), logicalTs)
+		minGcSafePointCache.lastUpdated = time.Now()
+	}
+	return minGcSafePointCache.ts, nil
+}
+
+// This value stores the ts obtained from PD and is updated every MinGCSafePointCacheUpdateInterval.
+var (
+	minGcSafePointCache minGcSafePointCacheEntry
+)
+
 // Owner manages the cdc cluster
 type Owner struct {
 	done        chan struct{}
@@ -118,6 +140,8 @@ const (
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
 	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	// MinGCSafePointCacheUpdateInterval is the interval that update minGcSafePointCache
+	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )
 
 // NewOwner creates a new Owner instance
@@ -715,13 +739,27 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		return nil
 	}
 
-	minCheckpointTs := uint64(math.MaxUint64)
+	staleChangeFeedID := make([]model.ChangeFeedID, 0)
+	gcSafePoint := uint64(math.MaxUint64)
+
+	// get the lower bound of gcSafePoint
+	minGcSafePoint, err := getGcMinSafePointCache(ctx, o.pdClient, o.gcTTL)
+	if err != nil {
+		log.Warn("failed to acquire minGcSafePoint from Cache, will use this machine time", zap.Error(err))
+		minGcSafePoint = oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
+	}
+
 	if len(o.changeFeeds) > 0 {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 		for id, changefeed := range o.changeFeeds {
 			snapshot[id] = changefeed.status
-			if changefeed.appliedCheckpointTs < minCheckpointTs {
-				minCheckpointTs = changefeed.appliedCheckpointTs
+			if changefeed.status.CheckpointTs < gcSafePoint {
+				gcSafePoint = changefeed.status.CheckpointTs
+			}
+			// if changefeed's appliedCheckpoinTs < minGcSafePoint, means this changefeed is stagnant
+			// They are collected into this queue, and then a function is called to deal with these stagnant changefeed.
+			if changefeed.status.CheckpointTs < minGcSafePoint {
+				staleChangeFeedID = append(staleChangeFeedID, id)
 			}
 
 			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
@@ -741,13 +779,27 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			o.lastFlushChangefeeds = time.Now()
 		}
 	}
+
 	for _, status := range o.stoppedFeeds {
-		if status.CheckpointTs < minCheckpointTs {
-			minCheckpointTs = status.CheckpointTs
+		// if a stopped changefeed's CheckpoinTs < minGcSafePoint, means this changefeed is stagnant
+		// it should never be resume, so here we can skip it
+		if status.CheckpointTs < minGcSafePoint {
+			continue
+		}
+
+		if status.CheckpointTs < gcSafePoint {
+			gcSafePoint = status.CheckpointTs
 		}
 	}
+
+	// handle stagnant changefeed collected above
+	err = o.handleStaleChangeFeed(ctx, staleChangeFeedID, minGcSafePoint, gcSafePoint)
+	if err != nil {
+		log.Warn("failed to handleStaleChangeFeed ", zap.Error(err))
+	}
+
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
-		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+		actual, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, gcSafePoint)
 		if err != nil {
 			sinceLastUpdate := time.Since(o.gcSafepointLastUpdate)
 			log.Warn("failed to update service safe point", zap.Error(err),
@@ -764,9 +816,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			actual = uint64(val.(int))
 		})
 
-		if actual > minCheckpointTs {
+		if actual > gcSafePoint {
 			// UpdateServiceGCSafePoint has failed.
-			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", minCheckpointTs), zap.Uint64("actual-safepoint", actual))
+			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", gcSafePoint), zap.Uint64("actual-safepoint", actual))
 
 			for cfID, cf := range o.changeFeeds {
 				if cf.status.CheckpointTs < actual {
@@ -871,6 +923,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
 	if job.Type == model.AdminStop {
+		log.Info("put changfeed into stoppedFeeds queue", zap.String("changefeed", job.CfID))
 		o.stoppedFeeds[job.CfID] = cf.status
 	}
 	for captureID := range cf.taskStatus {
@@ -1085,6 +1138,11 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			// refuse to resume adminJob that checkPointTs lag behind gcSafePoint
+			if cfInfo.Error != nil && cfInfo.Error.Code == string(cerror.ErrStartTsBeforeGC.RFCCode()) {
+				log.Warn("invalid admin job, changefeed checkpoint lag behind gcSafePoint", zap.String("changefeed", job.CfID))
+				continue
 			}
 
 			// set admin job in changefeed status to tell owner resume changefeed
@@ -1622,4 +1680,29 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// handle the StaleChangeFeed
+// By setting the AdminJob type to AdminStop and the Error code to indicate that the changefeed is stagnant
+func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeedID []model.ChangeFeedID, minGcSafePoint, gcSafePoint uint64) error {
+	for _, id := range staleChangeFeedID {
+		message := cerror.ErrStartTsBeforeGC.GenWithStackByArgs(minGcSafePoint, gcSafePoint).Error()
+		log.Info("handle staleChangeFeed ", zap.String("changefeed", id), zap.String("Error message", message))
+
+		runningError := &model.RunningError{
+			Addr:    util.CaptureAddrFromCtx(ctx),
+			Code:    string(cerror.ErrStartTsBeforeGC.RFCCode()), // changfeed is stagnant
+			Message: message,
+		}
+
+		err := o.EnqueueJob(model.AdminJob{
+			CfID:  id,
+			Type:  model.AdminStop,
+			Error: runningError,
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
