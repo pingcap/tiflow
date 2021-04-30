@@ -60,7 +60,7 @@ func main() {
 	)
 	cmd := &cobra.Command{
 		Use:   "bank",
-		Short: "bank is a test case that simulates bank scenarios",
+		Short: "bank is a testcase case that simulates bank scenarios",
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(upstream) == 0 || len(downstream) == 0 {
 				log.Fatal("upstream and downstream should not be empty")
@@ -77,11 +77,11 @@ func main() {
 	cmd.PersistentFlags().StringVarP(&upstream, "upstream", "u", "", "Upstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVarP(&downstream, "downstream", "d", "", "Downstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVar(&interval, "interval", "2s", "Interval of verify tables")
-	cmd.PersistentFlags().Int64Var(&testRound, "test-round", math.MaxInt64, "Total around of verify tables")
+	cmd.PersistentFlags().Int64Var(&testRound, "testcase-round", math.MaxInt64, "Total around of verify tables")
 	cmd.PersistentFlags().IntVar(&tables, "tables", 1, "The number of tables for db")
 	cmd.PersistentFlags().IntVar(&accounts, "accounts", 100, "The number of Accounts for each table")
 	cmd.PersistentFlags().IntVar(&concurrency, "concurrency", 10, "concurrency of transaction for each table")
-	cmd.PersistentFlags().BoolVar(&cleanupOnly, "cleanup", false, "cleanup all tables used in the test")
+	cmd.PersistentFlags().BoolVar(&cleanupOnly, "cleanup", false, "cleanup all tables used in the testcase")
 
 	// Outputs cmd.Print to stdout.
 	cmd.SetOut(os.Stdout)

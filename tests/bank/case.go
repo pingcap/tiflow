@@ -66,17 +66,17 @@ import (
 // -- Verify no missing transaction
 // SELECT sequence FROM accounts_seq%d ORDER BY sequence
 
-// Test ...
-// test.cleanup
-// test.prepare
-// go { loop { test.workload } }
-// go { loop { test.verify } }
+// testcase ...
+// testcase.cleanup
+// testcase.prepare
+// go { loop { testcase.workload } }
+// go { loop { testcase.verify } }
 
 const (
 	initBalance = 1000
 )
 
-type Test interface {
+type testcase interface {
 	prepare(ctx context.Context, db *sql.DB, accounts int, tableID int, concurrency int) error
 	workload(ctx context.Context, tx *sql.Tx, accounts int, tableID int) error
 	verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string) error
@@ -85,7 +85,7 @@ type Test interface {
 
 type sequenceTest struct{}
 
-var _ Test = &sequenceTest{}
+var _ testcase = &sequenceTest{}
 
 func (*sequenceTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID int) error {
 	const sequenceRowID = 0
@@ -177,7 +177,7 @@ func (s *sequenceTest) cleanup(ctx context.Context, db *sql.DB, accounts, tableI
 
 type bankTest struct{}
 
-var _ Test = &bankTest{}
+var _ testcase = &bankTest{}
 
 func (*bankTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID int) error {
 	var (
@@ -270,7 +270,7 @@ func (s *bankTest) cleanup(ctx context.Context, db *sql.DB, accounts, tableID in
 
 func prepareImpl(
 	ctx context.Context,
-	test Test, createTable string, batchInsertSQLF func(batchSize, offset int) string,
+	test testcase, createTable string, batchInsertSQLF func(batchSize, offset int) string,
 	db *sql.DB, accounts, tableID, concurrency int,
 ) error {
 	isDropped := test.cleanup(ctx, db, accounts, tableID, false)
@@ -331,7 +331,7 @@ func dropTable(ctx context.Context, db *sql.DB, table string) {
 	mustExec(ctx, db, fmt.Sprintf("DROP TABLE IF EXISTS %s", table))
 }
 
-func cleanupImpl(ctx context.Context, test Test, tableName string, db *sql.DB, accounts, tableID int, force bool) bool {
+func cleanupImpl(ctx context.Context, test testcase, tableName string, db *sql.DB, accounts, tableID int, force bool) bool {
 	if force {
 		dropTable(ctx, db, tableName)
 		return true
@@ -415,7 +415,7 @@ func run(
 	downstreamDB := openDB(ctx, downstream)
 	defer downstreamDB.Close()
 
-	tests := []Test{&sequenceTest{}, &bankTest{}}
+	tests := []testcase{&sequenceTest{}, &bankTest{}}
 
 	if cleanupOnly {
 		for tableID := 0; tableID < tables; tableID++ {
