@@ -218,11 +218,11 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 
 /// Message encoder
 type MessageEncoder struct {
-	bits            []byte
-	sizeTables      [][]uint64
-	bodyStartOffset int
-	bodySize        []uint64
-	bodySizeIndex   int
+	bits           []byte
+	sizeTables     [][]uint64
+	bodyLastOffset int
+	bodySize       []uint64
+	bodySizeIndex  int
 
 	allocator *SliceAllocator
 }
@@ -235,7 +235,8 @@ func NewMessageEncoder(allocator *SliceAllocator) *MessageEncoder {
 }
 
 func (e *MessageEncoder) encodeBodySize() *MessageEncoder {
-	e.bodySize[e.bodySizeIndex] = uint64(len(e.bits) - e.bodyStartOffset)
+	e.bodySize[e.bodySizeIndex] = uint64(len(e.bits) - e.bodyLastOffset)
+	e.bodyLastOffset = len(e.bits)
 	e.bodySizeIndex++
 	return e
 }
@@ -255,7 +256,7 @@ func (e *MessageEncoder) encodeHeaders(headers *Headers) *MessageEncoder {
 	oldSize := len(e.bits)
 	e.bodySize = e.allocator.uint64Slice(headers.count)
 	e.bits = headers.encode(e.bits)
-	e.bodyStartOffset = len(e.bits)
+	e.bodyLastOffset = len(e.bits)
 	e.sizeTables = append(e.sizeTables, e.allocator.oneUint64Slice(uint64(len(e.bits)-oldSize)), e.bodySize)
 	return e
 }
