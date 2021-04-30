@@ -82,10 +82,9 @@ func getGcMinSafePointCache(ctx context.Context, pdClient pd.Client, gcTTL int64
 		physicalTs, logicalTs, err := pdClient.GetTS(ctx)
 		if err != nil {
 			return 0, err
-		} else {
-			minGcSafePointCache.ts = oracle.ComposeTS(physicalTs-(gcTTL*1000), logicalTs)
-			minGcSafePointCache.lastUpdated = time.Now()
 		}
+		minGcSafePointCache.ts = oracle.ComposeTS(physicalTs-(gcTTL*1000), logicalTs)
+		minGcSafePointCache.lastUpdated = time.Now()
 	}
 	return minGcSafePointCache.ts, nil
 }
@@ -820,8 +819,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		})
 		if actual > gcSafePoint {
 			// UpdateServiceGCSafePoint has failed.
-			// log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", gcSafePoint), zap.Uint64("actual-safepoint", actual))
-			log.Warn("updating an outdated service safe point", zap.Time("checkpoint-ts", oracle.GetTimeFromTS(gcSafePoint)), zap.Time("actual-safepoint", oracle.GetTimeFromTS(actual)))
+			log.Warn("updating an outdated service safe point", zap.Uint64("checkpoint-ts", gcSafePoint), zap.Uint64("actual-safepoint", actual))
 			for cfID, cf := range o.changeFeeds {
 				if cf.status.CheckpointTs < actual {
 					runningError := &model.RunningError{
