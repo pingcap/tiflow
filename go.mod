@@ -3,7 +3,6 @@ module github.com/pingcap/ticdc
 go 1.13
 
 require (
-	cloud.google.com/go/storage v1.6.0 // indirect
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.27.2
@@ -16,7 +15,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/golang/mock v1.4.3 // indirect
 	github.com/golang/protobuf v1.3.4
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/btree v1.0.0
@@ -46,7 +44,6 @@ require (
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
-	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
