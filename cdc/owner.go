@@ -72,6 +72,17 @@ func (o *ownership) inc() {
 	}
 }
 
+type curTimestampCacheEntry struct {
+	ts          model.Ts
+	lastUpdated time.Time
+	mu          sync.Mutex
+}
+
+// This value stores the ts obtained from PD and is updated every CurTimestampCacheUpdateInterval.
+var (
+	curTimestampCache curTimestampCacheEntry
+)
+
 // Owner manages the cdc cluster
 type Owner struct {
 	done        chan struct{}
@@ -118,6 +129,8 @@ const (
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
 	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	// CurTimestampCacheUpdateInterval is the interval that update curTimestampCache
+	CurTimestampCacheUpdateInterval = time.Second * 2
 )
 
 // NewOwner creates a new Owner instance
@@ -719,17 +732,24 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 	staleChangeFeedID := make([]model.ChangeFeedID, 0)
 	gcSafePoint := uint64(math.MaxUint64)
-
 	// init the lower bound of gcSafePoint, the logical part is zero.
 	minGcSafePoint := oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
-	// Try to get physical and logical timestamp from pd
-	pyTs, lgTs, err := o.pdClient.GetTS(ctx)
-	if err != nil {
-		log.Warn("failed to acquire time from pd, will use this machine time", zap.Error(err))
+
+	// get ts from cache.
+	curTimestampCache.mu.Lock()
+	if time.Now().After(curTimestampCache.lastUpdated.Add(CurTimestampCacheUpdateInterval)) {
+		physicalTs, logicalTs, err := o.pdClient.GetTS(ctx)
+		if err != nil {
+			log.Warn("failed to acquire time from pd, will use this machine time", zap.Error(err))
+		} else {
+			curTimestampCache.ts = oracle.ComposeTS(physicalTs-(o.gcTTL*1000), logicalTs)
+			curTimestampCache.lastUpdated = time.Now()
+			minGcSafePoint = curTimestampCache.ts
+		}
 	} else {
-		// o.gcTTl * 1000 to cover from second to millisecond
-		minGcSafePoint = oracle.ComposeTS(pyTs-(o.gcTTL*1000), lgTs)
+		minGcSafePoint = curTimestampCache.ts
 	}
+	curTimestampCache.mu.Unlock()
 
 	if len(o.changeFeeds) > 0 {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
@@ -775,7 +795,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	// handle stagnant changefeed collected above
-	err = o.handleStaleChangeFeed(ctx, staleChangeFeedID, minGcSafePoint, gcSafePoint)
+	err := o.handleStaleChangeFeed(ctx, staleChangeFeedID, minGcSafePoint, gcSafePoint)
 	if err != nil {
 		log.Warn("failed to handleStaleChangeFeed ", zap.Error(err))
 	}
