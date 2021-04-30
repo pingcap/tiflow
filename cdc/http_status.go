@@ -59,7 +59,7 @@ func (s *Server) startStatusHTTP() error {
 
 	if util.FailpointBuild {
 		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
-		serverMux.Handle("/fail/", http.StripPrefix("/fail", &failpoint.HttpHandler{}))
+		serverMux.Handle("/debug/fail/", http.StripPrefix("/debug/fail", &failpoint.HttpHandler{}))
 	}
 
 	prometheus.DefaultGatherer = registry
