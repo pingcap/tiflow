@@ -92,6 +92,7 @@ if [[ "$restart" == "true" ]]; then
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
+        --sort-dir $workdir/cdc-sort$logsuffix \
         $config_path \
         $tls \
         $certcn \
@@ -107,6 +108,7 @@ else
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
+    --sort-dir $workdir/cdc-sort$logsuffix \
     $config_path \
     $tls \
     $certcn \
