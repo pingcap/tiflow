@@ -44,10 +44,10 @@ func (c *mockCallBacker) cb() error {
 	return c.injectedErr
 }
 
-func (s *flowControlSuite) TestMemoryControlBasic(c *check.C) {
+func (s *flowControlSuite) TestMemoryQuotaBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemorySizeController(1024)
+	controller := NewTableMemoryQuota(1024)
 	sizeCh := make(chan uint64, 1024)
 	var (
 		wg       sync.WaitGroup
@@ -86,10 +86,10 @@ func (s *flowControlSuite) TestMemoryControlBasic(c *check.C) {
 	c.Assert(controller.GetConsumption(), check.Equals, uint64(0))
 }
 
-func (s *flowControlSuite) TestMemoryControlForceConsume(c *check.C) {
+func (s *flowControlSuite) TestMemoryQuotaForceConsume(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemorySizeController(1024)
+	controller := NewTableMemoryQuota(1024)
 	sizeCh := make(chan uint64, 1024)
 	var (
 		wg       sync.WaitGroup
@@ -133,11 +133,11 @@ func (s *flowControlSuite) TestMemoryControlForceConsume(c *check.C) {
 	c.Assert(atomic.LoadUint64(&consumed), check.Equals, uint64(0))
 }
 
-// TestMemoryControlAbort verifies that Abort works
-func (s *flowControlSuite) TestMemoryControlAbort(c *check.C) {
+// TestMemoryQuotaAbort verifies that Abort works
+func (s *flowControlSuite) TestMemoryQuotaAbort(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemorySizeController(1024)
+	controller := NewTableMemoryQuota(1024)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -158,11 +158,11 @@ func (s *flowControlSuite) TestMemoryControlAbort(c *check.C) {
 	wg.Wait()
 }
 
-// TestMemoryControlReleaseZero verifies that releasing 0 bytes is successful
-func (s *flowControlSuite) TestMemoryControlReleaseZero(c *check.C) {
+// TestMemoryQuotaReleaseZero verifies that releasing 0 bytes is successful
+func (s *flowControlSuite) TestMemoryQuotaReleaseZero(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemorySizeController(1024)
+	controller := NewTableMemoryQuota(1024)
 	controller.Release(0)
 }
 
