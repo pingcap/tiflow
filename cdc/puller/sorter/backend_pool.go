@@ -15,22 +15,17 @@ package sorter
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
-	"math/big"
-	mathrand "math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
 
-	"github.com/cenkalti/backoff"
 	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -44,6 +39,7 @@ import (
 
 const (
 	backgroundJobInterval = time.Second * 15
+	sortDirLockFileName   = "ticdc_lock"
 )
 
 var (
@@ -75,18 +71,18 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 		fileNameCounter:   0,
 		dir:               dir,
 		cancelCh:          make(chan struct{}),
-		filePrefix:        generateFilePrefix(dir),
+		filePrefix:        fmt.Sprintf("%s/sort-%d-", dir, os.Getpid()),
 	}
 
-	err := ret.cleanUpStaleFiles()
-	if err != nil {
-		log.Warn("Unified Sorter: failed to clean up stale temporary files. Report a bug if you believe this is unexpected", zap.Error(err))
-	}
-
-	err = ret.lockPrefix()
+	err := ret.lockSortDir()
 	if err != nil {
 		log.Error("failed to lock file prefix", zap.String("prefix", ret.filePrefix))
 		return nil
+	}
+
+	err = ret.cleanUpStaleFiles()
+	if err != nil {
+		log.Warn("Unified Sorter: failed to clean up stale temporary files. Report a bug if you believe this is unexpected", zap.Error(err))
 	}
 
 	go func() {
@@ -247,7 +243,10 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 
 func (p *backEndPool) terminate() {
 	defer func() {
-		err := p.unlockPrefix()
+		if p.fileLock == nil {
+			return
+		}
+		err := p.unlockSortDir()
 		if err != nil {
 			log.Warn("failed to unlock file prefix", zap.String("prefix", p.filePrefix))
 		}
@@ -309,125 +308,61 @@ func (p *backEndPool) memoryPressure() int32 {
 	return atomic.LoadInt32(&p.memPressure)
 }
 
-func generateFilePrefix(dir string) string {
-	var randSuffix uint64
-	randInt, err := rand.Int(rand.Reader, big.NewInt(2<<16))
+func (p *backEndPool) lockSortDir() error {
+	lockFileName := fmt.Sprintf("%s/%s", p.dir, sortDirLockFileName)
+	fileLock, err := filelock.NewFileLock(lockFileName)
 	if err != nil {
-		log.Warn("Generating random number using entropy failed, falling back to pseudo randomness")
-		randSuffix = mathrand.Uint64() % (2 << 16)
-	} else {
-		randSuffix = randInt.Uint64()
+		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByArgs()
 	}
-	return fmt.Sprintf("%s/sort-%d-%d-", dir, os.Getpid(), randSuffix)
-}
 
-func (p *backEndPool) unlockPrefix() error {
-	if p.fileLock == nil {
-		log.Panic("expected file lock, got nil, report a bug")
-	}
-	defer p.fileLock.Close() //nolint:errcheck
-
-	err := p.fileLock.Unlock()
+	err = fileLock.Lock()
 	if err != nil {
-		return errors.Trace(err)
+		if cerrors.ErrConflictingFileLocks.Equal(err) {
+			log.Warn("TiCDC failed to lock sorter temporary file directory. "+
+				"Make sure that another instance of TiCDC, or any other program, is not using the directory. "+
+				"If you believe you should not see this error, try deleting the lock file and resume the changefeed. "+
+				"Report a bug or contact support if the problem persists.",
+				zap.String("lock-file", lockFileName))
+			return errors.Trace(err)
+		}
+		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByArgs()
 	}
 
-	log.Info("sorter temporary file prefix unlocked", zap.String("prefix", p.filePrefix))
+	p.fileLock = fileLock
 	return nil
 }
 
-func (p *backEndPool) lockPrefix() error {
-	metaLockPath := fmt.Sprintf("%s/cdc-meta-lock", p.dir)
-	localLockPath := fmt.Sprintf("%slock", p.filePrefix)
-
-	if p.fileLock != nil {
-		log.Panic("unexpected file lock, report a bug")
-	}
-
-	metaLock, err := filelock.NewSimpleFileLock(metaLockPath)
+func (p *backEndPool) unlockSortDir() error {
+	err := p.fileLock.Unlock()
 	if err != nil {
-		return errors.Trace(err)
+		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByArgs()
 	}
-	defer func() {
-		err := metaLock.Unlock()
-		if err != nil {
-			log.Warn("Failed to unlock meta lock", zap.String("path", metaLockPath))
-		}
-	}()
-
-	p.fileLock, err = filelock.NewFileLock(localLockPath)
-	if err != nil {
-		return backoff.Permanent(errors.Trace(err))
-	}
-
-	err = p.fileLock.Lock()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	return nil
 }
 
 func (p *backEndPool) cleanUpStaleFiles() error {
-	files, err := filepath.Glob(p.dir + "/*lock")
+	if p.dir == "" {
+		// guard against programmer error. Must be careful since we are deleting user files.
+		log.Panic("unexpected file prefix", zap.String("file-prefix", p.filePrefix))
+	}
+
+	files, err := filepath.Glob(p.dir + "/sort-*")
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for _, lockFilePath := range files {
-		log.Info("Found file lock", zap.String("path", lockFilePath))
-
-		flock, err := filelock.NewFileLock(lockFilePath)
+	for _, toRemoveFilePath := range files {
+		log.Info("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
+		err := os.Remove(toRemoveFilePath)
 		if err != nil {
-			log.Info("Cannot read lock file, skip", zap.String("path", lockFilePath))
-			continue
+			log.Warn("failed to remove file",
+				zap.String("file", toRemoveFilePath),
+				zap.Error(err))
+			// For fail-fast in integration tests
+			failpoint.Inject("sorterDebug", func() {
+				log.Panic("panicking", zap.Error(err))
+			})
 		}
-
-		metaLockPath := fmt.Sprintf("%s/cdc-meta-lock", p.dir)
-		metaLock, err := filelock.NewSimpleFileLock(metaLockPath)
-		if err != nil {
-			log.Warn("Cannot get meta lock while cleaning", zap.String("path", metaLockPath))
-			_ = flock.Close()
-			return err
-		}
-
-		failpoint.Inject("metaLockDelayInjectPoint", func() {})
-
-		err = flock.Lock()
-		_ = metaLock.Unlock()
-		if err != nil {
-			log.Info("Cannot lock prefix while cleaning up, skip", zap.String("path", lockFilePath), zap.Error(err))
-			_ = flock.Close()
-			continue
-		}
-
-		prefix := strings.TrimSuffix(lockFilePath, "lock")
-
-		toCleanFiles, err := filepath.Glob(prefix + "*")
-		if err != nil {
-			_ = flock.Unlock()
-			_ = flock.Close()
-			log.Warn("Cannot glob temporary files, skip", zap.String("prefix", prefix))
-			continue
-		}
-
-		failpoint.Inject("deleteStaleFileDelayInjectPoint", func() {})
-
-		for _, file := range toCleanFiles {
-			if file == prefix+"lock" {
-				// skip the lock file itself
-				continue
-			}
-			log.Debug("Cleaning stale temporary file", zap.String("file", file))
-			err := os.Remove(file)
-			if err != nil {
-				log.Warn("Cannot remove stale temporary file", zap.String("file", file), zap.Error(err))
-			}
-		}
-
-		_ = flock.Unlock()
-		_ = flock.Close()
-		_ = os.Remove(prefix + "lock")
 	}
 
 	return nil

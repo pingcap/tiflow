@@ -16,10 +16,8 @@ package sorter
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/filelock"
@@ -190,12 +188,7 @@ type mockOtherProcess struct {
 }
 
 func newMockOtherProcess(c *check.C, dir string, prefix string) *mockOtherProcess {
-	metaLockPath := fmt.Sprintf("%s/cdc-meta-lock", dir)
-	metaLock, err := filelock.NewSimpleFileLock(metaLockPath)
-	c.Assert(err, check.IsNil)
-	defer metaLock.Unlock() //nolint:errcheck
-
-	prefixLockPath := fmt.Sprintf("%slock", prefix)
+	prefixLockPath := fmt.Sprintf("%s/%s", dir, sortDirLockFileName)
 	flock, err := filelock.NewFileLock(prefixLockPath)
 	c.Assert(err, check.IsNil)
 
@@ -220,7 +213,7 @@ func (p *mockOtherProcess) writeMockFiles(c *check.C, num int) {
 }
 
 func (p *mockOtherProcess) changeLockPermission(c *check.C, mode os.FileMode) {
-	prefixLockPath := fmt.Sprintf("%slock", p.prefix)
+	prefixLockPath := fmt.Sprintf("%s/%s", p.dir, sortDirLockFileName)
 	err := os.Chmod(prefixLockPath, mode)
 	c.Assert(err, check.IsNil)
 }
@@ -244,128 +237,16 @@ func (p *mockOtherProcess) assertFilesNotExist(c *check.C) {
 	}
 }
 
-func (p *mockOtherProcess) randomlyDeleteFiles(c *check.C) {
-	numFiles := len(p.files)
-	perm := rand.Perm(numFiles)
-	for i := 0; i < numFiles/2; i++ {
-		file := p.files[perm[i]]
-		err := os.Remove(file)
-		c.Assert(err, check.IsNil)
-	}
-}
-
 // TestCleanUpStaleBasic verifies that the backendPool correctly cleans up stale temporary files
 // left by other CDC processes that have exited abnormally.
 func (s *backendPoolSuite) TestCleanUpStaleBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/metaLockDelayInjectPoint", "return(500)")
-	c.Assert(err, check.IsNil)
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/metaLockDelayInjectPoint") //nolint:errcheck
-
 	dir := c.MkDir()
-	prefix := dir + "/test-"
-	prefix1 := dir + "/test1-"
+	prefix := dir + "/sort-1-"
 
 	mockP := newMockOtherProcess(c, dir, prefix)
 	mockP.writeMockFiles(c, 100)
-	mockP.unlock(c)
-	mockP.assertFilesExist(c)
-
-	mockP1 := newMockOtherProcess(c, dir, prefix1)
-	mockP1.writeMockFiles(c, 100)
-	mockP1.assertFilesExist(c)
-
-	backEndPool := newBackEndPool(dir, "")
-	c.Assert(backEndPool, check.NotNil)
-	defer backEndPool.terminate()
-
-	mockP.assertFilesNotExist(c)
-	mockP1.assertFilesExist(c)
-	mockP1.unlock(c)
-
-	err = backEndPool.cleanUpStaleFiles()
-	c.Assert(err, check.IsNil)
-
-	mockP1.assertFilesNotExist(c)
-}
-
-// TestCleanUpStaleContention verifies that the backendPool correctly cleans up stale temporary files
-// if there are two new CDC processes starting up simultaneously and both are trying to clean up some stale files.
-func (s *backendPoolSuite) TestCleanUpStaleContention(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	dir := c.MkDir()
-
-	var (
-		exitedProcesses  []*mockOtherProcess
-		runningProcesses []*mockOtherProcess
-	)
-
-	for i := 0; i < 20; i++ {
-		prefix := fmt.Sprintf("%s/testa%d-", dir, i)
-		mockP := newMockOtherProcess(c, dir, prefix)
-		mockP.writeMockFiles(c, 100)
-		mockP.unlock(c)
-		exitedProcesses = append(exitedProcesses, mockP)
-	}
-
-	for i := 0; i < 20; i++ {
-		prefix := fmt.Sprintf("%s/testb%d-", dir, i)
-		mockP := newMockOtherProcess(c, dir, prefix)
-		mockP.writeMockFiles(c, 100)
-		runningProcesses = append(runningProcesses, mockP)
-	}
-
-	var wg sync.WaitGroup
-
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			backEndPool := newBackEndPool(dir, "")
-			c.Assert(backEndPool, check.NotNil)
-			defer backEndPool.terminate()
-		}()
-	}
-
-	wg.Wait()
-
-	for _, mockP := range exitedProcesses {
-		mockP.assertFilesNotExist(c)
-	}
-	for _, mockP := range runningProcesses {
-		mockP.assertFilesExist(c)
-		mockP.unlock(c)
-	}
-
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			backEndPool := newBackEndPool(dir, "")
-			c.Assert(backEndPool, check.NotNil)
-			defer backEndPool.terminate()
-		}()
-	}
-
-	wg.Wait()
-	for _, mockP := range runningProcesses {
-		mockP.assertFilesNotExist(c)
-	}
-}
-
-// TestCleanUpStaleBadLockPermission verifies that the backendPool does not panic or exit unexpectedly when it encounters
-// lock files that it does not have the access permission to.
-func (s *backendPoolSuite) TestCleanUpStaleBadLockPermission(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	dir := c.MkDir()
-	prefix := dir + "/test-"
-
-	mockP := newMockOtherProcess(c, dir, prefix)
-	mockP.writeMockFiles(c, 100)
-	mockP.changeLockPermission(c, 0o555) // read only
 	mockP.unlock(c)
 	mockP.assertFilesExist(c)
 
@@ -373,47 +254,38 @@ func (s *backendPoolSuite) TestCleanUpStaleBadLockPermission(c *check.C) {
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
 
-	mockP.assertFilesExist(c)
-	mockP.changeLockPermission(c, 0o755) // read-write
-
-	err := backEndPool.cleanUpStaleFiles()
-	c.Assert(err, check.IsNil)
-
 	mockP.assertFilesNotExist(c)
 }
 
-// TestCleanUpStaleFileRemovedUnexpectedly verifies that the backendPool does not panic or exit unexpectedly when it races with
-// a manual deletion of a stale file.
-func (s *backendPoolSuite) TestCleanUpStaleFileRemovedUnexpectedly(c *check.C) {
+// TestFileLockConflict tests that if two backEndPools were to use the same sort-dir,
+// and error would be returned by one of them.
+func (s *backendPoolSuite) TestFileLockConflict(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dir := c.MkDir()
+
+	backEndPool1 := newBackEndPool(dir, "")
+	c.Assert(backEndPool1, check.NotNil)
+	defer backEndPool1.terminate()
+
+	backEndPool2 := newBackEndPool(dir, "")
+	c.Assert(backEndPool2, check.IsNil)
+}
+
+// TestCleanUpStaleBasic verifies that the backendPool correctly cleans up stale temporary files
+// left by other CDC processes that have exited abnormally.
+func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	dir := c.MkDir()
-	prefix := dir + "/test-"
+	prefix := dir + "/sort-1-"
 
 	mockP := newMockOtherProcess(c, dir, prefix)
 	mockP.writeMockFiles(c, 100)
-	mockP.unlock(c)
+	// set a bad permission
+	mockP.changeLockPermission(c, 0o000)
+
+	backEndPool := newBackEndPool(dir, "")
+	c.Assert(backEndPool, check.IsNil)
+
 	mockP.assertFilesExist(c)
-
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/deleteStaleFileDelayInjectPoint", "pause")
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/deleteStaleFileDelayInjectPoint") //nolint:errcheck
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		backEndPool := newBackEndPool(dir, "")
-		c.Assert(backEndPool, check.NotNil)
-		defer backEndPool.terminate()
-	}()
-
-	time.Sleep(3 * time.Second)
-	mockP.randomlyDeleteFiles(c)
-	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/deleteStaleFileDelayInjectPoint") //nolint:errcheck
-	c.Assert(err, check.IsNil)
-
-	wg.Wait()
-
-	mockP.assertFilesNotExist(c)
 }
