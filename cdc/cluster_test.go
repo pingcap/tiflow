@@ -9,15 +9,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-
-	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/capture"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/owner"
+	"github.com/pingcap/ticdc/cdc/processor"
+	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"go.etcd.io/etcd/clientv3"
@@ -34,25 +36,62 @@ type ClusterTester struct {
 	embedEtcd  *embed.Etcd
 	etcdClient *kv.CDCEtcdClient
 
-	captures []*capture.Capture
+	upstream          *mockUpstream
+	captureCreatingCh chan *capture.Capture
 }
 
 func NewClusterTester(c *check.C, captureNum int) *ClusterTester {
-	captures := make([]*capture.Capture, 0, captureNum)
-	for i := 0; i < captureNum; i++ {
-		captures = append(captures, capture.NewCapture())
+	cluster := &ClusterTester{
+		c:                 c,
+		upstream:          newMockUpstream(c),
+		captureCreatingCh: make(chan *capture.Capture),
 	}
-	return &ClusterTester{c: c, captures: captures}
+	cluster.ScaleOut(captureNum)
+	return cluster
+}
+
+func (t *ClusterTester) ScaleOut(captureNum int) {
+	for i := 0; i < captureNum; i++ {
+		cap := capture.NewCapture4Test(
+			func(leaseID clientv3.LeaseID) *processor.Manager {
+				return processor.NewManager4Test(leaseID,
+					func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+						return t.upstream.createTablePipeline(ctx, tableID, replicaInfo), nil
+					})
+			}, func(leaseID clientv3.LeaseID) *owner.Owner {
+				return owner.NewOwner4Test(leaseID, func(ctx cdcContext.Context, startTs uint64) owner.DDLPuller {
+					return t.upstream.ddlPuller
+				}, func(ctx cdcContext.Context) (sink.Sink, error) {
+					panic("unimplemented")
+				})
+			})
+		t.captureCreatingCh <- cap
+	}
+}
+
+func (t *ClusterTester) ScaleIn(captureNum int) {
+	// todo
 }
 
 func (t *ClusterTester) Run(ctx context.Context) error {
 	errg, ctx := errgroup.WithContext(ctx)
-	t.runEtcd(ctx)
-	for _, capture := range t.captures {
-		errg.Go(func() error {
-			return t.runCapture(ctx, capture)
-		})
-	}
+	errg.Go(func() error {
+		t.runEtcd(ctx)
+		return nil
+	})
+	errg.Go(func() error {
+		for {
+			var cap *capture.Capture
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case cap = <-t.captureCreatingCh:
+			}
+			errg.Go(func() error {
+				return t.runCapture(ctx, cap)
+			})
+		}
+	})
 	return errg.Wait()
 }
 
@@ -88,41 +127,108 @@ func (t *ClusterTester) runEtcd(ctx context.Context) {
 	t.etcdClient = &etcdClient
 }
 
-func (t *ClusterTester) SetClusterBarrierTs(ts model.Ts) {}
-
-func (t *ClusterTester) CreateTable(tableID model.TableID, tableName model.TableName, startTs model.Ts) {
+func (t *ClusterTester) UpdateDDLPullerResolvedTs(ts model.Ts) {
+	t.upstream.ddlPuller.updateDDLPullerResolvedTs(ts)
 }
 
-func (t *ClusterTester) CheckConsistency(consistencyTs model.Ts) {}
+func (t *ClusterTester) ApplyDDLJob(job *timodel.Job) {
+	t.upstream.ddlPuller.applyDDLJob(job)
+}
+
+func (t *ClusterTester) CheckpointTs() map[model.TableID]model.Ts {
+	return t.upstream.checkpointTs()
+}
 
 type mockUpstream struct {
-	clusterBarrierTs model.Ts
+	c *check.C
 
+	ddlPuller          *mockDDLPuller
 	tableReceivedTsMap map[model.TableID]*[]model.Ts
 }
 
-func (u *mockUpstream) setClusterBarrierTs(ts model.Ts) {}
+func newMockUpstream(c *check.C) *mockUpstream {
+	return &mockUpstream{
+		c:                  c,
+		tableReceivedTsMap: make(map[model.TableID]*[]model.Ts),
+		ddlPuller:          &mockDDLPuller{c: c},
+	}
+}
 
-func (u *mockUpstream) applyDDLJob(job *timodel.Job) {}
+func (u *mockUpstream) checkpointTs() map[model.TableID]model.Ts {
+	// todo
+	panic("unimplemented")
+}
 
-func (u *mockUpstream) ddlPuller() {}
+type mockDDLPuller struct {
+	c          *check.C
+	resolvedTs model.Ts
+	ddlQueue   []*timodel.Job
+	ddlQueueMu sync.Mutex
+}
 
-func (u *mockUpstream) createTablePipeline(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+func (m *mockDDLPuller) updateDDLPullerResolvedTs(ts model.Ts) {
+	atomic.StoreUint64(&m.resolvedTs, ts)
+}
+
+func (m *mockDDLPuller) applyDDLJob(job *timodel.Job) {
+	m.ddlQueueMu.Lock()
+	defer m.ddlQueueMu.Unlock()
+	finishedTs := job.BinlogInfo.FinishedTS
+	for {
+		resolvedTs := atomic.LoadUint64(&m.resolvedTs)
+		if resolvedTs > finishedTs {
+			m.c.Fatalf("the ddl resolved TS is greater than finishedTs")
+		}
+		if atomic.CompareAndSwapUint64(&m.resolvedTs, resolvedTs, finishedTs) {
+			break
+		}
+	}
+	m.ddlQueue = append(m.ddlQueue, job)
+}
+
+func (m *mockDDLPuller) Run(ctx cdcContext.Context) error {
+	// do nothing
+	return nil
+}
+
+func (m *mockDDLPuller) FrontDDL() (uint64, *timodel.Job) {
+	m.ddlQueueMu.Lock()
+	defer m.ddlQueueMu.Unlock()
+	if len(m.ddlQueue) == 0 {
+		return atomic.LoadUint64(&m.resolvedTs), nil
+	}
+	return atomic.LoadUint64(&m.resolvedTs), m.ddlQueue[0]
+}
+
+func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
+	m.ddlQueueMu.Lock()
+	defer m.ddlQueueMu.Unlock()
+	if len(m.ddlQueue) == 0 {
+		return atomic.LoadUint64(&m.resolvedTs), nil
+	}
+	job := m.ddlQueue[0]
+	m.ddlQueue = m.ddlQueue[1:]
+	return atomic.LoadUint64(&m.resolvedTs), job
+}
+
+func (m *mockDDLPuller) Close() {
+	// do nothing
+}
+
+func (u *mockUpstream) createTablePipeline(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) tablepipeline.TablePipeline {
 	outputCh := make(chan model.Ts, 128)
 	ctx, cancel := context.WithCancel(ctx)
 	tablePipeline := &mockTablePipeline{
-		tableID:          tableID,
-		replicaInfo:      replicaInfo,
-		resolvedTs:       replicaInfo.StartTs,
-		checkpointTs:     replicaInfo.StartTs,
-		barrierTs:        replicaInfo.StartTs,
-		targetTs:         math.MaxUint64,
-		clusterBarrierTs: &u.clusterBarrierTs,
-		status:           tablepipeline.TableStatusInitializing,
-		outputCh:         outputCh,
-		cancel:           cancel,
+		tableID:      tableID,
+		replicaInfo:  replicaInfo,
+		resolvedTs:   replicaInfo.StartTs,
+		checkpointTs: replicaInfo.StartTs,
+		barrierTs:    replicaInfo.StartTs,
+		targetTs:     math.MaxUint64,
+		status:       tablepipeline.TableStatusInitializing,
+		outputCh:     outputCh,
+		cancel:       cancel,
 	}
-	tablePipeline.wg.Add(1)
 	var receivedTsArrPtr *[]model.Ts
 	var exist bool
 	if receivedTsArrPtr, exist = u.tableReceivedTsMap[tableID]; !exist {
@@ -131,27 +237,25 @@ func (u *mockUpstream) createTablePipeline(ctx context.Context, tableID model.Ta
 		u.tableReceivedTsMap[tableID] = receivedTsArrPtr
 	}
 
+	tablePipeline.wg.Add(2)
 	go tablePipeline.run(ctx)
 	go func() {
+		defer tablePipeline.wg.Done()
 		for ts := range outputCh {
 			*receivedTsArrPtr = append(*receivedTsArrPtr, ts)
 		}
 	}()
-	return tablePipeline, nil
-}
-
-func (u *mockUpstream) checkConsistency(consistencyTs model.Ts) {
+	return tablePipeline
 }
 
 type mockTablePipeline struct {
-	tableID          model.TableID
-	replicaInfo      *model.TableReplicaInfo
-	resolvedTs       model.Ts
-	checkpointTs     model.Ts
-	barrierTs        model.Ts
-	targetTs         model.Ts
-	clusterBarrierTs *model.Ts
-	status           tablepipeline.TableStatus
+	tableID      model.TableID
+	replicaInfo  *model.TableReplicaInfo
+	resolvedTs   model.Ts
+	checkpointTs model.Ts
+	barrierTs    model.Ts
+	targetTs     model.Ts
+	status       tablepipeline.TableStatus
 
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
@@ -193,10 +297,6 @@ func (m *mockTablePipeline) calcResolvedTs() model.Ts {
 	targetTs := atomic.LoadUint64(&m.targetTs)
 	if resolvedTs > targetTs {
 		resolvedTs = targetTs
-	}
-	clusterBarrierTs := atomic.LoadUint64(m.clusterBarrierTs)
-	if resolvedTs > clusterBarrierTs {
-		resolvedTs = clusterBarrierTs
 	}
 	return resolvedTs
 }

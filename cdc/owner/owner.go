@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/sink"
+
 	"github.com/pingcap/ticdc/pkg/context"
 
 	"go.etcd.io/etcd/clientv3"
@@ -76,14 +78,27 @@ type Owner struct {
 	leaseID clientv3.LeaseID
 
 	close int32
+
+	newChangefeed func(gcManager *gcManager) *changefeed
 }
 
 func NewOwner(leaseID clientv3.LeaseID) *Owner {
 	return &Owner{
-		changefeeds: make(map[model.ChangeFeedID]*changefeed),
-		gcManager:   newGCManager(),
-		leaseID:     leaseID,
+		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
+		gcManager:     newGCManager(),
+		leaseID:       leaseID,
+		newChangefeed: newChangefeed,
 	}
+}
+
+func NewOwner4Test(leaseID clientv3.LeaseID,
+	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller,
+	newSink func(ctx context.Context) (sink.Sink, error)) *Owner {
+	o := NewOwner(leaseID)
+	o.newChangefeed = func(gcManager *gcManager) *changefeed {
+		return newChangefeed4Test(gcManager, newDDLPuller, newSink)
+	}
+	return o
 }
 
 func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {

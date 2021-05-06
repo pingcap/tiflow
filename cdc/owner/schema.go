@@ -18,20 +18,15 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
+	tidbkv "github.com/pingcap/tidb/kv"
+	timeta "github.com/pingcap/tidb/meta"
 	"go.uber.org/zap"
 )
-
-type schema4Owner interface {
-	AllPhysicalTables() []model.TableID
-	HandleDDL(job *timodel.Job) error
-	BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, error)
-	IsIneligibleTableID(tableID model.TableID) bool
-	SinkTableInfos() []*model.SimpleTableInfo
-}
 
 type schemaWrap4Owner struct {
 	schemaSnapshot *entry.SingleSchemaSnapshot
@@ -41,12 +36,28 @@ type schemaWrap4Owner struct {
 	allPhysicalTablesCache []model.TableID
 }
 
-func newSchemaWrap4Owner(schemaSnapshot *entry.SingleSchemaSnapshot, filter *filter.Filter, config *config.ReplicaConfig) schema4Owner {
-	return &schemaWrap4Owner{
-		schemaSnapshot: schemaSnapshot,
-		filter:         filter,
-		config:         config,
+func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *config.ReplicaConfig) (*schemaWrap4Owner, error) {
+	var meta *timeta.Meta
+	if kvStorage != nil {
+		var err error
+		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	f, err := filter.NewFilter(config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &schemaWrap4Owner{
+		schemaSnapshot: schemaSnap,
+		filter:         f,
+		config:         config,
+	}, nil
 }
 
 // AllPhysicalTables returns the table IDs of all tables and partition tables.

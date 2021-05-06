@@ -21,14 +21,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -47,21 +43,24 @@ type changefeed struct {
 	feedStateManager *feedStateManager
 	gcManager        *gcManager
 
-	schema      schema4Owner
-	sink        sink.Sink
-	ddlPuller   ddlPuller
+	schema      *schemaWrap4Owner
+	sink        AsyncSink
+	ddlPuller   DDLPuller
 	initialized bool
 
 	gcTTL int64
 
 	errCh  chan error
 	cancel stdContext.CancelFunc
+
+	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller
+	newSink      func(ctx context.Context) (AsyncSink, error)
 }
 
 func newChangefeed(gcManager *gcManager) *changefeed {
 	serverConfig := config.GetGlobalServerConfig()
 	gcTTL := serverConfig.GcTTL
-	return &changefeed{
+	c := &changefeed{
 		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
@@ -70,10 +69,31 @@ func newChangefeed(gcManager *gcManager) *changefeed {
 
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
+
+		newDDLPuller: newDDLPuller,
 	}
+	c.barriers.Update(DDLJobBarrier, 0)
+	c.barriers.Update(SyncPointBarrier, 0)
+	c.newSink = newAsyncSink
+	return c
+}
+
+func newChangefeed4Test(
+	gcManager *gcManager,
+	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller,
+	newSink func(ctx context.Context) (AsyncSink, error),
+) *changefeed {
+	c := newChangefeed(gcManager)
+	c.newDDLPuller = newDDLPuller
+	c.newSink = newSink
+	return c
 }
 
 func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		c.errCh <- err
+		return nil
+	})
 	if err := c.tick(ctx, state, captures); err != nil {
 		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string
@@ -146,45 +166,27 @@ func (c *changefeed) initialize(ctx context.Context) error {
 	})
 
 	if c.state.Info.Config.CheckGCSafePoint {
-
 		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, startTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
-	kvStore, err := util.KVStorageFromCtx(ctx)
+	c.barriers.Update(FinishBarrier, c.state.Info.TargetTs)
+	var err error
+	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, c.state.Info.Config.ForceReplicate)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	filter, err := filter.NewFilter(c.state.Info.Config)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.schema = newSchemaWrap4Owner(schemaSnap, filter, c.state.Info.Config)
 	cancelCtx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
-	c.sink, err = sink.NewSink(cancelCtx, c.state.ID, c.state.Info.SinkURI, filter, c.state.Info.Config, c.state.Info.Opts, c.errCh)
-	err = c.sink.Initialize(ctx, c.schema.SinkTableInfos())
+	c.sink, err = c.newSink(cancelCtx)
+	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.ddlPuller = newDDLPuller(cancelCtx, startTs)
 	go func() {
-		err := c.ddlPuller.Run(cancelCtx)
-		if err != nil {
-			log.Warn("ddhHandler returned error", zap.Error(err))
-			c.errCh <- err
-		}
+		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 	return nil
 }
@@ -261,6 +263,11 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	blocked := barrierTs == c.state.Status.CheckpointTs
+	if blocked && c.state.Info.SyncPointEnabled {
+		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
+			return 0, errors.Trace(err)
+		}
+	}
 	switch barrierTp {
 	case DDLJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
@@ -271,46 +278,65 @@ func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
-		err := c.schema.HandleDDL(ddlJob)
+		done, err := c.asyncExecDDL(ctx, ddlJob)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
-
-		err = c.execDDL(ctx, ddlJob)
+		if !done {
+			return barrierTs, nil
+		}
+		err = c.schema.HandleDDL(ddlJob)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
 		c.barriers.Update(DDLJobBarrier, newDDLResolvedTs)
+
 	case SyncPointBarrier:
-		// todo
-		panic("not implemented")
+		if !c.state.Info.SyncPointEnabled {
+			c.barriers.Remove(SyncPointBarrier)
+			return barrierTs, nil
+		}
+		if barrierTs == 0 {
+			c.barriers.Update(SyncPointBarrier, c.state.Status.CheckpointTs)
+			return barrierTs, nil
+		}
+		if !blocked {
+			return barrierTs, nil
+		}
+		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
+		c.barriers.Update(SyncPointBarrier, nextSyncPointTs)
+
 	case FinishBarrier:
+		if !blocked {
+			return barrierTs, nil
+		}
 		c.feedStateManager.MarkFinished()
+
 	default:
 		log.Panic("Unknown barrier type", zap.Int("barrier type", barrierTp))
 	}
 	return barrierTs, nil
 }
 
-func (c *changefeed) execDDL(ctx context.Context, job *timodel.Job) error {
+func (c *changefeed) asyncExecDDL(ctx context.Context, job *timodel.Job) (bool, error) {
 	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
-		return nil
+		return true, nil
 	}
 	cyclicConfig := c.state.Info.Config.Cyclic
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
-		return nil
+		return true, nil
 	}
 	failpoint.Inject("InjectChangefeedDDLError", func() {
 		failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
 	})
 	ddlEvent, err := c.schema.BuildDDLEvent(job)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 	ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
-	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+	done, err := c.sink.EmitDDLEvent(ctx, ddlEvent)
 	// If DDL executing failed, pause the changefeed and print log, rather
 	// than return an error and break the running of this owner.
 	if err != nil {
@@ -319,13 +345,13 @@ func (c *changefeed) execDDL(ctx context.Context, job *timodel.Job) error {
 				zap.String("ChangeFeedID", c.state.ID),
 				zap.Error(err),
 				zap.Reflect("ddlJob", job))
-			return cerror.ErrExecDDLFailed.GenWithStackByArgs()
+			return false, cerror.ErrExecDDLFailed.GenWithStackByArgs()
 		}
 		log.Info("Execute DDL ignored", zap.String("changefeed", c.state.ID), zap.Reflect("ddlJob", job))
-		return nil
+		return true, nil
 	}
 	log.Info("Execute DDL succeeded", zap.String("changefeed", c.state.ID), zap.Reflect("ddlJob", job))
-	return nil
+	return done, nil
 }
 
 func (c *changefeed) updateStatus(barrierTs model.Ts) {

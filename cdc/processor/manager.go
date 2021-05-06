@@ -58,24 +58,22 @@ type Manager struct {
 }
 
 // NewManager creates a new processor manager
-func NewManager() *Manager {
+func NewManager(leaseID clientv3.LeaseID) *Manager {
 	return &Manager{
 		processors:   make(map[model.ChangeFeedID]*processor),
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
+		leaseID:      leaseID,
 	}
 }
 
 func NewManager4Test(
-	lazyInit func(ctx context.Context) error,
+	leaseID clientv3.LeaseID,
 	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
-	m := NewManager()
+	m := NewManager(leaseID)
 	m.newProcessor = func(ctx context.Context) *processor {
-		p := newProcessor(ctx)
-		p.lazyInit = lazyInit
-		p.createTablePipeline = createTablePipeline
-		return p
+		return newProcessor4Test(ctx, createTablePipeline)
 	}
 	return m
 }

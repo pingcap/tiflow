@@ -17,6 +17,7 @@ import (
 	stdContext "context"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -103,6 +104,15 @@ func newProcessor(ctx context.Context) *processor {
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
 	return p
+}
+
+func newProcessor4Test(ctx context.Context,
+	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+) *processor {
+	p := newProcessor(ctx)
+	p.lazyInit = func(ctx context.Context) error { return nil }
+	p.createTablePipeline = createTablePipeline
+	return nil
 }
 
 // Tick implements the `orchestrator.State` interface
@@ -562,7 +572,10 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 
 // handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition() error {
-	minResolvedTs := p.schemaStorage.ResolvedTs()
+	minResolvedTs := uint64(math.MaxUint64)
+	if p.schemaStorage != nil {
+		minResolvedTs = p.schemaStorage.ResolvedTs()
+	}
 	for _, table := range p.tables {
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
@@ -725,6 +738,10 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 
 // doGCSchemaStorage trigger the schema storage GC
 func (p *processor) doGCSchemaStorage() error {
+	if p.schemaStorage == nil {
+		// schemaStorage is nil only in test
+		return nil
+	}
 	// Delay GC to accommodate pullers starting from a startTs that's too small
 	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
 	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)

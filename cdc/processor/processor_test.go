@@ -20,8 +20,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -34,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 

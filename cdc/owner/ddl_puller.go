@@ -32,7 +32,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type ddlPuller interface {
+type DDLPuller interface {
 	Run(ctx context.Context) error
 	FrontDDL() (uint64, *timodel.Job)
 	PopFrontDDL() (uint64, *timodel.Job)
@@ -50,7 +50,7 @@ type ddlPullerImpl struct {
 }
 
 // TODO test-case: resolvedTs is initialized to (startTs - 1)
-func newDDLPuller(ctx context.Context, startTs uint64) *ddlPullerImpl {
+func newDDLPuller(ctx context.Context, startTs uint64) DDLPuller {
 	pdCli := ctx.GlobalVars().PDClient
 	conf := config.GetGlobalServerConfig()
 	kvStorage := ctx.GlobalVars().KVStorage

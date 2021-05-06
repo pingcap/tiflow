@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"go.etcd.io/etcd/clientv3"
+
 	"github.com/pingcap/ticdc/pkg/context"
 
 	"github.com/google/uuid"
@@ -50,6 +52,9 @@ type Capture struct {
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
 	election *concurrency.Election
+
+	newProcessorManager func(leaseID clientv3.LeaseID) *processor.Manager
+	newOwner            func(leaseID clientv3.LeaseID) *owner.Owner
 }
 
 // NewCapture returns a new Capture instance
@@ -60,12 +65,22 @@ func NewCapture() *Capture {
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-	processorManager := processor.NewManager()
 	log.Info("creating capture", zap.String("capture-id", info.ID), zap.String("capture-addr", info.AdvertiseAddr))
 	return &Capture{
-		info:             info,
-		processorManager: processorManager,
+		info:                info,
+		newProcessorManager: processor.NewManager,
+		newOwner:            owner.NewOwner,
 	}
+}
+
+func NewCapture4Test(
+	newProcessorManager func(leaseID clientv3.LeaseID) *processor.Manager,
+	newOwner func(leaseID clientv3.LeaseID) *owner.Owner,
+) *Capture {
+	c := NewCapture()
+	c.newProcessorManager = newProcessorManager
+	c.newOwner = newOwner
+	return c
 }
 
 func (c *Capture) Run(ctx context.Context) error {
@@ -87,9 +102,10 @@ func (c *Capture) Run(ctx context.Context) error {
 		defer cancel()
 		return c.campaignOwner(ctx)
 	})
-
+	c.processorManager = c.newProcessorManager(c.session.Lease())
 	wg.Go(func() error {
 		defer cancel()
+
 		return c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState())
 	})
 	return wg.Wait()
@@ -124,7 +140,7 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 		}
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
-		owner := owner.NewOwner(c.session.Lease())
+		owner := c.newOwner(c.session.Lease())
 		c.setOwner(owner)
 		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState())
 		c.setOwner(nil)
@@ -220,7 +236,9 @@ func (c *Capture) register(ctx context.Context) error {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
-	c.processorManager.AsyncClose()
+	if c.processorManager != nil {
+		c.processorManager.AsyncClose()
+	}
 	c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		o.AsyncStop()
 		return nil

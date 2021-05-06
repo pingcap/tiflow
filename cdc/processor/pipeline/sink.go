@@ -214,6 +214,6 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
-	n.status.store(TableStatusStopped)
+	n.status.Store(TableStatusStopped)
 	return n.sink.Close()
 }
