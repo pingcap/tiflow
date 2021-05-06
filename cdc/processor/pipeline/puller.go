@@ -15,7 +15,6 @@ package pipeline
 
 import (
 	stdContext "context"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -38,8 +37,6 @@ type pullerNode struct {
 	changefeedID model.ChangeFeedID
 	tableName    string // quoted schema and table, used in metircs only
 
-	resolvedTs uint64
-
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
 	cancel      stdContext.CancelFunc
@@ -51,7 +48,7 @@ func newPullerNode(
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	limitter *puller.BlurResourceLimitter,
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) *pullerNode {
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
 	return &pullerNode{
 		credential:   credential,
 		kvStorage:    kvStorage,
@@ -59,7 +56,6 @@ func newPullerNode(
 		tableID:      tableID,
 		replicaInfo:  replicaInfo,
 		tableName:    tableName,
-		resolvedTs:   replicaInfo.StartTs,
 		changefeedID: changefeedID,
 	}
 }
@@ -98,7 +94,6 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 				}
 				if rawKV.OpType == model.OpTypeResolved {
 					metricTableResolvedTsGauge.Set(float64(oracle.ExtractPhysical(rawKV.CRTs)))
-					atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
@@ -120,8 +115,4 @@ func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
 	tableResolvedTsGauge.DeleteLabelValues(n.changefeedID, ctx.Vars().CaptureAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
-}
-
-func (n *pullerNode) ResolvedTs() uint64 {
-	return atomic.LoadUint64(&n.resolvedTs)
 }

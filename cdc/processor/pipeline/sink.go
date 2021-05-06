@@ -70,8 +70,6 @@ type sinkNode struct {
 	targetTs     model.Ts
 	barrierTs    model.Ts
 
-	lastFlushedTs model.Ts
-
 	eventBuffer []*model.PolymorphicEvent
 	rowBuffer   []*model.RowChangedEvent
 
@@ -128,7 +126,6 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	if err := n.flushRow2Sink(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	atomic.StoreUint64(&n.lastFlushedTs, resolvedTs)
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx.StdContext(), resolvedTs)
 	if err != nil {
 		return errors.Trace(err)
@@ -197,11 +194,6 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			}
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
 			return nil
-		}
-		lastFlushedTs := atomic.LoadUint64(&n.lastFlushedTs)
-		if event.CRTs < lastFlushedTs {
-			log.Panic("CRTs too small", zap.Uint64("CRTs", event.CRTs),
-				zap.Uint64("lastFlushedTs", lastFlushedTs))
 		}
 		if err := n.emitEvent(ctx, event); err != nil {
 			return errors.Trace(err)

@@ -69,9 +69,8 @@ type tablePipelineImpl struct {
 	markTableID int64
 	tableName   string // quoted schema and table, used in metircs only
 
-	sinkNode   *sinkNode
-	pullerNode *pullerNode
-	cancel     stdContext.CancelFunc
+	sinkNode *sinkNode
+	cancel   stdContext.CancelFunc
 }
 
 // TODO find a better name or avoid using an interface
@@ -179,8 +178,7 @@ func NewTablePipeline(ctx context.Context,
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
-	tablePipeline.pullerNode = newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName)
-	p.AppendNode(ctx, "puller", tablePipeline.pullerNode)
+	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	config := ctx.Vars().Config
