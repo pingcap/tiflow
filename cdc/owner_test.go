@@ -97,7 +97,9 @@ func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	if m.mockPDFailure {
 		return 0, 0, errors.New("injected PD failure")
 	}
-
+	if m.mockSafePointLost {
+		return 0, 0, nil
+	}
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
@@ -334,6 +336,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
 		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
+
 	mockOwner := Owner{
 		pdClient:                mockPDCli,
 		session:                 session,
@@ -353,7 +356,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
-	c.Assert(changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
+	c.Assert(mockOwner.changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 	s.TearDownTest(c)
 }
 
