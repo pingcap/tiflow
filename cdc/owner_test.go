@@ -17,11 +17,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
@@ -226,6 +227,23 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 				"capture_2": {},
 			},
 		},
+		"test_change_feed_3": {
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 0,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
@@ -252,8 +270,11 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 
 	err = mockOwner.handleAdminJob(s.ctx)
 	c.Assert(err, check.IsNil)
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
-	c.Assert(changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
+	c.Assert(mockOwner.stoppedFeeds["test_change_feed_3"], check.NotNil)
+	c.Assert(mockOwner.changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 
 	time.Sleep(4 * time.Second)
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
