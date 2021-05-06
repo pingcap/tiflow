@@ -1706,6 +1706,7 @@ func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[
 		if err != nil {
 			return errors.Trace(err)
 		}
+		delete(staleChangeFeeds, id)
 	}
 	return nil
 }
