@@ -197,11 +197,15 @@ func (f *fileSink) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 	// FIXME: if initialize succeed, O_WRONLY is enough, but sometimes it will failed
-	file, err := os.OpenFile(f.logPath.meta, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
+	tmpFileName := f.logPath.meta + ".tmp"
+	tmpFile, err := os.OpenFile(tmpFileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
-	_, err = file.Write(data)
+	_, err = tmpFile.Write(data)
+	if err = os.Rename(tmpFileName, f.logPath.meta); err != nil {
+		return errors.Trace(err)
+	}
 	return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 }
 
