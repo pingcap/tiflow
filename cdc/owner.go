@@ -72,26 +72,26 @@ func (o *ownership) inc() {
 	}
 }
 
-type minGcSafePointCacheEntry struct {
+type minGCSafePointCacheEntry struct {
 	ts          model.Ts
 	lastUpdated time.Time
 }
 
 func getGcMinSafePointCache(ctx context.Context, pdClient pd.Client, gcTTL int64) (model.Ts, error) {
-	if time.Now().After(minGcSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval)) {
+	if time.Now().After(minGCSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval)) {
 		physicalTs, logicalTs, err := pdClient.GetTS(ctx)
 		if err != nil {
 			return 0, err
 		}
-		minGcSafePointCache.ts = oracle.ComposeTS(physicalTs-(gcTTL*1000), logicalTs)
-		minGcSafePointCache.lastUpdated = time.Now()
+		minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(gcTTL*1000), logicalTs)
+		minGCSafePointCache.lastUpdated = time.Now()
 	}
-	return minGcSafePointCache.ts, nil
+	return minGCSafePointCache.ts, nil
 }
 
 // This value stores the ts obtained from PD and is updated every MinGCSafePointCacheUpdateInterval.
 var (
-	minGcSafePointCache minGcSafePointCacheEntry
+	minGCSafePointCache minGCSafePointCacheEntry
 )
 
 // Owner manages the cdc cluster
@@ -140,7 +140,7 @@ const (
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
 	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
-	// MinGCSafePointCacheUpdateInterval is the interval that update minGcSafePointCache
+	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
 	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )
 
@@ -739,14 +739,14 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		return nil
 	}
 
-	staleChangeFeedID := make([]model.ChangeFeedID, 0)
+	staleChangeFeeds := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 	gcSafePoint := uint64(math.MaxUint64)
 
 	// get the lower bound of gcSafePoint
-	minGcSafePoint, err := getGcMinSafePointCache(ctx, o.pdClient, o.gcTTL)
+	minGCSafePoint, err := getGcMinSafePointCache(ctx, o.pdClient, o.gcTTL)
 	if err != nil {
-		log.Warn("failed to acquire minGcSafePoint from Cache, will use this machine time", zap.Error(err))
-		minGcSafePoint = oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
+		log.Warn("failed to acquire minGCSafePoint from Cache, will use this machine time", zap.Error(err))
+		minGCSafePoint = oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
 	}
 
 	if len(o.changeFeeds) > 0 {
@@ -756,10 +756,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < gcSafePoint {
 				gcSafePoint = changefeed.status.CheckpointTs
 			}
-			// if changefeed's appliedCheckpoinTs < minGcSafePoint, means this changefeed is stagnant
-			// They are collected into this queue, and then a function is called to deal with these stagnant changefeed.
-			if changefeed.status.CheckpointTs < minGcSafePoint {
-				staleChangeFeedID = append(staleChangeFeedID, id)
+			// if changefeed's appliedCheckpoinTs < minGCSafePoint, it means this changefeed is stagnant
+			// They are collected into this map, and then a function is called to deal with these stagnant changefeed.
+			if changefeed.status.CheckpointTs < minGCSafePoint {
+				staleChangeFeeds[id] = changefeed.status
 			}
 
 			phyTs := oracle.ExtractPhysical(changefeed.status.CheckpointTs)
@@ -781,9 +781,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	for _, status := range o.stoppedFeeds {
-		// if a stopped changefeed's CheckpoinTs < minGcSafePoint, means this changefeed is stagnant
+		// if a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant
 		// it should never be resume, so here we can skip it
-		if status.CheckpointTs < minGcSafePoint {
+		if status.CheckpointTs < minGCSafePoint {
 			continue
 		}
 
@@ -793,7 +793,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	// handle stagnant changefeed collected above
-	err = o.handleStaleChangeFeed(ctx, staleChangeFeedID, minGcSafePoint, gcSafePoint)
+	err = o.handleStaleChangeFeed(ctx, staleChangeFeeds, minGCSafePoint)
 	if err != nil {
 		log.Warn("failed to handleStaleChangeFeed ", zap.Error(err))
 	}
@@ -1140,7 +1140,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			// refuse to resume adminJob that checkPointTs lag behind gcSafePoint
-			if cfInfo.Error != nil && cfInfo.Error.Code == string(cerror.ErrStartTsBeforeGC.RFCCode()) {
+			if cfInfo.Error != nil && cfInfo.Error.Code == string(cerror.ErrSnapshotLostCauseByGC.RFCCode()) {
 				log.Warn("invalid admin job, changefeed checkpoint lag behind gcSafePoint", zap.String("changefeed", job.CfID))
 				continue
 			}
@@ -1684,14 +1684,14 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 
 // handle the StaleChangeFeed
 // By setting the AdminJob type to AdminStop and the Error code to indicate that the changefeed is stagnant
-func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeedID []model.ChangeFeedID, minGcSafePoint, gcSafePoint uint64) error {
-	for _, id := range staleChangeFeedID {
-		message := cerror.ErrStartTsBeforeGC.GenWithStackByArgs(minGcSafePoint, gcSafePoint).Error()
+func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[model.ChangeFeedID]*model.ChangeFeedStatus, minGCSafePoint uint64) error {
+	for id, status := range staleChangeFeeds {
+		message := cerror.ErrSnapshotLostCauseByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint).Error()
 		log.Info("handle staleChangeFeed ", zap.String("changefeed", id), zap.String("Error message", message))
 
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    string(cerror.ErrStartTsBeforeGC.RFCCode()), // changfeed is stagnant
+			Code:    string(cerror.ErrSnapshotLostCauseByGC.RFCCode()), // changfeed is stagnant
 			Message: message,
 		}
 
