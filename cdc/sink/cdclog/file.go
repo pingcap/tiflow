@@ -203,9 +203,10 @@ func (f *fileSink) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
 	_, err = tmpFile.Write(data)
-	if err = os.Rename(tmpFileName, f.logPath.meta); err != nil {
-		return errors.Trace(err)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
+	err = os.Rename(tmpFileName, f.logPath.meta)
 	return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 }
 
