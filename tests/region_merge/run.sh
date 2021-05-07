@@ -22,7 +22,7 @@ function split_and_random_merge() {
 }
 
 large_scale=(100 200 400 800 1600 3200 6400 12800 25600 51200)
-small_scale=(100 200 400 800)
+small_scale=(100 200 400)
 # in CI, we use the small data set
 test_scale=( "${small_scale[@]}" )
 
@@ -45,8 +45,8 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 
-    # set max_execution_time to 20s, because split region could block even region has been split.
-    run_sql "SET @@global.MAX_EXECUTION_TIME = 20000;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    # set max_execution_time to 15s, because split region could block even region has been split.
+    run_sql "SET @@global.MAX_EXECUTION_TIME = 15000;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE DATABASE region_merge;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE TABLE region_merge.t1 (id bigint primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
