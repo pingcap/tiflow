@@ -78,10 +78,7 @@ type minGCSafePointCacheEntry struct {
 }
 
 func (o *Owner) getGcMinSafePointCache(ctx context.Context) (model.Ts, error) {
-	log.Warn("Time", zap.Time("lastUpdated", o.minGCSafePointCache.lastUpdated))
-	log.Warn("After", zap.Bool("lastupdate time after 2 second", time.Now().After(o.minGCSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval))))
 	if time.Now().After(o.minGCSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval)) {
-		log.Warn("get ts from pd client")
 		physicalTs, logicalTs, err := o.pdClient.GetTS(ctx)
 		if err != nil {
 			return 0, err
