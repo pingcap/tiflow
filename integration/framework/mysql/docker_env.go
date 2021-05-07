@@ -33,7 +33,7 @@ type DockerEnv struct {
 	framework.DockerEnv
 }
 
-// NewDockerEnv creates a new KafkaDockerEnv
+// NewDockerEnv creates a new DockerEnv
 func NewDockerEnv(dockerComposeFile string) *DockerEnv {
 	healthChecker := func() error {
 		if err := checkDbConn(framework.UpstreamDSN); err != nil {

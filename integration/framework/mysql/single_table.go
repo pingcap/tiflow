@@ -14,34 +14,29 @@
 package mysql
 
 import (
-	"database/sql"
-	"time"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
-const (
-	testDbName = "testdb"
-)
-
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
-	TableName     string
-	CheckOleValue bool
+	*framework.BaseSingleTableTask
+	CheckOldValue bool
 }
 
-// Name implements Task
-func (c *SingleTableTask) Name() string {
-	log.Warn("SingleTableTask should be embedded in another Task")
-	return "SingleTableTask-" + c.TableName
+// NewSingleTableTask return a pointer of SingleTableTask
+func NewSingleTableTask(tableName string, checkOld bool) *SingleTableTask {
+	return &SingleTableTask{
+		BaseSingleTableTask: framework.NewBaseSingleTableTask(tableName),
+		CheckOldValue:       checkOld,
+	}
 }
 
 // GetCDCProfile implements Task
 func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
-	sinkURI := "mysql://downstream-tidb:4000/" + testDbName
-	if c.CheckOleValue {
-		sinkURI = "simple-mysql://downstream-tidb:4000/" + testDbName + "?check-old-value=true"
+	sinkURI := "mysql://downstream-tidb:4000/" + framework.TestDbName
+	if c.CheckOldValue {
+		sinkURI = "simple-mysql://downstream-tidb:4000/" + framework.TestDbName + "?check-old-value=true"
 	}
 	return &framework.CDCProfile{
 		PDUri:      "http://upstream-pd:2379",
@@ -49,33 +44,6 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 		Opts:       map[string]string{},
 		ConfigFile: "/config/enable-oldvalue-config.toml",
 	}
-}
-
-// Prepare implements Task
-func (c *SingleTableTask) Prepare(taskContext *framework.TaskContext) error {
-	err := taskContext.CreateDB(testDbName)
-	if err != nil {
-		return err
-	}
-
-	_ = taskContext.Upstream.Close()
-	taskContext.Upstream, err = sql.Open("mysql", framework.UpstreamDSN+testDbName)
-	if err != nil {
-		return err
-	}
-
-	_ = taskContext.Downstream.Close()
-	taskContext.Downstream, err = sql.Open("mysql", framework.DownstreamDSN+testDbName)
-	if err != nil {
-		return err
-	}
-	taskContext.Downstream.SetConnMaxLifetime(5 * time.Second)
-
-	if taskContext.WaitForReady != nil {
-		log.Info("Waiting for env to be ready")
-		return taskContext.WaitForReady()
-	}
-	return nil
 }
 
 // Run implements Task

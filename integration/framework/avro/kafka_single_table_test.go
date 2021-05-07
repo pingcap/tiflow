@@ -30,12 +30,12 @@ func TestAvroSingleTableTest_Prepare(t *testing.T) {
 	require.NotNil(t, env)
 
 	env.Setup()
-	env.RunTest(&emptyAvroSingleTableTask{SingleTableTask{TableName: "test"}})
+	env.RunTest(&emptyAvroSingleTableTask{*NewSingleTableTask("test")})
 
-	_, err := sql.Open("mysql", framework.UpstreamDSN+"testdb")
+	_, err := sql.Open("mysql", framework.UpstreamDSN+framework.TestDbName)
 	require.NoError(t, err)
 
-	_, err = sql.Open("mysql", framework.DownstreamDSN+"testdb")
+	_, err = sql.Open("mysql", framework.DownstreamDSN+framework.TestDbName)
 	require.NoError(t, err)
 
 	err = env.HealthChecker()

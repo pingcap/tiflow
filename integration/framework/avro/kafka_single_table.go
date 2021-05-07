@@ -15,11 +15,9 @@ package avro
 
 import (
 	"bytes"
-	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -29,13 +27,14 @@ import (
 
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
-	TableName string
+	*framework.BaseSingleTableTask
 }
 
-// Name implements Task
-func (a *SingleTableTask) Name() string {
-	log.Warn("SingleTableTask should be embedded in another Task")
-	return "SingleTableTask-" + a.TableName
+// NewSingleTableTask return a pointer of SingleTableTask
+func NewSingleTableTask(tableName string) *SingleTableTask {
+	return &SingleTableTask{
+		BaseSingleTableTask: framework.NewBaseSingleTableTask(tableName),
+	}
 }
 
 // GetCDCProfile implements Task
@@ -45,33 +44,6 @@ func (a *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 		SinkURI: "kafka://kafka:9092/testdb_" + a.TableName + "?kafka-version=2.6.0&protocol=avro",
 		Opts:    map[string]string{"registry": "http://schema-registry:8081"},
 	}
-}
-
-// Prepare implements Task
-func (a *SingleTableTask) Prepare(taskContext *framework.TaskContext) error {
-	err := taskContext.CreateDB("testdb")
-	if err != nil {
-		return err
-	}
-
-	_ = taskContext.Upstream.Close()
-	taskContext.Upstream, err = sql.Open("mysql", framework.UpstreamDSN+"testdb")
-	if err != nil {
-		return err
-	}
-
-	_ = taskContext.Downstream.Close()
-	taskContext.Downstream, err = sql.Open("mysql", framework.DownstreamDSN+"testdb")
-	if err != nil {
-		return err
-	}
-	taskContext.Downstream.SetConnMaxLifetime(5 * time.Second)
-	if taskContext.WaitForReady != nil {
-		log.Info("Waiting for env to be ready")
-		return taskContext.WaitForReady()
-	}
-
-	return nil
 }
 
 // Run implements Task
@@ -108,11 +80,11 @@ func createConnector() error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.Body == nil {
 		return errors.New("Kafka Connect Rest API returned empty body")
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		str, err := ioutil.ReadAll(resp.Body)

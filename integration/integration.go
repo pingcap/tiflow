@@ -34,7 +34,7 @@ var (
 func testAvro() {
 	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=America/Los_Angeles"}
-	task := &avro.SingleTableTask{TableName: "test"}
+	task := avro.NewSingleTableTask("test")
 	testCases := []framework.Task{
 		tests.NewDateTimeCase(task),
 		tests.NewSimpleCase(task),
@@ -51,7 +51,7 @@ func testAvro() {
 func testCanal() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=false"}
-	task := &canal.SingleTableTask{TableName: "test"}
+	task := canal.NewSingleTableTask("test", false)
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
@@ -67,7 +67,7 @@ func testCanal() {
 func testCanalJSON() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
-	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
+	task := canal.NewSingleTableTask("test", true)
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
@@ -82,7 +82,7 @@ func testCanalJSON() {
 
 func testMySQL() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
-	task := &mysql.SingleTableTask{TableName: "test"}
+	task := mysql.NewSingleTableTask("test", false)
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
@@ -95,10 +95,10 @@ func testMySQL() {
 	runTests(testCases, env)
 }
 
-func testMySQLWithCheckingOldvValue() {
+func testMySQLWithCheckingOldValue() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
-	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
+	task := mysql.NewSingleTableTask("test", true)
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
@@ -136,7 +136,7 @@ func main() {
 	} else if *testProtocol == "mysql" {
 		testMySQL()
 	} else if *testProtocol == "simple-mysql-checking-old-value" {
-		testMySQLWithCheckingOldvValue()
+		testMySQLWithCheckingOldValue()
 	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}

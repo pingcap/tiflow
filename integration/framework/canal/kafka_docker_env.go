@@ -84,15 +84,15 @@ func checkDbConn(dsn string) error {
 
 func checkCanalAdapterState() error {
 	resp, err := http.Get(
-		"http://127.0.0.1:8081/syncSwitch/" + testDbName)
+		"http://127.0.0.1:8081/syncSwitch/" + framework.TestDbName)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.Body == nil {
 		return errors.New("Canal Adapter Rest API returned empty body, there is no subscript topic")
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		str, err := ioutil.ReadAll(resp.Body)
