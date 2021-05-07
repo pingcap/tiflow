@@ -83,11 +83,11 @@ while [[ ${1} ]]; do
         echo 'Missing parameter argument.' >&2
         exit 1
     fi
-
-    if [ -z "$sort_dir" ]; then
-        sort_dir=${workdir}/cdc-sort${logsuffix}
-    fi
 done
+
+if [ -z "$sort_dir" ]; then
+    sort_dir=${workdir}/cdc-sort${logsuffix}
+fi
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
