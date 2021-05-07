@@ -1,10 +1,7 @@
 # Integration Framework
 
 ## Introduction
-The **Integration Framework** is designed to provide a flexible way for contributors to write integration tests for new sinks or MQ protocols. 
-The core of the framework is stored in `{ticdc_root}/integration/framework`, and test cases should be stored in `{ticdc_root}/integration`. 
-Currently, although the Framework is still under active development, it is capable of helping test Avro support.
-It is the only officially supported way for developers to run integration tests with Kafka connect.
+The **Integration Framework** is designed to provide a flexible way for contributors to write integration tests for new sinks or MQ protocols. The core of the framework is stored in `{ticdc_root}/integration/framework`, and test cases should be stored in `{ticdc_root}/integration`. Currently, although the Framework is still under active development, it is capable of helping test Avro support. It is the only officially supported way for developers to run integration tests with Kafka connect.
 
 ## Quick Start
 To create a test case, you need to:
@@ -22,10 +19,7 @@ type Task interface {
 }
 ```
 
-For the time being, if you would like to write a test case for Avro and Canal, it is recommended to write a base case 
-which define the common operations of test, and write construct function, pass `canal.SingleTableTask` or `canal.SingleTableTask` 
-as parameters, which execute the necessary setup steps, including creating the Kafka Connect sink and creating the 
-changefeed with appropriate configurations.
+For the time being, if you would like to write a test case for Avro and Canal, it is recommended to write a base case which define the common operations of test, and write construct function, pass `avro.SingleTableTask` or `canal.SingleTableTask` as parameters, which execute the necessary setup steps, including creating the Kafka Connect sink and creating the changefeed with appropriate configurations.
 
 Example:
 ```go
