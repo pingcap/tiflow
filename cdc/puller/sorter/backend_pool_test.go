@@ -20,11 +20,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/filelock"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/filelock"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -99,7 +98,8 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	c.Assert(os.IsNotExist(err), check.IsTrue)
 }
 
-// TestCleanUpSelf verifies that the backendPool correctly cleans up files used by itself on exit.
+// TestDirectoryBadPermission verifies that no permission to ls the directory does not prevent using it
+// as a temporary file directory.
 func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	defer testleak.AfterTest(c)()
 

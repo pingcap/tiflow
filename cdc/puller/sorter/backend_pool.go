@@ -57,6 +57,7 @@ type backEndPool struct {
 	dir               string
 	filePrefix        string
 
+	// to prevent `dir` from being accidentally used by another TiCDC server process.
 	fileLock *filelock.FileLock
 
 	// cancelCh needs to be unbuffered to prevent races
