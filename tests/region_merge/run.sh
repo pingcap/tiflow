@@ -12,10 +12,9 @@ function split_and_random_merge() {
     pd_addr=$1
     scale=$2
     echo "split_and_random_merge scale: $scale"
-    timeout --signal=SIGINT 3 pd-ctl --pd=$pd_addr scheduler remove random-merge-scheduler || true
     run_sql "SPLIT TABLE region_merge.t1 BETWEEN (-9223372036854775808) AND (9223372036854775807) REGIONS $scale;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} || true
-    run_sql "SELECT count(distinct region_id) from information_schema.tikv_region_status where db_name = 'region_merge' and table_name = 't1';" && cat $OUT_DIR/sql_res.region_merge.txt
-    timeout --signal=SIGINT 3 pd-ctl --pd=$pd_addr scheduler add random-merge-scheduler || true
+    run_sql "SELECT count(distinct region_id) from information_schema.tikv_region_status where db_name = 'region_merge' and table_name = 't1';" \
+        && cat $OUT_DIR/sql_res.region_merge.txt
     run_sql "insert into region_merge.t1 values (-9223372036854775808),(0),(1),(9223372036854775807);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "delete from region_merge.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # sleep 5s to wait some region merge
@@ -30,7 +29,7 @@ test_scale=( "${small_scale[@]}" )
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
+    start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true --pd-config $CUR/conf/pd_config.toml
 
     cd $WORK_DIR
 
@@ -50,10 +49,6 @@ function run() {
     run_sql "SET @@global.MAX_EXECUTION_TIME = 20000;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE DATABASE region_merge;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE TABLE region_merge.t1 (id bigint primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-
-    # decrease the split-merge-interval to trigger fast region merge
-    timeout --signal=SIGINT 3 pd-ctl --pd=$pd_addr -d config set split-merge-interval 1s || true
-    timeout --signal=SIGINT 3 pd-ctl --pd=$pd_addr -d config set merge-schedule-limit 128 || true
 
     for scale in "${test_scale[@]}"; do
         split_and_random_merge $pd_addr $scale
