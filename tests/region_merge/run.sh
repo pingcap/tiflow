@@ -14,7 +14,7 @@ function split_and_random_merge() {
     echo "split_and_random_merge scale: $scale..."
     timeout --signal=SIGINT 5 pd-ctl --pd=$pd_addr scheduler remove random-merge-scheduler || true
     run_sql "SPLIT TABLE region_merge.t1 BETWEEN (-9223372036854775808) AND (9223372036854775807) REGIONS $scale;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} || true
-    timeout --signal=SIGINT 5 pd-ctl --pd=$pd_addr scheduler add random-merge-scheduler
+    timeout --signal=SIGINT 5 pd-ctl --pd=$pd_addr scheduler add random-merge-scheduler || true
     run_sql "insert into region_merge.t1 values (-9223372036854775808),(0),(1),(9223372036854775807);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "delete from region_merge.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # sleep 5s to wait some region merge
@@ -51,8 +51,8 @@ function run() {
     run_sql "CREATE TABLE region_merge.t1 (id bigint primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     # decrease the split-merge-interval to trigger fast region merge
-    timeout --signal=SIGINT 5 pd-ctl --pd=$pd_addr -d config set split-merge-interval 1s
-    timeout --signal=SIGINT 5 pd-ctl --pd=$pd_addr -d config set merge-schedule-limit 128
+    timeout --signal=SIGINT 5 pd-ctl --pd=$pd_addr -d config set split-merge-interval 1s || true
+    timeout --signal=SIGINT 5 pd-ctl --pd=$pd_addr -d config set merge-schedule-limit 128 || true
 
     for scale in "${test_scale[@]}"; do
         split_and_random_merge $pd_addr $scale
