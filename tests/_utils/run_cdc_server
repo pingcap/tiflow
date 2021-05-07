@@ -84,7 +84,7 @@ while [[ ${1} ]]; do
         exit 1
     fi
 
-    if [ -z "$sort_dir"]; then
+    if [ -z "$sort_dir" ]; then
         sort_dir=${workdir}/cdc-sort${logsuffix}
     fi
 done
