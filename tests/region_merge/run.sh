@@ -14,7 +14,7 @@ function split_and_random_merge() {
     echo "split_and_random_merge scale: $scale"
     timeout --signal=SIGINT 3 pd-ctl --pd=$pd_addr scheduler remove random-merge-scheduler || true
     run_sql "SPLIT TABLE region_merge.t1 BETWEEN (-9223372036854775808) AND (9223372036854775807) REGIONS $scale;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} || true
-    run_sql "SELECT count(distinct region_id) from tikv_region_status where db_name = 'region_merge' and table_name = 't1';" && cat $OUT_DIR/sql_res.region_merge.txt
+    run_sql "SELECT count(distinct region_id) from information_schema.tikv_region_status where db_name = 'region_merge' and table_name = 't1';" && cat $OUT_DIR/sql_res.region_merge.txt
     timeout --signal=SIGINT 3 pd-ctl --pd=$pd_addr scheduler add random-merge-scheduler || true
     run_sql "insert into region_merge.t1 values (-9223372036854775808),(0),(1),(9223372036854775807);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "delete from region_merge.t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
