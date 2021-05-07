@@ -77,22 +77,20 @@ type minGCSafePointCacheEntry struct {
 	lastUpdated time.Time
 }
 
-func getGcMinSafePointCache(ctx context.Context, pdClient pd.Client, gcTTL int64) (model.Ts, error) {
-	if time.Now().After(minGCSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval)) {
-		physicalTs, logicalTs, err := pdClient.GetTS(ctx)
+func (o *Owner) getGcMinSafePointCache(ctx context.Context) (model.Ts, error) {
+	log.Warn("Time", zap.Time("lastUpdated", o.minGCSafePointCache.lastUpdated))
+	log.Warn("After", zap.Bool("lastupdate time after 2 second", time.Now().After(o.minGCSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval))))
+	if time.Now().After(o.minGCSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval)) {
+		log.Warn("get ts from pd client")
+		physicalTs, logicalTs, err := o.pdClient.GetTS(ctx)
 		if err != nil {
 			return 0, err
 		}
-		minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(gcTTL*1000), logicalTs)
-		minGCSafePointCache.lastUpdated = time.Now()
+		o.minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(o.gcTTL*1000), logicalTs)
+		o.minGCSafePointCache.lastUpdated = time.Now()
 	}
-	return minGCSafePointCache.ts, nil
+	return o.minGCSafePointCache.ts, nil
 }
-
-// This value stores the ts obtained from PD and is updated every MinGCSafePointCacheUpdateInterval.
-var (
-	minGCSafePointCache minGCSafePointCacheEntry
-)
 
 // Owner manages the cdc cluster
 type Owner struct {
@@ -129,6 +127,8 @@ type Owner struct {
 	gcTTL int64
 	// last update gc safepoint time. zero time means has not updated or cleared
 	gcSafepointLastUpdate time.Time
+	// stores the ts obtained from PD and is updated every MinGCSafePointCacheUpdateInterval.
+	minGCSafePointCache minGCSafePointCacheEntry
 	// record last time that flushes all changefeeds' replication status
 	lastFlushChangefeeds    time.Time
 	flushChangefeedInterval time.Duration
@@ -746,7 +746,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	gcSafePoint := uint64(math.MaxUint64)
 
 	// get the lower bound of gcSafePoint
-	minGCSafePoint, err := getGcMinSafePointCache(ctx, o.pdClient, o.gcTTL)
+	minGCSafePoint, err := o.getGcMinSafePointCache(ctx)
 	if err != nil {
 		log.Warn("failed to acquire minGCSafePoint from Cache, will use this machine time", zap.Error(err))
 		minGCSafePoint = oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
@@ -1690,7 +1690,7 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[model.ChangeFeedID]*model.ChangeFeedStatus, minGCSafePoint uint64) error {
 	for id, status := range staleChangeFeeds {
 		message := cerror.ErrSnapshotLostCauseByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint).Error()
-		log.Info("handle staleChangeFeed ", zap.String("changefeed", id), zap.String("Error message", message))
+		log.Warn("handle staleChangeFeed ", zap.String("changefeed", id), zap.String("Error message", message))
 
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
