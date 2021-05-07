@@ -46,12 +46,6 @@ func (a *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	}
 }
 
-// Run implements Task
-func (a *SingleTableTask) Run(taskContext *framework.TaskContext) error {
-	log.Warn("SingleTableTask has been run")
-	return nil
-}
-
 func createConnector() error {
 	// TODO better way to generate JSON
 	connectorConfigFmt := `{

@@ -36,13 +36,13 @@ func NewBaseSingleTableTask(name string) *BaseSingleTableTask {
 }
 
 // Name implements Task
-func (a *BaseSingleTableTask) Name() string {
+func (t *BaseSingleTableTask) Name() string {
 	log.Warn("SingleTableTask should be embedded in another Task")
-	return "SingleTableTask-" + a.TableName
+	return "SingleTableTask-" + t.TableName
 }
 
 // Prepare implements Task
-func (a *BaseSingleTableTask) Prepare(taskContext *TaskContext) error {
+func (t *BaseSingleTableTask) Prepare(taskContext *TaskContext) error {
 	err := taskContext.CreateDB(TestDbName)
 	if err != nil {
 		return err
@@ -65,5 +65,11 @@ func (a *BaseSingleTableTask) Prepare(taskContext *TaskContext) error {
 		return taskContext.WaitForReady()
 	}
 
+	return nil
+}
+
+// Run implements Task
+func (t *BaseSingleTableTask) Run(taskContext *TaskContext) error {
+	log.Warn("SingleTableTask has been run")
 	return nil
 }

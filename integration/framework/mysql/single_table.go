@@ -14,7 +14,6 @@
 package mysql
 
 import (
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
@@ -44,10 +43,4 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 		Opts:       map[string]string{},
 		ConfigFile: "/config/enable-oldvalue-config.toml",
 	}
-}
-
-// Run implements Task
-func (c *SingleTableTask) Run(taskContext *framework.TaskContext) error {
-	log.Warn("SingleTableTask has been run")
-	return nil
 }

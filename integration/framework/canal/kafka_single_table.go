@@ -14,7 +14,6 @@
 package canal
 
 import (
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
@@ -46,10 +45,4 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
 		ConfigFile: "/config/canal-test-config.toml",
 	}
-}
-
-// Run implements Task
-func (c *SingleTableTask) Run(taskContext *framework.TaskContext) error {
-	log.Warn("SingleTableTask has been run")
-	return nil
 }
