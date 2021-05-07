@@ -22,6 +22,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/google/uuid"
@@ -135,6 +138,7 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 }
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
+	log.Warn("Begin", zap.String("Test", "TestOwnerFlushChangeFeedInfosFailed"))
 	defer testleak.AfterTest(c)()
 	mockPDCli := &mockPDClient{
 		mockPDFailure: true,
@@ -183,12 +187,14 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
 
 	s.TearDownTest(c)
+	log.Warn("Finished", zap.String("Test", "TestOwnerFlushChangeFeedInfosFailed"))
 }
 
 // Test whether the owner handles the stagnant task correctly, so that it can't block the update of gcSafePoint.
 // If a changefeed is put into the stop queue due to stagnation, it can no longer affect the update of gcSafePoint.
 // So we just need to test whether the stagnant changefeed is put into the stop queue.
 func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
+	log.Warn("Begin", zap.String("Test", "TestOwnerHandleStaleChangeFeed"))
 	defer testleak.AfterTest(c)()
 	mockPDCli := &mockPDClient{}
 
@@ -256,11 +262,12 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 		etcdClient:              s.client,
 		lastFlushChangefeeds:    time.Now(),
 		flushChangefeedInterval: 1 * time.Hour,
-		gcSafepointLastUpdate:   time.Now(),
-		gcTTL:                   6, // 6 seconds
-		changeFeeds:             changeFeeds,
-		cfRWriter:               s.client,
-		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		// gcSafepointLastUpdate:   time.Now(),
+		gcTTL:               6, // 6 seconds
+		changeFeeds:         changeFeeds,
+		cfRWriter:           s.client,
+		stoppedFeeds:        make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		minGCSafePointCache: minGCSafePointCacheEntry{},
 	}
 
 	time.Sleep(3 * time.Second)
@@ -276,7 +283,7 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_3"], check.NotNil)
 	c.Assert(mockOwner.changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 
-	time.Sleep(4 * time.Second)
+	time.Sleep(6 * time.Second)
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
@@ -286,14 +293,16 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_2"], check.NotNil)
 
 	s.TearDownTest(c)
+	log.Warn("Finished", zap.String("Test", "TestOwnerHandleStaleChangeFeed"))
 }
 
 func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
+	log.Warn("Begin", zap.String("Test", "TestOwnerUploadGCSafePointOutdated"))
 	defer testleak.AfterTest(c)()
 	mockPDCli := &mockPDClient{
 		mockSafePointLost: true,
 	}
-
+	log.Warn("Value", zap.Bool("mockSafePointLost", mockPDCli.mockSafePointLost))
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed_1": {
 			info:    &model.ChangeFeedInfo{State: model.StateNormal},
@@ -344,6 +353,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 		changeFeeds:             changeFeeds,
 		cfRWriter:               s.client,
 		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		minGCSafePointCache:     minGCSafePointCacheEntry{},
 	}
 
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
@@ -354,8 +364,9 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
-	c.Assert(mockOwner.changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
+	c.Assert(changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 	s.TearDownTest(c)
+	log.Warn("Finished", zap.String("Test", "TestOwnerUploadGCSafePointOutdated"))
 }
 
 /*
