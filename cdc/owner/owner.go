@@ -20,8 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sink"
-
 	"github.com/pingcap/ticdc/pkg/context"
 
 	"go.etcd.io/etcd/clientv3"
@@ -93,7 +91,7 @@ func NewOwner(leaseID clientv3.LeaseID) *Owner {
 
 func NewOwner4Test(leaseID clientv3.LeaseID,
 	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller,
-	newSink func(ctx context.Context) (sink.Sink, error)) *Owner {
+	newSink func(ctx context.Context) (AsyncSink, error)) *Owner {
 	o := NewOwner(leaseID)
 	o.newChangefeed = func(gcManager *gcManager) *changefeed {
 		return newChangefeed4Test(gcManager, newDDLPuller, newSink)

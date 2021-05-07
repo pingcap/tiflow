@@ -121,7 +121,7 @@ func NewCapture(
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-	processorManager := processor.NewManager()
+	processorManager := processor.NewManager(sess.Lease())
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(stdCtx))
 
 	c = &Capture{

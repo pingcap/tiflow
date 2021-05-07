@@ -112,7 +112,7 @@ func newProcessor4Test(ctx context.Context,
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx context.Context) error { return nil }
 	p.createTablePipeline = createTablePipeline
-	return nil
+	return p
 }
 
 // Tick implements the `orchestrator.State` interface

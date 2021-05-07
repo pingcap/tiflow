@@ -3,13 +3,14 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/log"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/types"
 	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/pingcap/ticdc/cdc/sink"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -61,8 +62,8 @@ func (t *ClusterTester) ScaleOut(captureNum int) {
 			}, func(leaseID clientv3.LeaseID) *owner.Owner {
 				return owner.NewOwner4Test(leaseID, func(ctx cdcContext.Context, startTs uint64) owner.DDLPuller {
 					return t.upstream.ddlPuller
-				}, func(ctx cdcContext.Context) (sink.Sink, error) {
-					panic("unimplemented")
+				}, func(ctx cdcContext.Context) (owner.AsyncSink, error) {
+					return &mockAsyncSink{}, nil
 				})
 			})
 		t.captureCreatingCh <- cap
@@ -139,6 +140,34 @@ func (t *ClusterTester) CheckpointTs() map[model.TableID]model.Ts {
 	return t.upstream.checkpointTs()
 }
 
+type mockAsyncSink struct {
+}
+
+func (m *mockAsyncSink) Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error {
+	log.Info("mock async sink Initialize", zap.Any("tableInfo", tableInfo))
+	return nil
+}
+
+func (m *mockAsyncSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
+	log.Info("mock async sink EmitCheckpointTs", zap.Any("ts", ts))
+
+}
+
+func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
+	log.Info("mock async sink EmitDDLEvent", zap.Any("ddl", ddl))
+	return true, nil
+}
+
+func (m *mockAsyncSink) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error {
+	log.Info("mock async sink SinkSyncpoint", zap.Any("checkpointTs", checkpointTs))
+	return nil
+}
+
+func (m *mockAsyncSink) Close() error {
+	log.Info("mock async sink Close")
+	return nil
+}
+
 type mockUpstream struct {
 	c *check.C
 
@@ -197,7 +226,7 @@ func (m *mockDDLPuller) FrontDDL() (uint64, *timodel.Job) {
 	if len(m.ddlQueue) == 0 {
 		return atomic.LoadUint64(&m.resolvedTs), nil
 	}
-	return atomic.LoadUint64(&m.resolvedTs), m.ddlQueue[0]
+	return m.ddlQueue[0].BinlogInfo.FinishedTS, m.ddlQueue[0]
 }
 
 func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
@@ -208,7 +237,7 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	}
 	job := m.ddlQueue[0]
 	m.ddlQueue = m.ddlQueue[1:]
-	return atomic.LoadUint64(&m.resolvedTs), job
+	return job.BinlogInfo.FinishedTS, job
 }
 
 func (m *mockDDLPuller) Close() {
@@ -339,4 +368,65 @@ func (m *mockTablePipeline) Cancel() {
 
 func (m *mockTablePipeline) Wait() {
 	m.wg.Wait()
+}
+
+type clusterSuite struct {
+}
+
+var _ = check.Suite(&clusterSuite{})
+
+func (s *httpStatusSuite) TestClusters(c *check.C) {
+	tester := NewClusterTester(c, 3)
+	tester.UpdateDDLPullerResolvedTs(10)
+	tester.ApplyDDLJob(&timodel.Job{
+		ID:       3,
+		State:    timodel.JobStateSynced,
+		SchemaID: 1,
+		Type:     timodel.ActionCreateSchema,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: &timodel.DBInfo{
+			ID:    1,
+			Name:  timodel.NewCIStr("test"),
+			State: timodel.StatePublic,
+		}, FinishedTS: 20},
+		Query: "create database test",
+	})
+	tester.UpdateDDLPullerResolvedTs(25)
+	tester.ApplyDDLJob(&timodel.Job{
+		ID:       4,
+		State:    timodel.JobStateSynced,
+		SchemaID: 1,
+		Type:     timodel.ActionCreateTable,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: &timodel.DBInfo{
+			ID:    1,
+			Name:  timodel.NewCIStr("test"),
+			State: timodel.StatePublic,
+		},TableInfo: &timodel.TableInfo{
+			ID:    2,
+			Name:  timodel.NewCIStr("test"),
+			State: timodel.StatePublic,
+			Columns: []*timodel.ColumnInfo{{
+				ID:        1,
+				Name:      timodel.NewCIStr("A"),
+				Offset:    0,
+				FieldType: *types.NewFieldType(mysql.TypeLonglong),
+				State:     timodel.StatePublic,
+			}},
+			Indices: []*timodel.IndexInfo{{
+				Name:  timodel.NewCIStr("idx"),
+				Table: timodel.NewCIStr("test"),
+				Columns: []*timodel.IndexColumn{
+					{
+						Name:   timodel.NewCIStr("A"),
+						Offset: 0,
+						Length: 10,
+					},
+				},
+				Unique:  true,
+				Primary: true,
+				State:   timodel.StatePublic,
+			}},
+		}, FinishedTS: 30},
+		Query: "create table test.test(A int primary key)",
+	})
+	tester.UpdateDDLPullerResolvedTs(30)
 }

@@ -176,13 +176,13 @@ func (ctx *throwContext) Throw(err error) {
 func NewBackendContext4Test(withChangefeedVars bool) Context {
 	ctx := NewContext(context.Background(), &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
-			ID:            "capture-id-4-test",
+			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
 		},
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
-			ID: "changefeed-id-4-test",
+			ID: "changefeed-id-test",
 		})
 	}
 	return ctx
