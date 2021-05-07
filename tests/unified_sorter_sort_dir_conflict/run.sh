@@ -63,8 +63,8 @@ function prepare() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix 2 --sort-dir /tmp/cdc_sort_1
 
     ensure $MAX_RETRIES check_changefeed_mark_stopped_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*ErrConflictingFileLocks.*"
-
     kill $capture_pid
+    sleep 10 # wait for re-election in case of the owner having been killed
     run_cdc_cli changefeed resume -c ${changefeedid}
 }
 
