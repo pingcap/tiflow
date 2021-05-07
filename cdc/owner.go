@@ -920,7 +920,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
 	if job.Type == model.AdminStop {
-		log.Info("put changfeed into stoppedFeeds queue", zap.String("changefeed", job.CfID))
+		log.Debug("put changfeed into stoppedFeeds queue", zap.String("changefeed", job.CfID))
 		o.stoppedFeeds[job.CfID] = cf.status
 	}
 	for captureID := range cf.taskStatus {
@@ -1137,7 +1137,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			// refuse to resume adminJob that checkPointTs lag behind gcSafePoint
-			if cfInfo.Error != nil && cfInfo.Error.Code == string(cerror.ErrSnapshotLostCauseByGC.RFCCode()) {
+			if o.minGCSafePointCache.ts != 0 && cfInfo.StartTs < o.minGCSafePointCache.ts {
 				log.Warn("invalid admin job, changefeed checkpoint lag behind gcSafePoint", zap.String("changefeed", job.CfID))
 				continue
 			}
