@@ -88,11 +88,11 @@ func checkCanalAdapterState() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
 	if resp.Body == nil {
 		return errors.New("Canal Adapter Rest API returned empty body, there is no subscript topic")
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		str, err := ioutil.ReadAll(resp.Body)

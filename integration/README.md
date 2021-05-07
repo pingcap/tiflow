@@ -18,7 +18,6 @@ type Task interface {
 	Run(taskContext *TaskContext) error
 }
 ```
-
 For the time being, if you would like to write a test case for Avro and Canal, it is recommended to write a base case which define the common operations of test, and write construct function, pass `avro.SingleTableTask` or `canal.SingleTableTask` as parameters, which execute the necessary setup steps, including creating the Kafka Connect sink and creating the changefeed with appropriate configurations.
 
 Example:

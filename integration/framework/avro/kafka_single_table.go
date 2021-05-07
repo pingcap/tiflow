@@ -80,11 +80,11 @@ func createConnector() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
 	if resp.Body == nil {
 		return errors.New("Kafka Connect Rest API returned empty body")
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		str, err := ioutil.ReadAll(resp.Body)
