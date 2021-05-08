@@ -14,6 +14,7 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
+	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.3.4
 	github.com/golang/snappy v0.0.2 // indirect
@@ -37,10 +38,10 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
-	github.com/pingcap/kvproto v0.0.0-20210402093459-65aa336ccbbf
+	github.com/pingcap/kvproto v0.0.0-20210429093846-65f54a202d7e
 	github.com/pingcap/log v0.0.0-20210317133921-96f4fcab92a4
 	github.com/pingcap/parser v0.0.0-20210427084954-8e8ed7927bde
-	github.com/pingcap/tidb v1.1.0-beta.0.20210316111949-26ccbe972ac5
+	github.com/pingcap/tidb v1.1.0-beta.0.20210508083641-8ed1d9d4a798
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
@@ -66,5 +67,3 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-replace github.com/pingcap/tidb => github.com/amyangfei/tidb v1.1.0-beta.0.20210430073553-a15124fb136a
