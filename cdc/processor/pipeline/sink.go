@@ -72,9 +72,11 @@ type sinkNode struct {
 
 	eventBuffer []*model.PolymorphicEvent
 	rowBuffer   []*model.RowChangedEvent
+
+	flowController tableFlowController
 }
 
-func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts) *sinkNode {
+func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
 	return &sinkNode{
 		sink:         sink,
 		status:       TableStatusInitializing,
@@ -82,6 +84,8 @@ func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts) *sinkNode 
 		resolvedTs:   startTs,
 		checkpointTs: startTs,
 		barrierTs:    startTs,
+
+		flowController: flowController,
 	}
 }
 
@@ -130,6 +134,8 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 		return nil
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
+
+	n.flowController.Release(checkpointTs)
 	return nil
 }
 
@@ -215,5 +221,6 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	n.status.store(TableStatusStopped)
+	n.flowController.Abort()
 	return n.sink.Close()
 }
