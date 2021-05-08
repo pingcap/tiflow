@@ -83,7 +83,7 @@ func NewUnifiedSorter(
 	changeFeedID model.ChangeFeedID,
 	tableName string,
 	tableID model.TableID,
-	captureAddr string) *UnifiedSorter {
+	captureAddr string) (*UnifiedSorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -93,7 +93,11 @@ func NewUnifiedSorter(
 			// Let the local setting override the changefeed setting
 			dir = sorterConfig.SortDir
 		}
-		pool = newBackEndPool(dir, captureAddr)
+		var err error
+		pool, err = newBackEndPool(dir, captureAddr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	lazyInitWorkerPool()
@@ -108,7 +112,7 @@ func NewUnifiedSorter(
 			tableID:      tableID,
 			captureAddr:  captureAddr,
 		},
-	}
+	}, nil
 }
 
 // UnifiedSorterCleanUp cleans up the files that might have been used.
