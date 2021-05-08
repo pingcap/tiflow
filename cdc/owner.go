@@ -743,7 +743,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	minGCSafePoint, err := o.getGcMinSafePointCache(ctx)
 	if err != nil {
 		log.Warn("failed to acquire minGCSafePoint from Cache, will use this machine time", zap.Error(err))
-		minGCSafePoint = oracle.EncodeTSO(oracle.GetPhysical(time.Now()) - (o.gcTTL * 1000))
+		minGCSafePoint = oracle.EncodeTSO(oracle.GetPhysical(time.Now().Add(-(time.Second * time.Duration(o.gcTTL)))))
 	}
 
 	if len(o.changeFeeds) > 0 {
