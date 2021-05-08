@@ -756,8 +756,11 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < gcSafePoint {
 				gcSafePoint = changefeed.status.CheckpointTs
 			}
-			// if changefeed's appliedCheckpoinTs < minGCSafePoint, it means this changefeed is stagnant
-			// They are collected into this map, and then a function is called to deal with these stagnant changefeed.
+			// If changefeed's appliedCheckpoinTs < minGCSafePoint, it means this changefeed is stagnant.
+			// They are collected into this map, and then handleStaleChangeFeed() is called to deal with these stagnant changefeed.
+			// A changefeed will not enter the map twice, because in run(),
+			// handleAdminJob() will always be executed before flushChangeFeedInfos(),
+			// ensuring that the previous changefeed in staleChangeFeeds has been stopped and removed from o.changeFeeds.
 			if changefeed.status.CheckpointTs < minGCSafePoint {
 				staleChangeFeeds[id] = changefeed.status
 			}
@@ -781,8 +784,9 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	for _, status := range o.stoppedFeeds {
-		// if a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant
-		// it should never be resume, so here we can skip it
+		// If a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant.
+		// It should never be resumed. This part of the logic is in newChangeFeed()
+		// So here we can skip it.
 		if status.CheckpointTs < minGCSafePoint {
 			continue
 		}
@@ -1138,11 +1142,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
-			}
-			// refuse to resume adminJob that checkPointTs lag behind gcSafePoint
-			if o.minGCSafePointCache.ts != 0 && cfInfo.StartTs < o.minGCSafePointCache.ts {
-				log.Warn("invalid admin job, changefeed checkpoint lag behind gcSafePoint", zap.String("changefeed", job.CfID))
-				continue
 			}
 
 			// set admin job in changefeed status to tell owner resume changefeed
@@ -1683,15 +1682,15 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 }
 
 // handle the StaleChangeFeed
-// By setting the AdminJob type to AdminStop and the Error code to indicate that the changefeed is stagnant
+// By setting the AdminJob type to AdminStop and the Error code to indicate that the changefeed is stagnant.
 func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[model.ChangeFeedID]*model.ChangeFeedStatus, minGCSafePoint uint64) error {
 	for id, status := range staleChangeFeeds {
-		message := cerror.ErrSnapshotLostCauseByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint).Error()
+		message := cerror.ErrSnapshotLostByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint).Error()
 		log.Warn("handle staleChangeFeed ", zap.String("changefeed", id), zap.String("Error message", message))
 
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    string(cerror.ErrSnapshotLostCauseByGC.RFCCode()), // changfeed is stagnant
+			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changfeed is stagnant
 			Message: message,
 		}
 
