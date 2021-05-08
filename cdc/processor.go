@@ -845,7 +845,11 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 				p.sendError(errors.Trace(err))
 				return nil
 			}
-			sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, p.changefeedID, tableName, tableID, util.CaptureAddrFromCtx(ctx))
+			sorter, err = psorter.NewUnifiedSorter(p.changefeed.SortDir, p.changefeedID, tableName, tableID, util.CaptureAddrFromCtx(ctx))
+			if err != nil {
+				p.sendError(errors.Trace(err))
+				return nil
+			}
 		default:
 			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
 			return nil
