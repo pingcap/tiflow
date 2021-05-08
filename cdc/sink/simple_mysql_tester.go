@@ -131,10 +131,10 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 						return errors.Trace(err)
 					}
 				}
-				sql, args = prepareUpdate(row.Table.QuoteString(), row.PreColumns, row.Columns, true)
+				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
 			} else if len(row.PreColumns) == 0 {
 				// insert
-				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, true)
+				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
 			} else if len(row.Columns) == 0 {
 				// delete
 				if s.enableCheckOldValue {

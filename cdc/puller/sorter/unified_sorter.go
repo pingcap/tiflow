@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -83,7 +83,7 @@ func NewUnifiedSorter(
 	changeFeedID model.ChangeFeedID,
 	tableName string,
 	tableID model.TableID,
-	captureAddr string) *UnifiedSorter {
+	captureAddr string) (*UnifiedSorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -93,7 +93,11 @@ func NewUnifiedSorter(
 			// Let the local setting override the changefeed setting
 			dir = sorterConfig.SortDir
 		}
-		pool = newBackEndPool(dir, captureAddr)
+		var err error
+		pool, err = newBackEndPool(dir, captureAddr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	lazyInitWorkerPool()
@@ -108,7 +112,7 @@ func NewUnifiedSorter(
 			tableID:      tableID,
 			captureAddr:  captureAddr,
 		},
-	}
+	}, nil
 }
 
 // UnifiedSorterCleanUp cleans up the files that might have been used.
@@ -173,6 +177,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			}
 			// must wait for all writers to exit to close the channel.
 			close(heapSorterCollectCh)
+			failpoint.Inject("InjectHeapSorterExitDelay", func() {})
 		}()
 
 		select {
@@ -223,6 +228,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 						default:
 						}
 						err := sorter.poolHandle.AddEvent(subctx, event)
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						if err != nil {
 							return errors.Trace(err)
 						}
@@ -240,6 +250,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				default:
 					err := heapSorters[targetID].poolHandle.AddEvent(subctx, event)
 					if err != nil {
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						return errors.Trace(err)
 					}
 					metricSorterConsumeCount.WithLabelValues("kv").Inc()

@@ -41,13 +41,20 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-RELEASE_VERSION := v5.0.0-master
-ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
-	# If we are in release branch, use tag version.
-	RELEASE_VERSION := $(shell git describe --tags --dirty="-dirty")
-else ifneq ($(shell git status --porcelain),)
-	# Add -dirty if the working tree is dirty for non release branch.
-	RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+RELEASE_VERSION =
+ifeq ($(RELEASE_VERSION),)
+	RELEASE_VERSION := v5.0.0-master
+	release_version_regex := ^v5\..*$$
+	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
+	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
+		# If we are in release branch, try to use tag version.
+		ifneq ($(shell git describe --tags --dirty | egrep $(release_version_regex)),)
+			RELEASE_VERSION := $(shell git describe --tags --dirty)
+		endif
+	else ifneq ($(shell git status --porcelain),)
+		# Add -dirty if the working tree is dirty for non release branch.
+		RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+	endif
 endif
 
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
@@ -69,7 +76,7 @@ test: unit_test
 
 build: cdc
 
-build-failpoint: 
+build-failpoint:
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
 	$(FAILPOINT_DISABLE)
@@ -117,7 +124,7 @@ check_third_party_binary:
 integration_test_build: check_failpoint_ctl
 	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
-	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covemode=atomic \
+	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/ticdc/... \
 		-o bin/cdc.test github.com/pingcap/ticdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
