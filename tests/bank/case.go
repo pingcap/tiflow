@@ -453,7 +453,8 @@ func run(
 		passed              = true
 	)
 
-	for tableID := 0; tableID < tables; tableID++ {
+	for id := 0; id < tables; id++ {
+		tableID := id
 		// Verify
 		g.Go(func() error {
 			for {
