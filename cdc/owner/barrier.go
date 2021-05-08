@@ -44,7 +44,7 @@ func newBarriers() *barriers {
 }
 
 func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
-	if !b.dirty && barrierTs < b.inner[b.min] {
+	if !b.dirty && (tp == b.min||barrierTs <= b.inner[b.min]) {
 		b.dirty = true
 	}
 	b.inner[tp] = barrierTs
@@ -61,9 +61,6 @@ func (b *barriers) Min() (tp barrierType, barrierTs model.Ts) {
 }
 
 func (b *barriers) calcMin() (tp barrierType, barrierTs model.Ts) {
-	if len(b.inner) == 0 {
-		log.Panic("there are no barrier in owner, please report a bug")
-	}
 	barrierTs = uint64(math.MaxUint64)
 	for br, ts := range b.inner {
 		if ts <= barrierTs {
