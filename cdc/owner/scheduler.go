@@ -45,7 +45,6 @@ type moveTableJob struct {
 type scheduler struct {
 	state *model.ChangefeedReactorState
 
-	// we need a ttl map here
 	moveTableTarget          map[model.TableID]model.CaptureID
 	boundaryTsOfRemovedTable map[model.TableID]model.Ts
 	moveTableJobQueue        []*moveTableJob
@@ -183,10 +182,12 @@ func (s *scheduler) syncTablesWithSchemaManager(allTableShouldBeListened []model
 		}
 		// table which should be listened but not, add adding-table job to pending job list
 		boundaryTs := globalCheckpointTs + 1
-		if boundaryTsOfRemoved, exist := s.boundaryTsOfRemovedTable[tableID]; exist && boundaryTs < boundaryTsOfRemoved {
-			boundaryTs = boundaryTsOfRemoved
+		if boundaryTsOfRemoved, exist := s.boundaryTsOfRemovedTable[tableID]; exist {
+			if boundaryTs < boundaryTsOfRemoved{
+				boundaryTs = boundaryTsOfRemoved
+			}
+			delete(s.boundaryTsOfRemovedTable,tableID)
 		}
-		// TODO gc about boundaryTsOfRemovedTable
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:            schedulerJobTypeAddTable,
 			TableID:       tableID,
