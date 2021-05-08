@@ -26,6 +26,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -36,7 +38,7 @@ import (
 )
 
 const (
-	backgroundJobInterval = time.Second * 5
+	backgroundJobInterval = time.Second * 15
 )
 
 var (
@@ -107,11 +109,11 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
 				// Increase GC frequency to avoid unnecessary OOMs
 				debug.SetGCPercent(10)
-				if memPressure > 95 {
+				if memPressure > 80 {
 					runtime.GC()
 				}
 			} else {
-				debug.SetGCPercent(100)
+				debug.SetGCPercent(50)
 			}
 
 			// garbage collect temporary files in batches
@@ -166,9 +168,11 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	}
 
 	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
+	tableID, tableName := util.TableIDFromCtx(ctx)
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
-		zap.String("table", tableNameFromCtx(ctx)))
+		zap.Int64("table-id", tableID),
+		zap.String("table-name", tableName))
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
@@ -228,10 +232,12 @@ func (p *backEndPool) terminate() {
 	defer close(p.cancelCh)
 	// the background goroutine can be considered terminated here
 
+	log.Debug("Unified Sorter terminating...")
 	p.cancelRWLock.Lock()
 	defer p.cancelRWLock.Unlock()
 	p.isTerminating = true
 
+	log.Debug("Unified Sorter cleaning up before exiting")
 	// any new allocs and deallocs will not succeed from this point
 	// accessing p.cache without atomics is safe from now
 
@@ -254,11 +260,14 @@ func (p *backEndPool) terminate() {
 		log.Warn("Unified Sorter clean-up failed", zap.Error(err))
 	}
 	for _, file := range files {
+		log.Debug("Unified Sorter backEnd removing file", zap.String("file", file))
 		err = os.RemoveAll(file)
 		if err != nil {
 			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
 		}
 	}
+
+	log.Debug("Unified Sorter backEnd terminated")
 }
 
 func (p *backEndPool) sorterMemoryUsage() int64 {

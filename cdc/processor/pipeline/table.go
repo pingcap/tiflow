@@ -156,7 +156,7 @@ func NewTablePipeline(ctx context.Context,
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
 	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, tableName))
+	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	config := ctx.Vars().Config
 	if config.Cyclic != nil && config.Cyclic.IsEnabled() {

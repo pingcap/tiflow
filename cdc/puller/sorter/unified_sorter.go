@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,12 @@ package sorter
 
 import (
 	"context"
+	"os"
 	"sync"
+	"sync/atomic"
+	"time"
+
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -28,32 +33,82 @@ import (
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
-	inputCh   chan *model.PolymorphicEvent
-	outputCh  chan *model.PolymorphicEvent
-	dir       string
-	pool      *backEndPool
-	tableName string // used only for debugging and tracing
+	inputCh     chan *model.PolymorphicEvent
+	outputCh    chan *model.PolymorphicEvent
+	dir         string
+	pool        *backEndPool
+	metricsInfo *metricsInfo
+}
+
+type metricsInfo struct {
+	changeFeedID model.ChangeFeedID
+	tableName    string
+	tableID      model.TableID
+	captureAddr  string
 }
 
 type ctxKey struct {
 }
 
+// UnifiedSorterCheckDir checks whether the directory needed exists and is writable.
+// If it does not exist, we try to create one.
+// parameter: cfSortDir - the directory designated in changefeed's setting,
+// which will be overridden by a non-empty local setting of `sort-dir`.
+// TODO better way to organize this function after we obsolete chanegfeed setting's `sort-dir`
+func UnifiedSorterCheckDir(cfSortDir string) error {
+	dir := cfSortDir
+	sorterConfig := config.GetGlobalServerConfig().Sorter
+	if sorterConfig.SortDir != "" {
+		// Let the local setting override the changefeed setting
+		dir = sorterConfig.SortDir
+	}
+
+	err := util.IsDirAndWritable(dir)
+	if err != nil {
+		if os.IsNotExist(errors.Cause(err)) {
+			err = os.MkdirAll(dir, 0o755)
+			if err != nil {
+				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
+			}
+		} else {
+			return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
+		}
+	}
+
+	return nil
+}
+
 // NewUnifiedSorter creates a new UnifiedSorter
-func NewUnifiedSorter(dir string, tableName string, captureAddr string) *UnifiedSorter {
+func NewUnifiedSorter(
+	dir string,
+	changeFeedID model.ChangeFeedID,
+	tableName string,
+	tableID model.TableID,
+	captureAddr string) *UnifiedSorter {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
 	if pool == nil {
+		sorterConfig := config.GetGlobalServerConfig().Sorter
+		if sorterConfig.SortDir != "" {
+			// Let the local setting override the changefeed setting
+			dir = sorterConfig.SortDir
+		}
 		pool = newBackEndPool(dir, captureAddr)
 	}
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:   make(chan *model.PolymorphicEvent, 128),
-		outputCh:  make(chan *model.PolymorphicEvent, 128),
-		dir:       dir,
-		pool:      pool,
-		tableName: tableName,
+		inputCh:  make(chan *model.PolymorphicEvent, 128000),
+		outputCh: make(chan *model.PolymorphicEvent, 128000),
+		dir:      dir,
+		pool:     pool,
+		metricsInfo: &metricsInfo{
+			changeFeedID: changeFeedID,
+			tableName:    tableName,
+			tableID:      tableID,
+			captureAddr:  captureAddr,
+		},
 	}
 }
 
@@ -78,12 +133,15 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
-	valueCtx := context.WithValue(ctx, ctxKey{}, s)
+	ctx = context.WithValue(ctx, ctxKey{}, s)
+	ctx = util.PutCaptureAddrInCtx(ctx, s.metricsInfo.captureAddr)
+	ctx = util.PutChangefeedIDInCtx(ctx, s.metricsInfo.changeFeedID)
+	ctx = util.PutTableInfoInCtx(ctx, s.metricsInfo.tableID, s.metricsInfo.tableName)
 
 	sorterConfig := config.GetGlobalServerConfig().Sorter
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
-	errg, subctx := errgroup.WithContext(valueCtx)
+	errg, subctx := errgroup.WithContext(ctx)
 	heapSorterCollectCh := make(chan *flushTask, 4096)
 	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
 	defer mergerCleanUp(heapSorterCollectCh)
@@ -116,6 +174,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			}
 			// must wait for all writers to exit to close the channel.
 			close(heapSorterCollectCh)
+			failpoint.Inject("InjectHeapSorterExitDelay", func() {})
 		}()
 
 		select {
@@ -126,8 +185,9 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
+	var mergerBufLen int64
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, &mergerBufLen))
 	})
 
 	errg.Go(func() error {
@@ -143,6 +203,15 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
+			// tentative value 1280000
+			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
+				after := time.After(1 * time.Second)
+				select {
+				case <-subctx.Done():
+					return subctx.Err()
+				case <-after:
+				}
+			}
 			select {
 			case <-subctx.Done():
 				return subctx.Err()
@@ -156,6 +225,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 						default:
 						}
 						err := sorter.poolHandle.AddEvent(subctx, event)
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						if err != nil {
 							return errors.Trace(err)
 						}
@@ -173,6 +247,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				default:
 					err := heapSorters[targetID].poolHandle.AddEvent(subctx, event)
 					if err != nil {
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						return errors.Trace(err)
 					}
 					metricSorterConsumeCount.WithLabelValues("kv").Inc()
@@ -212,12 +291,4 @@ func RunWorkerPool(ctx context.Context) error {
 	})
 
 	return errors.Trace(errg.Wait())
-}
-
-// tableNameFromCtx is used for retrieving the table's name from a context within the Unified Sorter
-func tableNameFromCtx(ctx context.Context) string {
-	if sorter, ok := ctx.Value(ctxKey{}).(*UnifiedSorter); ok {
-		return sorter.tableName
-	}
-	return ""
 }
