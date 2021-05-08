@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -30,6 +31,7 @@ type barrierSuite struct {
 }
 
 func (s *barrierSuite) TestBarrier(c *check.C) {
+	defer testleak.AfterTest(c)()
 	b := newBarriers()
 	b.Update(DDLJobBarrier, 2)
 	b.Update(SyncPointBarrier, 3)
@@ -60,6 +62,7 @@ func (s *barrierSuite) TestBarrier(c *check.C) {
 }
 
 func (s *barrierSuite) TestBarrierRandom(c *check.C) {
+	defer testleak.AfterTest(c)()
 	maxBarrierType := 50
 	maxBarrierTs := 1000000
 	b := newBarriers()
