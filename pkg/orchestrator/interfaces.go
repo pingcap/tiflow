@@ -67,10 +67,10 @@ func (s *SingleDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map
 	return nil
 }
 
-// MultiDatePath represents an update to many keys
-type MultiDatePath func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
+// MultiDatePatch represents an update to many keys
+type MultiDatePatch func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
 
 // Patch implements the DataPatch interface
-func (m MultiDatePath) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
+func (m MultiDatePatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
 	return m(valueMap, changedSet)
 }
