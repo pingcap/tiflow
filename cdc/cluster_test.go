@@ -3,14 +3,15 @@ package cdc
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/log"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/types"
 	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/log"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/types"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -150,7 +151,6 @@ func (m *mockAsyncSink) Initialize(ctx cdcContext.Context, tableInfo []*model.Si
 
 func (m *mockAsyncSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 	log.Info("mock async sink EmitCheckpointTs", zap.Any("ts", ts))
-
 }
 
 func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
@@ -400,7 +400,7 @@ func (s *httpStatusSuite) TestClusters(c *check.C) {
 			ID:    1,
 			Name:  timodel.NewCIStr("test"),
 			State: timodel.StatePublic,
-		},TableInfo: &timodel.TableInfo{
+		}, TableInfo: &timodel.TableInfo{
 			ID:    2,
 			Name:  timodel.NewCIStr("test"),
 			State: timodel.StatePublic,

@@ -77,10 +77,6 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		etcd.CDCKeyTypeTaskPosition,
 		etcd.CDCKeyTypeTaskStatus,
 		etcd.CDCKeyTypeTaskWorkload:
-		if len(k.CaptureID) == 0 {
-			log.Warn("receive an unexpected etcd event", zap.String("key", key.String()), zap.ByteString("value", value))
-			return nil
-		}
 		changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 		if !exist {
 			if value == nil {

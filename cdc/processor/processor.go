@@ -93,6 +93,7 @@ func newProcessor(ctx context.Context) *processor {
 		firstTick:    true,
 		changefeedID: changefeedID,
 		captureInfo:  ctx.GlobalVars().CaptureInfo,
+		cancel:       func() {},
 
 		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -288,15 +289,16 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
-	//
-	//// Clean up possible residual error states
-	//p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-	//	if position != nil && position.Error != nil {
-	//		position.Error = nil
-	//		return position, true, nil
-	//	}
-	//	return position, false, nil
-	//})
+
+	// Clean up possible residual error states
+	// TODO(leoppro) the position should be removed by owner
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+		if position != nil && position.Error != nil {
+			position.Error = nil
+			return position, true, nil
+		}
+		return position, false, nil
+	})
 
 	log.Info("run processor", context.ZapFieldCapture(ctx), context.ZapFieldChangefeed(ctx))
 	return nil
@@ -342,6 +344,18 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 		})
 	}
 	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
+	// TODO: 👇👇 remove this six lines after the new owner is implemented, applied operation should be removed by owner
+	if !taskStatus.SomeOperationsUnapplied() && len(taskStatus.Operation) != 0 {
+		p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			if status == nil {
+				// for safety, status should never be nil
+				return nil, false, nil
+			}
+			status.Operation = nil
+			return status, true, nil
+		})
+	}
+	// 👆👆 remove this six lines
 	for tableID, opt := range taskStatus.Operation {
 		if opt.TableApplied() {
 			continue
@@ -626,6 +640,9 @@ func (p *processor) handlePosition() error {
 func (p *processor) handleWorkload() error {
 	p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(workloads model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		changed := false
+		if workloads == nil {
+			workloads = make(model.TaskWorkload)
+		}
 		for tableID := range workloads {
 			if _, exist := p.tables[tableID]; !exist {
 				delete(workloads, tableID)
@@ -759,6 +776,22 @@ func (p *processor) Close() error {
 	// mark tables share the same context with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
+	// TODO(leoppro) the metadata of a closed processor should be removed by owner
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+		if position == nil {
+			return nil, false, nil
+		}
+		if position.Error != nil {
+			return position, true, nil
+		}
+		return nil, true, nil
+	})
+	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(_ *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		return nil, true, nil
+	})
+	p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(_ model.TaskWorkload) (model.TaskWorkload, bool, error) {
+		return nil, true, nil
+	})
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
