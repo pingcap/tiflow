@@ -25,14 +25,9 @@ type Reactor interface {
 	Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error)
 }
 
-// PatchFunc should be a pure function that returns a new value given the old value.
-// The function is called each time the EtcdWorker initiates an Etcd transaction.
-type PatchFunc = func(old []byte) (newValue []byte, err error)
-
-// DataPatch represents an update to a given Etcd key
-type DataPatch struct {
-	Key util.EtcdKey
-	Fun PatchFunc
+// DataPatch represents an update of state
+type DataPatch interface {
+	Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
 }
 
 // ReactorState models the Etcd state of a reactor
@@ -42,5 +37,40 @@ type ReactorState interface {
 
 	// GetPatches is called by EtcdWorker, and should return a slice of data patches that represents the changes
 	// that a Reactor wants to apply to Etcd.
-	GetPatches() []*DataPatch
+	GetPatches() []DataPatch
+}
+
+// SingleDataPatch represents an update to a given Etcd key
+type SingleDataPatch struct {
+	Key util.EtcdKey
+	// PatchFunc should be a pure function that returns a new value given the old value.
+	// The function is called each time the EtcdWorker initiates an Etcd transaction.
+	Func func(old []byte) (newValue []byte, changed bool, err error)
+}
+
+// Patch implements the DataPatch interface
+func (s *SingleDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
+	value := valueMap[s.Key]
+	newValue, changed, err := s.Func(value)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	changedSet[s.Key] = struct{}{}
+	if newValue == nil {
+		delete(valueMap, s.Key)
+	} else {
+		valueMap[s.Key] = newValue
+	}
+	return nil
+}
+
+// MultiDatePath represents an update to many keys
+type MultiDatePath func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
+
+// Patch implements the DataPatch interface
+func (m MultiDatePath) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
+	return m(valueMap, changedSet)
 }
