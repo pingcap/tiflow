@@ -85,7 +85,10 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		sorter = psorter.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+		sorter, err = psorter.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
 	}

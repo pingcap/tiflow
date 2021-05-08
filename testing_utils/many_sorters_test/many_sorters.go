@@ -80,11 +80,14 @@ func main() {
 
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
-		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir,
+		sorters[i], err = pullerSorter.NewUnifiedSorter(*sorterDir,
 			"test-cf",
 			fmt.Sprintf("test-%d", i),
 			model.TableID(i),
 			"0.0.0.0:0")
+		if err != nil {
+			log.Panic("many_sorters", zap.Error(err))
+		}
 		finalI := i
 
 		// run sorter

@@ -21,8 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -32,6 +30,7 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
