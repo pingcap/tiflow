@@ -8,6 +8,7 @@ set -e
 
 OUT_DIR=
 tidb_config=
+pd_config=
 multiple_upstream_pd=
 
 while [[ ${1} ]]; do
@@ -18,6 +19,10 @@ while [[ ${1} ]]; do
             ;;
         --tidb-config)
             tidb_config=${2}
+            shift
+            ;;
+        --pd-config)
+            pd_config=${2}
             shift
             ;;
         --multiple-upstream-pd)
@@ -42,12 +47,18 @@ stop_tidb_cluster
 
 cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 
-cat - >"$OUT_DIR/pd-config.toml" <<EOF
+
+# pd server config file
+if [[ "$pd_config" != "" ]]; then
+    cat $pd_config > $OUT_DIR/pd-config.toml
+else
+    cat - >"$OUT_DIR/pd-config.toml" <<EOF
 [replication]
 # Set it to 1 to make sure we have enough replicas to run placement-rules.
 max-replicas = 1
 enable-placement-rules = true
 EOF
+fi
 
 echo "Starting Upstream PD..."
 if [[ "$multiple_upstream_pd" == "true" ]]; then
