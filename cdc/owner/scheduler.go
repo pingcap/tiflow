@@ -183,10 +183,10 @@ func (s *scheduler) syncTablesWithSchemaManager(allTableShouldBeListened []model
 		// table which should be listened but not, add adding-table job to pending job list
 		boundaryTs := globalCheckpointTs + 1
 		if boundaryTsOfRemoved, exist := s.boundaryTsOfRemovedTable[tableID]; exist {
-			if boundaryTs < boundaryTsOfRemoved{
+			if boundaryTs < boundaryTsOfRemoved {
 				boundaryTs = boundaryTsOfRemoved
 			}
-			delete(s.boundaryTsOfRemovedTable,tableID)
+			delete(s.boundaryTsOfRemovedTable, tableID)
 		}
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:            schedulerJobTypeAddTable,

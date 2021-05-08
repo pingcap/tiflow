@@ -16,12 +16,13 @@ package processor
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"time"
+
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"go.etcd.io/etcd/clientv3"
-	"math"
-	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -31,17 +32,17 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type managerSuite struct{
+type managerSuite struct {
 	manager *Manager
-	state *model.GlobalReactorState
-	tester *orchestrator.ReactorStateTester
+	state   *model.GlobalReactorState
+	tester  *orchestrator.ReactorStateTester
 }
 
 var _ = check.Suite(&managerSuite{})
 
 const mockLeaseID = clientv3.LeaseID(0x22317526c4fc9a37)
 
-func (s *managerSuite) resetSuit(ctx context.Context,c *check.C) {
+func (s *managerSuite) resetSuit(ctx context.Context, c *check.C) {
 	s.manager = NewManager4Test(mockLeaseID, func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
@@ -51,16 +52,16 @@ func (s *managerSuite) resetSuit(ctx context.Context,c *check.C) {
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	})
-	s.state=model.NewGlobalState().(*model.GlobalReactorState)
-	s.tester=orchestrator.NewReactorStateTester(c,s.state, map[string]string{
-		fmt.Sprintf("/tidb/cdc/owner/%x",mockLeaseID):ctx.GlobalVars().CaptureInfo.ID,
+	s.state = model.NewGlobalState().(*model.GlobalReactorState)
+	s.tester = orchestrator.NewReactorStateTester(c, s.state, map[string]string{
+		fmt.Sprintf("/tidb/cdc/owner/%x", mockLeaseID): ctx.GlobalVars().CaptureInfo.ID,
 	})
 }
 
 func (s *managerSuite) TestChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewBackendContext4Test(false)
-	s.resetSuit(ctx,c)
+	s.resetSuit(ctx, c)
 	var err error
 
 	// no changefeed
@@ -82,15 +83,15 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 			StartTs:    0,
 			TargetTs:   math.MaxUint64,
 			Config:     config.GetDefaultReplicaConfig(),
-		},true,nil
+		}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		return &model.ChangeFeedStatus{},true,nil
+		return &model.ChangeFeedStatus{}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
 			Tables: map[int64]*model.TableReplicaInfo{},
-		},true,nil
+		}, true, nil
 	})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
@@ -101,7 +102,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 	// processor return errors
 	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.AdminJobType = model.AdminStop
-		return status,true,nil
+		return status, true, nil
 	})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
@@ -113,7 +114,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 func (s *managerSuite) TestDebugInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewBackendContext4Test(false)
-	s.resetSuit(ctx,c)
+	s.resetSuit(ctx, c)
 	var err error
 
 	// no changefeed
@@ -129,15 +130,15 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 			StartTs:    0,
 			TargetTs:   math.MaxUint64,
 			Config:     config.GetDefaultReplicaConfig(),
-		},true,nil
+		}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		return &model.ChangeFeedStatus{},true,nil
+		return &model.ChangeFeedStatus{}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
 			Tables: map[int64]*model.TableReplicaInfo{},
-		},true,nil
+		}, true, nil
 	})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
@@ -167,7 +168,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 func (s *managerSuite) TestClose(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.NewBackendContext4Test(false)
-	s.resetSuit(ctx,c)
+	s.resetSuit(ctx, c)
 	var err error
 
 	// no changefeed
@@ -183,15 +184,15 @@ func (s *managerSuite) TestClose(c *check.C) {
 			StartTs:    0,
 			TargetTs:   math.MaxUint64,
 			Config:     config.GetDefaultReplicaConfig(),
-		},true,nil
+		}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		return &model.ChangeFeedStatus{},true,nil
+		return &model.ChangeFeedStatus{}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
 			Tables: map[int64]*model.TableReplicaInfo{},
-		},true,nil
+		}, true, nil
 	})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
