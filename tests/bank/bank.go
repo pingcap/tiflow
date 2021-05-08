@@ -77,7 +77,7 @@ func main() {
 	cmd.PersistentFlags().StringVarP(&upstream, "upstream", "u", "", "Upstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVarP(&downstream, "downstream", "d", "", "Downstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVar(&interval, "interval", "2s", "Interval of verify tables")
-	cmd.PersistentFlags().Int64Var(&testRound, "testcase-round", math.MaxInt64, "Total around of verify tables")
+	cmd.PersistentFlags().Int64Var(&testRound, "test-round", math.MaxInt64, "Total around of verify tables")
 	cmd.PersistentFlags().IntVar(&tables, "tables", 1, "The number of tables for db")
 	cmd.PersistentFlags().IntVar(&accounts, "accounts", 100, "The number of Accounts for each table")
 	cmd.PersistentFlags().IntVar(&concurrency, "concurrency", 10, "concurrency of transaction for each table")
