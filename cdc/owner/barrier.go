@@ -27,6 +27,7 @@ const (
 	DDLJobBarrier barrierType = iota
 	// SyncPointBarrier denotes a barrier for snapshot replication.
 	SyncPointBarrier
+	// FinishBarrier denotes a barrier for changefeed finished.
 	FinishBarrier
 )
 
@@ -44,7 +45,7 @@ func newBarriers() *barriers {
 }
 
 func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
-	if !b.dirty && (tp == b.min||barrierTs <= b.inner[b.min]) {
+	if !b.dirty && (tp == b.min || barrierTs <= b.inner[b.min]) {
 		b.dirty = true
 	}
 	b.inner[tp] = barrierTs
