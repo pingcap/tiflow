@@ -1686,8 +1686,7 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[model.ChangeFeedID]*model.ChangeFeedStatus, minGCSafePoint uint64) error {
 	for id, status := range staleChangeFeeds {
 		message := cerror.ErrSnapshotLostByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint).Error()
-		log.Warn("handle staleChangeFeed ", zap.String("changefeed", id), zap.String("Error message", message))
-
+		log.Warn("changefeed checkpoint is lagging too much, so it will be stopped.", zap.String("changefeed", id), zap.String("Error message", message))
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changfeed is stagnant
