@@ -906,8 +906,6 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
-const maxLagWithCheckpointTs = (30 * 1000) << 18 // 30s
-
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
 func (p *oldProcessor) sorterConsume(
@@ -920,7 +918,7 @@ func (p *oldProcessor) sorterConsume(
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 ) {
-	var lastResolvedTs, lastCheckPointTs uint64
+	var lastResolvedTs uint64
 	opDone := false
 	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
@@ -1031,7 +1029,6 @@ func (p *oldProcessor) sorterConsume(
 			}
 			return err
 		}
-		lastCheckPointTs = checkpointTs
 
 		if checkpointTs < replicaInfo.StartTs {
 			checkpointTs = replicaInfo.StartTs
@@ -1053,28 +1050,6 @@ func (p *oldProcessor) sorterConsume(
 		case pEvent := <-sorter.Output():
 			if pEvent == nil {
 				continue
-			}
-
-			for lastResolvedTs > maxLagWithCheckpointTs+lastCheckPointTs {
-				log.Debug("the lag between local checkpoint Ts and local resolved Ts is too lang",
-					zap.Uint64("resolvedTs", lastResolvedTs), zap.Uint64("lastCheckPointTs", lastCheckPointTs),
-					zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
-				select {
-				case <-ctx.Done():
-					if ctx.Err() != context.Canceled {
-						p.sendError(errors.Trace(ctx.Err()))
-					}
-					return
-				case <-globalResolvedTsReceiver.C:
-					if err := sendResolvedTs2Sink(); err != nil {
-						// error is already sent to processor, so we can just ignore it
-						return
-					}
-				case <-checkDoneTicker.C:
-					if !opDone {
-						checkDone()
-					}
-				}
 			}
 
 			pEvent.SetUpFinishedChan()
