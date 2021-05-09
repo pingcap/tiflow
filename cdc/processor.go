@@ -23,9 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sink/common"
-	serverConfig "github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -37,6 +34,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sink/common"
+	serverConfig "github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -930,7 +929,7 @@ func (p *oldProcessor) runFlowControl(
 		select {
 		case <-ctx.Done():
 			// NOTE: This line is buggy, because `context.Canceled` may indicate an actual error.
-			// TODO Will be resolved with other similar problems.
+			// TODO Will be resolved together with other similar problems.
 			if errors.Cause(ctx.Err()) != context.Canceled {
 				p.sendError(ctx.Err())
 			}
@@ -970,6 +969,7 @@ func (p *oldProcessor) runFlowControl(
 							}
 							return
 						case outCh <- interpolatedEvent:
+							log.Debug("sent resolved ts", zap.Uint64("resolved-ts", interpolatedEvent.CRTs))
 						}
 					}
 				}
@@ -988,11 +988,13 @@ func (p *oldProcessor) runFlowControl(
 						case <-ctx.Done():
 							return ctx.Err()
 						case outCh <- msg:
+							log.Debug("sent resolved ts", zap.Uint64("resolved-ts", msg.CRTs))
 						}
 					}
 					return nil
 				})
 				if err != nil {
+					log.Error("flow control error", zap.Error(err))
 					if cerror.ErrFlowControllerAborted.Equal(err) {
 						log.Info("flow control cancelled for table",
 							zap.Int64("tableID", tableID),
@@ -1002,6 +1004,7 @@ func (p *oldProcessor) runFlowControl(
 					}
 					return
 				}
+				lastCRTs = commitTs
 			} else {
 				// handle OpTypeResolved
 				if event.CRTs < lastSentResolvedTs {
@@ -1019,6 +1022,9 @@ func (p *oldProcessor) runFlowControl(
 				}
 				return
 			case outCh <- event:
+				if event.RawKV.OpType == model.OpTypeResolved {
+					log.Debug("sent resolved ts", zap.Uint64("resolved-ts", event.CRTs))
+				}
 			}
 		}
 	}
