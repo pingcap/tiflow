@@ -23,6 +23,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/sink/common"
+	serverConfig "github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -58,6 +61,11 @@ const (
 	defaultSyncResolvedBatch = 1024
 
 	schemaStorageGCLag = time.Minute * 20
+
+	// for better sink performance under flow control
+	resolvedTsInterpolateInterval = 200 * time.Millisecond
+	flushMemoryMetricsDuration    = time.Second * 5
+	flowControlOutChSize          = 128
 )
 
 type oldProcessor struct {
@@ -906,6 +914,116 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
+// runFlowControl controls the flow of events out of the sorter.
+func (p *oldProcessor) runFlowControl(
+	ctx context.Context,
+	tableID model.TableID,
+	flowController *common.TableFlowController,
+	inCh <-chan *model.PolymorphicEvent,
+	outCh chan<- *model.PolymorphicEvent) {
+	var (
+		lastSendResolvedTsTime       time.Time
+		lastCRTs, lastSentResolvedTs uint64
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			// NOTE: This line is buggy, because `context.Canceled` may indicate an actual error.
+			// TODO Will be resolved with other similar problems.
+			if errors.Cause(ctx.Err()) != context.Canceled {
+				p.sendError(ctx.Err())
+			}
+			return
+		case event, ok := <-inCh:
+			if !ok {
+				// sorter output channel has been closed.
+				// The sorter must have exited and has a reportable exit reason,
+				// so we don't need to worry about sending an error here.
+				log.Info("sorter output channel closed",
+					zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
+				return
+			}
+
+			if event == nil || event.RawKV == nil {
+				// This is an invariant violation.
+				log.Panic("unexpected empty event", zap.Reflect("event", event))
+			}
+
+			if event.RawKV.OpType != model.OpTypeResolved {
+				size := uint64(event.RawKV.ApproximateSize())
+				commitTs := event.CRTs
+				// We interpolate a resolved-ts if none has been sent for some time.
+				if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
+					// Refer to `cdc/processor/pipeline/sorter.go` for detailed explanation of the design.
+					// This is a backport.
+					if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
+						lastSentResolvedTs = lastCRTs
+						lastSendResolvedTsTime = time.Now()
+						interpolatedEvent := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+
+						select {
+						case <-ctx.Done():
+							// TODO fix me
+							if errors.Cause(ctx.Err()) != context.Canceled {
+								p.sendError(ctx.Err())
+							}
+							return
+						case outCh <- interpolatedEvent:
+						}
+					}
+				}
+				// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
+				// Otherwise the pipeline would deadlock.
+				err := flowController.Consume(commitTs, size, func() error {
+					if lastCRTs > lastSentResolvedTs {
+						// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
+						// Not sending a Resolved Event here will very likely deadlock the pipeline.
+						// NOTE: This is NOT an optimization, but is for liveness.
+						lastSentResolvedTs = lastCRTs
+						lastSendResolvedTsTime = time.Now()
+
+						msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case outCh <- msg:
+						}
+					}
+					return nil
+				})
+				if err != nil {
+					if cerror.ErrFlowControllerAborted.Equal(err) {
+						log.Info("flow control cancelled for table",
+							zap.Int64("tableID", tableID),
+							util.ZapFieldChangefeed(ctx))
+					} else {
+						p.sendError(ctx.Err())
+					}
+					return
+				}
+			} else {
+				// handle OpTypeResolved
+				if event.CRTs < lastSentResolvedTs {
+					continue
+				}
+				lastSentResolvedTs = event.CRTs
+				lastSendResolvedTsTime = time.Now()
+			}
+
+			select {
+			case <-ctx.Done():
+				// TODO fix me
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.sendError(ctx.Err())
+				}
+				return
+			case outCh <- event:
+			}
+		}
+	}
+}
+
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
 func (p *oldProcessor) sorterConsume(
@@ -1007,6 +1125,19 @@ func (p *oldProcessor) sorterConsume(
 	}
 	defer globalResolvedTsReceiver.Stop()
 
+	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
+	log.Debug("creating table flow controller",
+		zap.String("table-name", tableName),
+		zap.Int64("table-id", tableID),
+		zap.Uint64("quota", perTableMemoryQuota),
+		util.ZapFieldChangefeed(ctx))
+
+	flowController := common.NewTableFlowController(perTableMemoryQuota)
+	defer func() {
+		flowController.Abort()
+		tableMemoryGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	}()
+
 	sendResolvedTs2Sink := func() error {
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
@@ -1036,10 +1167,22 @@ func (p *oldProcessor) sorterConsume(
 
 		if checkpointTs != 0 {
 			atomic.StoreUint64(pCheckpointTs, checkpointTs)
+			flowController.Release(checkpointTs)
 			p.localCheckpointTsNotifier.Notify()
 		}
 		return nil
 	}
+
+	flowControlOutCh := make(chan *model.PolymorphicEvent, flowControlOutChSize)
+	go func() {
+		p.runFlowControl(ctx, tableID, flowController, sorter.Output(), flowControlOutCh)
+		close(flowControlOutCh)
+	}()
+
+	metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
+	defer metricsTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1047,7 +1190,9 @@ func (p *oldProcessor) sorterConsume(
 				p.sendError(ctx.Err())
 			}
 			return
-		case pEvent := <-sorter.Output():
+		case <-metricsTicker.C:
+			metricsTableMemoryGauge.Set(float64(flowController.GetConsumption()))
+		case pEvent := <-flowControlOutCh:
 			if pEvent == nil {
 				continue
 			}
