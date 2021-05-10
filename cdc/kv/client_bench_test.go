@@ -29,8 +29,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
-	"github.com/pingcap/tidb/store/mockstore/mocktikv"
+	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -139,7 +140,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}()
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
@@ -250,7 +251,7 @@ func prepareBench(b *testing.B, regionNum int) (
 		server1.Stop()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
