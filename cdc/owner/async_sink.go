@@ -4,6 +4,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
@@ -93,10 +98,26 @@ func (s *asyncSinkImpl) run(ctx context.Context) {
 				return
 			}
 		case ddl := <-s.ddlCh:
-			if err := s.sink.EmitDDLEvent(ctx, ddl); err != nil {
+			err := s.sink.EmitDDLEvent(ctx, ddl)
+			failpoint.Inject("InjectChangefeedDDLError", func() {
+				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
+			})
+			if err != nil {
+				// If DDL executing failed, and the error can be ignored, mark the ddl is executed successfully and print a log
+				if cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+					log.Info("Execute DDL ignored", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
+					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
+					return
+				}
+				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
+				log.Error("Execute DDL failed",
+					zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
+					zap.Error(err),
+					zap.Reflect("ddl", ddl))
 				ctx.Throw(errors.Trace(err))
 				return
 			}
+			log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
 			atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 		}
 	}

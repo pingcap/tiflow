@@ -16,6 +16,8 @@ package owner
 import (
 	"math"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
@@ -293,6 +295,10 @@ func (s *scheduler) rebalance() {
 				break
 			}
 			s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+				failpoint.Inject("OwnerRemoveTableError", func() {
+					// just skip remove this table
+					failpoint.Return(status, false, nil)
+				})
 				if status == nil {
 					// the capture may be down, just skip remove this table
 					return status, false, nil
@@ -302,12 +308,12 @@ func (s *scheduler) rebalance() {
 					return status, false, nil
 				}
 				status.RemoveTable(tableID, s.state.Status.ResolvedTs, false)
+				log.Info("Rebalance: Move table",
+					zap.Int64("table-id", tableID),
+					zap.String("capture", captureID),
+					zap.String("changefeed-id", s.state.ID))
 				return status, true, nil
 			})
-			log.Info("Rebalance: Move table",
-				zap.Int64("table-id", tableID),
-				zap.String("capture", captureID),
-				zap.String("changefeed-id", s.state.ID))
 			tableNum2Remove--
 		}
 	}

@@ -166,8 +166,8 @@ function run() {
     cleanup_process $CDC_BINARY
 
     # updating GC safepoint failure case
-    # TODO(leoppro): port this failpoint to new owner
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=return(9223372036854775807)'
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectActualGCSafePoint=return(9223372036854775807)' # new owner
+    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=return(9223372036854775807)' # old owner
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     changefeedid_2=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')

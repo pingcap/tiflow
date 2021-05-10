@@ -15,6 +15,7 @@ package owner
 
 import (
 	stdContext "context"
+	"reflect"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -90,15 +91,16 @@ func newChangefeed4Test(
 }
 
 func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+	log.Debug("LEOPPRO tick", zap.String("changefeed", state.ID))
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- err
 		return nil
 	})
 	if err := c.tick(ctx, state, captures); err != nil {
-		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err), zap.Stringer("tp", reflect.TypeOf(err)))
 		var code string
-		if terror, ok := err.(*errors.Error); ok {
-			code = string(terror.RFCCode())
+		if rfcCode, ok := cerror.RFCCode(err); ok {
+			code = string(rfcCode)
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
@@ -328,29 +330,15 @@ func (c *changefeed) asyncExecDDL(ctx context.Context, job *timodel.Job) (bool, 
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
 		return true, nil
 	}
-	failpoint.Inject("InjectChangefeedDDLError", func() {
-		failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
-	})
 	ddlEvent, err := c.schema.BuildDDLEvent(job)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 	done, err := c.sink.EmitDDLEvent(ctx, ddlEvent)
-	// If DDL executing failed, pause the changefeed and print log, rather
-	// than return an error and break the running of this owner.
 	if err != nil {
-		if cerror.ErrDDLEventIgnored.NotEqual(err) {
-			log.Error("Execute DDL failed",
-				zap.String("ChangeFeedID", c.state.ID),
-				zap.Error(err),
-				zap.Reflect("ddlJob", job))
-			return false, cerror.ErrExecDDLFailed.GenWithStackByArgs()
-		}
-		log.Info("Execute DDL ignored", zap.String("changefeed", c.state.ID), zap.Reflect("ddlJob", job))
-		return true, nil
+		return false, err
 	}
-	log.Info("Execute DDL succeeded", zap.String("changefeed", c.state.ID), zap.Reflect("ddlJob", job))
 	return done, nil
 }
 

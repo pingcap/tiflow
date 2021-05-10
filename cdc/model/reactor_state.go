@@ -16,9 +16,6 @@ package model
 import (
 	"encoding/json"
 	"reflect"
-	"strconv"
-
-	"go.etcd.io/etcd/clientv3"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -107,10 +104,10 @@ func (s *GlobalReactorState) GetPatches() []orchestrator.DataPatch {
 	return pendingPatches
 }
 
-func (s *GlobalReactorState) CheckLeaseExpired(leaseID clientv3.LeaseID) {
+func (s *GlobalReactorState) CheckLeaseExpired(captureID CaptureID) {
 	k := etcd.CDCKey{
-		Tp:           etcd.CDCKeyTypeOwner,
-		OwnerLeaseID: strconv.FormatInt(int64(leaseID), 16),
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureID,
 	}
 	key := k.String()
 	patch := &orchestrator.SingleDataPatch{

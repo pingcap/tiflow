@@ -18,6 +18,9 @@ type feedStateManager struct {
 func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 	m.state = state
 	m.shouldRunning = true
+	if m.state.Status == nil {
+		return
+	}
 	if pendingJobs := m.handleAdminJob(); pendingJobs {
 		return
 	}
@@ -185,16 +188,22 @@ func (m *feedStateManager) errorReportByProcessor() []*model.RunningError {
 		if position.Error != nil {
 			runningErrors = append(runningErrors, position.Error)
 			log.Warn("processor report an error", zap.String("changefeedID", m.state.ID), zap.String("captureID", captureID), zap.Any("error", position.Error))
+			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				if position == nil {
+					return nil, false, nil
+				}
+				position.Error = nil
+				return position, true, nil
+			})
 		}
-		m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-			position.Error = nil
-			return position, true, nil
-		})
 	}
 	return runningErrors
 }
 
 func (m *feedStateManager) AppendError2Changefeed(errs ...*model.RunningError) {
+	if len(errs) == 0 {
+		return
+	}
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		for _, err := range errs {
 			info.Error = err

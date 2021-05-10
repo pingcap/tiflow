@@ -20,9 +20,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/context"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 
-	"go.etcd.io/etcd/clientv3"
+	"github.com/pingcap/ticdc/pkg/context"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -73,26 +74,23 @@ type Owner struct {
 	ownerJobQueue   []*ownerJob
 	ownerJobQueueMu sync.Mutex
 
-	leaseID clientv3.LeaseID
-
 	close int32
 
 	newChangefeed func(gcManager *gcManager) *changefeed
 }
 
-func NewOwner(leaseID clientv3.LeaseID) *Owner {
+func NewOwner() *Owner {
 	return &Owner{
 		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
 		gcManager:     newGCManager(),
-		leaseID:       leaseID,
 		newChangefeed: newChangefeed,
 	}
 }
 
-func NewOwner4Test(leaseID clientv3.LeaseID,
+func NewOwner4Test(
 	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller,
 	newSink func(ctx context.Context) (AsyncSink, error)) *Owner {
-	o := NewOwner(leaseID)
+	o := NewOwner()
 	o.newChangefeed = func(gcManager *gcManager) *changefeed {
 		return newChangefeed4Test(gcManager, newDDLPuller, newSink)
 	}
@@ -100,15 +98,26 @@ func NewOwner4Test(leaseID clientv3.LeaseID,
 }
 
 func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	failpoint.Inject("owner-run-with-error", func() {
+		failpoint.Return(nil, errors.New("owner run with injected error"))
+	})
 	ctx := stdCtx.(context.Context)
 	state := rawState.(*model.GlobalReactorState)
-	state.CheckLeaseExpired(o.leaseID)
+	state.CheckLeaseExpired(ctx.GlobalVars().CaptureInfo.ID)
+	err = o.gcManager.updateGCSafePoint(ctx, state)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	o.handleJob()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
 			continue
 		}
+		ctx = context.WithChangefeedVars(ctx, &context.ChangefeedVars{
+			ID:   changefeedID,
+			Info: changefeedState.Info,
+		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
 			cfReactor = newChangefeed(o.gcManager)
@@ -123,11 +132,6 @@ func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorSta
 			cfReactor.Close()
 			delete(o.changefeeds, changefeedID)
 		}
-	}
-
-	err = o.gcManager.updateGCSafePoint(ctx, state)
-	if err != nil {
-		return nil, err
 	}
 	if atomic.LoadInt32(&o.close) != 0 {
 		for _, cfReactor := range o.changefeeds {

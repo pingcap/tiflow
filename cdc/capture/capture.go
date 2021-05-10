@@ -18,8 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
-
 	"github.com/pingcap/ticdc/pkg/context"
 
 	"github.com/google/uuid"
@@ -53,8 +51,8 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	newProcessorManager func(leaseID clientv3.LeaseID) *processor.Manager
-	newOwner            func(leaseID clientv3.LeaseID) *owner.Owner
+	newProcessorManager func() *processor.Manager
+	newOwner            func() *owner.Owner
 }
 
 // NewCapture returns a new Capture instance
@@ -74,8 +72,8 @@ func NewCapture() *Capture {
 }
 
 func NewCapture4Test(
-	newProcessorManager func(leaseID clientv3.LeaseID) *processor.Manager,
-	newOwner func(leaseID clientv3.LeaseID) *owner.Owner,
+	newProcessorManager func() *processor.Manager,
+	newOwner func() *owner.Owner,
 ) *Capture {
 	c := NewCapture()
 	c.newProcessorManager = newProcessorManager
@@ -98,15 +96,23 @@ func (c *Capture) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	wg, stdCtx := errgroup.WithContext(ctx)
 	ctx = context.WithStd(ctx, stdCtx)
+
+	go func() {
+		<-ctx.Done()
+		log.Debug("LEOPPRO cancel")
+	}()
 	wg.Go(func() error {
 		defer cancel()
+		defer log.Debug("LEOPPRO exit")
 		return c.campaignOwner(ctx)
 	})
-	c.processorManager = c.newProcessorManager(c.session.Lease())
+	c.processorManager = c.newProcessorManager()
 	wg.Go(func() error {
 		defer cancel()
-
-		return c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState())
+		defer log.Debug("LEOPPRO exit")
+		conf := config.GetGlobalServerConfig()
+		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
+		return c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 	})
 	return wg.Wait()
 }
@@ -118,6 +124,11 @@ func (c *Capture) Info() model.CaptureInfo {
 func (c *Capture) campaignOwner(ctx context.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
+	conf := config.GetGlobalServerConfig()
+	ownerFlushInterval := time.Duration(conf.OwnerFlushInterval)
+	failpoint.Inject("ownerFlushIntervalInject", func(val failpoint.Value) {
+		ownerFlushInterval = time.Millisecond * time.Duration(val.(int))
+	})
 	rl := rate.NewLimiter(0.05, 2)
 	for {
 		err := rl.Wait(ctx)
@@ -140,9 +151,13 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 		}
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
-		owner := c.newOwner(c.session.Lease())
+		owner := c.newOwner()
+		go func() {
+			<-ctx.Done()
+			log.Debug("LEOPPRO cancel")
+		}()
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState())
+		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		if err == nil || cerror.ErrCaptureSuicide.Equal(errors.Cause(err)) {
@@ -156,12 +171,13 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 	}
 }
 
-func (c *Capture) runEtcdWorker(ctx context.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState) error {
+func (c *Capture) runEtcdWorker(ctx context.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, kv.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, c.session, 200*time.Millisecond); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
+		log.Debug("LEOPPRO etcd worker err", zap.Error(err))
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
@@ -225,7 +241,7 @@ func (c *Capture) register(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	elec := concurrency.NewElection(sess, kv.CaptureOwnerKey)
-	err = ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
+	err = ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, sess.Lease())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}

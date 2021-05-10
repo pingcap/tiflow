@@ -17,6 +17,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/context"
@@ -72,6 +74,9 @@ func (m *gcManager) updateGCSafePoint(ctx context.Context, state *model.GlobalRe
 		}
 		return nil
 	}
+	failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
+		actual = uint64(val.(int))
+	})
 	m.lastSafePointTs = actual
 	m.lastSucceedTime = time.Now()
 	return nil

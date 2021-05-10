@@ -21,8 +21,6 @@ import (
 
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 
-	"go.etcd.io/etcd/clientv3"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -52,26 +50,23 @@ type Manager struct {
 	processors map[model.ChangeFeedID]*processor
 
 	commandQueue chan *command
-	leaseID      clientv3.LeaseID
 
 	newProcessor func(context.Context) *processor
 }
 
 // NewManager creates a new processor manager
-func NewManager(leaseID clientv3.LeaseID) *Manager {
+func NewManager() *Manager {
 	return &Manager{
 		processors:   make(map[model.ChangeFeedID]*processor),
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
-		leaseID:      leaseID,
 	}
 }
 
 func NewManager4Test(
-	leaseID clientv3.LeaseID,
 	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
-	m := NewManager(leaseID)
+	m := NewManager()
 	m.newProcessor = func(ctx context.Context) *processor {
 		return newProcessor4Test(ctx, createTablePipeline)
 	}
@@ -84,7 +79,7 @@ func NewManager4Test(
 func (m *Manager) Tick(stdCtx stdContext.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(context.Context)
 	globalState := state.(*model.GlobalReactorState)
-	globalState.CheckLeaseExpired(m.leaseID)
+	globalState.CheckLeaseExpired(ctx.GlobalVars().CaptureInfo.ID)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
