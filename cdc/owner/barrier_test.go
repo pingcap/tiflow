@@ -33,31 +33,31 @@ type barrierSuite struct {
 func (s *barrierSuite) TestBarrier(c *check.C) {
 	defer testleak.AfterTest(c)()
 	b := newBarriers()
-	b.Update(DDLJobBarrier, 2)
-	b.Update(SyncPointBarrier, 3)
-	b.Update(FinishBarrier, 1)
+	b.Update(ddlJobBarrier, 2)
+	b.Update(syncPointBarrier, 3)
+	b.Update(finishBarrier, 1)
 	tp, ts := b.Min()
-	c.Assert(tp, check.Equals, FinishBarrier)
+	c.Assert(tp, check.Equals, finishBarrier)
 	c.Assert(ts, check.Equals, uint64(1))
 
-	b.Update(FinishBarrier, 4)
+	b.Update(finishBarrier, 4)
 	tp, ts = b.Min()
-	c.Assert(tp, check.Equals, DDLJobBarrier)
+	c.Assert(tp, check.Equals, ddlJobBarrier)
 	c.Assert(ts, check.Equals, uint64(2))
 
-	b.Remove(DDLJobBarrier)
+	b.Remove(ddlJobBarrier)
 	tp, ts = b.Min()
-	c.Assert(tp, check.Equals, SyncPointBarrier)
+	c.Assert(tp, check.Equals, syncPointBarrier)
 	c.Assert(ts, check.Equals, uint64(3))
 
-	b.Update(FinishBarrier, 1)
+	b.Update(finishBarrier, 1)
 	tp, ts = b.Min()
-	c.Assert(tp, check.Equals, FinishBarrier)
+	c.Assert(tp, check.Equals, finishBarrier)
 	c.Assert(ts, check.Equals, uint64(1))
 
-	b.Update(DDLJobBarrier, 5)
+	b.Update(ddlJobBarrier, 5)
 	tp, ts = b.Min()
-	c.Assert(tp, check.Equals, FinishBarrier)
+	c.Assert(tp, check.Equals, finishBarrier)
 	c.Assert(ts, check.Equals, uint64(1))
 }
 
@@ -69,18 +69,18 @@ func (s *barrierSuite) TestBarrierRandom(c *check.C) {
 	expectedBarriers := make(map[barrierType]model.Ts)
 
 	// set a barrier which can not be removed to avoid the barrier map is empty
-	b.Update(maxBarrierType, model.Ts(maxBarrierTs))
-	expectedBarriers[maxBarrierType] = model.Ts(maxBarrierTs)
+	b.Update(barrierType(maxBarrierType), model.Ts(maxBarrierTs))
+	expectedBarriers[barrierType(maxBarrierType)] = model.Ts(maxBarrierTs)
 
 	for i := 0; i < 100000; i++ {
 		switch rand.Intn(2) {
 		case 0:
-			tp := rand.Intn(maxBarrierType)
+			tp := barrierType(rand.Intn(maxBarrierType))
 			ts := model.Ts(rand.Intn(maxBarrierTs))
 			b.Update(tp, ts)
 			expectedBarriers[tp] = ts
 		case 1:
-			tp := rand.Intn(maxBarrierType)
+			tp := barrierType(rand.Intn(maxBarrierType))
 			b.Remove(tp)
 			delete(expectedBarriers, tp)
 		}
