@@ -119,7 +119,13 @@ func (s *regionWorkerSuite) TestRegionWorkerPoolSize(c *check.C) {
 	conf.KVClient.WorkerPoolSize = 0
 	config.StoreGlobalServerConfig(conf)
 	size := getWorkerPoolSize()
-	c.Assert(size, check.Equals, runtime.NumCPU()*2)
+	min := func(a, b int) int {
+		if a < b {
+			return a
+		}
+		return b
+	}
+	c.Assert(size, check.Equals, min(runtime.NumCPU()*2, maxWorkerPoolSize))
 
 	conf.KVClient.WorkerPoolSize = 5
 	size = getWorkerPoolSize()
