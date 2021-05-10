@@ -113,6 +113,8 @@ func (s *regionWorkerSuite) TestRegionStateManagerBucket(c *check.C) {
 }
 
 func (s *regionWorkerSuite) TestRegionWorkerPoolSize(c *check.C) {
+	defer testleak.AfterTest(c)()
+
 	conf := config.GetDefaultServerConfig()
 	conf.KVClient.WorkerPoolSize = 0
 	config.StoreGlobalServerConfig(conf)
