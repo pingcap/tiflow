@@ -77,16 +77,17 @@ type minGCSafePointCacheEntry struct {
 	lastUpdated time.Time
 }
 
-func (o *Owner) getGcMinSafePointCache(ctx context.Context) (model.Ts, error) {
+func (o *Owner) getMinGCSafePointCache(ctx context.Context) model.Ts {
 	if time.Now().After(o.minGCSafePointCache.lastUpdated.Add(MinGCSafePointCacheUpdateInterval)) {
 		physicalTs, logicalTs, err := o.pdClient.GetTS(ctx)
 		if err != nil {
-			return 0, err
+			log.Warn("Fail to update minGCSafePointCache.", zap.Error(err))
+			return o.minGCSafePointCache.ts
 		}
 		o.minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(o.gcTTL*1000), logicalTs)
 		o.minGCSafePointCache.lastUpdated = time.Now()
 	}
-	return o.minGCSafePointCache.ts, nil
+	return o.minGCSafePointCache.ts
 }
 
 // Owner manages the cdc cluster
@@ -740,11 +741,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	gcSafePoint := uint64(math.MaxUint64)
 
 	// get the lower bound of gcSafePoint
-	minGCSafePoint, err := o.getGcMinSafePointCache(ctx)
-	if err != nil {
-		log.Warn("failed to acquire minGCSafePoint from Cache, will use this machine time", zap.Error(err))
-		minGCSafePoint = oracle.EncodeTSO(oracle.GetPhysical(time.Now().Add(-(time.Second * time.Duration(o.gcTTL)))))
-	}
+	minGCSafePoint := o.getMinGCSafePointCache(ctx)
 
 	if len(o.changeFeeds) > 0 {
 		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
@@ -794,7 +791,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	// handle stagnant changefeed collected above
-	err = o.handleStaleChangeFeed(ctx, staleChangeFeeds, minGCSafePoint)
+	err := o.handleStaleChangeFeed(ctx, staleChangeFeeds, minGCSafePoint)
 	if err != nil {
 		log.Warn("failed to handleStaleChangeFeed ", zap.Error(err))
 	}
