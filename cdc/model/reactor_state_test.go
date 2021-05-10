@@ -30,15 +30,15 @@ type stateSuite struct{}
 
 var _ = check.Suite(&stateSuite{})
 
-func (s *stateSuite) TestCheckLeaseExpired(c *check.C) {
+func (s *stateSuite) TestCheckCaptureAlive(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewGlobalState().(*GlobalReactorState)
 	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
-	state.CheckLeaseExpired(0x22317526c4fc9a37)
+	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	c.Assert(stateTester.ApplyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
-	err := stateTester.Update("/tidb/cdc/owner/22317526c4fc9a37", []byte("abcd"))
+	err := stateTester.Update("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`))
 	c.Assert(err, check.IsNil)
-	state.CheckLeaseExpired(0x22317526c4fc9a37)
+	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	stateTester.MustApplyPatches()
 }
 

@@ -103,7 +103,7 @@ func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorSta
 	})
 	ctx := stdCtx.(context.Context)
 	state := rawState.(*model.GlobalReactorState)
-	state.CheckLeaseExpired(ctx.GlobalVars().CaptureInfo.ID)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	err = o.gcManager.updateGCSafePoint(ctx, state)
 	if err != nil {
 		return nil, errors.Trace(err)

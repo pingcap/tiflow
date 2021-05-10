@@ -104,7 +104,7 @@ func (s *GlobalReactorState) GetPatches() []orchestrator.DataPatch {
 	return pendingPatches
 }
 
-func (s *GlobalReactorState) CheckLeaseExpired(captureID CaptureID) {
+func (s *GlobalReactorState) CheckCaptureAlive(captureID CaptureID) {
 	k := etcd.CDCKey{
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: captureID,
