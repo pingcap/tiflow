@@ -14,10 +14,14 @@
 package cdc
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"time"
+
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/ticdc/cdc/owner"
 
@@ -198,35 +202,32 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	panic("unimplemented")
-	/*
-		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
-		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-			writeInternalServerError(w, err)
-			return
-		}
-		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
-		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-			writeInternalServerError(w, err)
-			return
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cfInfo, err := s.etcdClient.GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
+		return
+	}
+	cfStatus, _, err := s.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 
-
-		resp := &ChangefeedResp{
-			FeedState: string(feedState),
-		}
-		if cf != nil {
-			resp.RunningError = cf.info.Error
-		} else if feedInfo != nil {
-			resp.RunningError = feedInfo.Error
-		}
-		if status != nil {
-			resp.TSO = status.CheckpointTs
-			tm := oracle.GetTimeFromTS(status.CheckpointTs)
-			resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
-		}
-		writeData(w, resp)
-	*/
+	resp := &ChangefeedResp{
+		FeedState: string(cfInfo.State),
+	}
+	if cfInfo != nil {
+		resp.RunningError = cfInfo.Error
+	}
+	if cfStatus != nil {
+		resp.TSO = cfStatus.CheckpointTs
+		tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
+		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
+	}
+	writeData(w, resp)
 }
 
 func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {

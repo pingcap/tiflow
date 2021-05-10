@@ -135,6 +135,7 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 
 // GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
 func (info *ChangeFeedInfo) GetCheckpointTs(status *ChangeFeedStatus) uint64 {
+	log.Debug("LEOPPRO", zap.Any("info", info), zap.Any("status", status))
 	if status != nil {
 		return status.CheckpointTs
 	}

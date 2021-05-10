@@ -138,8 +138,8 @@ func (p *processor) Tick(ctx context.Context, state *model.ChangefeedReactorStat
 	p.metricProcessorErrorCounter.Inc()
 	// record error information in etcd
 	var code string
-	if terror, ok := err.(*errors.Error); ok {
-		code = string(terror.RFCCode())
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}

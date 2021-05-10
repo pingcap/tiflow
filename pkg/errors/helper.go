@@ -27,3 +27,17 @@ func WrapError(rfcError *errors.Error, err error) error {
 	}
 	return rfcError.Wrap(err).GenWithStackByCause()
 }
+
+func RFCCode(err error) (errors.RFCErrorCode, bool) {
+	type rfcCoder interface {
+		RFCCode() errors.RFCErrorCode
+	}
+	if terr, ok := err.(rfcCoder); ok {
+		return terr.RFCCode(), true
+	}
+	err = errors.Cause(err)
+	if terr, ok := err.(rfcCoder); ok {
+		return terr.RFCCode(), true
+	}
+	return "", false
+}
