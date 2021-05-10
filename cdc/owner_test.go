@@ -245,7 +245,7 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+		concurrency.WithTTL(defaultCaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
