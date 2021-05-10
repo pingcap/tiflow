@@ -651,6 +651,11 @@ error = '''
 sink uri invalid
 '''
 
+["CDC:ErrSnapshotLostByGC"]
+error = '''
+fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d
+'''
+
 ["CDC:ErrSnapshotSchemaExists"]
 error = '''
 schema %s(%d) already exists
