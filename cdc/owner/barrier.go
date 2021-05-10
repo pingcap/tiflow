@@ -31,6 +31,8 @@ const (
 	FinishBarrier
 )
 
+// barriers stores some barrierType and barrierTs, and can calculate the min barrierTs
+// barriers is NOT-THREAD-SAFE
 type barriers struct {
 	inner map[barrierType]model.Ts
 	dirty bool
