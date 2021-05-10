@@ -50,6 +50,8 @@ var (
 const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
+
+	maxWorkerPoolSize = 64
 )
 
 // regionStateManager provides the get/put way like a sync.Map, and it is divided
@@ -786,6 +788,19 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 	return err
 }
 
+func getWorkerPoolSize() (size int) {
+	cfg := config.GetGlobalServerConfig().KVClient
+	if cfg.WorkerPoolSize > 0 {
+		size = cfg.WorkerPoolSize
+	} else {
+		size = runtime.NumCPU() * 2
+	}
+	if size > maxWorkerPoolSize {
+		size = maxWorkerPoolSize
+	}
+	return
+}
+
 // InitWorkerPool initializs workerpool once, the workerpool must be initialized
 // before any kv event is received.
 func InitWorkerPool() {
@@ -793,13 +808,7 @@ func InitWorkerPool() {
 		return
 	}
 	workerPoolOnce.Do(func() {
-		cfg := config.GetGlobalServerConfig().KVClient
-		var size int
-		if cfg.WorkerPoolSize > 0 {
-			size = cfg.WorkerPoolSize
-		} else {
-			size = runtime.NumCPU() * 2
-		}
+		size := getWorkerPoolSize()
 		regionWorkerPool = workerpool.NewDefaultWorkerPool(size)
 	})
 }

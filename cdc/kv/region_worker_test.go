@@ -15,9 +15,11 @@ package kv
 
 import (
 	"math/rand"
+	"runtime"
 	"sync"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -108,4 +110,20 @@ func (s *regionWorkerSuite) TestRegionStateManagerBucket(c *check.C) {
 	bucket := rsm.bucket * 2
 	rsm = newRegionStateManager(bucket)
 	c.Assert(rsm.bucket, check.Equals, bucket)
+}
+
+func (s *regionWorkerSuite) TestRegionWorkerPoolSize(c *check.C) {
+	conf := config.GetDefaultServerConfig()
+	conf.KVClient.WorkerPoolSize = 0
+	config.StoreGlobalServerConfig(conf)
+	size := getWorkerPoolSize()
+	c.Assert(size, check.Equals, runtime.NumCPU()*2)
+
+	conf.KVClient.WorkerPoolSize = 5
+	size = getWorkerPoolSize()
+	c.Assert(size, check.Equals, 5)
+
+	conf.KVClient.WorkerPoolSize = maxWorkerPoolSize + 1
+	size = getWorkerPoolSize()
+	c.Assert(size, check.Equals, maxWorkerPoolSize)
 }
