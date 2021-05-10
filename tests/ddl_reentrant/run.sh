@@ -47,7 +47,7 @@ function complete_ddls() {
 }
 
 changefeedid=""
-SINK_URI="mysql://root@127.0.0.1:3306/"
+SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 
 function check_ts_forward() {
     changefeedid=$1
