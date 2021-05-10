@@ -969,7 +969,6 @@ func (p *oldProcessor) runFlowControl(
 							}
 							return
 						case outCh <- interpolatedEvent:
-							log.Debug("sent resolved ts", zap.Uint64("resolved-ts", interpolatedEvent.CRTs))
 						}
 					}
 				}
@@ -988,7 +987,6 @@ func (p *oldProcessor) runFlowControl(
 						case <-ctx.Done():
 							return ctx.Err()
 						case outCh <- msg:
-							log.Debug("sent resolved ts", zap.Uint64("resolved-ts", msg.CRTs))
 						}
 					}
 					return nil
@@ -1022,9 +1020,6 @@ func (p *oldProcessor) runFlowControl(
 				}
 				return
 			case outCh <- event:
-				if event.RawKV.OpType == model.OpTypeResolved {
-					log.Debug("sent resolved ts", zap.Uint64("resolved-ts", event.CRTs))
-				}
 			}
 		}
 	}
