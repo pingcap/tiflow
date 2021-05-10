@@ -20,15 +20,15 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type barrierType = int
+type barrierType int
 
 const (
-	// DDLJobBarrier denotes a replication barrier caused by a DDL.
-	DDLJobBarrier barrierType = iota
-	// SyncPointBarrier denotes a barrier for snapshot replication.
-	SyncPointBarrier
-	// FinishBarrier denotes a barrier for changefeed finished.
-	FinishBarrier
+	// ddlJobBarrier denotes a replication barrier caused by a DDL.
+	ddlJobBarrier barrierType = iota
+	// syncPointBarrier denotes a barrier for snapshot replication.
+	syncPointBarrier
+	// finishBarrier denotes a barrier for changefeed finished.
+	finishBarrier
 )
 
 // barriers stores some barrierType and barrierTs, and can calculate the min barrierTs
