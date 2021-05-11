@@ -112,23 +112,24 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 
 func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 	var sinkTableInfos []*model.SimpleTableInfo
-	tableIDs := s.AllPhysicalTables()
-	for _, tableID := range tableIDs {
+	for tableID := range s.schemaSnapshot.CloneTables() {
 		tblInfo, ok := s.schemaSnapshot.TableByID(tableID)
 		if !ok {
 			log.Panic("table not found for table ID", zap.Int64("tid", tableID))
+		}
+		if s.shouldIgnoreTable(tblInfo) {
 			continue
 		}
 		dbInfo, ok := s.schemaSnapshot.SchemaByTableID(tableID)
 		if !ok {
 			log.Panic("schema not found for table ID", zap.Int64("tid", tableID))
-			continue
 		}
 
 		// TODO separate function for initializing SimpleTableInfo
 		sinkTableInfo := new(model.SimpleTableInfo)
 		sinkTableInfo.Schema = dbInfo.Name.O
 		sinkTableInfo.TableID = tableID
+		sinkTableInfo.Table = tblInfo.TableName.Table
 		sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 		for i, colInfo := range tblInfo.Cols() {
 			sinkTableInfo.ColumnInfo[i] = new(model.ColumnInfo)

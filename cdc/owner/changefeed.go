@@ -142,7 +142,7 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 	if err != nil {
 		return errors.Trace(err)
 	}
-	allTableInListened := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables())
+	allTableInListened := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(),captures)
 	if allTableInListened {
 		c.updateStatus(barrierTs)
 	}

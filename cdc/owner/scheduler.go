@@ -45,7 +45,9 @@ type moveTableJob struct {
 }
 
 type scheduler struct {
-	state *model.ChangefeedReactorState
+	state                    *model.ChangefeedReactorState
+	allTableShouldBeListened []model.TableID
+	captures                 map[model.CaptureID]*model.CaptureInfo
 
 	moveTableTarget          map[model.TableID]model.CaptureID
 	boundaryTsOfRemovedTable map[model.TableID]model.Ts
@@ -64,10 +66,13 @@ func newScheduler() *scheduler {
 // and returns a bool represents Is it possible that there are tables that do not exist in taskStatus
 // if some table are not exist in taskStatus(in taskStatus.Tables nor in taskStatus.Operation),
 // we should not push up resolvedTs
-func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID) (allTableInListened bool) {
+func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (allTableInListened bool) {
 	s.state = state
+	s.allTableShouldBeListened = allTableShouldBeListened
+	s.captures = captures
+
 	s.cleanUpOperations()
-	pendingJob := s.syncTablesWithSchemaManager(allTableShouldBeListened)
+	pendingJob := s.syncTablesWithSchemaManager()
 	s.handleJobs(pendingJob)
 	s.rebalance()
 	s.handleMoveTableJob()
@@ -134,7 +139,12 @@ func (s *scheduler) table2CaptureIndex() map[model.TableID]model.CaptureID {
 func (s *scheduler) getMinWorkloadCapture(pendingJob []*schedulerJob) model.CaptureID {
 	workloads := make(map[model.CaptureID]uint64)
 
-	for captureID, taskWorkload := range s.state.Workloads {
+	for captureID := range s.captures {
+		workloads[captureID] = 0
+		taskWorkload := s.state.Workloads[captureID]
+		if taskWorkload == nil {
+			continue
+		}
 		for _, workload := range taskWorkload {
 			workloads[captureID] += workload.Workload
 		}
@@ -167,11 +177,11 @@ func (s *scheduler) getMinWorkloadCapture(pendingJob []*schedulerJob) model.Capt
 	return minCapture
 }
 
-func (s *scheduler) syncTablesWithSchemaManager(allTableShouldBeListened []model.TableID) []*schedulerJob {
+func (s *scheduler) syncTablesWithSchemaManager() []*schedulerJob {
 	var pendingJob []*schedulerJob
 	allTableListeningNow := s.table2CaptureIndex()
 	globalCheckpointTs := s.state.Status.CheckpointTs
-	for _, tableID := range allTableShouldBeListened {
+	for _, tableID := range s.allTableShouldBeListened {
 		if _, exist := allTableListeningNow[tableID]; exist {
 			delete(allTableListeningNow, tableID)
 			continue
