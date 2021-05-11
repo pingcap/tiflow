@@ -20,16 +20,19 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type barrierType = int
+type barrierType int
 
 const (
-	// DDLJobBarrier denotes a replication barrier caused by a DDL.
-	DDLJobBarrier barrierType = iota
-	// SyncPointBarrier denotes a barrier for snapshot replication.
-	SyncPointBarrier
-	FinishBarrier
+	// ddlJobBarrier denotes a replication barrier caused by a DDL.
+	ddlJobBarrier barrierType = iota
+	// syncPointBarrier denotes a barrier for snapshot replication.
+	syncPointBarrier
+	// finishBarrier denotes a barrier for changefeed finished.
+	finishBarrier
 )
 
+// barriers stores some barrierType and barrierTs, and can calculate the min barrierTs
+// barriers is NOT-THREAD-SAFE
 type barriers struct {
 	inner map[barrierType]model.Ts
 	dirty bool
@@ -44,6 +47,8 @@ func newBarriers() *barriers {
 }
 
 func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
+	// the barriers structure was given the ability to handle a fallback barrierTs by design.
+	// but the barrierTs should never fallback in owner replication model
 	if !b.dirty && (tp == b.min || barrierTs <= b.inner[b.min]) {
 		b.dirty = true
 	}

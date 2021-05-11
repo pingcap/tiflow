@@ -171,9 +171,9 @@ func (c *changefeed) initialize(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
-	c.barriers.Update(DDLJobBarrier, startTs)
-	c.barriers.Update(SyncPointBarrier, startTs)
-	c.barriers.Update(FinishBarrier, c.state.Info.GetTargetTs())
+	c.barriers.Update(ddlJobBarrier, startTs)
+	c.barriers.Update(syncPointBarrier, startTs)
+	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
 	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
 	if err != nil {
@@ -274,10 +274,10 @@ func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 		}
 	}
 	switch barrierTp {
-	case DDLJobBarrier:
+	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
 		if ddlJob == nil {
-			c.barriers.Update(DDLJobBarrier, ddlResolvedTs)
+			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}
 		if !blocked {
@@ -296,26 +296,26 @@ func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 		}
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
-		c.barriers.Update(DDLJobBarrier, newDDLResolvedTs)
+		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
 
-	case SyncPointBarrier:
+	case syncPointBarrier:
 		if !c.state.Info.SyncPointEnabled {
-			c.barriers.Remove(SyncPointBarrier)
+			c.barriers.Remove(syncPointBarrier)
 			return barrierTs, nil
 		}
 		if !blocked {
 			return barrierTs, nil
 		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
-		c.barriers.Update(SyncPointBarrier, nextSyncPointTs)
+		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 
-	case FinishBarrier:
+	case finishBarrier:
 		if !blocked {
 			return barrierTs, nil
 		}
 		c.feedStateManager.MarkFinished()
 	default:
-		log.Panic("Unknown barrier type", zap.Int("barrier type", barrierTp))
+		log.Panic("Unknown barrier type", zap.Int("barrier type", int(barrierTp)))
 	}
 	return barrierTs, nil
 }

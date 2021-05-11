@@ -179,6 +179,7 @@ var (
 	ErrServiceSafepointLost         = errors.Normalize("service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint", errors.RFCCodeText("CDC:ErrServiceSafepointLost"))
 	ErrUpdateServiceSafepointFailed = errors.Normalize("updating service safepoint failed", errors.RFCCodeText("CDC:ErrUpdateServiceSafepointFailed"))
 	ErrStartTsBeforeGC              = errors.Normalize("fail to create changefeed because start-ts %d is earlier than GC safepoint at %d", errors.RFCCodeText("CDC:ErrStartTsBeforeGC"))
+	ErrSnapshotLostByGC             = errors.Normalize("fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d", errors.RFCCodeText("CDC:ErrSnapshotLostByGC"))
 	ErrNotOwner                     = errors.Normalize("this capture is not a owner", errors.RFCCodeText("CDC:ErrNotOwner"))
 
 	// EtcdWorker related errors. Internal use only.
