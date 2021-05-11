@@ -499,7 +499,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 		Use:   "update",
 		Short: "Update config of an existing replication task (changefeed)",
 		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := defaultContext
 
 			old, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
@@ -519,8 +519,8 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SinkURI = sinkURI
 				case "config":
 					cfg := info.Config
-					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
-						log.Panic("decode config file error", zap.Error(err))
+					if err = strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+						log.Error("decode config file error", zap.Error(err))
 					}
 				case "opts":
 					for _, opt := range opts {
@@ -562,6 +562,9 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
 				}
 			})
+			if err != nil {
+				return err
+			}
 
 			resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
 			// if no cdc owner exists, allow user to update changefeed config
