@@ -73,8 +73,6 @@ func newChangefeed(gcManager *gcManager) *changefeed {
 
 		newDDLPuller: newDDLPuller,
 	}
-	c.barriers.Update(DDLJobBarrier, 0)
-	c.barriers.Update(SyncPointBarrier, 0)
 	c.newSink = newAsyncSink
 	return c
 }
@@ -173,7 +171,9 @@ func (c *changefeed) initialize(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
-	c.barriers.Update(FinishBarrier, c.state.Info.TargetTs)
+	c.barriers.Update(DDLJobBarrier, startTs)
+	c.barriers.Update(SyncPointBarrier, startTs)
+	c.barriers.Update(FinishBarrier, c.state.Info.GetTargetTs())
 	var err error
 	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
 	if err != nil {
@@ -186,10 +186,11 @@ func (c *changefeed) initialize(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller = newDDLPuller(cancelCtx, startTs)
+	c.ddlPuller = c.newDDLPuller(cancelCtx, startTs)
 	go func() {
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
+	c.initialized = true
 	return nil
 }
 
@@ -197,6 +198,8 @@ func (c *changefeed) releaseResources() error {
 	if !c.initialized {
 		return nil
 	}
+	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
+		zap.Stringer("info", c.state.Info))
 	c.cancel()
 	c.cancel = func() {}
 	c.ddlPuller.Close()
@@ -264,7 +267,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 
 func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
-	blocked := barrierTs == c.state.Status.CheckpointTs
+	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
 	if blocked && c.state.Info.SyncPointEnabled {
 		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
@@ -300,10 +303,6 @@ func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 			c.barriers.Remove(SyncPointBarrier)
 			return barrierTs, nil
 		}
-		if barrierTs == 0 {
-			c.barriers.Update(SyncPointBarrier, c.state.Status.CheckpointTs)
-			return barrierTs, nil
-		}
 		if !blocked {
 			return barrierTs, nil
 		}
@@ -315,7 +314,6 @@ func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 			return barrierTs, nil
 		}
 		c.feedStateManager.MarkFinished()
-
 	default:
 		log.Panic("Unknown barrier type", zap.Int("barrier type", barrierTp))
 	}
@@ -362,6 +360,7 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 			checkpointTs = position.CheckPointTs
 		}
 	}
+	log.Info("LEOPPRO update ts", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status.ResolvedTs != resolvedTs {

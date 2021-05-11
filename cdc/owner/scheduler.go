@@ -265,18 +265,21 @@ func (s *scheduler) cleanUpOperations() {
 func (s *scheduler) rebalance() {
 	needRebanlance := false
 	totalTableNum := 0
+	captureNum := len(s.state.TaskStatuses)
 	for _, taskStatus := range s.state.TaskStatuses {
 		totalTableNum += len(taskStatus.Tables)
 		if len(taskStatus.Tables) == 0 {
 			needRebanlance = true
 		}
 	}
+	if totalTableNum < captureNum {
+		needRebanlance = false
+	}
 	if !needRebanlance && !s.needRebalanceNextTick {
 		return
 	}
 	s.needRebalanceNextTick = false
 
-	captureNum := len(s.state.TaskStatuses)
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
 
 	log.Info("Start rebalancing",

@@ -120,7 +120,8 @@ func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorSta
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			cfReactor = newChangefeed(o.gcManager)
+			cfReactor = o.newChangefeed(o.gcManager)
+			o.changefeeds[changefeedID] = cfReactor
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
 	}
