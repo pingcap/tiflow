@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -89,6 +90,16 @@ type mockPDClient struct {
 	invokeCounter     int
 	mockSafePointLost bool
 	mockPDFailure     bool
+}
+
+func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	if m.mockPDFailure {
+		return 0, 0, errors.New("injected PD failure")
+	}
+	if m.mockSafePointLost {
+		return 0, 0, nil
+	}
+	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -173,12 +184,114 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 	s.TearDownTest(c)
 }
 
+// Test whether the owner handles the stagnant task correctly, so that it can't block the update of gcSafePoint.
+// If a changefeed is put into the stop queue due to stagnation, it can no longer affect the update of gcSafePoint.
+// So we just need to test whether the stagnant changefeed is put into the stop queue.
+func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDCli := &mockPDClient{}
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
+		"test_change_feed_1": {
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 1000,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+		"test_change_feed_2": {
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+		"test_change_feed_3": {
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 0,
+			},
+			targetTs: 2000,
+			ddlState: model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {},
+				"capture_2": {},
+			},
+		},
+	}
+
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(defaultCaptureSessionTTL))
+	c.Assert(err, check.IsNil)
+
+	mockOwner := Owner{
+		session:                 session,
+		pdClient:                mockPDCli,
+		etcdClient:              s.client,
+		lastFlushChangefeeds:    time.Now(),
+		flushChangefeedInterval: 1 * time.Hour,
+		// gcSafepointLastUpdate:   time.Now(),
+		gcTTL:               6, // 6 seconds
+		changeFeeds:         changeFeeds,
+		cfRWriter:           s.client,
+		stoppedFeeds:        make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		minGCSafePointCache: minGCSafePointCacheEntry{},
+	}
+
+	time.Sleep(3 * time.Second)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
+	c.Assert(mockOwner.stoppedFeeds["test_change_feed_3"], check.NotNil)
+	c.Assert(mockOwner.changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
+
+	time.Sleep(6 * time.Second)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
+
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockOwner.stoppedFeeds["test_change_feed_2"], check.NotNil)
+
+	s.TearDownTest(c)
+}
+
 func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDCli := &mockPDClient{
 		mockSafePointLost: true,
 	}
-
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed_1": {
 			info:    &model.ChangeFeedInfo{State: model.StateNormal},
@@ -219,6 +332,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
 		concurrency.WithTTL(defaultCaptureSessionTTL))
 	c.Assert(err, check.IsNil)
+
 	mockOwner := Owner{
 		pdClient:                mockPDCli,
 		session:                 session,
@@ -228,6 +342,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 		changeFeeds:             changeFeeds,
 		cfRWriter:               s.client,
 		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		minGCSafePointCache:     minGCSafePointCacheEntry{},
 	}
 
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
