@@ -291,13 +291,13 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	// Clean up possible residual error states
 	// TODO(leoppro) the position should be removed by owner
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		if position != nil && position.Error != nil {
-			position.Error = nil
-			return position, true, nil
-		}
-		return position, false, nil
-	})
+	//p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+	//	if position != nil && position.Error != nil {
+	//		position.Error = nil
+	//		return position, true, nil
+	//	}
+	//	return position, false, nil
+	//})
 
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
