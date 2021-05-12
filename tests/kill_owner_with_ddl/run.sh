@@ -55,7 +55,7 @@ function run() {
     check_table_exists "kill_owner_with_ddl.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkExecDDLDelay=return(true);github.com/pingcap/ticdc/cdc/ownerFlushIntervalInject=return(0)' # old owner
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkExecDDLDelay=return(true)' # new owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkExecDDLDelay=return(true);github.com/pingcap/ticdc/cdc/capture/ownerFlushIntervalInject=return(0)' # new owner
     kill_cdc_and_restart $pd_addr $WORK_DIR $CDC_BINARY
 
     for i in $(seq 2 3); do

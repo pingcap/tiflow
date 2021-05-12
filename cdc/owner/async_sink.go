@@ -150,6 +150,8 @@ func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 
 func (s *asyncSinkImpl) Close() (err error) {
 	err = s.sink.Close()
-	err = s.syncpointStore.Close()
+	if s.syncpointStore != nil {
+		err = s.syncpointStore.Close()
+	}
 	return
 }
