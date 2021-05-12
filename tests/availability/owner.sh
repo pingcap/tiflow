@@ -198,7 +198,7 @@ function test_gap_between_watch_capture() {
     echo "run test case test_gap_between_watch_capture"
 
     # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sleep-before-watch-capture=1*sleep(6000)' # old owner
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/sleep-before-watch-capture=1*sleep(6000)' # new owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/sleep-in-owner-tick=1*sleep(6000)' # new owner
 
     # start a capture server
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_gap_between_watch_capture.server1

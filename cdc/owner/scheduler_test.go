@@ -133,8 +133,7 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		4: {StartTs: 1}, 5: {StartTs: 1},
 	})
-	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-	})
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 
 	// table 3 is missing by expected, because the table was trying to move to a invalid capture
 	// and the move will failed, the table 3 will be add in next tick
@@ -144,8 +143,7 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 	c.Assert(s.state.TaskStatuses[captureID].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{
 		4: {StartTs: 1}, 5: {StartTs: 1},
 	})
-	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-	})
+	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 
 	allTableInListened = s.scheduler.Tick(s.state, []model.TableID{3, 4, 5}, s.captures)
 	c.Assert(allTableInListened, check.IsFalse)

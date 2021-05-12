@@ -98,7 +98,7 @@ func (s *scheduler) handleMoveTableJob() {
 			return
 		}
 		s.moveTableTarget[job.tableID] = job.target
-		job:=job
+		job := job
 		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
 				// the capture may be down, just skip remove this table
@@ -236,7 +236,7 @@ func (s *scheduler) syncTablesWithSchemaManager() []*schedulerJob {
 
 func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 	for _, job := range jobs {
-		job:=job
+		job := job
 		s.state.PatchTaskStatus(job.TargetCapture, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			switch job.Tp {
 			case schedulerJobTypeAddTable:
@@ -322,7 +322,7 @@ func (s *scheduler) rebalanceByTableNum() {
 			continue
 		}
 		for tableID := range taskStatus.Tables {
-			tableID:=tableID
+			tableID := tableID
 			if tableNum2Remove <= 0 {
 				break
 			}

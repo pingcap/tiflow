@@ -99,6 +99,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
+	failpoint.Inject("sleep-in-owner-tick", nil)
 	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*model.GlobalReactorState)
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
