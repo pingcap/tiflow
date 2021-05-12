@@ -15,9 +15,12 @@ package owner
 
 import (
 	"github.com/pingcap/check"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"sort"
 )
@@ -28,6 +31,7 @@ type schemaSuite struct {
 }
 
 func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
+	defer testleak.AfterTest(c)()
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
@@ -71,4 +75,99 @@ func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	sortTableIDs(expectedTableIDs)
 	sortTableIDs(schema.AllPhysicalTables())
 	c.Assert(schema.AllPhysicalTables(), check.DeepEquals, expectedTableIDs)
+}
+
+
+func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
+	defer testleak.AfterTest(c)()
+	helper := entry.NewSchemaTestHelper(c)
+	defer helper.Close()
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	c.Assert(err, check.IsNil)
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	c.Assert(err, check.IsNil)
+	// add normal table
+	job:=helper.DDL2Job("create table test.t1(id int primary key)")
+	tableIDT1:=job.BinlogInfo.TableInfo.ID
+	c.Assert(schema.HandleDDL(job), check.IsNil)
+	// add ineligible table
+	job=helper.DDL2Job("create table test.t2(id int)")
+	tableIDT2:=job.BinlogInfo.TableInfo.ID
+	c.Assert(schema.HandleDDL(job), check.IsNil)
+	c.Assert(schema.IsIneligibleTableID(tableIDT1),check.IsFalse)
+	c.Assert(schema.IsIneligibleTableID(tableIDT2),check.IsTrue)
+}
+
+func (s *schemaSuite) TestBuildDDLEvent(c *check.C){
+	defer testleak.AfterTest(c)()
+	helper := entry.NewSchemaTestHelper(c)
+	defer helper.Close()
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	c.Assert(err, check.IsNil)
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	c.Assert(err, check.IsNil)
+	// add normal table
+	job:=helper.DDL2Job("create table test.t1(id int primary key)")
+	event,err:=schema.BuildDDLEvent(job)
+	c.Assert(err, check.IsNil)
+	c.Assert(event,check.DeepEquals,&model.DDLEvent{
+		StartTs: job.StartTS,
+		CommitTs: job.BinlogInfo.FinishedTS,
+		Query: "create table test.t1(id int primary key)",
+		Type: timodel.ActionCreateTable,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "test",
+			Table: "t1",
+			TableID: job.TableID,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong}},
+		},
+		PreTableInfo: nil,
+	})
+	c.Assert(schema.HandleDDL(job), check.IsNil)
+	job=helper.DDL2Job("ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL")
+	event,err=schema.BuildDDLEvent(job)
+	c.Assert(err, check.IsNil)
+	c.Assert(event,check.DeepEquals,&model.DDLEvent{
+		StartTs: job.StartTS,
+		CommitTs: job.BinlogInfo.FinishedTS,
+		Query: "ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL",
+		Type: timodel.ActionAddColumn,
+		TableInfo:&model.SimpleTableInfo{
+			Schema: "test",
+			Table: "t1",
+			TableID: job.TableID,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong},{Name: "c1",Type: mysql.TypeString}},
+		},
+		PreTableInfo: &model.SimpleTableInfo{
+			Schema: "test",
+			Table: "t1",
+			TableID: job.TableID,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong}},
+		},
+	})
+}
+
+func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
+	defer testleak.AfterTest(c)()
+	helper := entry.NewSchemaTestHelper(c)
+	defer helper.Close()
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	c.Assert(err, check.IsNil)
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	c.Assert(err, check.IsNil)
+	// add normal table
+	job:=helper.DDL2Job("create table test.t1(id int primary key)")
+	tableIDT1:=job.BinlogInfo.TableInfo.ID
+	c.Assert(schema.HandleDDL(job), check.IsNil)
+	// add ineligible table
+	job=helper.DDL2Job("create table test.t2(id int)")
+	c.Assert(schema.HandleDDL(job), check.IsNil)
+	c.Assert(schema.SinkTableInfos(),check.DeepEquals,[]*model.SimpleTableInfo{
+		{
+			Schema: "test",
+			Table: "t1",
+			TableID: tableIDT1,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong}},
+		},
+	})
 }
