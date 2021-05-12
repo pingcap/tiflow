@@ -8,6 +8,7 @@ set -e
 
 OUT_DIR=
 tidb_config=
+pd_config=
 retry_times=3
 multiple_upstream_pd="false"
 
@@ -19,6 +20,10 @@ while [[ ${1} ]]; do
             ;;
         --tidb-config)
             tidb_config=${2}
+            shift
+            ;;
+        --pd-config)
+            pd_config=${2}
             shift
             ;;
         --retry)
@@ -51,6 +56,8 @@ do
 
     if [[ "$tidb_config" != "" ]]; then
         start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config}
+    elif [[ "$pd_config" != "" ]]; then
+        start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --pd-config ${pd_config}
     else
         start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}
     fi
