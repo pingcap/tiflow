@@ -65,7 +65,10 @@ func main() {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 
-	sorter := pullerSorter.NewUnifiedSorter(*sorterDir, "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := pullerSorter.NewUnifiedSorter(*sorterDir, "test-cf", "test", 0, "0.0.0.0:0")
+	if err != nil {
+		log.Panic("sorter_stress_test:", zap.Error(err))
+	}
 
 	ctx1, cancel := context.WithCancel(context.Background())
 
