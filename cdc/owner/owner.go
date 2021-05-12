@@ -14,7 +14,7 @@
 package owner
 
 import (
-	stdContext "context"
+	"context"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -22,11 +22,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-
-	"github.com/pingcap/ticdc/pkg/context"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 )
@@ -88,8 +86,8 @@ func NewOwner() *Owner {
 }
 
 func NewOwner4Test(
-	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller,
-	newSink func(ctx context.Context) (AsyncSink, error)) *Owner {
+	newDDLPuller func(ctx cdcContext.Context, startTs uint64) DDLPuller,
+	newSink func(ctx cdcContext.Context) (AsyncSink, error)) *Owner {
 	o := NewOwner()
 	o.newChangefeed = func(gcManager *gcManager) *changefeed {
 		return newChangefeed4Test(gcManager, newDDLPuller, newSink)
@@ -97,11 +95,11 @@ func NewOwner4Test(
 	return o
 }
 
-func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
-	ctx := stdCtx.(context.Context)
+	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*model.GlobalReactorState)
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	err = o.gcManager.updateGCSafePoint(ctx, state)
@@ -114,7 +112,7 @@ func (o *Owner) Tick(stdCtx stdContext.Context, rawState orchestrator.ReactorSta
 			o.cleanUpChangefeed(changefeedState)
 			continue
 		}
-		ctx = context.WithChangefeedVars(ctx, &context.ChangefeedVars{
+		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})

@@ -17,7 +17,6 @@ import (
 	"math"
 
 	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"

@@ -14,18 +14,17 @@
 package processor
 
 import (
-	stdContext "context"
+	"context"
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -38,8 +37,8 @@ type processorSuite struct{}
 
 var _ = check.Suite(&processorSuite{})
 
-func initProcessor4Test(ctx context.Context, c *check.C) (*processor, *orchestrator.ReactorStateTester) {
-	p := newProcessor4Test(ctx, func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+func initProcessor4Test(ctx cdcContext.Context, c *check.C) (*processor, *orchestrator.ReactorStateTester) {
+	p := newProcessor4Test(ctx, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
@@ -112,7 +111,7 @@ func (m *mockTablePipeline) Wait() {
 
 func (s *processorSuite) TestCheckTablesNum(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	var err error
 	_, err = p.Tick(ctx, p.changefeed)
@@ -143,7 +142,7 @@ func (s *processorSuite) TestCheckTablesNum(c *check.C) {
 
 func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	var err error
 	// init tick
@@ -284,7 +283,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 
 func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	var err error
 	// init tick
@@ -484,7 +483,7 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 
 func (s *processorSuite) TestInitTable(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	var err error
 	// init tick
@@ -507,7 +506,7 @@ func (s *processorSuite) TestInitTable(c *check.C) {
 
 func (s *processorSuite) TestProcessorError(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	var err error
 	// init tick
@@ -535,7 +534,7 @@ func (s *processorSuite) TestProcessorError(c *check.C) {
 	tester.MustApplyPatches()
 
 	// send a normal error
-	p.sendError(stdContext.Canceled)
+	p.sendError(context.Canceled)
 	_, err = p.Tick(ctx, p.changefeed)
 	tester.MustApplyPatches()
 	c.Assert(cerror.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
@@ -546,7 +545,7 @@ func (s *processorSuite) TestProcessorError(c *check.C) {
 
 func (s *processorSuite) TestProcessorExit(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	var err error
 	// init tick
@@ -570,7 +569,7 @@ func (s *processorSuite) TestProcessorExit(c *check.C) {
 
 func (s *processorSuite) TestProcessorClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	var err error
 	// init tick
@@ -658,7 +657,7 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 
 func (s *processorSuite) TestPositionDeleted(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(true)
+	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
 	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		status.Tables[1] = &model.TableReplicaInfo{StartTs: 30}

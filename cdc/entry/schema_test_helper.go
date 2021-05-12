@@ -42,8 +42,8 @@ func NewSchemaTestHelper(c *check.C) *SchemaTestHelper {
 
 func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs,err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(1)
-	s.c.Assert(err,check.IsNil)
+	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(1)
+	s.c.Assert(err, check.IsNil)
 	s.c.Assert(jobs, check.HasLen, 1)
 	return jobs[0]
 }
@@ -52,7 +52,7 @@ func (s *SchemaTestHelper) Storage() kv.Storage {
 	return s.storage
 }
 
-func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta{
+func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	s.c.Assert(err, check.IsNil)
 	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))

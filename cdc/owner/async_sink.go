@@ -4,23 +4,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"go.uber.org/zap"
 )
 
 type AsyncSink interface {
-	Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error
-	EmitCheckpointTs(ctx context.Context, ts uint64)
-	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
-	SinkSyncpoint(ctx context.Context, checkpointTs uint64) error
+	Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error
+	EmitCheckpointTs(ctx cdcContext.Context, ts uint64)
+	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
+	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close() error
 }
 
@@ -38,7 +37,7 @@ type asyncSinkImpl struct {
 	errCh   chan error
 }
 
-func newAsyncSink(ctx context.Context) (AsyncSink, error) {
+func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 	changefeedID := ctx.ChangefeedVars().ID
 	changefeedInfo := ctx.ChangefeedVars().Info
 	filter, err := filter.NewFilter(changefeedInfo.Config)
@@ -69,11 +68,11 @@ func newAsyncSink(ctx context.Context) (AsyncSink, error) {
 	return asyncSink, nil
 }
 
-func (s *asyncSinkImpl) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
+func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error {
 	return s.sink.Initialize(ctx, tableInfo)
 }
 
-func (s *asyncSinkImpl) run(ctx context.Context) {
+func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -123,11 +122,11 @@ func (s *asyncSinkImpl) run(ctx context.Context) {
 	}
 }
 
-func (s *asyncSinkImpl) EmitCheckpointTs(ctx context.Context, ts uint64) {
+func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 	atomic.StoreUint64(&s.checkpointTs, ts)
 }
 
-func (s *asyncSinkImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error) {
+func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
 	if ddl.CommitTs <= ddlFinishedTs {
 		return true, nil
@@ -144,7 +143,7 @@ func (s *asyncSinkImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (
 	return false, nil
 }
 
-func (s *asyncSinkImpl) SinkSyncpoint(ctx context.Context, checkpointTs uint64) error {
+func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	// TODO implement async sink syncpoint
 	return s.syncpointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }

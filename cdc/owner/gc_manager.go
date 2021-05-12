@@ -18,13 +18,11 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-
-	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 
@@ -43,7 +41,7 @@ func newGCManager() *gcManager {
 	}
 }
 
-func (m *gcManager) updateGCSafePoint(ctx context.Context, state *model.GlobalReactorState) error {
+func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error {
 	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
 		return nil
 	}

@@ -14,7 +14,7 @@
 package owner
 
 import (
-	stdContext "context"
+	"context"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -33,7 +33,7 @@ import (
 )
 
 type DDLPuller interface {
-	Run(ctx context.Context) error
+	Run(ctx cdcContext.Context) error
 	FrontDDL() (uint64, *timodel.Job)
 	PopFrontDDL() (uint64, *timodel.Job)
 	Close()
@@ -46,11 +46,11 @@ type ddlPullerImpl struct {
 	mu             sync.Mutex
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
-	cancel         stdContext.CancelFunc
+	cancel         context.CancelFunc
 }
 
 // TODO test-case: resolvedTs is initialized to (startTs - 1)
-func newDDLPuller(ctx context.Context, startTs uint64) DDLPuller {
+func newDDLPuller(ctx cdcContext.Context, startTs uint64) DDLPuller {
 	pdCli := ctx.GlobalVars().PDClient
 	conf := config.GetGlobalServerConfig()
 	kvStorage := ctx.GlobalVars().KVStorage
@@ -71,13 +71,13 @@ func newDDLPuller(ctx context.Context, startTs uint64) DDLPuller {
 	}
 }
 
-func (h *ddlPullerImpl) Run(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
+func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
+	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
 	log.Debug("DDL puller started")
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, "DDL_PULLER")
 	errg, stdCtx := errgroup.WithContext(stdCtx)
-	ctx = context.WithStd(ctx, stdCtx)
+	ctx = cdcContext.WithStd(ctx, stdCtx)
 
 	errg.Go(func() error {
 		return h.puller.Run(ctx)

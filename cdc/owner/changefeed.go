@@ -14,7 +14,7 @@
 package owner
 
 import (
-	stdContext "context"
+	"context"
 	"reflect"
 	"time"
 
@@ -24,7 +24,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -52,10 +52,10 @@ type changefeed struct {
 	gcTTL int64
 
 	errCh  chan error
-	cancel stdContext.CancelFunc
+	cancel context.CancelFunc
 
-	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller
-	newSink      func(ctx context.Context) (AsyncSink, error)
+	newDDLPuller func(ctx cdcContext.Context, startTs uint64) DDLPuller
+	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
 func newChangefeed(gcManager *gcManager) *changefeed {
@@ -79,8 +79,8 @@ func newChangefeed(gcManager *gcManager) *changefeed {
 
 func newChangefeed4Test(
 	gcManager *gcManager,
-	newDDLPuller func(ctx context.Context, startTs uint64) DDLPuller,
-	newSink func(ctx context.Context) (AsyncSink, error),
+	newDDLPuller func(ctx cdcContext.Context, startTs uint64) DDLPuller,
+	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
 	c := newChangefeed(gcManager)
 	c.newDDLPuller = newDDLPuller
@@ -88,9 +88,9 @@ func newChangefeed4Test(
 	return c
 }
 
-func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	log.Debug("LEOPPRO tick", zap.String("changefeed", state.ID))
-	ctx = context.WithErrorHandler(ctx, func(err error) error {
+	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- err
 		return nil
 	})
@@ -113,7 +113,7 @@ func (c *changefeed) Tick(ctx context.Context, state *model.ChangefeedReactorSta
 	}
 }
 
-func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
@@ -149,7 +149,7 @@ func (c *changefeed) tick(ctx context.Context, state *model.ChangefeedReactorSta
 	return nil
 }
 
-func (c *changefeed) initialize(ctx context.Context) error {
+func (c *changefeed) initialize(ctx cdcContext.Context) error {
 	if c.initialized {
 		return nil
 	}
@@ -179,7 +179,7 @@ func (c *changefeed) initialize(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	cancelCtx, cancel := context.WithCancel(ctx)
+	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 	c.sink, err = c.newSink(cancelCtx)
 	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
@@ -265,7 +265,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 	return
 }
 
-func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
+func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
 	if blocked && c.state.Info.SyncPointEnabled {
@@ -320,7 +320,7 @@ func (c *changefeed) handleBarrier(ctx context.Context) (uint64, error) {
 	return barrierTs, nil
 }
 
-func (c *changefeed) asyncExecDDL(ctx context.Context, job *timodel.Job) (bool, error) {
+func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (bool, error) {
 	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		return true, nil
 	}

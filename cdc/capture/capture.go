@@ -14,11 +14,9 @@
 package capture
 
 import (
-	stdContext "context"
+	"context"
 	"sync"
 	"time"
-
-	"github.com/pingcap/ticdc/pkg/context"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -29,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
 	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -81,21 +80,21 @@ func NewCapture4Test(
 	return c
 }
 
-func (c *Capture) Run(ctx context.Context) error {
+func (c *Capture) Run(ctx cdcContext.Context) error {
 	err := c.register(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	defer func() {
-		timeoutCtx, cancel := stdContext.WithTimeout(stdContext.Background(), 5*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
 			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
 		}
 		cancel()
 	}()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := cdcContext.WithCancel(ctx)
 	wg, stdCtx := errgroup.WithContext(ctx)
-	ctx = context.WithStd(ctx, stdCtx)
+	ctx = cdcContext.WithStd(ctx, stdCtx)
 
 	go func() {
 		<-ctx.Done()
@@ -121,7 +120,7 @@ func (c *Capture) Info() model.CaptureInfo {
 	return *c.info
 }
 
-func (c *Capture) campaignOwner(ctx context.Context) error {
+func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
 	conf := config.GetGlobalServerConfig()
@@ -133,7 +132,7 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 	for {
 		err := rl.Wait(ctx)
 		if err != nil {
-			if errors.Cause(err) == stdContext.Canceled {
+			if errors.Cause(err) == context.Canceled {
 				return nil
 			}
 			return errors.Trace(err)
@@ -141,7 +140,7 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 		// Campaign to be an owner, it blocks until it becomes the owner
 		if err := c.campaign(ctx); err != nil {
 			switch errors.Cause(err) {
-			case stdContext.Canceled:
+			case context.Canceled:
 				return nil
 			case mvcc.ErrCompacted:
 				continue
@@ -171,7 +170,7 @@ func (c *Capture) campaignOwner(ctx context.Context) error {
 	}
 }
 
-func (c *Capture) runEtcdWorker(ctx context.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
+func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, kv.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
@@ -217,7 +216,7 @@ func (c *Capture) OperateOwnerUnderLock(fn func(*owner.Owner) error) error {
 }
 
 // Campaign to be an owner
-func (c *Capture) campaign(ctx context.Context) error {
+func (c *Capture) campaign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
@@ -225,7 +224,7 @@ func (c *Capture) campaign(ctx context.Context) error {
 }
 
 // Resign lets a owner start a new election.
-func (c *Capture) resign(ctx context.Context) error {
+func (c *Capture) resign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
@@ -233,7 +232,7 @@ func (c *Capture) resign(ctx context.Context) error {
 }
 
 // register registers the capture information in etcd
-func (c *Capture) register(ctx context.Context) error {
+func (c *Capture) register(ctx cdcContext.Context) error {
 	conf := config.GetGlobalServerConfig()
 	sess, err := concurrency.NewSession(ctx.GlobalVars().EtcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))

@@ -19,16 +19,14 @@ import (
 	"math"
 	"time"
 
-	"github.com/pingcap/errors"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"go.etcd.io/etcd/clientv3"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -40,10 +38,8 @@ type managerSuite struct {
 
 var _ = check.Suite(&managerSuite{})
 
-const mockLeaseID = clientv3.LeaseID(0x22317526c4fc9a37)
-
-func (s *managerSuite) resetSuit(ctx context.Context, c *check.C) {
-	s.manager = NewManager4Test(mockLeaseID, func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+func (s *managerSuite) resetSuit(ctx cdcContext.Context, c *check.C) {
+	s.manager = NewManager4Test(func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
@@ -53,14 +49,16 @@ func (s *managerSuite) resetSuit(ctx context.Context, c *check.C) {
 		}, nil
 	})
 	s.state = model.NewGlobalState().(*model.GlobalReactorState)
+	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
+	c.Assert(err, check.IsNil)
 	s.tester = orchestrator.NewReactorStateTester(c, s.state, map[string]string{
-		fmt.Sprintf("/tidb/cdc/owner/%x", mockLeaseID): ctx.GlobalVars().CaptureInfo.ID,
+		fmt.Sprintf("/tidb/cdc/capture/%s", ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
 	})
 }
 
 func (s *managerSuite) TestChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(false)
+	ctx := cdcContext.NewBackendContext4Test(false)
 	s.resetSuit(ctx, c)
 	var err error
 
@@ -113,7 +111,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 
 func (s *managerSuite) TestDebugInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(false)
+	ctx := cdcContext.NewBackendContext4Test(false)
 	s.resetSuit(ctx, c)
 	var err error
 
@@ -167,7 +165,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 
 func (s *managerSuite) TestClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewBackendContext4Test(false)
+	ctx := cdcContext.NewBackendContext4Test(false)
 	s.resetSuit(ctx, c)
 	var err error
 

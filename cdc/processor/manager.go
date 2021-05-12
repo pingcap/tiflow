@@ -14,7 +14,7 @@
 package processor
 
 import (
-	stdContext "context"
+	"context"
 	"fmt"
 	"io"
 	"time"
@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"go.uber.org/zap"
@@ -51,7 +51,7 @@ type Manager struct {
 
 	commandQueue chan *command
 
-	newProcessor func(context.Context) *processor
+	newProcessor func(cdcContext.Context) *processor
 }
 
 // NewManager creates a new processor manager
@@ -64,10 +64,10 @@ func NewManager() *Manager {
 }
 
 func NewManager4Test(
-	createTablePipeline func(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
 	m := NewManager()
-	m.newProcessor = func(ctx context.Context) *processor {
+	m.newProcessor = func(ctx cdcContext.Context) *processor {
 		return newProcessor4Test(ctx, createTablePipeline)
 	}
 	return m
@@ -76,8 +76,8 @@ func NewManager4Test(
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
-func (m *Manager) Tick(stdCtx stdContext.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	ctx := stdCtx.(context.Context)
+func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*model.GlobalReactorState)
 	globalState.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := m.handleCommand(); err != nil {
@@ -91,7 +91,7 @@ func (m *Manager) Tick(stdCtx stdContext.Context, state orchestrator.ReactorStat
 			m.closeProcessor(changefeedID)
 			continue
 		}
-		ctx := context.WithChangefeedVars(ctx, &context.ChangefeedVars{
+		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})

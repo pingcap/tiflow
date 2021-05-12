@@ -14,6 +14,8 @@
 package owner
 
 import (
+	"sort"
+
 	"github.com/pingcap/check"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -22,7 +24,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"sort"
 )
 
 var _ = check.Suite(&schemaSuite{})
@@ -40,15 +41,15 @@ func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(schema.AllPhysicalTables(), check.HasLen, 0)
 	// add normal table
-	job:=helper.DDL2Job("create table test.t1(id int primary key)")
-	tableIDT1:=job.BinlogInfo.TableInfo.ID
+	job := helper.DDL2Job("create table test.t1(id int primary key)")
+	tableIDT1 := job.BinlogInfo.TableInfo.ID
 	c.Assert(schema.HandleDDL(job), check.IsNil)
 	c.Assert(schema.AllPhysicalTables(), check.DeepEquals, []model.TableID{tableIDT1})
 	// add ineligible table
 	c.Assert(schema.HandleDDL(helper.DDL2Job("create table test.t2(id int)")), check.IsNil)
 	c.Assert(schema.AllPhysicalTables(), check.DeepEquals, []model.TableID{tableIDT1})
 	// add partition table
-	job=helper.DDL2Job(`CREATE TABLE test.employees  (
+	job = helper.DDL2Job(`CREATE TABLE test.employees  (
 			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 			fname VARCHAR(25) NOT NULL,
 			lname VARCHAR(25) NOT NULL,
@@ -63,20 +64,19 @@ func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 			PARTITION p3 VALUES LESS THAN (20)
 		)`)
 	c.Assert(schema.HandleDDL(job), check.IsNil)
-	expectedTableIDs:=[]model.TableID{tableIDT1}
-	for _,p:=range job.BinlogInfo.TableInfo.GetPartitionInfo().Definitions{
-		expectedTableIDs=append(expectedTableIDs,p.ID)
+	expectedTableIDs := []model.TableID{tableIDT1}
+	for _, p := range job.BinlogInfo.TableInfo.GetPartitionInfo().Definitions {
+		expectedTableIDs = append(expectedTableIDs, p.ID)
 	}
-	sortTableIDs:= func(tableIDs []model.TableID) {
+	sortTableIDs := func(tableIDs []model.TableID) {
 		sort.Slice(tableIDs, func(i, j int) bool {
-			return tableIDs[i]<tableIDs[j]
+			return tableIDs[i] < tableIDs[j]
 		})
 	}
 	sortTableIDs(expectedTableIDs)
 	sortTableIDs(schema.AllPhysicalTables())
 	c.Assert(schema.AllPhysicalTables(), check.DeepEquals, expectedTableIDs)
 }
-
 
 func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -87,18 +87,18 @@ func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	// add normal table
-	job:=helper.DDL2Job("create table test.t1(id int primary key)")
-	tableIDT1:=job.BinlogInfo.TableInfo.ID
+	job := helper.DDL2Job("create table test.t1(id int primary key)")
+	tableIDT1 := job.BinlogInfo.TableInfo.ID
 	c.Assert(schema.HandleDDL(job), check.IsNil)
 	// add ineligible table
-	job=helper.DDL2Job("create table test.t2(id int)")
-	tableIDT2:=job.BinlogInfo.TableInfo.ID
+	job = helper.DDL2Job("create table test.t2(id int)")
+	tableIDT2 := job.BinlogInfo.TableInfo.ID
 	c.Assert(schema.HandleDDL(job), check.IsNil)
-	c.Assert(schema.IsIneligibleTableID(tableIDT1),check.IsFalse)
-	c.Assert(schema.IsIneligibleTableID(tableIDT2),check.IsTrue)
+	c.Assert(schema.IsIneligibleTableID(tableIDT1), check.IsFalse)
+	c.Assert(schema.IsIneligibleTableID(tableIDT2), check.IsTrue)
 }
 
-func (s *schemaSuite) TestBuildDDLEvent(c *check.C){
+func (s *schemaSuite) TestBuildDDLEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
@@ -107,42 +107,42 @@ func (s *schemaSuite) TestBuildDDLEvent(c *check.C){
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	// add normal table
-	job:=helper.DDL2Job("create table test.t1(id int primary key)")
-	event,err:=schema.BuildDDLEvent(job)
+	job := helper.DDL2Job("create table test.t1(id int primary key)")
+	event, err := schema.BuildDDLEvent(job)
 	c.Assert(err, check.IsNil)
-	c.Assert(event,check.DeepEquals,&model.DDLEvent{
-		StartTs: job.StartTS,
+	c.Assert(event, check.DeepEquals, &model.DDLEvent{
+		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
-		Query: "create table test.t1(id int primary key)",
-		Type: timodel.ActionCreateTable,
+		Query:    "create table test.t1(id int primary key)",
+		Type:     timodel.ActionCreateTable,
 		TableInfo: &model.SimpleTableInfo{
-			Schema: "test",
-			Table: "t1",
-			TableID: job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong}},
+			Schema:     "test",
+			Table:      "t1",
+			TableID:    job.TableID,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
 		},
 		PreTableInfo: nil,
 	})
 	c.Assert(schema.HandleDDL(job), check.IsNil)
-	job=helper.DDL2Job("ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL")
-	event,err=schema.BuildDDLEvent(job)
+	job = helper.DDL2Job("ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL")
+	event, err = schema.BuildDDLEvent(job)
 	c.Assert(err, check.IsNil)
-	c.Assert(event,check.DeepEquals,&model.DDLEvent{
-		StartTs: job.StartTS,
+	c.Assert(event, check.DeepEquals, &model.DDLEvent{
+		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
-		Query: "ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL",
-		Type: timodel.ActionAddColumn,
-		TableInfo:&model.SimpleTableInfo{
-			Schema: "test",
-			Table: "t1",
-			TableID: job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong},{Name: "c1",Type: mysql.TypeString}},
+		Query:    "ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL",
+		Type:     timodel.ActionAddColumn,
+		TableInfo: &model.SimpleTableInfo{
+			Schema:     "test",
+			Table:      "t1",
+			TableID:    job.TableID,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}, {Name: "c1", Type: mysql.TypeString}},
 		},
 		PreTableInfo: &model.SimpleTableInfo{
-			Schema: "test",
-			Table: "t1",
-			TableID: job.TableID,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong}},
+			Schema:     "test",
+			Table:      "t1",
+			TableID:    job.TableID,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
 		},
 	})
 }
@@ -156,18 +156,18 @@ func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	// add normal table
-	job:=helper.DDL2Job("create table test.t1(id int primary key)")
-	tableIDT1:=job.BinlogInfo.TableInfo.ID
+	job := helper.DDL2Job("create table test.t1(id int primary key)")
+	tableIDT1 := job.BinlogInfo.TableInfo.ID
 	c.Assert(schema.HandleDDL(job), check.IsNil)
 	// add ineligible table
-	job=helper.DDL2Job("create table test.t2(id int)")
+	job = helper.DDL2Job("create table test.t2(id int)")
 	c.Assert(schema.HandleDDL(job), check.IsNil)
-	c.Assert(schema.SinkTableInfos(),check.DeepEquals,[]*model.SimpleTableInfo{
+	c.Assert(schema.SinkTableInfos(), check.DeepEquals, []*model.SimpleTableInfo{
 		{
-			Schema: "test",
-			Table: "t1",
-			TableID: tableIDT1,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id",Type: mysql.TypeLong}},
+			Schema:     "test",
+			Table:      "t1",
+			TableID:    tableIDT1,
+			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
 		},
 	})
 }
