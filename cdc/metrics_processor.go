@@ -82,6 +82,13 @@ var (
 			Name:      "exit_with_error_count",
 			Help:      "counter for processor exits with error",
 		}, []string{"changefeed", "capture"})
+	tableMemoryGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "table_memory_consumption",
+			Help:      "estimated memory consumption for a table after the sorter",
+		}, []string{"changefeed", "capture", "table"})
 )
 
 // initProcessorMetrics registers all metrics used in processor
