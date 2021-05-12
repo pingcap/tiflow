@@ -58,7 +58,7 @@ function prepare() {
     run_sql "CREATE table test.simple3(id int primary key, val int);"
     run_sql "CREATE table test.simple4(id int primary key, val int);"
 
-    sleep 10
+    sleep 20
     # starts the first second server instance. It should fail, and bring down the changefeed
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix 2 --sort-dir /tmp/cdc_sort_1
 
