@@ -131,12 +131,15 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		ctx := context.NewContext(stdContext.Background(), &context.Vars{
-			Config: &config.ReplicaConfig{
-				Cyclic: &config.CyclicConfig{
-					Enable:          true,
-					ReplicaID:       tc.replicaID,
-					FilterReplicaID: tc.filterID,
+		ctx := context.NewContext(stdContext.Background(), &context.GlobalVars{})
+		ctx = context.WithChangefeedVars(ctx, &context.ChangefeedVars{
+			Info: &model.ChangeFeedInfo{
+				Config: &config.ReplicaConfig{
+					Cyclic: &config.CyclicConfig{
+						Enable:          true,
+						ReplicaID:       tc.replicaID,
+						FilterReplicaID: tc.filterID,
+					},
 				},
 			},
 		})
