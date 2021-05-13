@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -53,6 +54,7 @@ type changefeed struct {
 
 	errCh  chan error
 	cancel context.CancelFunc
+	wg sync.WaitGroup
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) DDLPuller
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
@@ -91,7 +93,8 @@ func newChangefeed4Test(
 func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	log.Debug("LEOPPRO tick", zap.String("changefeed", state.ID))
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
-		c.errCh <- err
+		log.Info("LEOPPRO err",zap.Error(err),zap.Stack("s"))
+		c.errCh <- errors.Trace(err)
 		return nil
 	})
 	if err := c.tick(ctx, state, captures); err != nil {
@@ -159,6 +162,14 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 	if c.initialized {
 		return nil
 	}
+	// empty the errCh
+	LOOP:for {
+		select {
+		case <-c.errCh:
+		default:
+			break LOOP
+		}
+	}
 	startTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info),
@@ -186,15 +197,6 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
-	go func() {
-		<-ctx.Done()
-		log.Info("LEOPPRO std cancelled")
-	}()
-
-	go func() {
-		<-cancelCtx.Done()
-		log.Info("LEOPPRO cancelled")
-	}()
 	c.cancel = cancel
 	c.sink, err = c.newSink(cancelCtx)
 	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
@@ -202,7 +204,9 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	c.ddlPuller = c.newDDLPuller(cancelCtx, startTs)
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 	c.initialized = true
@@ -223,8 +227,7 @@ func (c *changefeed) releaseResources() {
 	if err := c.sink.Close(); err != nil {
 		log.Warn("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
-	// empty the errCh
-	c.errCh = make(chan error, defaultErrChSize)
+	c.wg.Wait()
 }
 
 func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
