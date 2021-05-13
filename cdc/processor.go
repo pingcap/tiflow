@@ -23,8 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap/zapcore"
-
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -53,6 +51,7 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -339,9 +338,7 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
-				if cerror.ErrProcessorTableCanceled.NotEqual(inErr) &&
-					errors.Cause(inErr) != context.Canceled {
-
+				if cerror.ErrProcessorTableCanceled.NotEqual(inErr) {
 					logError := log.Error
 					errField := zap.Error(inErr)
 					if cerror.ErrAdminStopProcessor.Equal(inErr) {
