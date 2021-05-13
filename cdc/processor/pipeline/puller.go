@@ -19,23 +19,19 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"golang.org/x/sync/errgroup"
 )
 
 type pullerNode struct {
-	credential *security.Credential
-	kvStorage  tidbkv.Storage
-	limitter   *puller.BlurResourceLimitter
+	limitter *puller.BlurResourceLimitter
 
-	changefeedID model.ChangeFeedID
-	tableName    string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metircs only
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
@@ -44,41 +40,36 @@ type pullerNode struct {
 }
 
 func newPullerNode(
-	changefeedID model.ChangeFeedID,
-	credential *security.Credential,
-	kvStorage tidbkv.Storage,
 	limitter *puller.BlurResourceLimitter,
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
 	return &pullerNode{
-		credential:   credential,
-		kvStorage:    kvStorage,
-		limitter:     limitter,
-		tableID:      tableID,
-		replicaInfo:  replicaInfo,
-		tableName:    tableName,
-		changefeedID: changefeedID,
+		limitter:    limitter,
+		tableID:     tableID,
+		replicaInfo: replicaInfo,
+		tableName:   tableName,
 	}
 }
 
 func (n *pullerNode) tableSpan(ctx context.Context) []regionspan.Span {
 	// start table puller
-	enableOldValue := ctx.Vars().Config.EnableOldValue
+	config := ctx.ChangefeedVars().Info.Config
 	spans := make([]regionspan.Span, 0, 4)
-	spans = append(spans, regionspan.GetTableSpan(n.tableID, enableOldValue))
+	spans = append(spans, regionspan.GetTableSpan(n.tableID, config.EnableOldValue))
 
-	if ctx.Vars().Config.Cyclic.IsEnabled() && n.replicaInfo.MarkTableID != 0 {
-		spans = append(spans, regionspan.GetTableSpan(n.replicaInfo.MarkTableID, enableOldValue))
+	if config.Cyclic.IsEnabled() && n.replicaInfo.MarkTableID != 0 {
+		spans = append(spans, regionspan.GetTableSpan(n.replicaInfo.MarkTableID, config.EnableOldValue))
 	}
 	return spans
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(n.changefeedID, ctx.Vars().CaptureAddr, n.tableName)
-	enableOldValue := ctx.Vars().Config.EnableOldValue
-	ctxC, cancel := stdContext.WithCancel(ctx.StdContext())
+	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
+	globalConfig := config.GetGlobalServerConfig()
+	config := ctx.ChangefeedVars().Info.Config
+	ctxC, cancel := stdContext.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
-	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
-		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
+	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, globalConfig.Security, ctx.GlobalVars().KVStorage,
+		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, config.EnableOldValue)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil
@@ -112,7 +103,7 @@ func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
-	tableResolvedTsGauge.DeleteLabelValues(n.changefeedID, ctx.Vars().CaptureAddr, n.tableName)
+	tableResolvedTsGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
 }
