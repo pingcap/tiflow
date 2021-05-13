@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -291,7 +293,19 @@ func (p *oldProcessor) Run(ctx context.Context) {
 // wait blocks until all routines in processor are returned
 func (p *oldProcessor) wait() {
 	err := p.wg.Wait()
-	if err != nil && cerror.ErrProcessorTableCanceled.NotEqual(err) {
+	if log.GetLevel() == zapcore.DebugLevel {
+		// prints all errors for debugging
+		log.Error("processor wait error",
+			zap.String("capture-id", p.captureInfo.ID),
+			zap.String("capture", p.captureInfo.AdvertiseAddr),
+			zap.String("changefeed", p.changefeedID),
+			zap.Error(err))
+		return
+	}
+	if err != nil &&
+		cerror.ErrProcessorTableCanceled.NotEqual(err) &&
+		errors.Cause(err) != context.Canceled {
+
 		log.Error("processor wait error",
 			zap.String("capture-id", p.captureInfo.ID),
 			zap.String("capture", p.captureInfo.AdvertiseAddr),
@@ -336,6 +350,9 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 				}
 				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
 					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
+				}
+				if cerror.ErrProcessorTableCanceled.Equal(inErr) {
+					return backoff.Permanent(inErr)
 				}
 			}
 			return inErr
