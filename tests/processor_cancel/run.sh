@@ -53,14 +53,14 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
     sleep 3s
-    curl -X PUT -d "return(true)" http://127.0.0.1:8400/github.com/pingcap/ticdc/cdc/ProcessorContextCancel
+    curl -X PUT -d "return(true)" http://127.0.0.1:8300/debug/fail/github.com/pingcap/ticdc/cdc/ProcessorContextCancel
 
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI"  2>&1|tail -n2|head -n1|awk '{print $2}')
     sleep 20s
     retry_time=20
     ensure $retry_time check_changefeed_mark_stopped $pd_addr $changefeed_id "context canceled"
 
-    curl -X PUT -d "off" http://127.0.0.1:8400/github.com/pingcap/ticdc/cdc/ProcessorContextCancel
+    curl -X PUT -d "off" http://127.0.0.1:8300/debug/fail/github.com/pingcap/ticdc/cdc/ProcessorContextCancel
     cdc cli changefeed resume --pd=$pd_addr -c $changefeed_id
     for i in $(seq 1 10); do
         run_sql "INSERT INTO processor_cancel.t$i values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

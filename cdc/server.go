@@ -278,7 +278,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 // Close closes the server.
 func (s *Server) Close() {
 	if s.capture != nil {
-		if !config.IsNewReplicaEnabled() {
+		if !config.NewReplicaImpl {
 			s.capture.Cleanup()
 		}
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
