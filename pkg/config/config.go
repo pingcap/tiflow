@@ -33,6 +33,10 @@ import (
 // new owner should be also switched on after it implemented
 const NewReplicaImpl = false
 
+func init() {
+	StoreGlobalServerConfig(GetDefaultServerConfig())
+}
+
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
 	EnableOldValue:   false,

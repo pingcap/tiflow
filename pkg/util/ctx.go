@@ -17,6 +17,10 @@ import (
 	"context"
 	"time"
 
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/errors"
+>>>>>>> 9b50616f (*: refine the vars in context.Context (#1459))
 	"github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"
 )
