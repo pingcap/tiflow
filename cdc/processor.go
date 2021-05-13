@@ -934,9 +934,7 @@ func (p *oldProcessor) runFlowControl(
 	for {
 		select {
 		case <-ctx.Done():
-			// NOTE: This line is buggy, because `context.Canceled` may indicate an actual error.
-			// TODO Will be resolved together with other similar problems.
-			if errors.Cause(ctx.Err()) != context.Canceled {
+			if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 				p.sendError(ctx.Err())
 			}
 			return
@@ -969,8 +967,7 @@ func (p *oldProcessor) runFlowControl(
 
 						select {
 						case <-ctx.Done():
-							// TODO fix me
-							if errors.Cause(ctx.Err()) != context.Canceled {
+							if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 								p.sendError(ctx.Err())
 							}
 							return
@@ -1003,7 +1000,7 @@ func (p *oldProcessor) runFlowControl(
 						log.Info("flow control cancelled for table",
 							zap.Int64("tableID", tableID),
 							util.ZapFieldChangefeed(ctx))
-					} else {
+					} else if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 						p.sendError(ctx.Err())
 					}
 					return
@@ -1020,8 +1017,7 @@ func (p *oldProcessor) runFlowControl(
 
 			select {
 			case <-ctx.Done():
-				// TODO fix me
-				if errors.Cause(ctx.Err()) != context.Canceled {
+				if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 					p.sendError(ctx.Err())
 				}
 				return
