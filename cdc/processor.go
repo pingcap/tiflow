@@ -339,7 +339,9 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
-				if cerror.ErrProcessorTableCanceled.NotEqual(inErr) {
+				if cerror.ErrProcessorTableCanceled.NotEqual(inErr) &&
+					errors.Cause(inErr) != context.Canceled {
+
 					logError := log.Error
 					errField := zap.Error(inErr)
 					if cerror.ErrAdminStopProcessor.Equal(inErr) {
@@ -350,9 +352,6 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 				}
 				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
 					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
-				}
-				if cerror.ErrProcessorTableCanceled.Equal(inErr) {
-					return backoff.Permanent(inErr)
 				}
 			}
 			return inErr
@@ -1446,6 +1445,7 @@ func runProcessor(
 }
 
 func (p *oldProcessor) sendError(err error) {
+	log.Debug("processor sending error", zap.Error(err), zap.Stack("stack"))
 	select {
 	case p.errCh <- err:
 	default:
