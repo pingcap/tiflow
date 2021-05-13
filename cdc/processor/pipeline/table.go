@@ -27,8 +27,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/security"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"
 )
 
@@ -147,16 +145,10 @@ func (t *tablePipelineImpl) Wait() {
 }
 
 // NewTablePipeline creates a table pipeline
-// TODO(leoppro): the parameters in this function are too much, try to move some parameters into ctx.Vars().
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
 func NewTablePipeline(ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	credential *security.Credential,
-	kvStorage tidbkv.Storage,
 	limitter *puller.BlurResourceLimitter,
 	mounter entry.Mounter,
-	sortEngine model.SortEngine,
-	sortDir string,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
@@ -172,16 +164,16 @@ func NewTablePipeline(ctx context.Context,
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
 	log.Debug("creating table flow controller",
-		zap.String("changefeed-id", changefeedID),
+		zap.String("changefeed-id", ctx.ChangefeedVars().ID),
 		zap.String("table-name", tableName),
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
-	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID, flowController))
+	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
+	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
-	config := ctx.Vars().Config
+	config := ctx.ChangefeedVars().Info.Config
 	if config.Cyclic != nil && config.Cyclic.IsEnabled() {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
