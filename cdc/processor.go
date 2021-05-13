@@ -1218,7 +1218,7 @@ func (p *oldProcessor) sorterConsume(
 			pEvent.SetUpFinishedChan()
 			select {
 			case <-ctx.Done():
-				if cerror.ErrProcessorTableCanceled.NotEqual(err) {
+				if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 					p.sendError(ctx.Err())
 				}
 				return
