@@ -32,8 +32,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// DDLPuller is a wrapper of Puller for owner
-// DDLPuller start a puller and listen the DDL range, add the received DDL into a internal queue
+// DDLPuller is a wrapper of the Puller interface for the owner
+// DDLPuller start a puller and listen to the DDL range, add the received DDL into an internal queue
 type DDLPuller interface {
 	// Run runs the DDLPuller
 	Run(ctx cdcContext.Context) error
