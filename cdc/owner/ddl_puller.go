@@ -64,7 +64,7 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return nil, errors.Trace(err)
 	}
 	var plr puller.Puller
-	// kvStorage can be nil only in test
+	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(
 			ctx,
