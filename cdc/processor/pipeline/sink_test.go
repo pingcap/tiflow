@@ -105,7 +105,7 @@ var _ = check.Suite(&outputSuite{})
 
 func (s *outputSuite) TestStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
+	ctx := context.NewContext(stdContext.Background(), &context.GlobalVars{})
 
 	// test stop at targetTs
 	node := newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
@@ -180,7 +180,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 
 func (s *outputSuite) TestManyTs(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
+	ctx := context.NewContext(stdContext.Background(), &context.GlobalVars{})
 	sink := &mockSink{}
 	node := newSinkNode(sink, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)

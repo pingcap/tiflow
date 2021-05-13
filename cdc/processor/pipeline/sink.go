@@ -126,7 +126,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	if err := n.flushRow2Sink(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx.StdContext(), resolvedTs)
+	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -150,9 +150,8 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 }
 
 func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
-	stdCtx := ctx.StdContext()
 	for _, ev := range n.eventBuffer {
-		err := ev.WaitPrepare(stdCtx)
+		err := ev.WaitPrepare(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -167,7 +166,7 @@ func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 		time.Sleep(10 * time.Second)
 		panic("ProcessorSyncResolvedPreEmit")
 	})
-	err := n.sink.EmitRowChangedEvents(stdCtx, n.rowBuffer...)
+	err := n.sink.EmitRowChangedEvents(ctx, n.rowBuffer...)
 	if err != nil {
 		return errors.Trace(err)
 	}
