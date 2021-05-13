@@ -240,13 +240,8 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	conf := config.GetGlobalServerConfig()
-
-	opts := &captureOpts{
-		flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval),
-		captureSessionTTL:       defaultCaptureSessionTTL,
-	}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
+	kvStorage := util.KVStorageFromCtx(ctx)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 	if err != nil {
 		return err
 	}
