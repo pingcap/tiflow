@@ -53,10 +53,12 @@ func (s TableStatus) String() string {
 	return "Unknown"
 }
 
+// Load TableStatus with THREAD-SAFE
 func (s *TableStatus) Load() TableStatus {
 	return TableStatus(atomic.LoadInt32((*int32)(s)))
 }
 
+// Store TableStatus with THREAD-SAFE
 func (s *TableStatus) Store(new TableStatus) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
