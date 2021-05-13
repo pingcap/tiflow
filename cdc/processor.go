@@ -1392,7 +1392,7 @@ func runProcessor(
 		cancel()
 		processor.wait()
 		cause := errors.Cause(err)
-		if cause != nil && cerror.ErrProcessorSortDir.NotEqual(cause) && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+		if cause != nil && cerror.ErrProcessorTableCanceled.NotEqual(cause) && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
 				util.ZapFieldCapture(ctx),
