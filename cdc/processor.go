@@ -1260,7 +1260,7 @@ func (p *oldProcessor) sorterConsume(
 			})
 			err := processRowChangedEvent(pEvent)
 			if err != nil {
-				if cerror.ErrProcessorTableCanceled.NotEqual(err) {
+				if cerror.ErrProcessorTableCanceled.NotEqual(ctx.Err()) {
 					p.sendError(ctx.Err())
 				}
 				return
@@ -1408,7 +1408,7 @@ func runProcessor(
 		cancel()
 		processor.wait()
 		cause := errors.Cause(err)
-		if cause != nil && cerror.ErrProcessorTableCanceled.NotEqual(cause) && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+		if cause != nil && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
 				util.ZapFieldCapture(ctx),
