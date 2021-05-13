@@ -14,7 +14,7 @@
 package pipeline
 
 import (
-	stdContext "context"
+	"context"
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/sink"
@@ -23,7 +23,14 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/pkg/context"
+=======
+	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sink/common"
+	serverConfig "github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
+>>>>>>> 58c6ca1f (context: uniform the import naming of context, part 1 (#1773))
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -63,7 +70,7 @@ type tablePipelineImpl struct {
 	tableName   string // quoted schema and table, used in metircs only
 
 	sinkNode *sinkNode
-	cancel   stdContext.CancelFunc
+	cancel   context.CancelFunc
 }
 
 // ResolvedTs returns the resolved ts in this table pipeline
@@ -133,10 +140,14 @@ func (t *tablePipelineImpl) Wait() []error {
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): the parameters in this function are too much, try to move some parameters into ctx.Vars().
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
+<<<<<<< HEAD
 func NewTablePipeline(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
+=======
+func NewTablePipeline(ctx cdcContext.Context,
+>>>>>>> 58c6ca1f (context: uniform the import naming of context, part 1 (#1773))
 	limitter *puller.BlurResourceLimitter,
 	mounter entry.Mounter,
 	sortEngine model.SortEngine,
@@ -145,8 +156,13 @@ func NewTablePipeline(ctx context.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
+<<<<<<< HEAD
 	targetTs model.Ts) (context.Context, TablePipeline) {
 	ctx, cancel := context.WithCancel(ctx)
+=======
+	targetTs model.Ts) TablePipeline {
+	ctx, cancel := cdcContext.WithCancel(ctx)
+>>>>>>> 58c6ca1f (context: uniform the import naming of context, part 1 (#1773))
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,

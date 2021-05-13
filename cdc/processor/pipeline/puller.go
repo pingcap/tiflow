@@ -14,12 +14,17 @@
 package pipeline
 
 import (
-	stdContext "context"
+	"context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/pkg/context"
+=======
+	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
+>>>>>>> 58c6ca1f (context: uniform the import naming of context, part 1 (#1773))
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -39,7 +44,7 @@ type pullerNode struct {
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
-	cancel      stdContext.CancelFunc
+	cancel      context.CancelFunc
 	wg          errgroup.Group
 }
 
@@ -60,7 +65,7 @@ func newPullerNode(
 	}
 }
 
-func (n *pullerNode) tableSpan(ctx context.Context) []regionspan.Span {
+func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 	// start table puller
 	enableOldValue := ctx.Vars().Config.EnableOldValue
 	spans := make([]regionspan.Span, 0, 4)
@@ -73,9 +78,16 @@ func (n *pullerNode) tableSpan(ctx context.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
+<<<<<<< HEAD
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(n.changefeedID, ctx.Vars().CaptureAddr, n.tableName)
 	enableOldValue := ctx.Vars().Config.EnableOldValue
 	ctxC, cancel := stdContext.WithCancel(ctx.StdContext())
+=======
+	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
+	globalConfig := config.GetGlobalServerConfig()
+	config := ctx.ChangefeedVars().Info.Config
+	ctxC, cancel := context.WithCancel(ctx)
+>>>>>>> 58c6ca1f (context: uniform the import naming of context, part 1 (#1773))
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
