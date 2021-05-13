@@ -18,8 +18,6 @@ import (
 	"sync"
 	"time"
 
-	tidbkv "github.com/pingcap/tidb/kv"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -34,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
+	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"

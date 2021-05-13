@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/kv"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"

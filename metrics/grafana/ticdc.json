@@ -76,16 +76,17 @@
       },
       {
         "datasource": "${DS_TEST-CLUSTER}",
-        "enable": true,
-        "expr": "min(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}) by (job, instance) == BOOL 0",
+        "enable": false,
+        "expr": "delta(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}[30s]) < BOOL 0",
         "hide": false,
         "iconColor": "#FF9830",
         "limit": 100,
         "name": "Server down",
         "showIn": 0,
-        "tagKeys": "instance",
+        "step": "15s",
+        "tagKeys": "instance,job",
         "tags": [],
-        "textFormat": "instance",
+        "textFormat": "",
         "titleFormat": "Down",
         "type": "tags"
       },
@@ -102,6 +103,21 @@
         "tags": [],
         "titleFormat": "Alert Name",
         "type": "tags"
+      },
+      {
+        "datasource": "${DS_TEST-CLUSTER}",
+        "enable": true,
+        "expr": "delta(tikv_cdc_region_resolve_status{status=\"resolved\"}[30s]) < BOOL -800",
+        "hide": true,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "limit": 100,
+        "name": "Resolved region drop",
+        "showIn": 0,
+        "step": "15s",
+        "tagKeys": "instance",
+        "tags": [],
+        "titleFormat": "Resolved region drop",
+        "type": "tags"
       }
     ]
   },
@@ -109,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1617798727219,
+  "iteration": 1620627250839,
   "links": [],
   "panels": [
     {
@@ -5068,6 +5084,255 @@
           }
         },
         {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "decimals": 1,
+          "description": "The count of different kinds of gRPC message",
+          "fill": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 12
+          },
+          "id": 147,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sideWidth": null,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(tikv_grpc_msg_duration_seconds_count{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type!=\"kv_gc\"}[1m])) by (type)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{type}}",
+              "metric": "tikv_grpc_msg_duration_seconds_bucket",
+              "refId": "A",
+              "step": 10
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "gRPC message count",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "ops",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "decimals": 1,
+          "description": "The memory usage per TiKV instance",
+          "editable": true,
+          "error": false,
+          "fill": 0,
+          "grid": {},
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 12
+          },
+          "id": 74,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sideWidth": null,
+            "sort": "max",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [
+            {
+              "alias": "/.*-cap-.*/",
+              "yaxis": 2
+            },
+            {
+              "alias": "/.*tikv.*/",
+              "yaxis": 2
+            }
+          ],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
+              "format": "time_series",
+              "hide": true,
+              "intervalFactor": 2,
+              "legendFormat": "tikv-{{instance}}",
+              "refId": "A",
+              "step": 10
+            },
+            {
+              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
+              "format": "time_series",
+              "hide": true,
+              "intervalFactor": 2,
+              "legendFormat": "cdc-{{instance}}",
+              "refId": "B",
+              "step": 10
+            },
+            {
+              "expr": "(avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "tikv-{{instance}}",
+              "refId": "C",
+              "step": 10
+            },
+            {
+              "expr": "sum(tikv_cdc_sink_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "sink-{{instance}}",
+              "refId": "D",
+              "step": 10
+            },
+            {
+              "expr": "sum(tikv_cdc_old_value_cache_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "old-value-{{instance}}",
+              "refId": "E",
+              "step": 10
+            },
+            {
+              "expr": "sum(tikv_cdc_sink_memory_capacity{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "sink-cap-{{instance}}",
+              "refId": "F",
+              "step": 10
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "CDC memory",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
           "columns": [
             {
               "text": "Current",
@@ -5084,7 +5349,7 @@
             "h": 7,
             "w": 7,
             "x": 0,
-            "y": 12
+            "y": 19
           },
           "hideTimeOverride": true,
           "id": 64,
@@ -5166,7 +5431,7 @@
             "h": 7,
             "w": 5,
             "x": 7,
-            "y": 12
+            "y": 19
           },
           "hideTimeOverride": true,
           "id": 66,
@@ -5217,7 +5482,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 19
           },
           "id": 70,
           "legend": {
@@ -5319,7 +5584,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 19
+            "y": 26
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5391,7 +5656,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 19
+            "y": 26
           },
           "id": 72,
           "legend": {
@@ -5486,7 +5751,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 19
+            "y": 26
           },
           "id": 140,
           "legend": {
@@ -5570,224 +5835,6 @@
             },
             {
               "format": "none",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "decimals": 1,
-          "description": "The memory usage per TiKV instance",
-          "editable": true,
-          "error": false,
-          "fill": 0,
-          "grid": {},
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 26
-          },
-          "id": 74,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "sideWidth": null,
-            "sort": "max",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "paceLength": 10,
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
-              "refId": "A",
-              "step": 10
-            },
-            {
-              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "cdc-{{instance}}",
-              "refId": "B",
-              "step": 10
-            },
-            {
-              "expr": "(avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
-              "refId": "C",
-              "step": 10
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Memory without block cache",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "decimals": 1,
-          "description": "The speed of TiKV CDC incremental scan",
-          "editable": true,
-          "error": false,
-          "fill": 0,
-          "grid": {},
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 26
-          },
-          "id": 76,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "hideEmpty": true,
-            "hideZero": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "sideWidth": null,
-            "sort": "current",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "paceLength": 10,
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
-              "refId": "A",
-              "step": 10
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "CDC scan speed",
-          "tooltip": {
-            "msResolution": false,
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": true
-            },
-            {
-              "format": "short",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -5910,6 +5957,107 @@
         },
         {
           "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "decimals": 1,
+          "description": "The speed of TiKV CDC incremental scan",
+          "editable": true,
+          "error": false,
+          "fill": 0,
+          "grid": {},
+          "gridPos": {
+            "h": 7,
+            "w": 6,
+            "x": 12,
+            "y": 33
+          },
+          "id": 76,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 2,
+              "legendFormat": "tikv-{{instance}}",
+              "refId": "A",
+              "step": 10
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "CDC scan speed",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
           "bars": true,
           "dashLength": 10,
           "dashes": false,
@@ -5922,8 +6070,8 @@
           "grid": {},
           "gridPos": {
             "h": 7,
-            "w": 12,
-            "x": 12,
+            "w": 6,
+            "x": 18,
             "y": 33
           },
           "id": 139,
@@ -5935,7 +6083,7 @@
             "hideZero": true,
             "max": true,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "sideWidth": null,
             "sort": "current",
@@ -6017,7 +6165,7 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
-          "fill": 1,
+          "fill": 4,
           "gridPos": {
             "h": 7,
             "w": 12,
@@ -6031,8 +6179,8 @@
             "current": true,
             "hideEmpty": false,
             "hideZero": true,
-            "max": true,
-            "min": false,
+            "max": false,
+            "min": true,
             "rightSide": true,
             "show": true,
             "sideWidth": null,
@@ -6053,6 +6201,7 @@
           "seriesOverrides": [
             {
               "alias": "/(access|miss).*/",
+              "fill": 0,
               "points": false,
               "yaxis": 2
             }
@@ -6062,28 +6211,36 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_access{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 1,
-              "legendFormat": "access-{{instance}}",
-              "refId": "A"
-            },
-            {
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 1,
-              "legendFormat": "miss-{{instance}}",
-              "refId": "B"
-            },
-            {
               "expr": "(sum(rate(tikv_cdc_old_value_cache_access{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance) - sum(rate(tikv_cdc_old_value_cache_miss{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)) / sum(rate(tikv_cdc_old_value_cache_access{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
               "legendFormat": "hit-rate-{{instance}}",
+              "refId": "A"
+            },
+            {
+              "expr": "-sum(rate(tikv_cdc_old_value_cache_access{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
+              "format": "time_series",
+              "hide": true,
+              "intervalFactor": 1,
+              "legendFormat": "access-{{instance}}",
+              "refId": "B"
+            },
+            {
+              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "miss-{{instance}}",
               "refId": "C"
+            },
+            {
+              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss_none{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "miss-none-{{instance}}",
+              "refId": "D"
             }
           ],
           "thresholds": [],
@@ -6109,8 +6266,8 @@
               "format": "percentunit",
               "label": null,
               "logBase": 1,
-              "max": null,
-              "min": null,
+              "max": "1",
+              "min": "0",
               "show": true
             },
             {
@@ -6142,7 +6299,7 @@
             "x": 12,
             "y": 40
           },
-          "id": 144,
+          "id": 145,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -6168,25 +6325,38 @@
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
-          "seriesOverrides": [],
+          "seriesOverrides": [
+            {
+              "alias": "/cap.*/",
+              "yaxis": 2
+            }
+          ],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(tikv_cdc_old_value_cache_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
+              "expr": "sum(tikv_cdc_old_value_cache_capacity{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
+              "legendFormat": "cap-{{instance}}",
               "refId": "A"
+            },
+            {
+              "expr": "sum(tikv_cdc_old_value_cache_length{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "len-{{instance}}",
+              "refId": "B"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Old value cache bytes",
+          "title": "Old value cache size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -6202,19 +6372,20 @@
           },
           "yaxes": [
             {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
               "format": "none",
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "decimals": null,
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
               "show": true
             }
           ],
@@ -6246,6 +6417,8 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
             "max": true,
             "min": false,
             "rightSide": true,
@@ -6323,6 +6496,84 @@
           }
         },
         {
+          "cards": {
+            "cardPadding": 0,
+            "cardRound": 0
+          },
+          "color": {
+            "cardColor": "#FF9830",
+            "colorScale": "linear",
+            "colorScheme": "interpolateSpectral",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "The time consumed to get an old value (both from cache and from disk)",
+          "gridPos": {
+            "h": 7,
+            "w": 6,
+            "x": 12,
+            "y": 47
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 146,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "links": [],
+          "maxPerRow": 3,
+          "repeatDirection": "h",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(tikv_cdc_old_value_duration_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "intervalFactor": 2,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Old value seek duration",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": 1,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": 1,
+            "format": "s",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "upper",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
@@ -6333,8 +6584,8 @@
           "fill": 1,
           "gridPos": {
             "h": 7,
-            "w": 12,
-            "x": 12,
+            "w": 6,
+            "x": 18,
             "y": 47
           },
           "id": 142,
@@ -6346,7 +6597,7 @@
             "hideZero": true,
             "max": true,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": true,
             "sideWidth": null,
             "sort": "current",
@@ -6617,5 +6868,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 15
+  "version": 16
 }
