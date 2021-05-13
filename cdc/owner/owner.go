@@ -86,7 +86,7 @@ func NewOwner() *Owner {
 }
 
 func NewOwner4Test(
-	newDDLPuller func(ctx cdcContext.Context, startTs uint64) DDLPuller,
+	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error)) *Owner {
 	o := NewOwner()
 	o.newChangefeed = func(gcManager *gcManager) *changefeed {

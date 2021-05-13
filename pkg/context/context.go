@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -182,6 +183,9 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
 			ID: "changefeed-id-test",
+			Info: &model.ChangeFeedInfo{
+				Config: config.GetDefaultReplicaConfig(),
+			},
 		})
 	}
 	return ctx

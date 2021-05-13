@@ -54,9 +54,9 @@ type changefeed struct {
 
 	errCh  chan error
 	cancel context.CancelFunc
-	wg sync.WaitGroup
+	wg     sync.WaitGroup
 
-	newDDLPuller func(ctx cdcContext.Context, startTs uint64) DDLPuller
+	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
@@ -81,7 +81,7 @@ func newChangefeed(gcManager *gcManager) *changefeed {
 
 func newChangefeed4Test(
 	gcManager *gcManager,
-	newDDLPuller func(ctx cdcContext.Context, startTs uint64) DDLPuller,
+	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
 	c := newChangefeed(gcManager)
@@ -93,7 +93,7 @@ func newChangefeed4Test(
 func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	log.Debug("LEOPPRO tick", zap.String("changefeed", state.ID))
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
-		log.Info("LEOPPRO err",zap.Error(err),zap.Stack("s"))
+		log.Info("LEOPPRO err", zap.Error(err), zap.Stack("s"))
 		c.errCh <- errors.Trace(err)
 		return nil
 	})
@@ -163,7 +163,8 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 		return nil
 	}
 	// empty the errCh
-	LOOP:for {
+LOOP:
+	for {
 		select {
 		case <-c.errCh:
 		default:
@@ -203,7 +204,10 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller = c.newDDLPuller(cancelCtx, startTs)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, startTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()

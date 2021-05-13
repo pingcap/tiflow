@@ -49,26 +49,34 @@ type ddlPullerImpl struct {
 	cancel         context.CancelFunc
 }
 
-// TODO test-case: resolvedTs is initialized to (startTs - 1)
-func newDDLPuller(ctx cdcContext.Context, startTs uint64) DDLPuller {
+func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	pdCli := ctx.GlobalVars().PDClient
 	conf := config.GetGlobalServerConfig()
 	kvStorage := ctx.GlobalVars().KVStorage
-	plr := puller.NewPuller(
-		ctx,
-		pdCli,
-		conf.Security,
-		kvStorage,
-		startTs,
-		[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
-		nil,
-		false)
+	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var plr puller.Puller
+	// kvStorage can be nil only in test
+	if kvStorage != nil {
+		plr = puller.NewPuller(
+			ctx,
+			pdCli,
+			conf.Security,
+			kvStorage,
+			startTs,
+			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
+			nil,
+			false)
+	}
 
 	return &ddlPullerImpl{
 		puller:     plr,
 		resolvedTS: startTs - 1,
+		filter:     f,
 		cancel:     func() {},
-	}
+	}, nil
 }
 
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
