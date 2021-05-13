@@ -53,11 +53,13 @@ func (s TableStatus) String() string {
 	return "Unknown"
 }
 
-func (s *TableStatus) load() TableStatus {
+// Load TableStatus with THREAD-SAFE
+func (s *TableStatus) Load() TableStatus {
 	return TableStatus(atomic.LoadInt32((*int32)(s)))
 }
 
-func (s *TableStatus) store(new TableStatus) {
+// Store TableStatus with THREAD-SAFE
+func (s *TableStatus) Store(new TableStatus) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
 
@@ -91,7 +93,7 @@ func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowContro
 
 func (n *sinkNode) ResolvedTs() model.Ts   { return atomic.LoadUint64(&n.resolvedTs) }
 func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpointTs) }
-func (n *sinkNode) Status() TableStatus    { return n.status.load() }
+func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	// do nothing
@@ -101,11 +103,11 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
 	defer func() {
 		if err != nil {
-			n.status.store(TableStatusStopped)
+			n.status.Store(TableStatusStopped)
 			return
 		}
 		if n.checkpointTs >= n.targetTs {
-			n.status.store(TableStatusStopped)
+			n.status.Store(TableStatusStopped)
 			err = n.sink.Close()
 			if err != nil {
 				err = errors.Trace(err)
@@ -184,7 +186,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		event := msg.PolymorphicEvent
 		if event.RawKV.OpType == model.OpTypeResolved {
 			if n.status == TableStatusInitializing {
-				n.status.store(TableStatusRunning)
+				n.status.Store(TableStatusRunning)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(errors.New("processor sync resolved injected error"))
@@ -221,7 +223,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
-	n.status.store(TableStatusStopped)
+	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
 	return n.sink.Close()
 }

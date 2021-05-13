@@ -14,7 +14,7 @@
 package pipeline
 
 import (
-	stdContext "context"
+	"context"
 	"time"
 
 	"github.com/pingcap/log"
@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -70,7 +70,7 @@ type tablePipelineImpl struct {
 	tableName   string // quoted schema and table, used in metircs only
 
 	sinkNode *sinkNode
-	cancel   stdContext.CancelFunc
+	cancel   context.CancelFunc
 }
 
 // TODO find a better name or avoid using an interface
@@ -149,10 +149,14 @@ func (t *tablePipelineImpl) Wait() {
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): the parameters in this function are too much, try to move some parameters into ctx.Vars().
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
+<<<<<<< HEAD
 func NewTablePipeline(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	credential *security.Credential,
 	kvStorage tidbkv.Storage,
+=======
+func NewTablePipeline(ctx cdcContext.Context,
+>>>>>>> 58c6ca1f (context: uniform the import naming of context, part 1 (#1773))
 	limitter *puller.BlurResourceLimitter,
 	mounter entry.Mounter,
 	sortEngine model.SortEngine,
@@ -162,7 +166,7 @@ func NewTablePipeline(ctx context.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts) TablePipeline {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := cdcContext.WithCancel(ctx)
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
