@@ -14,7 +14,7 @@
 package pipeline
 
 import (
-	stdContext "context"
+	"context"
 	"time"
 
 	"github.com/pingcap/log"
@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"go.uber.org/zap"
@@ -68,7 +68,7 @@ type tablePipelineImpl struct {
 	tableName   string // quoted schema and table, used in metircs only
 
 	sinkNode *sinkNode
-	cancel   stdContext.CancelFunc
+	cancel   context.CancelFunc
 }
 
 // TODO find a better name or avoid using an interface
@@ -146,7 +146,7 @@ func (t *tablePipelineImpl) Wait() {
 
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
-func NewTablePipeline(ctx context.Context,
+func NewTablePipeline(ctx cdcContext.Context,
 	limitter *puller.BlurResourceLimitter,
 	mounter entry.Mounter,
 	tableID model.TableID,
@@ -154,7 +154,7 @@ func NewTablePipeline(ctx context.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts) TablePipeline {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := cdcContext.WithCancel(ctx)
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,

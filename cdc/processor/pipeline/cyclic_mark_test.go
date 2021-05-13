@@ -14,7 +14,7 @@
 package pipeline
 
 import (
-	stdContext "context"
+	"context"
 	"sort"
 	"sync"
 
@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -131,8 +131,8 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		ctx := context.NewContext(stdContext.Background(), &context.GlobalVars{})
-		ctx = context.WithChangefeedVars(ctx, &context.ChangefeedVars{
+		ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			Info: &model.ChangeFeedInfo{
 				Config: &config.ReplicaConfig{
 					Cyclic: &config.CyclicConfig{
