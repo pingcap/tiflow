@@ -60,15 +60,9 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	var plr puller.Puller
 	// kvStorage can be nil only in test
 	if kvStorage != nil {
-		plr = puller.NewPuller(
-			ctx,
-			pdCli,
-			conf.Security,
-			kvStorage,
-			startTs,
+		plr = puller.NewPuller(ctx, pdCli, conf.Security, kvStorage, startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
-			nil,
-			false)
+			nil, false)
 	}
 
 	return &ddlPullerImpl{
