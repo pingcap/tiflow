@@ -23,8 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	context2 "github.com/pingcap/ticdc/pkg/context"
-
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -38,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
+	context2 "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
