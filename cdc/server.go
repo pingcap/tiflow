@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	tidbkv "github.com/pingcap/tidb/kv"
 
 	"go.etcd.io/etcd/pkg/logutil"
@@ -159,13 +158,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
-	// When a capture suicided, restart it
-	for {
-		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(errors.Cause(err)) {
-			return err
-		}
-		log.Info("server recovered", zap.String("capture-id", s.capture.Info().ID))
-	}
+
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+	return s.run(ctx)
 }
 
 func (s *Server) etcdHealthChecker(ctx context.Context) error {
@@ -211,8 +206,6 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture := capture.NewCapture()
-	s.capture = capture
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -227,13 +220,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		captureInfo := capture.Info()
-		return s.capture.Run(cdcContext.NewContext(cctx, &cdcContext.GlobalVars{
-			PDClient:    s.pdClient,
-			KVStorage:   s.kvStorage,
-			CaptureInfo: &captureInfo,
-			EtcdClient:  s.etcdClient,
-		}))
+		return s.capture.Run(ctx)
 	})
 
 	return wg.Wait()

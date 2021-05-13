@@ -1,6 +1,7 @@
 package owner
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,8 +34,8 @@ type asyncSinkImpl struct {
 	ddlFinishedTs model.Ts
 	ddlSentTs     model.Ts
 
-	closeCh chan struct{}
-	errCh   chan error
+	wg    sync.WaitGroup
+	errCh chan error
 }
 
 func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
@@ -50,10 +51,9 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 		return nil, errors.Trace(err)
 	}
 	asyncSink := &asyncSinkImpl{
-		sink:    s,
-		ddlCh:   make(chan *model.DDLEvent, 1),
-		closeCh: make(chan struct{}, 0),
-		errCh:   errCh,
+		sink:  s,
+		ddlCh: make(chan *model.DDLEvent, 1),
+		errCh: errCh,
 	}
 	if changefeedInfo.SyncPointEnabled {
 		asyncSink.syncpointStore, err = sink.NewSyncpointStore(ctx, changefeedID, changefeedInfo.SinkURI)
@@ -64,6 +64,7 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 			return nil, errors.Trace(err)
 		}
 	}
+	asyncSink.wg.Add(1)
 	go asyncSink.run(ctx)
 	return asyncSink, nil
 }
@@ -73,6 +74,7 @@ func (s *asyncSinkImpl) Initialize(ctx cdcContext.Context, tableInfo []*model.Si
 }
 
 func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
+	defer s.wg.Done()
 	// TODO make the tick duration configurable
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -80,8 +82,6 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-s.closeCh:
 			return
 		case err := <-s.errCh:
 			ctx.Throw(err)
@@ -153,5 +153,6 @@ func (s *asyncSinkImpl) Close() (err error) {
 	if s.syncpointStore != nil {
 		err = s.syncpointStore.Close()
 	}
+	s.wg.Wait()
 	return
 }

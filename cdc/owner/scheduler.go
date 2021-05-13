@@ -72,7 +72,9 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeLi
 	s.cleanUpFinishedOperations()
 	pendingJob := s.syncTablesWithSchemaManager()
 	s.dispatchTargetCapture(pendingJob)
-	log.Debug("scheduler:generated pending job to be executed", zap.Any("pendingJob", pendingJob))
+	if len(pendingJob) != 0 {
+		log.Debug("scheduler:generated pending job to be executed", zap.Any("pendingJob", pendingJob))
+	}
 	s.handleJobs(pendingJob)
 	s.rebalance()
 	s.handleMoveTableJob()

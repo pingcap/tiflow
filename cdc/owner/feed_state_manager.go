@@ -101,13 +101,13 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
+		m.patchState(model.StateRemoved)
 		if job.Opts != nil && job.Opts.ForceRemove {
 			// remove changefeed info
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				return nil, true, nil
 			})
 		}
-		m.patchState(model.StateRemoved)
 	case model.AdminResume:
 		switch m.state.Info.State {
 		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:

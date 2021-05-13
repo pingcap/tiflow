@@ -31,16 +31,18 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/version"
+	tidbkv "github.com/pingcap/tidb/kv"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	info *model.CaptureInfo
+	captureMu sync.Mutex
+	info      *model.CaptureInfo
 
 	owner            *owner.Owner
 	ownerMu          sync.Mutex
@@ -50,37 +52,83 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
+	pdClient   pd.Client
+	kvStorage  tidbkv.Storage
+	etcdClient *kv.CDCEtcdClient
+
 	newProcessorManager func() *processor.Manager
 	newOwner            func() *owner.Owner
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture() *Capture {
-	conf := config.GetGlobalServerConfig()
-	info := &model.CaptureInfo{
-		ID:            uuid.New().String(),
-		AdvertiseAddr: conf.AdvertiseAddr,
-		Version:       version.ReleaseVersion,
-	}
-	log.Info("creating capture", zap.String("capture-id", info.ID), zap.String("capture-addr", info.AdvertiseAddr))
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient) *Capture {
 	return &Capture{
-		info:                info,
+		pdClient:   pdClient,
+		kvStorage:  kvStorage,
+		etcdClient: etcdClient,
+
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
 }
 
-func NewCapture4Test(
+func NewCapture4Test(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient,
 	newProcessorManager func() *processor.Manager,
 	newOwner func() *owner.Owner,
 ) *Capture {
-	c := NewCapture()
+	c := NewCapture(pdClient, kvStorage, etcdClient)
 	c.newProcessorManager = newProcessorManager
 	c.newOwner = newOwner
 	return c
 }
 
-func (c *Capture) Run(ctx cdcContext.Context) error {
+func (c *Capture) reset() error {
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
+	conf := config.GetGlobalServerConfig()
+	c.info = &model.CaptureInfo{
+		ID:            uuid.New().String(),
+		AdvertiseAddr: conf.AdvertiseAddr,
+		Version:       version.ReleaseVersion,
+	}
+	c.processorManager = c.newProcessorManager()
+	if c.session != nil {
+		c.session.Close() //nolint:errcheck
+	}
+	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
+		concurrency.WithTTL(conf.CaptureSessionTTL))
+	if err != nil {
+		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
+	}
+	c.session = sess
+	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
+	return nil
+}
+
+func (c *Capture) Run(ctx context.Context) error {
+	for {
+		err := c.reset()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = c.run(ctx)
+		// if no error returned or capture suicide, reset the capture and run again
+		if err == nil || cerror.ErrCaptureSuicide.Equal(errors.Cause(err)) {
+			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
+			continue
+		}
+		return errors.Trace(err)
+	}
+}
+
+func (c *Capture) run(stdCtx context.Context) error {
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
+		PDClient:    c.pdClient,
+		KVStorage:   c.kvStorage,
+		CaptureInfo: c.info,
+		EtcdClient:  c.etcdClient,
+	})
 	err := c.register(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -92,31 +140,39 @@ func (c *Capture) Run(ctx cdcContext.Context) error {
 		}
 		cancel()
 	}()
-	ctx, cancel := cdcContext.WithCancel(ctx)
-	wg, stdCtx := errgroup.WithContext(ctx)
-	ctx = cdcContext.WithStd(ctx, stdCtx)
-
+	wg := new(sync.WaitGroup)
+	wg.Add(2)
+	var ownerErr, processorErr error
 	go func() {
-		<-ctx.Done()
-		log.Debug("LEOPPRO cancel")
+		defer wg.Done()
+		defer c.AsyncClose()
+		ownerErr = c.campaignOwner(ctx)
 	}()
-	wg.Go(func() error {
-		defer cancel()
-		defer log.Debug("LEOPPRO exit")
-		return c.campaignOwner(ctx)
-	})
-	c.processorManager = c.newProcessorManager()
-	wg.Go(func() error {
-		defer cancel()
-		defer log.Debug("LEOPPRO exit")
+	go func() {
+		defer wg.Done()
+		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
-		return c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
-	})
-	return wg.Wait()
+		// no matter why the processor is exited, return to let capture restart or exit
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
+	}()
+	go func() {
+		<-ctx.Done()
+		log.Info("LEOPPRO cancelled")
+	}()
+	wg.Wait()
+	if ownerErr != nil {
+		return errors.Annotate(ownerErr, "owner exited with error")
+	}
+	if processorErr != nil {
+		return errors.Annotate(processorErr, "processor exited with error")
+	}
+	return nil
 }
 
 func (c *Capture) Info() model.CaptureInfo {
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
 	return *c.info
 }
 
@@ -151,22 +207,20 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
 		owner := c.newOwner()
-		go func() {
-			<-ctx.Done()
-			log.Debug("LEOPPRO cancel")
-		}()
 		c.setOwner(owner)
 		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
-		if err == nil || cerror.ErrCaptureSuicide.Equal(errors.Cause(err)) {
-			// if owner exits normally, or exits caused by lease expired
-			if err = c.resign(ctx); err != nil {
-				// if regisn owner failed, return error to let capture exits
-				return errors.Annotatef(err, "resign owner failed, capture: %s", c.info.ID)
-			}
-			return nil
+		// if owner exits, resign the owner key
+		if resignErr := c.resign(ctx); resignErr != nil {
+			// if regisn owner failed, return error to let capture exits
+			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
+		if err != nil {
+			// for other errors, return error and let capture exits or restart
+			return errors.Trace(err)
+		}
+		// if owner exits normally, continue the campaign loop and try to election owner again
 	}
 }
 
@@ -233,31 +287,24 @@ func (c *Capture) resign(ctx cdcContext.Context) error {
 
 // register registers the capture information in etcd
 func (c *Capture) register(ctx cdcContext.Context) error {
-	conf := config.GetGlobalServerConfig()
-	sess, err := concurrency.NewSession(ctx.GlobalVars().EtcdClient.Client.Unwrap(),
-		concurrency.WithTTL(conf.CaptureSessionTTL))
-	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
-	}
-	elec := concurrency.NewElection(sess, kv.CaptureOwnerKey)
-	err = ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, sess.Lease())
+	err := ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
-	c.session = sess
-	c.election = elec
 	return nil
 }
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
-	if c.processorManager != nil {
-		c.processorManager.AsyncClose()
-	}
 	c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		o.AsyncStop()
 		return nil
 	}) //nolint:errcheck
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
+	if c.processorManager != nil {
+		c.processorManager.AsyncClose()
+	}
 }
 
 func (c *Capture) DebugInfo() string {

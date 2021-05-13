@@ -107,9 +107,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 			Code:    code,
 			Message: err.Error(),
 		})
-		if err := c.releaseResources(); err != nil {
-			log.Error("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
-		}
+		c.releaseResources()
 	}
 }
 
@@ -117,35 +115,43 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
-		return c.releaseResources()
+		c.releaseResources()
+		return nil
 	}
+	log.Info("LEOPPRO1")
 
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	gcSafePointTs := c.gcManager.GcSafePointTs()
 	if checkpointTs < gcSafePointTs || time.Since(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(c.gcTTL)*time.Second {
 		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs, gcSafePointTs)
 	}
+	log.Info("LEOPPRO2")
 	if !c.preCheck(captures) {
 		return nil
 	}
+	log.Info("LEOPPRO3")
 	if err := c.initialize(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("LEOPPRO4")
 
 	select {
 	case err := <-c.errCh:
 		return errors.Trace(err)
 	default:
 	}
+	log.Info("LEOPPRO5")
 
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("LEOPPRO6")
 	allTableInListened := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
 	if allTableInListened {
 		c.updateStatus(barrierTs)
 	}
+	log.Info("LEOPPRO7")
 	return nil
 }
 
@@ -180,6 +186,15 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
+	go func() {
+		<-ctx.Done()
+		log.Info("LEOPPRO std cancelled")
+	}()
+
+	go func() {
+		<-cancelCtx.Done()
+		log.Info("LEOPPRO cancelled")
+	}()
 	c.cancel = cancel
 	c.sink, err = c.newSink(cancelCtx)
 	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
@@ -194,9 +209,9 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (c *changefeed) releaseResources() error {
+func (c *changefeed) releaseResources() {
 	if !c.initialized {
-		return nil
+		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info))
@@ -205,8 +220,11 @@ func (c *changefeed) releaseResources() error {
 	c.ddlPuller.Close()
 	c.schema = nil
 	c.initialized = false
-	// TODO wait ddlpuller and sink exited
-	return errors.Trace(c.sink.Close())
+	if err := c.sink.Close(); err != nil {
+		log.Warn("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
+	}
+	// empty the errCh
+	c.errCh = make(chan error, defaultErrChSize)
 }
 
 func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
@@ -376,8 +394,5 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 }
 
 func (c *changefeed) Close() {
-	err := c.releaseResources()
-	if err != nil {
-		log.Warn("Sink closed with error", zap.Error(err))
-	}
+	c.releaseResources()
 }
