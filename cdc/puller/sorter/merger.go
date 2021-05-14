@@ -502,8 +502,7 @@ func printError(err error) error {
 		errors.Cause(err) != context.DeadlineExceeded &&
 		!strings.Contains(err.Error(), "context canceled") &&
 		!strings.Contains(err.Error(), "context deadline exceeded") &&
-		cerrors.ErrAsyncIOCancelled.NotEqual(err) &&
-		cerrors.ErrProcessorTableCanceled.NotEqual(err) {
+		cerrors.ErrAsyncIOCancelled.NotEqual(errors.Cause(err)) {
 
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}
