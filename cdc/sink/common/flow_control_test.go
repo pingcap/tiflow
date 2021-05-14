@@ -133,6 +133,20 @@ func (s *flowControlSuite) TestMemoryQuotaForceConsume(c *check.C) {
 	c.Assert(atomic.LoadUint64(&consumed), check.Equals, uint64(0))
 }
 
+func (s *flowControlSuite) TestBlockingConsumeNoDeadlock(c *check.C) {
+	defer testleak.AfterTest(c)()
+	controller := NewTableMemoryQuota(1024)
+	err := controller.ForceConsume(2048)
+	c.Assert(err, check.IsNil)
+	go func() {
+		time.Sleep(time.Millisecond * 500)
+		controller.Release(2048)
+	}()
+	// will block until memory is released
+	err = controller.ConsumeWithBlocking(512, dummyCallBack)
+	c.Assert(err, check.IsNil)
+}
+
 // TestMemoryQuotaAbort verifies that Abort works
 func (s *flowControlSuite) TestMemoryQuotaAbort(c *check.C) {
 	defer testleak.AfterTest(c)()

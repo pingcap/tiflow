@@ -21,6 +21,7 @@ import (
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"go.uber.org/zap"
 )
 
@@ -35,7 +36,8 @@ type TableMemoryQuota struct {
 	mu       sync.Mutex
 	Consumed uint64
 
-	cond *sync.Cond
+	Notifier *notify.Notifier
+	Receiver *notify.Receiver
 }
 
 // NewTableMemoryQuota creates a new TableMemoryQuota
@@ -47,7 +49,9 @@ func NewTableMemoryQuota(quota uint64) *TableMemoryQuota {
 		Consumed: 0,
 	}
 
-	ret.cond = sync.NewCond(&ret.mu)
+	ret.Notifier = new(notify.Notifier)
+	ret.Receiver, _ = ret.Notifier.NewReceiver(-1)
+
 	return ret
 }
 
@@ -61,11 +65,11 @@ func (c *TableMemoryQuota) ConsumeWithBlocking(nBytes uint64, blockCallBack func
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	calledBack := false
 	for {
 		if atomic.LoadUint32(&c.IsAborted) == 1 {
+			c.mu.Unlock()
 			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
 		}
 		if c.Consumed+nBytes < c.Quota {
@@ -76,13 +80,17 @@ func (c *TableMemoryQuota) ConsumeWithBlocking(nBytes uint64, blockCallBack func
 			calledBack = true
 			err := blockCallBack()
 			if err != nil {
+				c.mu.Unlock()
 				return errors.Trace(err)
 			}
 		}
-		c.cond.Wait()
+		c.mu.Unlock()
+		<-c.Receiver.C
+		c.mu.Lock()
 	}
 
 	c.Consumed += nBytes
+	c.mu.Unlock()
 	return nil
 }
 
@@ -114,7 +122,7 @@ func (c *TableMemoryQuota) Release(nBytes uint64) {
 	c.Consumed -= nBytes
 	if c.Consumed < c.Quota {
 		c.mu.Unlock()
-		c.cond.Signal()
+		c.Notifier.Notify()
 		return
 	}
 
@@ -124,7 +132,7 @@ func (c *TableMemoryQuota) Release(nBytes uint64) {
 // Abort interrupts any ongoing ConsumeWithBlocking call
 func (c *TableMemoryQuota) Abort() {
 	atomic.StoreUint32(&c.IsAborted, 1)
-	c.cond.Signal()
+	c.Notifier.Notify()
 }
 
 // GetConsumption returns the current memory consumption
