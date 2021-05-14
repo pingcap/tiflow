@@ -202,7 +202,8 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 				continue
 			}
 			log.Warn("campaign owner failed", zap.Error(err))
-			continue
+			// if campaign owner failed, restart capture
+			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
