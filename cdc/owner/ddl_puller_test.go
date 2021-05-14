@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -102,6 +103,7 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 }
 
 func (s *ddlPullerSuite) TestPuller(c *check.C) {
+	defer testleak.AfterTest(c)()
 	startTs := uint64(10)
 	mockPuller := newMockPuller(c, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
