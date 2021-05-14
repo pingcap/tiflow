@@ -1385,8 +1385,8 @@ func runProcessor(
 	}
 	go func() {
 		<-ctx.Done()
-		// TODO this is a temporary workaround to make sure the processor can be cancelled
-		processor.sendError(errors.New("processor cancelled"))
+		// TODO this is a temporary workaround to make sure the processor can be canceled
+		processor.sendError(errors.New("processor canceled"))
 	}()
 	log.Info("start to run processor", zap.String("changefeed", changefeedID), zap.String("processor", processor.id))
 
