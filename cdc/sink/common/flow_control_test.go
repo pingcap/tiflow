@@ -433,6 +433,7 @@ func (s *flowControlSuite) TestFlowControlCallBackNotBlockingRelease(c *check.C)
 			c.Fatalf("unreachable")
 			return nil
 		})
+		c.Assert(err, check.IsNil)
 
 		var isBlocked int32
 		wg.Add(1)
