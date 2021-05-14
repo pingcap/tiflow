@@ -58,6 +58,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
+			log.Info("remote capture offline", zap.String("capture-id", k.CaptureID))
 			delete(s.Captures, k.CaptureID)
 			return nil
 		}
@@ -68,6 +69,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
+		log.Info("remote capture online", zap.String("capture-id", k.CaptureID), zap.Any("info", newCaptureInfo))
 		s.Captures[k.CaptureID] = &newCaptureInfo
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,

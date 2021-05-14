@@ -64,7 +64,7 @@ func newScheduler() *scheduler {
 // and returns a bool represents Is it possible that there are tables that do not exist in taskStatus
 // if some table are not exist in taskStatus(in taskStatus.Tables nor in taskStatus.Operation),
 // we should not push up resolvedTs
-func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (allTableInListened bool) {
+func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (addOperationsThisTick bool) {
 	s.state = state
 	s.allTableShouldBeListened = allTableShouldBeListened
 	s.captures = captures
@@ -76,10 +76,11 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeLi
 		log.Debug("scheduler:generated pending job to be executed", zap.Any("pendingJob", pendingJob))
 	}
 	s.handleJobs(pendingJob)
-	s.rebalance()
-	s.handleMoveTableJob()
+	addOperationsThisTick = len(pendingJob) > 0
+	addOperationsThisTick = s.rebalance() || addOperationsThisTick
+	addOperationsThisTick = s.handleMoveTableJob() || addOperationsThisTick
 	s.lastTickCaptureCount = len(captures)
-	return len(pendingJob) == 0
+	return addOperationsThisTick
 }
 
 func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
@@ -89,7 +90,7 @@ func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
 	})
 }
 
-func (s *scheduler) handleMoveTableJob() {
+func (s *scheduler) handleMoveTableJob() (addOperationsThisTick bool) {
 	if len(s.moveTableJobQueue) == 0 {
 		return
 	}
@@ -101,6 +102,7 @@ func (s *scheduler) handleMoveTableJob() {
 		}
 		s.moveTableTarget[job.tableID] = job.target
 		job := job
+		addOperationsThisTick = true
 		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
 				// the capture may be down, just skip remove this table
@@ -115,6 +117,7 @@ func (s *scheduler) handleMoveTableJob() {
 		})
 	}
 	s.moveTableJobQueue = nil
+	return
 }
 
 func (s *scheduler) Rebalance() {
@@ -211,7 +214,7 @@ func (s *scheduler) syncTablesWithSchemaManager() []*schedulerJob {
 			continue
 		}
 		// table which should be listened but not, add adding-table job to pending job list
-		boundaryTs := globalCheckpointTs + 1
+		boundaryTs := globalCheckpointTs
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:         schedulerJobTypeAddTable,
 			TableID:    tableID,
@@ -285,12 +288,12 @@ func (s *scheduler) cleanUpFinishedOperations() {
 	}
 }
 
-func (s *scheduler) rebalance() {
+func (s *scheduler) rebalance() (addOperationsThisTick bool) {
 	if !s.shouldRebalance() {
 		return
 	}
 	// we only support rebalance by table number for now
-	s.rebalanceByTableNum()
+	return s.rebalanceByTableNum()
 }
 
 func (s *scheduler) shouldRebalance() bool {
@@ -307,7 +310,7 @@ func (s *scheduler) shouldRebalance() bool {
 	return false
 }
 
-func (s *scheduler) rebalanceByTableNum() {
+func (s *scheduler) rebalanceByTableNum() (addOperationsThisTick bool) {
 	totalTableNum := len(s.allTableShouldBeListened)
 	captureNum := len(s.captures)
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
@@ -328,6 +331,7 @@ func (s *scheduler) rebalanceByTableNum() {
 			if tableNum2Remove <= 0 {
 				break
 			}
+			addOperationsThisTick = true
 			s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 				if status == nil {
 					// the capture may be down, just skip remove this table
@@ -347,4 +351,5 @@ func (s *scheduler) rebalanceByTableNum() {
 			tableNum2Remove--
 		}
 	}
+	return
 }

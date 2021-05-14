@@ -65,10 +65,10 @@ type processor struct {
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
 
-	firstTick bool
-	errCh     chan error
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	initialized bool
+	errCh       chan error
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
@@ -89,7 +89,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		limitter:     puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
 		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:        make(chan error, 1),
-		firstTick:    true,
 		changefeedID: changefeedID,
 		captureInfo:  ctx.GlobalVars().CaptureInfo,
 		cancel:       func() {},
@@ -125,7 +124,6 @@ func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 		Info: state.Info,
 	})
 	_, err := p.tick(ctx, state)
-	p.firstTick = false
 	if err == nil {
 		return state, nil
 	}
@@ -168,11 +166,11 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if p.changefeed.Status.AdminJobType.IsStopState() || p.changefeed.TaskStatuses[p.captureInfo.ID].AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	if err := p.lazyInit(ctx); err != nil {
-		return nil, errors.Trace(err)
-	}
 	if skip := p.checkPosition(); skip {
 		return p.changefeed, nil
+	}
+	if err := p.lazyInit(ctx); err != nil {
+		return nil, errors.Trace(err)
 	}
 	if err := p.handleTableOperation(ctx); err != nil {
 		return nil, errors.Trace(err)
@@ -197,11 +195,16 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 
 // checkPosition create a new task position, and put it into the etcd state.
 // task position maybe be not exist only when the processor is running first time.
-func (p *processor) checkPosition() bool {
+func (p *processor) checkPosition() (skipThisTick bool) {
 	if p.changefeed.TaskPositions[p.captureInfo.ID] != nil {
 		return false
 	}
-	if !p.firstTick {
+	// the processor should write task position after one table added to this processor at least
+	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
+	if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
+		return true
+	}
+	if p.initialized {
 		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
@@ -219,7 +222,7 @@ func (p *processor) checkPosition() bool {
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
-	if !p.firstTick {
+	if p.initialized {
 		return nil
 	}
 	ctx, cancel := cdcContext.WithCancel(ctx)
@@ -298,7 +301,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	//	}
 	//	return position, false, nil
 	//})
-
+	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
 }
@@ -557,8 +560,9 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 		if opt != nil && opt[tableID] != nil {
 			continue
 		}
-		if !p.firstTick {
-			log.Warn("the table should be listen but not, already listen the table again, please report a bug", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+		log.Info("start to listen the table immediately", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+		if replicaInfo.StartTs < p.changefeed.Status.CheckpointTs {
+			replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
 		}
 		err := p.addTable(ctx, tableID, replicaInfo)
 		if err != nil {
