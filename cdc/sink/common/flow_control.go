@@ -61,23 +61,26 @@ func (c *TableMemoryQuota) ConsumeWithBlocking(nBytes uint64, blockCallBack func
 	}
 
 	c.mu.Lock()
+	if c.Consumed+nBytes >= c.Quota {
+		c.mu.Unlock()
+		err := blockCallBack()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		c.mu.Unlock()
+	}
+
+	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	calledBack := false
 	for {
 		if atomic.LoadUint32(&c.IsAborted) == 1 {
 			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
 		}
+
 		if c.Consumed+nBytes < c.Quota {
 			break
-		}
-
-		if !calledBack {
-			calledBack = true
-			err := blockCallBack()
-			if err != nil {
-				return errors.Trace(err)
-			}
 		}
 		c.cond.Wait()
 	}
