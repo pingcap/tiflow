@@ -60,11 +60,10 @@ func newScheduler() *scheduler {
 	}
 }
 
-// Tick is a main process of scheduler, it calls some internal handle function
-// and returns a bool represents Is it possible that there are tables that do not exist in taskStatus
-// if some table are not exist in taskStatus(in taskStatus.Tables nor in taskStatus.Operation),
-// we should not push up resolvedTs
-func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (addOperationsThisTick bool) {
+// Tick is a main process of scheduler, it dispatches tables into captures, and handles move-table and rebalance events.
+// Tick returns a bool represents the changefeed state can be update in this tick.
+// The state can be update only if all the tables which should be listened dispatched to captures and no operation sent to captures in this tick.
+func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool) {
 	s.state = state
 	s.allTableShouldBeListened = allTableShouldBeListened
 	s.captures = captures
@@ -76,11 +75,11 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeLi
 		log.Debug("scheduler:generated pending job to be executed", zap.Any("pendingJob", pendingJob))
 	}
 	s.handleJobs(pendingJob)
-	addOperationsThisTick = len(pendingJob) > 0
-	addOperationsThisTick = s.rebalance() || addOperationsThisTick
-	addOperationsThisTick = s.handleMoveTableJob() || addOperationsThisTick
+	shouldUpdateState = len(pendingJob) == 0
+	shouldUpdateState = s.rebalance() && shouldUpdateState
+	shouldUpdateState = s.handleMoveTableJob() && shouldUpdateState
 	s.lastTickCaptureCount = len(captures)
-	return addOperationsThisTick
+	return shouldUpdateState
 }
 
 func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
@@ -90,7 +89,8 @@ func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
 	})
 }
 
-func (s *scheduler) handleMoveTableJob() (addOperationsThisTick bool) {
+func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool) {
+	shouldUpdateState = true
 	if len(s.moveTableJobQueue) == 0 {
 		return
 	}
@@ -102,7 +102,7 @@ func (s *scheduler) handleMoveTableJob() (addOperationsThisTick bool) {
 		}
 		s.moveTableTarget[job.tableID] = job.target
 		job := job
-		addOperationsThisTick = true
+		shouldUpdateState = false
 		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
 				// the capture may be down, just skip remove this table
@@ -288,9 +288,9 @@ func (s *scheduler) cleanUpFinishedOperations() {
 	}
 }
 
-func (s *scheduler) rebalance() (addOperationsThisTick bool) {
+func (s *scheduler) rebalance() (shouldUpdateState bool) {
 	if !s.shouldRebalance() {
-		return
+		return true
 	}
 	// we only support rebalance by table number for now
 	return s.rebalanceByTableNum()
@@ -310,10 +310,13 @@ func (s *scheduler) shouldRebalance() bool {
 	return false
 }
 
-func (s *scheduler) rebalanceByTableNum() (addOperationsThisTick bool) {
+// rebalanceByTableNum removes the tables in captures which of number is too much
+// the removed table will be dispatched again by syncTablesWithSchemaManager function
+func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 	totalTableNum := len(s.allTableShouldBeListened)
 	captureNum := len(s.captures)
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
+	shouldUpdateState = true
 
 	log.Info("Start rebalancing",
 		zap.String("changefeed", s.state.ID),
@@ -331,7 +334,7 @@ func (s *scheduler) rebalanceByTableNum() (addOperationsThisTick bool) {
 			if tableNum2Remove <= 0 {
 				break
 			}
-			addOperationsThisTick = true
+			shouldUpdateState = false
 			s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 				if status == nil {
 					// the capture may be down, just skip remove this table

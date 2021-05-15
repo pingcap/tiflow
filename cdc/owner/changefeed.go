@@ -145,13 +145,14 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	}
 	log.Info("LEOPPRO5")
 
+	c.sink.EmitCheckpointTs(ctx, checkpointTs)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	log.Info("LEOPPRO6")
-	addOperationsThisTick := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
-	if !addOperationsThisTick {
+	shouldUpdateState := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+	if shouldUpdateState {
 		c.updateStatus(barrierTs)
 	}
 	log.Info("LEOPPRO7")
@@ -308,6 +309,11 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
+		log.Info("LEOPPRO handleDDL", zap.Uint64("barrierTs", barrierTs), zap.Uint64("cts", c.state.Status.CheckpointTs), zap.Reflect("job", ddlJob))
+		err := c.schema.HandleDDL(ddlJob)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
 		log.Info("LEOPPRO asyncExecDDL", zap.Uint64("barrierTs", barrierTs), zap.Uint64("cts", c.state.Status.CheckpointTs), zap.Reflect("job", ddlJob))
 		done, err := c.asyncExecDDL(ctx, ddlJob)
 		if err != nil {
@@ -315,11 +321,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		}
 		if !done {
 			return barrierTs, nil
-		}
-		log.Info("LEOPPRO handleDDL", zap.Uint64("barrierTs", barrierTs), zap.Uint64("cts", c.state.Status.CheckpointTs), zap.Reflect("job", ddlJob))
-		err = c.schema.HandleDDL(ddlJob)
-		if err != nil {
-			return 0, errors.Trace(err)
 		}
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()

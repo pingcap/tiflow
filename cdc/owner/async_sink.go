@@ -1,6 +1,7 @@
 package owner
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,11 +35,13 @@ type asyncSinkImpl struct {
 	ddlFinishedTs model.Ts
 	ddlSentTs     model.Ts
 
-	wg    sync.WaitGroup
-	errCh chan error
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+	errCh  chan error
 }
 
 func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
+	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeedID := ctx.ChangefeedVars().ID
 	changefeedInfo := ctx.ChangefeedVars().Info
 	filter, err := filter.NewFilter(changefeedInfo.Config)
@@ -51,9 +54,10 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 		return nil, errors.Trace(err)
 	}
 	asyncSink := &asyncSinkImpl{
-		sink:  s,
-		ddlCh: make(chan *model.DDLEvent, 1),
-		errCh: errCh,
+		sink:   s,
+		ddlCh:  make(chan *model.DDLEvent, 1),
+		errCh:  errCh,
+		cancel: cancel,
 	}
 	if changefeedInfo.SyncPointEnabled {
 		asyncSink.syncpointStore, err = sink.NewSyncpointStore(ctx, changefeedID, changefeedInfo.SinkURI)
@@ -88,7 +92,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			return
 		case <-ticker.C:
 			checkpointTs := atomic.LoadUint64(&s.checkpointTs)
-			if checkpointTs <= lastCheckpointTs {
+			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
 				continue
 			}
 			lastCheckpointTs = checkpointTs
@@ -101,13 +105,14 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
-			if err != nil {
+			if err == nil {
+				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
+				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
+			} else if cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
 				// If DDL executing failed, and the error can be ignored, mark the ddl is executed successfully and print a log
-				if cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-					log.Info("Execute DDL ignored", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
-					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
-					return
-				}
+				log.Info("Execute DDL ignored", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
+				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
+			} else {
 				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
 				log.Error("Execute DDL failed",
 					zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
@@ -116,8 +121,6 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 				ctx.Throw(errors.Trace(err))
 				return
 			}
-			log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
-			atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 		}
 	}
 }
@@ -149,6 +152,7 @@ func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 }
 
 func (s *asyncSinkImpl) Close() (err error) {
+	s.cancel()
 	err = s.sink.Close()
 	if s.syncpointStore != nil {
 		err = s.syncpointStore.Close()
