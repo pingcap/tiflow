@@ -108,6 +108,11 @@ func (c *Capture) reset() error {
 
 func (c *Capture) Run(ctx context.Context) error {
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 		err := c.reset()
 		if err != nil {
 			return errors.Trace(err)

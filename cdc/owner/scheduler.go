@@ -68,6 +68,7 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeLi
 	s.allTableShouldBeListened = allTableShouldBeListened
 	s.captures = captures
 
+	log.Debug("LEOPPRO", zap.Any("allTableShouldBeListened", allTableShouldBeListened))
 	s.cleanUpFinishedOperations()
 	pendingJob := s.syncTablesWithSchemaManager()
 	s.dispatchTargetCapture(pendingJob)

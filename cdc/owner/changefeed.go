@@ -45,10 +45,11 @@ type changefeed struct {
 	feedStateManager *feedStateManager
 	gcManager        *gcManager
 
-	schema      *schemaWrap4Owner
-	sink        AsyncSink
-	ddlPuller   DDLPuller
-	initialized bool
+	schema        *schemaWrap4Owner
+	sink          AsyncSink
+	ddlPuller     DDLPuller
+	initialized   bool
+	ddlEventCache *model.DDLEvent
 
 	gcTTL int64
 
@@ -309,13 +310,8 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
-		log.Info("LEOPPRO handleDDL", zap.Uint64("barrierTs", barrierTs), zap.Uint64("cts", c.state.Status.CheckpointTs), zap.Reflect("job", ddlJob))
-		err := c.schema.HandleDDL(ddlJob)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		log.Info("LEOPPRO asyncExecDDL", zap.Uint64("barrierTs", barrierTs), zap.Uint64("cts", c.state.Status.CheckpointTs), zap.Reflect("job", ddlJob))
 		done, err := c.asyncExecDDL(ctx, ddlJob)
+		log.Info("LEOPPRO asyncExecDDL", zap.Uint64("barrierTs", barrierTs), zap.Uint64("cts", c.state.Status.CheckpointTs), zap.Reflect("job", ddlJob.Query), zap.Bool("done", done))
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -349,22 +345,37 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	return barrierTs, nil
 }
 
-func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (bool, error) {
-	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (done bool, err error) {
+	if job.BinlogInfo == nil {
+		log.Warn("ignore the invalid DDL job", zap.Reflect("job", job))
 		return true, nil
 	}
 	cyclicConfig := c.state.Info.Config.Cyclic
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
 		return true, nil
 	}
-	ddlEvent, err := c.schema.BuildDDLEvent(job)
-	if err != nil {
-		return false, errors.Trace(err)
+	if c.ddlEventCache == nil || c.ddlEventCache.CommitTs != job.BinlogInfo.FinishedTS {
+		ddlEvent, err := c.schema.BuildDDLEvent(job)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		err = c.schema.HandleDDL(job)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+		c.ddlEventCache = ddlEvent
 	}
-	ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
-	done, err := c.sink.EmitDDLEvent(ctx, ddlEvent)
+	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
+		return true, nil
+	}
+	done, err = c.sink.EmitDDLEvent(ctx, c.ddlEventCache)
 	if err != nil {
 		return false, err
+	}
+	if done {
+		c.ddlEventCache = nil
 	}
 	return done, nil
 }
