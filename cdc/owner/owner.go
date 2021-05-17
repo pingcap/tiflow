@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -27,13 +26,6 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-)
-
-const (
-	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	cdcServiceSafePointID = "ticdc"
-	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	gcSafepointUpdateInterval = time.Duration(1 * time.Minute)
 )
 
 type ownerJobType int

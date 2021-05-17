@@ -448,8 +448,13 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 			case model.OperProcessed:
 				table, exist := p.tables[tableID]
 				if !exist {
-					log.Panic("table which was added is not found",
+					log.Warn("table which was added is not found",
 						cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+					patchOperation(tableID, func(operation *model.TableOperation) error {
+						operation.Status = model.OperDispatched
+						return nil
+					})
+					continue
 				}
 				localResolvedTs := p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs
 				globalResolvedTs := p.changefeed.Status.ResolvedTs

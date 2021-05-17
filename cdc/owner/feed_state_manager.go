@@ -3,8 +3,10 @@ package owner
 import (
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -30,26 +32,11 @@ func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 		return
 	}
 	errs := m.errorReportByProcessor()
-	m.AppendError2Changefeed(errs...)
-	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		needSave := info.CleanUpOutdatedErrorHistory()
-		return info, needSave, nil
-	})
-	if m.state.Info.HasFastFailError() {
-		m.shouldRunning = false
-		m.patchState(model.StateFailed)
-		return
-	}
-	canRun := m.state.Info.CheckErrorHistoryV2()
-	if !canRun {
-		m.shouldRunning = false
-		m.patchState(model.StateError)
-		return
-	}
+	m.HandleError(errs...)
 	if m.shouldRunning {
 		m.patchState(model.StateNormal)
 	} else {
-		// handle leak info
+		m.cleanUpInfos()
 	}
 }
 
@@ -169,6 +156,9 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		log.Panic("Unreachable")
 	}
 	m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		if status == nil {
+			return status, false, nil
+		}
 		if status.AdminJobType != adminJobType {
 			status.AdminJobType = adminJobType
 			return status, true, nil
@@ -203,11 +193,14 @@ func (m *feedStateManager) cleanUpInfos() {
 }
 
 func (m *feedStateManager) errorReportByProcessor() []*model.RunningError {
-	var runningErrors []*model.RunningError
+	var runningErrors map[string]*model.RunningError
 	for captureID, position := range m.state.TaskPositions {
 		if position.Error != nil {
-			runningErrors = append(runningErrors, position.Error)
-			log.Warn("processor report an error", zap.String("changefeedID", m.state.ID), zap.String("captureID", captureID), zap.Any("error", position.Error))
+			if runningErrors == nil {
+				runningErrors = make(map[string]*model.RunningError)
+			}
+			runningErrors[position.Error.Code] = position.Error
+			log.Error("processor report an error", zap.String("changefeedID", m.state.ID), zap.String("captureID", captureID), zap.Any("error", position.Error))
 			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				if position == nil {
 					return nil, false, nil
@@ -217,18 +210,42 @@ func (m *feedStateManager) errorReportByProcessor() []*model.RunningError {
 			})
 		}
 	}
-	return runningErrors
+	if runningErrors == nil {
+		return nil
+	}
+	result := make([]*model.RunningError, 0, len(runningErrors))
+	for _, err := range runningErrors {
+		result = append(result, err)
+	}
+	return result
 }
 
-func (m *feedStateManager) AppendError2Changefeed(errs ...*model.RunningError) {
-	if len(errs) == 0 {
-		return
-	}
+func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
+	log.Info("LEOPPRO handle error", zap.Reflect("errs", errs))
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		for _, err := range errs {
 			info.Error = err
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		}
-		return info, true, nil
+		needSave := info.CleanUpOutdatedErrorHistory()
+		log.Info("LEOPPRO info", zap.Reflect("info", info))
+		return info, needSave || len(errs) > 0, nil
 	})
+	var err *model.RunningError
+	if len(errs) > 0 {
+		err = errs[len(errs)-1]
+	}
+	log.Info("LEOPPRO handle error2", zap.Reflect("err", err))
+	if m.state.Info.HasFastFailError() || (err != nil && filter.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code))) {
+		log.Info("LEOPPRO handle error3", zap.Reflect("err", err))
+		m.shouldRunning = false
+		m.patchState(model.StateFailed)
+		return
+	}
+	canRun := m.state.Info.CheckErrorHistoryV2() && err == nil
+	if !canRun {
+		m.shouldRunning = false
+		m.patchState(model.StateError)
+		return
+	}
 }

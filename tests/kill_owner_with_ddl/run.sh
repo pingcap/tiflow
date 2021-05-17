@@ -25,7 +25,11 @@ function kill_cdc_and_restart() {
     work_dir=$2
     cdc_binary=$3
     MAX_RETRIES=10
-    cdc_pid=$(curl -s http://127.0.0.1:8300/status|jq '.pid')
+    status=$(curl -s http://127.0.0.1:8300/status)
+    cdc_pid=$(echo "$status"|jq '.pid')
+    echo "$status"
+    echo "$cdc_pid"
+
     kill $cdc_pid
     ensure $MAX_RETRIES check_capture_count $pd_addr 0
     run_cdc_server --workdir $work_dir --binary $cdc_binary --addr "127.0.0.1:8300" --pd $pd_addr

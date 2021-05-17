@@ -26,6 +26,14 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// cdcServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	cdcServiceSafePointID = "ticdc"
+)
+
+// gcSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
+var gcSafepointUpdateInterval = 1 * time.Minute
+
 type gcManager struct {
 	gcTTL int64
 
@@ -36,6 +44,9 @@ type gcManager struct {
 
 func newGCManager() *gcManager {
 	serverConfig := config.GetGlobalServerConfig()
+	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
+		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
+	})
 	return &gcManager{
 		gcTTL: serverConfig.GcTTL,
 	}
