@@ -225,7 +225,9 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 	ret := make(map[util.EtcdKey][]byte)
 	for k, v := range worker.rawState {
-		ret[k] = v
+		cloneV := make([]byte, len(v))
+		copy(cloneV, v)
+		ret[util.NewEtcdKey(k.String())] = cloneV
 	}
 	return ret
 }
