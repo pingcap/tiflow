@@ -120,7 +120,6 @@ func (s *configSuite) TestFillV1(c *check.C) {
 		},
 		StartTs: 417136892416622595,
 		Engine:  "memory",
-		SortDir: ".",
 		Config: &config.ReplicaConfig{
 			CaseSensitive: true,
 			Filter: &config.FilterConfig{
