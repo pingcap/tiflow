@@ -462,6 +462,21 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		config.Credential.KeyPath = s
 	}
 
+	s = sinkURI.Query().Get("sasl-user")
+	if s != "" {
+		config.SaslScram.SaslUser = s
+	}
+
+	s = sinkURI.Query().Get("sasl-password")
+	if s != "" {
+		config.SaslScram.SaslPassword = s
+	}
+
+	s = sinkURI.Query().Get("sasl-mechanism")
+	if s != "" {
+		config.SaslScram.SaslMechanism = s
+	}
+
 	s = sinkURI.Query().Get("auto-create-topic")
 	if s != "" {
 		autoCreate, err := strconv.ParseBool(s)
