@@ -170,14 +170,14 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		return status, false, nil
 	})
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		changed :=false
+		changed := false
 		if info.State != feedState {
 			info.State = feedState
-			changed=true
+			changed = true
 		}
-		if info.AdminJobType!=adminJobType{
-			info.AdminJobType=adminJobType
-			changed=true
+		if info.AdminJobType != adminJobType {
+			info.AdminJobType = adminJobType
+			changed = true
 		}
 		return info, changed, nil
 	})
