@@ -194,11 +194,11 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 }
 
 func (p *processor) checkChangefeedNormal() bool {
-	if p.changefeed.Info.State != model.StateNormal || p.changefeed.Status.AdminJobType.IsStopState() {
+	if p.changefeed.Info.AdminJobType.IsStopState() || p.changefeed.Status.AdminJobType.IsStopState() {
 		return false
 	}
 	p.changefeed.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		if info.State != model.StateNormal {
+		if info.AdminJobType.IsStopState() {
 			return info, false, cerror.ErrReactorFinished.GenWithStackByArgs()
 		}
 		return info, false, nil

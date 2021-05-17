@@ -152,8 +152,10 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		adminJobType = model.AdminNone
 	case model.StateFinished:
 		adminJobType = model.AdminFinish
-	case model.StateError, model.StateStopped, model.StateFailed, model.StateRemoved:
+	case model.StateError, model.StateStopped, model.StateFailed:
 		adminJobType = model.AdminStop
+	case model.StateRemoved:
+		adminJobType = model.AdminRemove
 	default:
 		log.Panic("Unreachable")
 	}
@@ -168,11 +170,16 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		return status, false, nil
 	})
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		changed :=false
 		if info.State != feedState {
 			info.State = feedState
-			return info, true, nil
+			changed=true
 		}
-		return info, false, nil
+		if info.AdminJobType!=adminJobType{
+			info.AdminJobType=adminJobType
+			changed=true
+		}
+		return info, changed, nil
 	})
 }
 
