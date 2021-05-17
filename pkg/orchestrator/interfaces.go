@@ -43,7 +43,7 @@ type ReactorState interface {
 // SingleDataPatch represents an update to a given Etcd key
 type SingleDataPatch struct {
 	Key util.EtcdKey
-	// PatchFunc should be a pure function that returns a new value given the old value.
+	// Func should be a pure function that returns a new value given the old value.
 	// The function is called each time the EtcdWorker initiates an Etcd transaction.
 	Func func(old []byte) (newValue []byte, changed bool, err error)
 }
