@@ -163,7 +163,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if p.changefeed.Status.AdminJobType.IsStopState() || p.changefeed.TaskStatuses[p.captureInfo.ID].AdminJobType.IsStopState() {
+	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	if skip := p.checkPosition(); skip {
@@ -191,6 +191,28 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 		return nil, errors.Trace(err)
 	}
 	return p.changefeed, nil
+}
+
+func (p *processor) checkChangefeedNormal() bool {
+	if p.changefeed.Info.State != model.StateNormal || p.changefeed.Status.AdminJobType.IsStopState() {
+		return false
+	}
+	p.changefeed.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		if info.State != model.StateNormal {
+			return info, false, cerror.ErrReactorFinished.GenWithStackByArgs()
+		}
+		return info, false, nil
+	})
+	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		if status == nil {
+			return status, false, nil
+		}
+		if status.AdminJobType.IsStopState() {
+			return status, false, cerror.ErrReactorFinished.GenWithStackByArgs()
+		}
+		return status, false, nil
+	})
+	return true
 }
 
 // checkPosition create a new task position, and put it into the etcd state.
@@ -430,9 +452,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				replicaInfo, exist := taskStatus.Tables[tableID]
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
-				}
-				if p.changefeed.Info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
 				}
 				if replicaInfo.StartTs != opt.BoundaryTs {
 					log.Warn("the startTs and BoundaryTs of add table operation should be always equaled", zap.Any("replicaInfo", replicaInfo))
@@ -716,26 +735,53 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		p.sendError(err)
 		return nil
 	})
-	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
+	var tableName *model.TableName
+	retry.Run(time.Millisecond*5, 3, func() error { //nolint:errcheck
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = name.QuoteString()
+			tableName = &name
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	})
-	if err != nil {
-		log.Warn("get table name for metric", zap.Error(err))
-		tableName = strconv.Itoa(int(tableID))
+	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
+		// Retry duration is 30s to find mark table ID
+		var markTableID model.TableID
+		err := retry.Run(50*time.Millisecond, 600, func() error {
+			if tableName == nil {
+				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
+				if !exist {
+					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s)", tableID)
+				}
+				tableName = &name
+			}
+			markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchameName, markTableTableName)
+			if !exist {
+				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
+			}
+			markTableID = tableInfo.ID
+			return nil
+		})
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		replicaInfo.MarkTableID = markTableID
 	}
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
+	var tableNameStr string
+	if tableName == nil {
+		log.Warn("failed to get table name for metric")
+		tableNameStr = strconv.Itoa(int(tableID))
+	} else {
+		tableNameStr = tableName.QuoteString()
+	}
 
+	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
 		p.limitter,
 		p.mounter,
 		tableID,
-		tableName,
+		tableNameStr,
 		replicaInfo,
 		sink,
 		p.changefeed.Info.GetTargetTs(),

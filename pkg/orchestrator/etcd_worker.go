@@ -147,6 +147,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			if err != nil {
 				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
 					continue
+				} else if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
+					return nil
 				}
 				return errors.Trace(err)
 			}

@@ -20,6 +20,13 @@ type feedStateManager struct {
 func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 	m.state = state
 	m.shouldRunning = true
+	defer func() {
+		if m.shouldRunning {
+			m.patchState(model.StateNormal)
+		} else {
+			m.cleanUpInfos()
+		}
+	}()
 	if m.state.Status == nil {
 		return
 	}
@@ -33,11 +40,6 @@ func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 	}
 	errs := m.errorReportByProcessor()
 	m.HandleError(errs...)
-	if m.shouldRunning {
-		m.patchState(model.StateNormal)
-	} else {
-		m.cleanUpInfos()
-	}
 }
 
 func (m *feedStateManager) ShouldRunning() bool {

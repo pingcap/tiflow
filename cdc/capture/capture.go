@@ -16,6 +16,7 @@ package capture
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,6 +59,7 @@ type Capture struct {
 
 	newProcessorManager func() *processor.Manager
 	newOwner            func() *owner.Owner
+	stopCampaign        int32
 }
 
 // NewCapture returns a new Capture instance
@@ -102,6 +104,7 @@ func (c *Capture) reset() error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+	atomic.StoreInt32(&c.stopCampaign, 0)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -191,6 +194,9 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	})
 	rl := rate.NewLimiter(0.05, 2)
 	for {
+		if atomic.LoadInt32(&c.stopCampaign) != 0 {
+			return nil
+		}
 		err := rl.Wait(ctx)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled {
@@ -302,6 +308,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
+	atomic.StoreInt32(&c.stopCampaign, 1)
 	c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		o.AsyncStop()
 		return nil
