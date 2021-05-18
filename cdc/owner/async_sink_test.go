@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,7 @@ type mockSink struct {
 	initTableInfo []*model.SimpleTableInfo
 	checkpointTs  model.Ts
 	ddl           *model.DDLEvent
+	ddlMu sync.Mutex
 	ddlError      error
 }
 
@@ -53,6 +55,8 @@ func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (m *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	m.ddlMu.Lock()
+	defer m.ddlMu.Unlock()
 	time.Sleep(1 * time.Second)
 	m.ddl = ddl
 	return m.ddlError
@@ -60,6 +64,12 @@ func (m *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 
 func (m *mockSink) Close() error {
 	return nil
+}
+
+func (m *mockSink) GetDDL() *model.DDLEvent{
+	m.ddlMu.Lock()
+	defer m.ddlMu.Unlock()
+	return m.ddl
 }
 
 func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, AsyncSink, *mockSink) {
@@ -115,7 +125,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 		done, err := sink.EmitDDLEvent(ctx, ddl1)
 		c.Assert(err, check.IsNil)
 		if done {
-			c.Assert(mSink.ddl, check.DeepEquals, ddl1)
+			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl1)
 			break
 		}
 	}
@@ -129,7 +139,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 		done, err := sink.EmitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
 		if done {
-			c.Assert(mSink.ddl, check.DeepEquals, ddl2)
+			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
 			break
 		}
 	}
@@ -137,7 +147,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 		done, err := sink.EmitDDLEvent(ctx, ddl3)
 		c.Assert(err, check.IsNil)
 		if done {
-			c.Assert(mSink.ddl, check.DeepEquals, ddl3)
+			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl3)
 			break
 		}
 	}
@@ -159,7 +169,7 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		done, err := sink.EmitDDLEvent(ctx, ddl1)
 		c.Assert(err, check.IsNil)
 		if done {
-			c.Assert(mSink.ddl, check.DeepEquals, ddl1)
+			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl1)
 			break
 		}
 	}
@@ -170,7 +180,7 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		done, err := sink.EmitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
 		if done || resultErr != nil {
-			c.Assert(mSink.ddl, check.DeepEquals, ddl2)
+			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
 			break
 		}
 	}
