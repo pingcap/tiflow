@@ -197,21 +197,7 @@ func (p *processor) checkChangefeedNormal() bool {
 	if p.changefeed.Info.AdminJobType.IsStopState() || p.changefeed.Status.AdminJobType.IsStopState() {
 		return false
 	}
-	p.changefeed.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		if info.AdminJobType.IsStopState() {
-			return info, false, cerror.ErrReactorFinished.GenWithStackByArgs()
-		}
-		return info, false, nil
-	})
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		if status == nil {
-			return status, false, nil
-		}
-		if status.AdminJobType.IsStopState() {
-			return status, false, cerror.ErrReactorFinished.GenWithStackByArgs()
-		}
-		return status, false, nil
-	})
+	p.changefeed.CheckChangefeedNormal()
 	return true
 }
 

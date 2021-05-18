@@ -152,11 +152,13 @@ func (c *Capture) run(stdCtx context.Context) error {
 	wg.Add(2)
 	var ownerErr, processorErr error
 	go func() {
+		defer log.Info("owner goroutine is exited")
 		defer wg.Done()
 		defer c.AsyncClose()
 		ownerErr = c.campaignOwner(ctx)
 	}()
 	go func() {
+		defer log.Info("processor goroutine is exited")
 		defer wg.Done()
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()

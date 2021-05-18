@@ -132,7 +132,8 @@ type ChangefeedReactorState struct {
 	TaskStatuses  map[CaptureID]*TaskStatus
 	Workloads     map[CaptureID]TaskWorkload
 
-	pendingPatches []orchestrator.DataPatch
+	pendingPatches        []orchestrator.DataPatch
+	skipPatchesInThisTick bool
 }
 
 func NewChangefeedReactorState(id ChangeFeedID) *ChangefeedReactorState {
@@ -248,6 +249,27 @@ var (
 	changefeedInfoTPI   *ChangeFeedInfo
 )
 
+func (s *ChangefeedReactorState) CheckChangefeedNormal() {
+	s.skipPatchesInThisTick = false
+	s.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+		if info.AdminJobType.IsStopState() {
+			s.skipPatchesInThisTick = true
+			return info, false, cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
+		}
+		return info, false, nil
+	})
+	s.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+		if status == nil {
+			return status, false, nil
+		}
+		if status.AdminJobType.IsStopState() {
+			s.skipPatchesInThisTick = true
+			return status, false, cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
+		}
+		return status, false, nil
+	})
+}
+
 func (s *ChangefeedReactorState) PatchInfo(fn func(*ChangeFeedInfo) (*ChangeFeedInfo, bool, error)) {
 	key := &etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
@@ -325,6 +347,9 @@ func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(i
 	patch := &orchestrator.SingleDataPatch{
 		Key: util.NewEtcdKey(key),
 		Func: func(v []byte) ([]byte, bool, error) {
+			if s.skipPatchesInThisTick {
+				return v, false, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
+			}
 			var e interface{}
 			if v != nil {
 				tp := reflect.TypeOf(tpi)
@@ -352,4 +377,8 @@ func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(i
 		},
 	}
 	s.pendingPatches = append(s.pendingPatches, patch)
+}
+
+func (s *ChangefeedReactorState) SkipPatchesInThisTick() {
+	s.skipPatchesInThisTick = true
 }
