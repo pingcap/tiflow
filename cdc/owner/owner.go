@@ -26,6 +26,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"go.uber.org/zap"
 )
 
 type ownerJobType int
@@ -203,10 +204,16 @@ func (o *Owner) handleJob() {
 		changefeedID := job.changefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			log.Warn("") // TODO
+			log.Warn("changefeed not found when handle a job",zap.Reflect("job",job)) // TODO
 		}
 		switch job.tp {
 		case ownerJobTypeAdminJob:
+			log.Info("LEOPPRO who is nil??",zap.Bool("cfReactor",cfReactor!=nil),
+				zap.Reflect("job",job))
+			if cfReactor!=nil{
+				log.Info("LEOPPRO who is nil??",zap.Bool("feedStateManager",cfReactor.feedStateManager!=nil),
+					zap.Reflect("job",job))
+			}
 			cfReactor.feedStateManager.PushAdminJob(job.adminJob)
 		case ownerJobTypeManualSchedule:
 			cfReactor.scheduler.MoveTable(job.tableID, job.targetCaptureID)
