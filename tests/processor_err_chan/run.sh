@@ -36,8 +36,13 @@ function run() {
     pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
     TOPIC_NAME="ticdc-processor-err-chan-$RANDOM"
     case $SINK_TYPE in
+<<<<<<< HEAD
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
         *) SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1";;
+=======
+        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
+        *) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1";;
+>>>>>>> f04762b8 (tests: use normal mysql user in integration test (#1755))
     esac
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
