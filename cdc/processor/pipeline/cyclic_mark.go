@@ -46,8 +46,8 @@ func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	n.localReplicaID = ctx.Vars().Config.Cyclic.ReplicaID
-	filterReplicaID := ctx.Vars().Config.Cyclic.FilterReplicaID
+	n.localReplicaID = ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID
+	filterReplicaID := ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
 	for _, rID := range filterReplicaID {
 		n.filterReplicaID[rID] = struct{}{}
@@ -110,7 +110,7 @@ func (n *cyclicMarkNode) appendMarkRow(ctx pipeline.NodeContext, event *model.Po
 	if event.CRTs != n.currentCommitTs {
 		log.Panic("the CommitTs of the received event is not equal to the currentCommitTs, please report a bug", zap.Reflect("event", event), zap.Uint64("currentCommitTs", n.currentCommitTs))
 	}
-	err := event.WaitPrepare(ctx.StdContext())
+	err := event.WaitPrepare(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
