@@ -233,10 +233,10 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch, session *concurrency.Session) error {
-	stete := worker.cloneRawState()
+	state := worker.cloneRawState()
 	changedSet := make(map[util.EtcdKey]struct{})
 	for _, patch := range patches {
-		err := patch.Patch(stete, changedSet)
+		err := patch.Patch(state, changedSet)
 		if err != nil {
 			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
 				continue
@@ -258,7 +258,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch,
 		}
 		cmps = append(cmps, cmp)
 
-		value := stete[key]
+		value := state[key]
 		var op clientv3.Op
 		if value != nil {
 			op = clientv3.OpPut(key.String(), string(value))
