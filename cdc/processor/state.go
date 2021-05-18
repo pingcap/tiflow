@@ -45,7 +45,7 @@ func (s *globalState) Update(key util.EtcdKey, value []byte, isInit bool) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if k.Tp == etcd.CDCKeyTypeCapture || k.Tp == etcd.CDCKeyTypeOnwer {
+	if k.Tp == etcd.CDCKeyTypeCapture || k.Tp == etcd.CDCKeyTypeOwner {
 		return nil
 	}
 	if len(k.CaptureID) != 0 && k.CaptureID != s.CaptureID {
