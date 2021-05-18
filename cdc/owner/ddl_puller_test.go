@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -110,10 +111,17 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	p, err := newDDLPuller(ctx, startTs)
 	c.Assert(err, check.IsNil)
 	p.(*ddlPullerImpl).puller = mockPuller
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := p.Run(ctx)
+		if errors.Cause(err)==context.Canceled{
+			err=nil
+		}
 		c.Assert(err, check.IsNil)
 	}()
+	defer wg.Wait()
 	defer p.Close()
 
 	// test initialize state
