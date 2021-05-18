@@ -40,7 +40,7 @@ type mockSink struct {
 	initTableInfo []*model.SimpleTableInfo
 	checkpointTs  model.Ts
 	ddl           *model.DDLEvent
-	ddlMu sync.Mutex
+	ddlMu         sync.Mutex
 	ddlError      error
 }
 
@@ -66,7 +66,7 @@ func (m *mockSink) Close() error {
 	return nil
 }
 
-func (m *mockSink) GetDDL() *model.DDLEvent{
+func (m *mockSink) GetDDL() *model.DDLEvent {
 	m.ddlMu.Lock()
 	defer m.ddlMu.Unlock()
 	return m.ddl
