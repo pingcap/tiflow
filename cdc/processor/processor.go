@@ -730,9 +730,9 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	})
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		// Retry duration is 30s to find mark table ID
+		// Retry to find mark table ID
 		var markTableID model.TableID
-		err := retry.Run(50*time.Millisecond, 600, func() error {
+		err := retry.Run(50*time.Millisecond, 20, func() error {
 			if tableName == nil {
 				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
 				if !exist {
