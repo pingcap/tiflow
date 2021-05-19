@@ -33,6 +33,10 @@ import (
 // new owner should be also switched on after it implemented
 const NewReplicaImpl = true
 
+func init() {
+	StoreGlobalServerConfig(GetDefaultServerConfig())
+}
+
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
 	EnableOldValue:   true,
@@ -160,7 +164,8 @@ var defaultServerConfig = &ServerConfig{
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                "/tmp/cdc_sort",
 	},
-	Security: &SecurityConfig{},
+	Security:            &SecurityConfig{},
+	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
 }
 
 // ServerConfig represents a config for server
@@ -181,6 +186,8 @@ type ServerConfig struct {
 
 	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
 	Security *SecurityConfig `toml:"security" json:"security"`
+
+	PerTableMemoryQuota uint64 `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -283,6 +290,13 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.Sorter.MaxMemoryPressure < 0 || c.Sorter.MaxMemoryPressure > 100 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+	}
+
+	if c.PerTableMemoryQuota == 0 {
+		c.PerTableMemoryQuota = defaultServerConfig.PerTableMemoryQuota
+	}
+	if c.PerTableMemoryQuota < 6*1024*1024 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
 	}
 
 	return nil

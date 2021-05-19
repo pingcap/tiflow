@@ -8,6 +8,7 @@ set -e
 
 OUT_DIR=
 tidb_config=
+pd_config=
 multiple_upstream_pd=
 
 while [[ ${1} ]]; do
@@ -18,6 +19,10 @@ while [[ ${1} ]]; do
             ;;
         --tidb-config)
             tidb_config=${2}
+            shift
+            ;;
+        --pd-config)
+            pd_config=${2}
             shift
             ;;
         --multiple-upstream-pd)
@@ -42,12 +47,18 @@ stop_tidb_cluster
 
 cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 
-cat - >"$OUT_DIR/pd-config.toml" <<EOF
+
+# pd server config file
+if [[ "$pd_config" != "" ]]; then
+    cat $pd_config > $OUT_DIR/pd-config.toml
+else
+    cat - >"$OUT_DIR/pd-config.toml" <<EOF
 [replication]
 # Set it to 1 to make sure we have enough replicas to run placement-rules.
 max-replicas = 1
 enable-placement-rules = true
 EOF
+fi
 
 echo "Starting Upstream PD..."
 if [[ "$multiple_upstream_pd" == "true" ]]; then
@@ -217,6 +228,9 @@ done
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "CREATE user 'normal'@'%' identified by '123456';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "GRANT select,insert,update,delete,index,create,drop,alter,create view ON *.* TO 'normal'@'%';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "FLUSH privileges" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 cat - >"$OUT_DIR/tiflash-config.toml" <<EOF
 tmp_path = "${OUT_DIR}/tiflash/tmp"

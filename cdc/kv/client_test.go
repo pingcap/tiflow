@@ -39,8 +39,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/mockstore/mocktikv"
+	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -304,7 +305,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -392,7 +393,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	// Cancel first, and then close the server.
 	defer cancel()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	defer pdClient.Close() //nolint:errcheck
@@ -481,7 +482,7 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -643,7 +644,7 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -704,7 +705,7 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1102,7 +1103,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 		}
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1200,7 +1201,7 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1334,7 +1335,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1553,7 +1554,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: gen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1650,7 +1651,7 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1706,7 +1707,7 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1808,7 +1809,7 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -1900,7 +1901,7 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2037,7 +2038,7 @@ func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2190,7 +2191,7 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2415,7 +2416,7 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2501,7 +2502,7 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2585,7 +2586,7 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	srv1 := newMockChangeDataService(c, ch1)
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2656,7 +2657,7 @@ func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
 	srv1 := newMockChangeDataService(c, ch1)
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2734,7 +2735,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 		}
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -2903,7 +2904,7 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 		}
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)

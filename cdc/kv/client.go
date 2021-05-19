@@ -37,8 +37,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
+	tidbkv "github.com/pingcap/tidb/store/tikv/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
@@ -53,11 +53,13 @@ import (
 )
 
 const (
-	dialTimeout               = 10 * time.Second
-	maxRetry                  = 100
-	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms)
-	grpcInitialWindowSize     = 1 << 27 // 128 MB The value for initial window size on a stream
-	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
+	dialTimeout           = 10 * time.Second
+	maxRetry              = 100
+	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
+	// TODO find optimal values and test extensively before releasing
+	// The old values cause the gRPC stream to stall for some unknown reason.
+	grpcInitialWindowSize     = 1 << 28 // 256 MB The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 29 // 512 MB The value for initial window size on a connection
 	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
 	grpcConnCount             = 10
 
