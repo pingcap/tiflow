@@ -375,7 +375,6 @@ type CDCClient struct {
 // NewCDCClient creates a CDCClient instance
 func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
-	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
 		clusterID:   clusterID,
