@@ -634,6 +634,12 @@ func (s *schemaSnapshot) CloneTables() map[model.TableID]model.TableName {
 	return mp
 }
 
+// Tables return a map between table id and table info
+// the returned map must be READ-ONLY. Any modified of this map will lead to the internal state confusion in schema storage
+func (s *schemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
+	return s.tables
+}
+
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
 	// GetSnapshot returns the snapshot which of ts is specified

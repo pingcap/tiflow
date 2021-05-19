@@ -65,13 +65,9 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	if s.allPhysicalTablesCache != nil {
 		return s.allPhysicalTablesCache
 	}
-	tables := s.schemaSnapshot.CloneTables()
+	tables := s.schemaSnapshot.Tables()
 	s.allPhysicalTablesCache = make([]model.TableID, 0, len(tables))
-	for tid := range tables {
-		tblInfo, exist := s.schemaSnapshot.TableByID(tid)
-		if !exist {
-			log.Panic("table not found for table ID", zap.Int64("tid", tid))
-		}
+	for _, tblInfo := range tables {
 		if s.shouldIgnoreTable(tblInfo) {
 			continue
 		}
