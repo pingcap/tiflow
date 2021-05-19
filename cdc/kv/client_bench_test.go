@@ -393,12 +393,34 @@ func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
+func benchmarkResolvedTsClientV2(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(ctx) //nolint:errcheck
+	}()
+	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
+}
+
 func BenchmarkResolvedTsClientV1(b *testing.B) {
 	benchmarkSingleWorkerResolvedTs(b, false /* clientV1 */)
 }
 
 func BenchmarkResolvedTsClientV2(b *testing.B) {
-	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
+	benchmarkResolvedTsClientV2(b)
+}
+
+func BenchmarkResolvedTsClientV2WorkerPool(b *testing.B) {
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 10000
+	regionWorkerLowWatermark = 2000
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	benchmarkResolvedTsClientV2(b)
 }
 
 func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
@@ -493,10 +515,32 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
+func benchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(ctx) //nolint:errcheck
+	}()
+	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
+}
+
 func BenchmarkMultiStoreResolvedTsClientV1(b *testing.B) {
 	benchmarkMultipleStoreResolvedTs(b, false /* clientV1 */)
 }
 
 func BenchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
-	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
+	benchmarkMultiStoreResolvedTsClientV2(b)
+}
+
+func BenchmarkMultiStoreResolvedTsClientV2WorkerPool(b *testing.B) {
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 1000
+	regionWorkerLowWatermark = 200
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	benchmarkMultiStoreResolvedTsClientV2(b)
 }
