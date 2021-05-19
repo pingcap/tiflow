@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -45,7 +46,15 @@ import (
 	"google.golang.org/grpc"
 )
 
-func Test(t *testing.T) { check.TestingT(t) }
+func Test(t *testing.T) {
+	conf := config.GetDefaultServerConfig()
+	config.StoreGlobalServerConfig(conf)
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(context.Background()) //nolint:errcheck
+	}()
+	check.TestingT(t)
+}
 
 type clientSuite struct {
 }
@@ -687,8 +696,7 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cancel()
 }
 
-func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -965,6 +973,17 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			Ts:      145,
 		},
 	}
+	multiSize := 100
+	regions := make([]uint64, multiSize)
+	for i := range regions {
+		regions[i] = 3
+	}
+	multipleResolved := &cdcpb.ChangeDataEvent{
+		ResolvedTs: &cdcpb.ResolvedTs{
+			Regions: regions,
+			Ts:      160,
+		},
+	}
 
 	expected := []*model.RegionFeedEvent{
 		{
@@ -1054,6 +1073,13 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			RegionID: 3,
 		},
 	}
+	multipleExpected := &model.RegionFeedEvent{
+		Resolved: &model.ResolvedSpan{
+			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			ResolvedTs: 160,
+		},
+		RegionID: 3,
+	}
 
 	ch1 <- eventsBeforeInit
 	ch1 <- initialized
@@ -1070,7 +1096,35 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 		}
 	}
 
+	ch1 <- multipleResolved
+	for i := 0; i < multiSize; i++ {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, multipleExpected)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", multipleExpected)
+		}
+	}
+
 	cancel()
+}
+
+func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	s.testHandleFeedEvent(c)
+}
+
+func (s *etcdSuite) TestHandleFeedEventWithWorkerPool(c *check.C) {
+	defer testleak.AfterTest(c)()
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 8
+	regionWorkerLowWatermark = 2
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	s.testHandleFeedEvent(c)
 }
 
 // TestStreamSendWithError mainly tests the scenario that the `Send` call of a gPRC

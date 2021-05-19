@@ -160,7 +160,16 @@ var defaultServerConfig = &ServerConfig{
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                "/tmp/cdc_sort",
 	},
+<<<<<<< HEAD
 	Security: &SecurityConfig{},
+=======
+	Security:            &SecurityConfig{},
+	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+	KVClient: &KVClientConfig{
+		WorkerConcurrent: 8,
+		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+	},
+>>>>>>> 075a31de (kv-client: use worker pool in region worker (#1481))
 }
 
 // ServerConfig represents a config for server
@@ -179,8 +188,15 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
+<<<<<<< HEAD
 	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
 	Security *SecurityConfig `toml:"security" json:"security"`
+=======
+	Sorter              *SorterConfig   `toml:"sorter" json:"sorter"`
+	Security            *SecurityConfig `toml:"security" json:"security"`
+	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
+>>>>>>> 075a31de (kv-client: use worker pool in region worker (#1481))
 }
 
 // Marshal returns the json marshal format of a ServerConfig

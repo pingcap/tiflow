@@ -117,6 +117,14 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
 		},
+<<<<<<< HEAD
+=======
+		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+		},
+>>>>>>> 075a31de (kv-client: use worker pool in region worker (#1481))
 	})
 
 	// test decode config file
@@ -169,7 +177,16 @@ sort-dir = "/tmp/just_a_test"
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                "/tmp/just_a_test",
 		},
+<<<<<<< HEAD
 		Security: &config.SecurityConfig{},
+=======
+		Security:            &config.SecurityConfig{},
+		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+		},
+>>>>>>> 075a31de (kv-client: use worker pool in region worker (#1481))
 	})
 
 	configContent = configContent + `
@@ -223,5 +240,13 @@ cert-allowed-cn = ["dd","ee"]
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
 		},
+<<<<<<< HEAD
+=======
+		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+		},
+>>>>>>> 075a31de (kv-client: use worker pool in region worker (#1481))
 	})
 }
