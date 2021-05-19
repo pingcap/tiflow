@@ -41,6 +41,9 @@ import (
 var (
 	regionWorkerPool workerpool.WorkerPool
 	workerPoolOnce   sync.Once
+	// The magic number here is keep the same with some magic numbers in some
+	// other components in TiCDC, including worker pool task chan size, mounter
+	// chan size etc.
 	// TODO: unified channel buffer mechanism
 	regionWorkerInputChanSize = 128000
 	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
