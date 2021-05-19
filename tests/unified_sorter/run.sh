@@ -31,7 +31,7 @@ function run() {
     esac
     sort_dir="$WORK_DIR/unified_sort_cache"
     mkdir $sort_dir
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-engine="unified" --sort-dir="$sort_dir"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-engine="unified"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
