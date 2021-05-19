@@ -650,3 +650,38 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 			check.Commentf("%s", cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{}))))
 	}
 }
+
+func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
+	defer testleak.AfterTest(c)()
+	state := NewChangefeedReactorState("test1")
+	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+		return &ChangeFeedInfo{SinkURI: "123", AdminJobType: AdminNone, Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+		return &ChangeFeedStatus{ResolvedTs: 1, AdminJobType: AdminNone}, true, nil
+	})
+	state.CheckChangefeedNormal()
+	stateTester.MustApplyPatches()
+	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
+
+	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+		info.AdminJobType = AdminStop
+		return info, true, nil
+	})
+	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+		status.ResolvedTs = 2
+		return status, true, nil
+	})
+	state.CheckChangefeedNormal()
+	stateTester.MustApplyPatches()
+	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
+
+	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+		status.ResolvedTs = 2
+		return status, true, nil
+	})
+	state.CheckChangefeedNormal()
+	stateTester.MustApplyPatches()
+	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(2))
+}

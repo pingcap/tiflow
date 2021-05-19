@@ -71,6 +71,7 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 	if job == nil {
 		return false
 	}
+	log.Info("handle admin job", zap.String("changefeedID", m.state.ID), zap.Reflect("job", job))
 	pendingJobs = true
 	m.shouldRunning = false
 	switch job.Type {
@@ -230,23 +231,19 @@ func (m *feedStateManager) errorReportByProcessor() []*model.RunningError {
 }
 
 func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
-	log.Info("LEOPPRO handle error", zap.Reflect("errs", errs))
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		for _, err := range errs {
 			info.Error = err
 			info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		}
 		needSave := info.CleanUpOutdatedErrorHistory()
-		log.Info("LEOPPRO info", zap.Reflect("info", info))
 		return info, needSave || len(errs) > 0, nil
 	})
 	var err *model.RunningError
 	if len(errs) > 0 {
 		err = errs[len(errs)-1]
 	}
-	log.Info("LEOPPRO handle error2", zap.Reflect("err", err))
 	if m.state.Info.HasFastFailError() || (err != nil && filter.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code))) {
-		log.Info("LEOPPRO handle error3", zap.Reflect("err", err))
 		m.shouldRunning = false
 		m.patchState(model.StateFailed)
 		return

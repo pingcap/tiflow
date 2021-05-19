@@ -241,3 +241,74 @@ func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
 	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{})
 	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 }
+
+func (s *schedulerSuite) TestScheduleRebalance(c *check.C) {
+	s.reset(c)
+	captureID1 := "test-capture-1"
+	captureID2 := "test-capture-2"
+	captureID3 := "test-capture-3"
+	s.addCapture(captureID1)
+	s.addCapture(captureID2)
+	s.addCapture(captureID3)
+
+	s.state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		status = new(model.TaskStatus)
+		status.Tables = make(map[model.TableID]*model.TableReplicaInfo)
+		status.Tables[1] = &model.TableReplicaInfo{StartTs: 1}
+		status.Tables[2] = &model.TableReplicaInfo{StartTs: 1}
+		status.Tables[3] = &model.TableReplicaInfo{StartTs: 1}
+		status.Tables[4] = &model.TableReplicaInfo{StartTs: 1}
+		status.Tables[5] = &model.TableReplicaInfo{StartTs: 1}
+		status.Tables[6] = &model.TableReplicaInfo{StartTs: 1}
+		return status, true, nil
+	})
+	s.tester.MustApplyPatches()
+
+	// rebalance table
+	shouldUpdateState := s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4, 5, 6}, s.captures)
+	c.Assert(shouldUpdateState, check.IsFalse)
+	s.tester.MustApplyPatches()
+	// 4 tables remove in capture 1, this 4 tables will be added to another capture in next tick
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.HasLen, 2)
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.HasLen, 0)
+	c.Assert(s.state.TaskStatuses[captureID3].Tables, check.HasLen, 0)
+
+	s.state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		for _, opt := range status.Operation {
+			opt.Done = true
+			opt.Status = model.OperFinished
+		}
+		return status, true, nil
+	})
+	s.state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
+		workload = make(model.TaskWorkload)
+		for tableID := range s.state.TaskStatuses[captureID1].Tables {
+			workload[tableID] = model.WorkloadInfo{Workload: 1}
+		}
+		return workload, true, nil
+	})
+	s.tester.MustApplyPatches()
+
+	// clean finished operation
+	shouldUpdateState = s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4, 5, 6}, s.captures)
+	c.Assert(shouldUpdateState, check.IsTrue)
+	s.tester.MustApplyPatches()
+	// 4 tables add to another capture in this tick
+	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.HasLen, 0)
+
+	// rebalance table
+	shouldUpdateState = s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4, 5, 6}, s.captures)
+	c.Assert(shouldUpdateState, check.IsFalse)
+	s.tester.MustApplyPatches()
+	// 4 tables add to another capture in this tick
+	c.Assert(s.state.TaskStatuses[captureID1].Tables, check.HasLen, 2)
+	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.HasLen, 2)
+	c.Assert(s.state.TaskStatuses[captureID3].Tables, check.HasLen, 2)
+	tableIDs := make(map[model.TableID]struct{})
+	for _, status := range s.state.TaskStatuses {
+		for tableID := range status.Tables {
+			tableIDs[tableID] = struct{}{}
+		}
+	}
+	c.Assert(tableIDs, check.DeepEquals, map[model.TableID]struct{}{1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}})
+}

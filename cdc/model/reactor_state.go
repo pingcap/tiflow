@@ -378,7 +378,3 @@ func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(i
 	}
 	s.pendingPatches = append(s.pendingPatches, patch)
 }
-
-func (s *ChangefeedReactorState) SkipPatchesInThisTick() {
-	s.skipPatchesInThisTick = true
-}
