@@ -37,6 +37,13 @@ type regionStatefulEvent struct {
 	changeEvent *cdcpb.Event
 	resolvedTs  *cdcpb.ResolvedTs
 	state       *regionFeedState
+
+	// regionID is used for load balancer, we don't use fileds in state to reduce lock usage
+	regionID uint64
+
+	// finishedCounter is used to mark events that are sent from a give region
+	// worker to this worker(one of the workers in worker pool) are all processed.
+	finishedCounter *int32
 }
 
 func (s *eventFeedSession) sendRegionChangeEventV2(
@@ -116,6 +123,7 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		return ctx.Err()
 	case worker.inputCh <- &regionStatefulEvent{
 		changeEvent: event,
+		regionID:    event.RegionId,
 		state:       state,
 	}:
 	}
@@ -142,6 +150,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 			select {
 			case worker.inputCh <- &regionStatefulEvent{
 				resolvedTs: resolvedTs,
+				regionID:   regionID,
 				state:      state,
 			}:
 			case <-ctx.Done():
