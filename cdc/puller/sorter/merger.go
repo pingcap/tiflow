@@ -111,7 +111,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		}
 
 		taskBuf.close()
-		log.Info("Merger has exited")
 	}()
 
 	lastOutputTs := uint64(0)
