@@ -116,8 +116,8 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	go func() {
 		defer wg.Done()
 		err := p.Run(ctx)
-		if errors.Cause(err)==context.Canceled{
-			err=nil
+		if errors.Cause(err) == context.Canceled {
+			err = nil
 		}
 		c.Assert(err, check.IsNil)
 	}()

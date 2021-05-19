@@ -72,18 +72,22 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}
 
 	return &ddlPullerImpl{
-		puller:     plr,
+		puller: plr,
+		// the puller will listen changed events from `startTs`(including `startTs`)
+		// so `startTs - 1` is a available resolvedTS, it means that all txn before `startTs - 1` is received(or don't need to receive)
 		resolvedTS: startTs - 1,
 		filter:     f,
 		cancel:     func() {},
 	}, nil
 }
 
+const ddlPullerName = "DDL_PULLER"
+
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
 	log.Debug("DDL puller started")
-	stdCtx := util.PutTableInfoInCtx(ctx, -1, "DDL_PULLER")
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, ddlPullerName)
 	errg, stdCtx := errgroup.WithContext(stdCtx)
 	ctx = cdcContext.WithStd(ctx, stdCtx)
 
