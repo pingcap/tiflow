@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
@@ -70,6 +71,7 @@ func (s *changefeedSuite) TearDownTest(c *check.C) {
 }
 
 func (s *changefeedSuite) TestHandleMoveTableJobs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	changefeed := new(changeFeed)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
