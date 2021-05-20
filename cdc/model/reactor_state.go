@@ -120,6 +120,9 @@ func (s *GlobalReactorState) CheckCaptureAlive(captureID CaptureID) {
 	patch := &orchestrator.SingleDataPatch{
 		Key: util.NewEtcdKey(key),
 		Func: func(v []byte) ([]byte, bool, error) {
+			// If v is empty, it means that the key-value pair of capture info is not exist.
+			// The key-value pair of capture info is written with lease,
+			// so if the capture info is not exist, the lease is expired
 			if len(v) == 0 {
 				return v, false, cerrors.ErrLeaseExpired.GenWithStackByArgs()
 			}
@@ -255,6 +258,7 @@ func (s *ChangefeedReactorState) GetPatches() []orchestrator.DataPatch {
 
 // CheckChangefeedNormal checks if the changefeed state is runable,
 // if the changefeed status is not runable, the etcd worker will skip all patch of this tick
+// the processor should call this function every tick to make sure the changefeed is runable
 func (s *ChangefeedReactorState) CheckChangefeedNormal() {
 	s.skipPatchesInThisTick = false
 	s.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
