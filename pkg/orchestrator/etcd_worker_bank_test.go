@@ -123,7 +123,6 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 	totalAccountNumber := 25
 	workerNumber := 10
 	var wg sync.WaitGroup
-	// ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
