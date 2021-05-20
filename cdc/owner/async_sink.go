@@ -124,12 +124,8 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
-			if err == nil {
-				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
-				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
-			} else if cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-				// If DDL executing failed, and the error can be ignored, mark the ddl is executed successfully and print a log
-				log.Info("Execute DDL ignored", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
+			if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
 				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 			} else {
 				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
