@@ -52,8 +52,9 @@ func newMockReactorStatePatcher(c *check.C, state orchestrator.ReactorState) *mo
 func (m *mockReactorStatePatcher) applyPatches() {
 	patches := m.state.GetPatches()
 	m.c.Assert(m.state.GetPatches(), check.HasLen, 0)
-	for _, patch := range patches {
-		newValue, err := patch.Fun(m.rawState[patch.Key])
+	for _, p := range patches {
+		patch := p.(*orchestrator.SingleDataPatch)
+		newValue, _, err := patch.Func(m.rawState[patch.Key])
 		m.c.Assert(err, check.IsNil)
 		err = m.state.Update(patch.Key, newValue, false)
 		m.c.Assert(err, check.IsNil)

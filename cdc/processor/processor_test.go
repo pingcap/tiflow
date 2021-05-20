@@ -20,6 +20,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/orchestrator"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -75,7 +77,8 @@ func newProcessor4Test(ctx context.Context) *processor {
 }
 
 func applyPatches(c *check.C, state *changefeedState) {
-	for _, patch := range state.pendingPatches {
+	for _, p := range state.pendingPatches {
+		patch := p.(*orchestrator.SingleDataPatch)
 		key := &etcd.CDCKey{}
 		c.Assert(key.Parse(patch.Key.String()), check.IsNil)
 		var value []byte
@@ -105,7 +108,7 @@ func applyPatches(c *check.C, state *changefeedState) {
 		default:
 			c.Fatal("unexpected key type")
 		}
-		newValue, err := patch.Fun(value)
+		newValue, _, err := patch.Func(value)
 		c.Assert(err, check.IsNil)
 		err = state.UpdateCDCKey(key, newValue)
 		c.Assert(err, check.IsNil)
