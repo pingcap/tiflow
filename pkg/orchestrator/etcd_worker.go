@@ -226,16 +226,18 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 	ret := make(map[util.EtcdKey][]byte)
 	for k, v := range worker.rawState {
-		ret[k] = v
+		cloneV := make([]byte, len(v))
+		copy(cloneV, v)
+		ret[util.NewEtcdKey(k.String())] = cloneV
 	}
 	return ret
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch, session *concurrency.Session) error {
-	stete := worker.cloneRawState()
+	state := worker.cloneRawState()
 	changedSet := make(map[util.EtcdKey]struct{})
 	for _, patch := range patches {
-		err := patch.Patch(stete, changedSet)
+		err := patch.Patch(state, changedSet)
 		if err != nil {
 			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
 				continue
@@ -257,17 +259,12 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch,
 		}
 		cmps = append(cmps, cmp)
 
-		var opOption []clientv3.OpOption
-		if session != nil {
-			// TODO !patch.Persistent &&
-			// opOption = []clientv3.OpOption{clientv3.WithLease(session.Lease())}
-		}
-		value := stete[key]
+		value := state[key]
 		var op clientv3.Op
 		if value != nil {
-			op = clientv3.OpPut(key.String(), string(value), opOption...)
+			op = clientv3.OpPut(key.String(), string(value))
 		} else {
-			op = clientv3.OpDelete(key.String(), opOption...)
+			op = clientv3.OpDelete(key.String())
 		}
 		ops = append(ops, op)
 	}

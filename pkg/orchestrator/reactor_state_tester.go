@@ -93,11 +93,17 @@ RetryLoop:
 	}
 }
 
+func (t *ReactorStateTester) MustUpdateKey(key string, value []byte) {
+	t.c.Assert(t.Update(key, value), check.IsNil)
+}
+
+// MustApplyPatches calls ApplyPatches and must successfully
 func (t *ReactorStateTester) MustApplyPatches() {
 	t.c.Assert(t.ApplyPatches(), check.IsNil)
 }
 
-func (t *ReactorStateTester) MustUpdateKey(key string, value []byte) {
+// MustUpdate calls Update and must successfully
+func (t *ReactorStateTester) MustUpdate(key string, value []byte) {
 	t.c.Assert(t.Update(key, value), check.IsNil)
 }
 

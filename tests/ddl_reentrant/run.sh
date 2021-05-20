@@ -47,6 +47,8 @@ function complete_ddls() {
 }
 
 changefeedid=""
+# this test contains `recover table`, which requires super privilege, so we
+# can't use the normal user
 SINK_URI="mysql://root@127.0.0.1:3306/"
 
 function check_ts_forward() {

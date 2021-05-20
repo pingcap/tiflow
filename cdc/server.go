@@ -146,6 +146,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	kv.InitWorkerPool()
 	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
 	if err != nil {
 		return errors.Trace(err)
@@ -220,7 +221,11 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return s.capture.Run(ctx)
+		return kv.RunWorkerPool(cctx)
+	})
+
+	wg.Go(func() error {
+		return s.capture.Run(cctx)
 	})
 
 	return wg.Wait()

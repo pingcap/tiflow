@@ -25,10 +25,7 @@ type Reactor interface {
 	Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error)
 }
 
-type Value struct {
-	value []byte
-}
-
+// DataPatch represents an update of state
 type DataPatch interface {
 	Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
 }
@@ -46,11 +43,12 @@ type ReactorState interface {
 // SingleDataPatch represents an update to a given Etcd key
 type SingleDataPatch struct {
 	Key util.EtcdKey
-	// PatchFunc should be a pure function that returns a new value given the old value.
+	// Func should be a pure function that returns a new value given the old value.
 	// The function is called each time the EtcdWorker initiates an Etcd transaction.
 	Func func(old []byte) (newValue []byte, changed bool, err error)
 }
 
+// Patch implements the DataPatch interface
 func (s *SingleDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
 	value := valueMap[s.Key]
 	newValue, changed, err := s.Func(value)
@@ -69,8 +67,10 @@ func (s *SingleDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map
 	return nil
 }
 
-type MultiDatePath func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
+// MultiDatePatch represents an update to many keys
+type MultiDatePatch func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
 
-func (m MultiDatePath) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
+// Patch implements the DataPatch interface
+func (m MultiDatePatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
 	return m(valueMap, changedSet)
 }
