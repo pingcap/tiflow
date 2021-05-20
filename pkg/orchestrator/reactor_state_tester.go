@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 )
 
@@ -60,30 +61,40 @@ func (t *ReactorStateTester) Update(key string, value []byte) error {
 // ApplyPatches calls the GetPatches method on the ReactorState and apply the changes to the mocked kv-store.
 func (t *ReactorStateTester) ApplyPatches() error {
 	patches := t.state.GetPatches()
+RetryLoop:
+	for {
+		tmpKVEntries := make(map[util.EtcdKey][]byte)
+		for k, v := range t.kvEntries {
+			tmpKVEntries[util.NewEtcdKey(k)] = []byte(v)
+		}
+		changedSet := make(map[util.EtcdKey]struct{})
+		for _, patch := range patches {
+			err := patch.Patch(tmpKVEntries, changedSet)
+			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
+				continue
+			} else if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
+				continue RetryLoop
+			} else if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		for k := range changedSet {
+			err := t.state.Update(k, tmpKVEntries[k], false)
+			if err != nil {
+				return err
+			}
+			if value := tmpKVEntries[k]; value != nil {
+				t.kvEntries[k.String()] = string(value)
+			} else {
+				delete(t.kvEntries, k.String())
+			}
+		}
+		return nil
+	}
+}
 
-	tmpKVEntries := make(map[util.EtcdKey][]byte)
-	for k, v := range t.kvEntries {
-		tmpKVEntries[util.NewEtcdKey(k)] = []byte(v)
-	}
-	changedSet := make(map[util.EtcdKey]struct{})
-	for _, patch := range patches {
-		err := patch.Patch(tmpKVEntries, changedSet)
-		if err != nil {
-			return err
-		}
-	}
-	for k := range changedSet {
-		err := t.state.Update(k, tmpKVEntries[k], false)
-		if err != nil {
-			return err
-		}
-		if value := tmpKVEntries[k]; value != nil {
-			t.kvEntries[k.String()] = string(value)
-		} else {
-			delete(t.kvEntries, k.String())
-		}
-	}
-	return nil
+func (t *ReactorStateTester) MustUpdateKey(key string, value []byte) {
+	t.c.Assert(t.Update(key, value), check.IsNil)
 }
 
 // MustApplyPatches calls ApplyPatches and must successfully
