@@ -217,6 +217,7 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
+
 	worker.revision = resp.Header.Revision
 	return nil
 }
