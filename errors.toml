@@ -396,6 +396,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrLeaseExpired"]
+error = '''
+owner lease expired 
+'''
+
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
