@@ -55,6 +55,7 @@ func (t *ReactorStateTester) UpdateKeys(updatedKeys map[string][]byte) error {
 // ApplyPatches calls the GetPatches method on the ReactorState and apply the changes to the mocked kv-store.
 func (t *ReactorStateTester) ApplyPatches() error {
 	patches := t.state.GetPatches()
+<<<<<<< HEAD
 	mergedPatches := mergePatch(patches)
 
 	for _, patch := range mergedPatches {
@@ -84,6 +85,39 @@ func (t *ReactorStateTester) ApplyPatches() error {
 		}
 		t.kvEntries[patch.Key.String()] = string(newBytes)
 	}
+=======
+RetryLoop:
+	for {
+		tmpKVEntries := make(map[util.EtcdKey][]byte)
+		for k, v := range t.kvEntries {
+			tmpKVEntries[util.NewEtcdKey(k)] = []byte(v)
+		}
+		changedSet := make(map[util.EtcdKey]struct{})
+		for _, patch := range patches {
+			err := patch.Patch(tmpKVEntries, changedSet)
+			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
+				continue
+			} else if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
+				continue RetryLoop
+			} else if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		for k := range changedSet {
+			err := t.state.Update(k, tmpKVEntries[k], false)
+			if err != nil {
+				return err
+			}
+			if value := tmpKVEntries[k]; value != nil {
+				t.kvEntries[k.String()] = string(value)
+			} else {
+				delete(t.kvEntries, k.String())
+			}
+		}
+		return nil
+	}
+}
+>>>>>>> 1c0706e4 (new_owner: let processor and owner use the same reactor state (#1810))
 
 	return nil
 }
