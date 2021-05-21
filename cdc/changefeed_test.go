@@ -72,6 +72,7 @@ func (s *changefeedSuite) TearDownTest(c *check.C) {
 
 func (s *changefeedSuite) TestHandleMoveTableJobs(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	changefeed := new(changeFeed)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
