@@ -17,14 +17,12 @@ import (
 	"context"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -51,8 +49,6 @@ type changefeed struct {
 	initialized   bool
 	ddlEventCache *model.DDLEvent
 
-	gcTTL int64
-
 	errCh  chan error
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -62,13 +58,10 @@ type changefeed struct {
 }
 
 func newChangefeed(gcManager *gcManager) *changefeed {
-	serverConfig := config.GetGlobalServerConfig()
-	gcTTL := serverConfig.GcTTL
 	c := &changefeed{
 		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
-		gcTTL:            gcTTL,
 		gcManager:        gcManager,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -125,9 +118,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	log.Info("LEOPPRO1")
 
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	gcSafePointTs := c.gcManager.GcSafePointTs()
-	if checkpointTs < gcSafePointTs || time.Since(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(c.gcTTL)*time.Second {
-		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs, gcSafePointTs)
+	if err := c.gcManager.CheckTsTooFarBehindToStop(ctx, checkpointTs); err != nil {
+		return errors.Trace(err)
 	}
 	log.Info("LEOPPRO2")
 	if !c.preCheck(captures) {

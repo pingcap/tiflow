@@ -17,18 +17,21 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
 const (
 	// cdcServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	cdcServiceSafePointID = "ticdc"
+	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
 // gcSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
@@ -40,6 +43,9 @@ type gcManager struct {
 	lastUpdatedTime time.Time
 	lastSucceedTime time.Time
 	lastSafePointTs uint64
+
+	pdTimeCached      time.Time
+	lastUpdatedPdTime time.Time
 }
 
 func newGCManager() *gcManager {
@@ -56,7 +62,6 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
 		return nil
 	}
-	m.lastUpdatedTime = time.Now()
 	minCheckpointTs := uint64(math.MaxUint64)
 	for _, cfState := range state.Changefeeds {
 		if cfState.Info == nil {
@@ -72,6 +77,10 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 			minCheckpointTs = checkpointTs
 		}
 	}
+	if minCheckpointTs == math.MaxUint64 {
+		return nil
+	}
+	m.lastUpdatedTime = time.Now()
 
 	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
 	if err != nil {
@@ -91,6 +100,26 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	return nil
 }
 
-func (m gcManager) GcSafePointTs() model.Ts {
-	return m.lastSafePointTs
+func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error) {
+	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
+		return m.pdTimeCached, nil
+	}
+	physical, logical, err := ctx.GlobalVars().PDClient.GetTS(ctx)
+	if err != nil {
+		return time.Now(), errors.Trace(err)
+	}
+	m.pdTimeCached = oracle.GetTimeFromTS(oracle.ComposeTS(physical, logical))
+	m.lastUpdatedPdTime = time.Now()
+	return m.pdTimeCached, nil
+}
+
+func (m *gcManager) CheckTsTooFarBehindToStop(ctx cdcContext.Context, checkpointTs model.Ts) error {
+	pdTime, err := m.currentTimeFromPDCached(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if checkpointTs < m.lastSafePointTs || pdTime.Sub(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(m.gcTTL)*time.Second {
+		return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
+	}
+	return nil
 }
