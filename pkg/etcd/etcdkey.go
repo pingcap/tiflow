@@ -17,7 +17,6 @@ import (
 	"log"
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
@@ -76,8 +75,8 @@ const (
 */
 type CDCKey struct {
 	Tp           CDCKeyType
-	ChangefeedID model.ChangeFeedID
-	CaptureID    model.CaptureID
+	ChangefeedID string
+	CaptureID    string
 	OwnerLeaseID string
 }
 
