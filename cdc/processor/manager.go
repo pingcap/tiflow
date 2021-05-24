@@ -62,6 +62,7 @@ func NewManager() *Manager {
 	}
 }
 
+// NewManager4Test creates a new processor manager for test
 func NewManager4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {

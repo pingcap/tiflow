@@ -286,8 +286,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.CheckpointTs = 90
-		status.ResolvedTs = 90
+		status.CheckpointTs = 20
+		status.ResolvedTs = 20
 		return status, true, nil
 	})
 	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
@@ -332,26 +332,7 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs, check.Equals, uint64(30))
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs, check.Equals, uint64(30))
 
-	// add table, not finished
-	_, err = p.Tick(ctx, p.changefeed)
-	c.Assert(err, check.IsNil)
-	tester.MustApplyPatches()
-	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			1: {StartTs: 60},
-			2: {StartTs: 50},
-			3: {StartTs: 40},
-			4: {StartTs: 30},
-		},
-		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
-			2: {Delete: false, BoundaryTs: 50, Done: false, Status: model.OperProcessed},
-			3: {Delete: false, BoundaryTs: 40, Done: false, Status: model.OperProcessed},
-		},
-	})
-	c.Assert(p.tables, check.HasLen, 4)
-
-	// add table, push the resolvedTs
+	// add table, push the resolvedTs, finished add table
 	table1 := p.tables[1].(*mockTablePipeline)
 	table2 := p.tables[2].(*mockTablePipeline)
 	table3 := p.tables[3].(*mockTablePipeline)
@@ -376,8 +357,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 			4: {StartTs: 30},
 		},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
-			2: {Delete: false, BoundaryTs: 50, Done: false, Status: model.OperProcessed},
+			1: {Delete: false, BoundaryTs: 60, Done: true, Status: model.OperFinished},
+			2: {Delete: false, BoundaryTs: 50, Done: true, Status: model.OperFinished},
 			3: {Delete: true, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
 		},
 	})
@@ -386,7 +367,7 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(table3.stopTs, check.Equals, uint64(60))
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs, check.Equals, uint64(101))
 
-	// finish remove and add operations
+	// finish remove operations
 	table3.status = tablepipeline.TableStatusStopped
 	table3.checkpointTs = 65
 	_, err = p.Tick(ctx, p.changefeed)
@@ -549,7 +530,7 @@ func (s *processorSuite) TestProcessorExit(c *check.C) {
 	tester.MustApplyPatches()
 
 	// stop the changefeed
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})

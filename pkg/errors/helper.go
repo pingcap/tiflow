@@ -28,6 +28,7 @@ func WrapError(rfcError *errors.Error, err error) error {
 	return rfcError.Wrap(err).GenWithStackByCause()
 }
 
+// RFCCode returns a RFCCode for an error
 func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	type rfcCoder interface {
 		RFCCode() errors.RFCErrorCode
