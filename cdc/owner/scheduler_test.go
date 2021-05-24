@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 var _ = check.Suite(&schedulerSuite{})
@@ -82,6 +83,7 @@ func (s *schedulerSuite) finishTableOperation(captureID model.CaptureID, tableID
 }
 
 func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
+	defer testleak.AfterTest(c)()
 	s.reset(c)
 	captureID := "test-capture-1"
 	s.addCapture(captureID)
@@ -172,6 +174,7 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 }
 
 func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	s.reset(c)
 	captureID1 := "test-capture-1"
 	captureID2 := "test-capture-2"
@@ -251,6 +254,7 @@ func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
 }
 
 func (s *schedulerSuite) TestScheduleRebalance(c *check.C) {
+	defer testleak.AfterTest(c)()
 	s.reset(c)
 	captureID1 := "test-capture-1"
 	captureID2 := "test-capture-2"
