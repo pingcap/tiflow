@@ -85,7 +85,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
+	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 	var (
 		pendingPatches []DataPatch
 		exiting        bool
