@@ -228,7 +228,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}
-	for i := 0; i < errorHistoryThreshold-1; i++ {
+	for i := 0; i < ErrorHistoryThreshold-1; i++ {
 		info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}
@@ -236,7 +236,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 	needSave, canInit := info.CheckErrorHistory()
 	c.Assert(needSave, check.IsTrue)
 	c.Assert(canInit, check.IsTrue)
-	c.Assert(info.ErrorHis, check.HasLen, errorHistoryThreshold-1)
+	c.Assert(info.ErrorHis, check.HasLen, ErrorHistoryThreshold-1)
 
 	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 	needSave, canInit = info.CheckErrorHistory()

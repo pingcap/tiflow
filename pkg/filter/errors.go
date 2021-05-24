@@ -23,3 +23,13 @@ import (
 func ChangefeedFastFailError(err error) bool {
 	return cerror.ErrStartTsBeforeGC.Equal(errors.Cause(err))
 }
+
+// ChangefeedFastFailErrorCode checks the error, returns true if it is meaningless
+//// to retry on this error
+func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
+	switch errCode {
+	case cerror.ErrStartTsBeforeGC.RFCCode():
+		return true
+	}
+	return false
+}
