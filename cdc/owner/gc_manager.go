@@ -40,12 +40,12 @@ var gcSafepointUpdateInterval = 1 * time.Minute
 type gcManager struct {
 	gcTTL int64
 
-	lastUpdatedTime time.Time
-	lastSucceedTime time.Time
-	lastSafePointTs uint64
+	lastUpdatedTime   time.Time
+	lastSucceededTime time.Time
+	lastSafePointTs   uint64
 
-	pdTimeCached      time.Time
-	lastUpdatedPdTime time.Time
+	pdPhysicalTimeCache time.Time
+	lastUpdatedPdTime   time.Time
 }
 
 func newGCManager() *gcManager {
@@ -87,7 +87,7 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 		log.Warn("updateGCSafePoint failed",
 			zap.Uint64("safePointTs", minCheckpointTs),
 			zap.Error(err))
-		if time.Since(m.lastSucceedTime) >= time.Second*time.Duration(m.gcTTL) {
+		if time.Since(m.lastSucceededTime) >= time.Second*time.Duration(m.gcTTL) {
 			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 		}
 		return nil
@@ -96,24 +96,24 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 		actual = uint64(val.(int))
 	})
 	m.lastSafePointTs = actual
-	m.lastSucceedTime = time.Now()
+	m.lastSucceededTime = time.Now()
 	return nil
 }
 
 func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error) {
 	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
-		return m.pdTimeCached, nil
+		return m.pdPhysicalTimeCache, nil
 	}
 	physical, logical, err := ctx.GlobalVars().PDClient.GetTS(ctx)
 	if err != nil {
 		return time.Now(), errors.Trace(err)
 	}
-	m.pdTimeCached = oracle.GetTimeFromTS(oracle.ComposeTS(physical, logical))
+	m.pdPhysicalTimeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, logical))
 	m.lastUpdatedPdTime = time.Now()
-	return m.pdTimeCached, nil
+	return m.pdPhysicalTimeCache, nil
 }
 
-func (m *gcManager) CheckTsTooFarBehindToStop(ctx cdcContext.Context, checkpointTs model.Ts) error {
+func (m *gcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
 	pdTime, err := m.currentTimeFromPDCached(ctx)
 	if err != nil {
 		return errors.Trace(err)
