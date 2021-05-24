@@ -33,6 +33,8 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
+    # this test contains `recover table`, which requires super privilege, so we
+    # can't use the normal user
     TOPIC_NAME="ticdc-common-1-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
