@@ -74,7 +74,7 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDC
 	}
 }
 
-func NewCapture4Test(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient,
+func newCapture4Test(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient,
 	newProcessorManager func() *processor.Manager,
 	newOwner func() *owner.Owner,
 ) *Capture {
