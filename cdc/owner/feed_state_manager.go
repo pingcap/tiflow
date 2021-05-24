@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package owner
 
 import (
@@ -47,6 +60,11 @@ func (m *feedStateManager) ShouldRunning() bool {
 }
 
 func (m *feedStateManager) MarkFinished() {
+	if m.state == nil{
+		// when state is nil, it means that Tick is never not called
+		// skip this and wait next tick to finish the changefeed
+		return
+	}
 	m.pushAdminJob(&model.AdminJob{
 		CfID: m.state.ID,
 		Type: model.AdminFinish,
@@ -54,9 +72,6 @@ func (m *feedStateManager) MarkFinished() {
 }
 
 func (m *feedStateManager) PushAdminJob(job *model.AdminJob) {
-	if job.CfID != m.state.ID {
-		return
-	}
 	switch job.Type {
 	case model.AdminStop, model.AdminResume, model.AdminRemove:
 	default:
@@ -68,12 +83,10 @@ func (m *feedStateManager) PushAdminJob(job *model.AdminJob) {
 
 func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 	job := m.popAdminJob()
-	if job == nil {
+	if job == nil || job.CfID != m.state.ID  {
 		return false
 	}
 	log.Info("handle admin job", zap.String("changefeedID", m.state.ID), zap.Reflect("job", job))
-	pendingJobs = true
-	m.shouldRunning = false
 	switch job.Type {
 	case model.AdminStop:
 		switch m.state.Info.State {
@@ -83,6 +96,8 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
+		m.shouldRunning = false
+		pendingJobs = true
 		m.patchState(model.StateStopped)
 	case model.AdminRemove:
 		switch m.state.Info.State {
@@ -93,10 +108,15 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
+		m.shouldRunning = false
+		pendingJobs = true
 		m.patchState(model.StateRemoved)
 		if job.Opts != nil && job.Opts.ForceRemove {
-			// remove changefeed info
+			// remove changefeed info and state
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				return nil, true, nil
+			})
+			m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 				return nil, true, nil
 			})
 		}
@@ -108,6 +128,8 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
+		m.shouldRunning = true
+		pendingJobs = true
 		m.patchState(model.StateNormal)
 		// remove error history to make sure the changefeed can running in next tick
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -126,6 +148,8 @@ func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
+		m.shouldRunning = false
+		pendingJobs = true
 		m.patchState(model.StateFinished)
 	default:
 		log.Warn("Unknown admin job", zap.Any("adminJob", job), zap.String("changefeed", m.state.ID))
@@ -248,7 +272,7 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 		m.patchState(model.StateFailed)
 		return
 	}
-	canRun := m.state.Info.CheckErrorHistoryV2() && err == nil
+	canRun := m.state.Info.CheckErrorHistoryV2()
 	if !canRun {
 		m.shouldRunning = false
 		m.patchState(model.StateError)
