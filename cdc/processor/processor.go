@@ -207,11 +207,6 @@ func (p *processor) checkPosition() (skipThisTick bool) {
 	if p.changefeed.TaskPositions[p.captureInfo.ID] != nil {
 		return false
 	}
-	// the processor should write task position after one table added to this processor at least
-	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
-	if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
-		return true
-	}
 	if p.initialized {
 		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
 	}
@@ -555,6 +550,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 		}
 		log.Info("start to listen the table immediately", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 		if replicaInfo.StartTs < p.changefeed.Status.CheckpointTs {
+			log.Warn("")
 			replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
 		}
 		err := p.addTable(ctx, tableID, replicaInfo)

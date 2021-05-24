@@ -517,7 +517,7 @@ func (s *processorSuite) TestProcessorError(c *check.C) {
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID], check.DeepEquals, &model.TaskPosition{
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
-			Code:    "CDC:ErrProcessorUnknown",
+			Code:    "CDC:ErrSinkURIInvalid",
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 		},
 	})
@@ -641,7 +641,7 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	tester.MustApplyPatches()
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].Error, check.DeepEquals, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
-		Code:    "CDC:ErrProcessorUnknown",
+		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 	})
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.IsNil)
