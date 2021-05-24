@@ -45,6 +45,7 @@ type FeedState string
 // All FeedStates
 const (
 	StateNormal   FeedState = "normal"
+	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
 	StateRemoved  FeedState = "removed"
