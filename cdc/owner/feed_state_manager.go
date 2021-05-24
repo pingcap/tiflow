@@ -60,7 +60,7 @@ func (m *feedStateManager) ShouldRunning() bool {
 }
 
 func (m *feedStateManager) MarkFinished() {
-	if m.state == nil{
+	if m.state == nil {
 		// when state is nil, it means that Tick is never not called
 		// skip this and wait next tick to finish the changefeed
 		return
@@ -83,7 +83,7 @@ func (m *feedStateManager) PushAdminJob(job *model.AdminJob) {
 
 func (m *feedStateManager) handleAdminJob() (pendingJobs bool) {
 	job := m.popAdminJob()
-	if job == nil || job.CfID != m.state.ID  {
+	if job == nil || job.CfID != m.state.ID {
 		return false
 	}
 	log.Info("handle admin job", zap.String("changefeedID", m.state.ID), zap.Reflect("job", job))

@@ -170,7 +170,6 @@ func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 	})
 	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return &model.TaskPosition{}, true, nil
-
 	})
 	state.PatchTaskWorkload(ctx.GlobalVars().CaptureInfo.ID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		return model.TaskWorkload{}, true, nil

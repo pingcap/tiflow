@@ -85,9 +85,7 @@ func newChangefeed4Test(
 }
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
-	log.Debug("LEOPPRO tick", zap.String("changefeed", state.ID))
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
-		log.Info("LEOPPRO err", zap.Error(err), zap.Stack("s"))
 		c.errCh <- errors.Trace(err)
 		return nil
 	})
@@ -115,40 +113,33 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		c.releaseResources()
 		return nil
 	}
-	log.Info("LEOPPRO1")
 
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	if err := c.gcManager.CheckTsTooFarBehindToStop(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("LEOPPRO2")
 	if !c.preCheck(captures) {
 		return nil
 	}
-	log.Info("LEOPPRO3")
 	if err := c.initialize(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("LEOPPRO4")
 
 	select {
 	case err := <-c.errCh:
 		return errors.Trace(err)
 	default:
 	}
-	log.Info("LEOPPRO5")
 
 	c.sink.EmitCheckpointTs(ctx, checkpointTs)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("LEOPPRO6")
 	shouldUpdateState := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
 	if shouldUpdateState {
 		c.updateStatus(barrierTs)
 	}
-	log.Info("LEOPPRO7")
 	return nil
 }
 
@@ -303,7 +294,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			return barrierTs, nil
 		}
 		done, err := c.asyncExecDDL(ctx, ddlJob)
-		log.Info("LEOPPRO asyncExecDDL", zap.Uint64("barrierTs", barrierTs), zap.Uint64("cts", c.state.Status.CheckpointTs), zap.Reflect("job", ddlJob.Query), zap.Bool("done", done))
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -313,7 +303,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
-		log.Info("LEOPPRO updare ddl barrierTs", zap.Uint64("barrierTs", barrierTs), zap.Uint64("newDDLResolvedTs", newDDLResolvedTs))
 
 	case syncPointBarrier:
 		if !c.state.Info.SyncPointEnabled {
@@ -378,7 +367,6 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 		if resolvedTs > position.ResolvedTs {
 			resolvedTs = position.ResolvedTs
 		}
-		log.Info("LEOPPRO update ts position", zap.Uint64("resolvedTs", resolvedTs), zap.Any("position", position))
 	}
 	for _, taskStatus := range c.state.TaskStatuses {
 		for _, opt := range taskStatus.Operation {
@@ -386,7 +374,6 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 				resolvedTs = opt.BoundaryTs
 			}
 		}
-		log.Info("LEOPPRO update ts taskStatus", zap.Uint64("resolvedTs", resolvedTs), zap.Any("taskStatus", taskStatus))
 	}
 	checkpointTs := resolvedTs
 	for _, position := range c.state.TaskPositions {
@@ -394,7 +381,6 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 			checkpointTs = position.CheckPointTs
 		}
 	}
-	log.Info("LEOPPRO update ts", zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status.ResolvedTs != resolvedTs {
