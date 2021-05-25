@@ -43,7 +43,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type CaptureTester struct {
+type Tester struct {
 	c *check.C
 
 	embedEtcd  *embed.Etcd
@@ -53,8 +53,8 @@ type CaptureTester struct {
 	captureCreatingCh chan *Capture
 }
 
-func NewCaptureTester(c *check.C, captureNum int) *CaptureTester {
-	cluster := &CaptureTester{
+func NewTester(c *check.C, captureNum int) *Tester {
+	cluster := &Tester{
 		c:                 c,
 		upstream:          newMockUpstream(c),
 		captureCreatingCh: make(chan *Capture),
@@ -63,7 +63,7 @@ func NewCaptureTester(c *check.C, captureNum int) *CaptureTester {
 	return cluster
 }
 
-func (t *CaptureTester) ScaleOut(captureNum int) {
+func (t *Tester) ScaleOut(captureNum int) {
 	for i := 0; i < captureNum; i++ {
 		cap := newCapture4Test(
 			func(leaseID clientv3.LeaseID) *processor.Manager {
@@ -82,11 +82,11 @@ func (t *CaptureTester) ScaleOut(captureNum int) {
 	}
 }
 
-func (t *CaptureTester) ScaleIn(captureNum int) {
+func (t *Tester) ScaleIn(captureNum int) {
 	// todo
 }
 
-func (t *CaptureTester) Run(ctx context.Context) error {
+func (t *Tester) Run(ctx context.Context) error {
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		t.runEtcd(ctx)
@@ -101,29 +101,14 @@ func (t *CaptureTester) Run(ctx context.Context) error {
 			case cap = <-t.captureCreatingCh:
 			}
 			errg.Go(func() error {
-				return t.runCapture(ctx, cap)
+				return cap.Run(ctx)
 			})
 		}
 	})
 	return errg.Wait()
 }
 
-func (t *CaptureTester) runCapture(ctx context.Context, capture *Capture) error {
-	captureInfo := capture.Info()
-	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
-		PDClient:    nil,
-		KVStorage:   nil,
-		CaptureInfo: &captureInfo,
-		EtcdClient:  t.etcdClient,
-	})
-	err := capture.Run(cdcCtx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func (t *CaptureTester) runEtcd(ctx context.Context) {
+func (t *Tester) runEtcd(ctx context.Context) {
 	dir := t.c.MkDir()
 	clientURL, embedEtcd, err := etcd.SetupEmbedEtcd(dir)
 	t.c.Assert(err, check.IsNil)
@@ -140,15 +125,15 @@ func (t *CaptureTester) runEtcd(ctx context.Context) {
 	t.etcdClient = &etcdClient
 }
 
-func (t *CaptureTester) UpdateDDLPullerResolvedTs(ts model.Ts) {
+func (t *Tester) UpdateDDLPullerResolvedTs(ts model.Ts) {
 	t.upstream.ddlPuller.updateDDLPullerResolvedTs(ts)
 }
 
-func (t *CaptureTester) ApplyDDLJob(job *timodel.Job) {
+func (t *Tester) ApplyDDLJob(job *timodel.Job) {
 	t.upstream.ddlPuller.applyDDLJob(job)
 }
 
-func (t *CaptureTester) CheckpointTs() map[model.TableID]model.Ts {
+func (t *Tester) CheckpointTs() map[model.TableID]model.Ts {
 	return t.upstream.checkpointTs()
 }
 
