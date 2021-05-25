@@ -150,7 +150,7 @@ func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 	c.Assert(t3, check.Not(check.Equals), t2)
 }
 
-func (s *gcManagerSuite) TestCheckTsTooFarBehindToStop(c *check.C) {
+func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	gcManager := newGCManager()
 	ctx := cdcContext.NewBackendContext4Test(true)
