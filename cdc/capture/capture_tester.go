@@ -26,15 +26,19 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/version"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/pkg/logutil"
@@ -46,66 +50,93 @@ import (
 type Tester struct {
 	c *check.C
 
-	embedEtcd  *embed.Etcd
-	etcdClient *kv.CDCEtcdClient
+	embedEtcd    *embed.Etcd
+	etcdClient   *kv.CDCEtcdClient
+	pdClient     pd.Client
+	kvStorage    tidbkv.Storage
+	schemaHelper *entry.SchemaTestHelper
 
-	upstream          *mockUpstream
+	ddlPuller         *mockDDLPuller
 	captureCreatingCh chan *Capture
+	wg                sync.WaitGroup
 }
 
-func NewTester(c *check.C, captureNum int) *Tester {
+func NewTester(ctx context.Context, c *check.C, captureNum int) *Tester {
+	log.Info("LEOPPRO111 1")
 	cluster := &Tester{
 		c:                 c,
-		upstream:          newMockUpstream(c),
 		captureCreatingCh: make(chan *Capture),
+		schemaHelper:      entry.NewSchemaTestHelper(c),
+		pdClient:          &mockPDClient{},
 	}
+	cluster.ddlPuller = newMockDDLPuller(c, cluster.schemaHelper)
+	cluster.runEtcd(ctx)
+	cluster.wg.Add(1)
+	go func() {
+		defer cluster.wg.Done()
+		cluster.run(ctx)
+	}()
+	log.Info("LEOPPRO111 2")
 	cluster.ScaleOut(captureNum)
+	log.Info("LEOPPRO111 3")
 	return cluster
 }
 
 func (t *Tester) ScaleOut(captureNum int) {
 	for i := 0; i < captureNum; i++ {
-		cap := newCapture4Test(
-			func(leaseID clientv3.LeaseID) *processor.Manager {
-				return processor.NewManager4Test(leaseID,
+		capture := newCapture4Test(t.pdClient, t.kvStorage, t.etcdClient,
+			func() *processor.Manager {
+				return processor.NewManager4Test(
 					func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
-						return t.upstream.createTablePipeline(ctx, tableID, replicaInfo), nil
+						return createTablePipeline(ctx, tableID, replicaInfo), nil
 					})
-			}, func(leaseID clientv3.LeaseID) *owner.Owner {
-				return owner.NewOwner4Test(leaseID, func(ctx cdcContext.Context, startTs uint64) owner.DDLPuller {
-					return t.upstream.ddlPuller
+			}, func() *owner.Owner {
+				return owner.NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (owner.DDLPuller, error) {
+					return t.ddlPuller, nil
 				}, func(ctx cdcContext.Context) (owner.AsyncSink, error) {
 					return &mockAsyncSink{}, nil
 				})
 			})
-		t.captureCreatingCh <- cap
+		t.captureCreatingCh <- capture
 	}
 }
 
-func (t *Tester) ScaleIn(captureNum int) {
+func (t *Tester) ScaleIn(captureNum int, force bool) {
 	// todo
 }
 
-func (t *Tester) Run(ctx context.Context) error {
+func (t *Tester) CreateChangefeed(ctx context.Context, name string, startTs uint64, targetTs uint64, rules ...string) {
+	info := new(model.ChangeFeedInfo)
+	info.StartTs = startTs
+	info.TargetTs = targetTs
+	info.Config = config.GetDefaultReplicaConfig()
+	info.CreatorVersion = version.ReleaseVersion
+	info.Config.Filter.Rules = rules
+	err := t.etcdClient.CreateChangefeedInfo(ctx, info, name)
+	t.c.Assert(err, check.IsNil)
+}
+
+func (t *Tester) CurrentVersion() model.Ts{
+	ver,err:=t.schemaHelper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	t.c.Assert(err, check.IsNil)
+	return ver.Ver
+}
+
+func (t *Tester) run(ctx context.Context) {
 	errg, ctx := errgroup.WithContext(ctx)
-	errg.Go(func() error {
-		t.runEtcd(ctx)
-		return nil
-	})
-	errg.Go(func() error {
-		for {
-			var cap *Capture
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case cap = <-t.captureCreatingCh:
-			}
+MainLoop:
+	for {
+		var cap *Capture
+		select {
+		case <-ctx.Done():
+			break MainLoop
+		case cap = <-t.captureCreatingCh:
 			errg.Go(func() error {
 				return cap.Run(ctx)
 			})
 		}
-	})
-	return errg.Wait()
+	}
+	t.c.Assert(errg.Wait(), check.IsNil)
 }
 
 func (t *Tester) runEtcd(ctx context.Context) {
@@ -125,16 +156,12 @@ func (t *Tester) runEtcd(ctx context.Context) {
 	t.etcdClient = &etcdClient
 }
 
-func (t *Tester) UpdateDDLPullerResolvedTs(ts model.Ts) {
-	t.upstream.ddlPuller.updateDDLPullerResolvedTs(ts)
-}
-
-func (t *Tester) ApplyDDLJob(job *timodel.Job) {
-	t.upstream.ddlPuller.applyDDLJob(job)
+func (t *Tester) ApplyDDLJob(query string) {
+	t.ddlPuller.applyDDLJob(query)
 }
 
 func (t *Tester) CheckpointTs() map[model.TableID]model.Ts {
-	return t.upstream.checkpointTs()
+	panic("unimplemented")
 }
 
 type mockAsyncSink struct {
@@ -164,56 +191,64 @@ func (m *mockAsyncSink) Close() error {
 	return nil
 }
 
-type mockUpstream struct {
-	c *check.C
-
-	ddlPuller          *mockDDLPuller
-	tableReceivedTsMap map[model.TableID]*[]model.Ts
+type mockPDClient struct {
+	pd.Client
 }
 
-func newMockUpstream(c *check.C) *mockUpstream {
-	return &mockUpstream{
-		c:                  c,
-		tableReceivedTsMap: make(map[model.TableID]*[]model.Ts),
-		ddlPuller:          &mockDDLPuller{c: c},
-	}
+func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	log.Info("mock pd client update service gc safe point", zap.String("serviceID", serviceID), zap.Int64("ttl", ttl), zap.Uint64("safePoint", safePoint))
+	return safePoint, nil
 }
 
-func (u *mockUpstream) checkpointTs() map[model.TableID]model.Ts {
-	// todo
-	panic("unimplemented")
+func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
 type mockDDLPuller struct {
-	c          *check.C
+	c *check.C
+
 	resolvedTs model.Ts
 	ddlQueue   []*timodel.Job
 	ddlQueueMu sync.Mutex
+
+	ddlQueryQueue chan string
+	schemaHelper  *entry.SchemaTestHelper
 }
 
-func (m *mockDDLPuller) updateDDLPullerResolvedTs(ts model.Ts) {
-	atomic.StoreUint64(&m.resolvedTs, ts)
-}
-
-func (m *mockDDLPuller) applyDDLJob(job *timodel.Job) {
-	m.ddlQueueMu.Lock()
-	defer m.ddlQueueMu.Unlock()
-	finishedTs := job.BinlogInfo.FinishedTS
-	for {
-		resolvedTs := atomic.LoadUint64(&m.resolvedTs)
-		if resolvedTs > finishedTs {
-			m.c.Fatalf("the ddl resolved TS is greater than finishedTs")
-		}
-		if atomic.CompareAndSwapUint64(&m.resolvedTs, resolvedTs, finishedTs) {
-			break
-		}
+func newMockDDLPuller(c *check.C, schemaHelper *entry.SchemaTestHelper) *mockDDLPuller {
+	return &mockDDLPuller{
+		c:             c,
+		schemaHelper:  schemaHelper,
+		ddlQueryQueue: make(chan string, 16),
 	}
-	m.ddlQueue = append(m.ddlQueue, job)
+}
+
+func (m *mockDDLPuller) applyDDLJob(query string) {
+	m.ddlQueryQueue <- query
 }
 
 func (m *mockDDLPuller) Run(ctx cdcContext.Context) error {
-	// do nothing
-	return nil
+	ticker := time.NewTicker(50 * time.Millisecond)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case query := <-m.ddlQueryQueue:
+			job := m.schemaHelper.DDL2Job(query)
+			m.ddlQueueMu.Lock()
+			m.ddlQueue = append(m.ddlQueue, job)
+			m.resolvedTs = job.BinlogInfo.FinishedTS
+			m.ddlQueueMu.Unlock()
+		case <-ticker.C:
+			ver, err := m.schemaHelper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			m.ddlQueueMu.Lock()
+			m.resolvedTs = ver.Ver
+			m.ddlQueueMu.Unlock()
+		}
+	}
 }
 
 func (m *mockDDLPuller) FrontDDL() (uint64, *timodel.Job) {
@@ -240,8 +275,8 @@ func (m *mockDDLPuller) Close() {
 	// do nothing
 }
 
-func (u *mockUpstream) createTablePipeline(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) tablepipeline.TablePipeline {
-	outputCh := make(chan model.Ts, 128)
+func createTablePipeline(ctx context.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) tablepipeline.TablePipeline {
+	log.Info("create mock table pipeline", zap.Int64("tableID", tableID), zap.Reflect("replicaInfo", replicaInfo))
 	ctx, cancel := context.WithCancel(ctx)
 	tablePipeline := &mockTablePipeline{
 		tableID:      tableID,
@@ -251,25 +286,11 @@ func (u *mockUpstream) createTablePipeline(ctx context.Context, tableID model.Ta
 		barrierTs:    replicaInfo.StartTs,
 		targetTs:     math.MaxUint64,
 		status:       tablepipeline.TableStatusInitializing,
-		outputCh:     outputCh,
 		cancel:       cancel,
 	}
-	var receivedTsArrPtr *[]model.Ts
-	var exist bool
-	if receivedTsArrPtr, exist = u.tableReceivedTsMap[tableID]; !exist {
-		receivedTsArr := make([]model.Ts, 0, 128)
-		receivedTsArrPtr = &receivedTsArr
-		u.tableReceivedTsMap[tableID] = receivedTsArrPtr
-	}
 
-	tablePipeline.wg.Add(2)
+	tablePipeline.wg.Add(1)
 	go tablePipeline.run(ctx)
-	go func() {
-		defer tablePipeline.wg.Done()
-		for ts := range outputCh {
-			*receivedTsArrPtr = append(*receivedTsArrPtr, ts)
-		}
-	}()
 	return tablePipeline
 }
 
@@ -282,14 +303,12 @@ type mockTablePipeline struct {
 	targetTs     model.Ts
 	status       tablepipeline.TableStatus
 
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	outputCh chan model.Ts
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 func (m *mockTablePipeline) run(ctx context.Context) {
 	defer m.wg.Done()
-	defer close(m.outputCh)
 	defer m.status.Store(tablepipeline.TableStatusStopped)
 	m.status.Store(tablepipeline.TableStatusRunning)
 	for {
@@ -301,11 +320,7 @@ func (m *mockTablePipeline) run(ctx context.Context) {
 		if nextCheckpointTs > nextResolvedTs {
 			nextCheckpointTs = nextResolvedTs
 		}
-		select {
-		case <-ctx.Done():
-			return
-		case m.outputCh <- nextCheckpointTs:
-		}
+		log.Info("table", zap.Int64("tableID", m.tableID), zap.Uint64("checkpointTs", nextCheckpointTs))
 		atomic.StoreUint64(&m.resolvedTs, nextResolvedTs)
 		atomic.StoreUint64(&m.checkpointTs, nextCheckpointTs)
 		time.Sleep(time.Duration(rand.Int63n(10)) * time.Millisecond)
@@ -364,65 +379,4 @@ func (m *mockTablePipeline) Cancel() {
 
 func (m *mockTablePipeline) Wait() {
 	m.wg.Wait()
-}
-
-type clusterSuite struct {
-}
-
-var _ = check.Suite(&clusterSuite{})
-
-func (s *clusterSuite) TestClusters(c *check.C) {
-	tester := NewCaptureTester(c, 3)
-	tester.UpdateDDLPullerResolvedTs(10)
-	tester.ApplyDDLJob(&timodel.Job{
-		ID:       3,
-		State:    timodel.JobStateSynced,
-		SchemaID: 1,
-		Type:     timodel.ActionCreateSchema,
-		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: &timodel.DBInfo{
-			ID:    1,
-			Name:  timodel.NewCIStr("test"),
-			State: timodel.StatePublic,
-		}, FinishedTS: 20},
-		Query: "create database test",
-	})
-	tester.UpdateDDLPullerResolvedTs(25)
-	tester.ApplyDDLJob(&timodel.Job{
-		ID:       4,
-		State:    timodel.JobStateSynced,
-		SchemaID: 1,
-		Type:     timodel.ActionCreateTable,
-		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: &timodel.DBInfo{
-			ID:    1,
-			Name:  timodel.NewCIStr("test"),
-			State: timodel.StatePublic,
-		}, TableInfo: &timodel.TableInfo{
-			ID:    2,
-			Name:  timodel.NewCIStr("test"),
-			State: timodel.StatePublic,
-			Columns: []*timodel.ColumnInfo{{
-				ID:        1,
-				Name:      timodel.NewCIStr("A"),
-				Offset:    0,
-				FieldType: *types.NewFieldType(mysql.TypeLonglong),
-				State:     timodel.StatePublic,
-			}},
-			Indices: []*timodel.IndexInfo{{
-				Name:  timodel.NewCIStr("idx"),
-				Table: timodel.NewCIStr("test"),
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.NewCIStr("A"),
-						Offset: 0,
-						Length: 10,
-					},
-				},
-				Unique:  true,
-				Primary: true,
-				State:   timodel.StatePublic,
-			}},
-		}, FinishedTS: 30},
-		Query: "create table test.test(A int primary key)",
-	})
-	tester.UpdateDDLPullerResolvedTs(30)
 }
