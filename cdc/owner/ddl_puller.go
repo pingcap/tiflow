@@ -97,7 +97,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 
 	rawDDLCh := puller.SortOutput(ctx, h.puller.Output())
 
-	var lastDDLFinishedTs uint64
 	receiveDDL := func(rawDDL *model.RawKVEntry) error {
 		if rawDDL == nil {
 			return nil
@@ -121,10 +120,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 			return nil
 		}
-		if job.BinlogInfo.FinishedTS == lastDDLFinishedTs {
-			return nil
-		}
-		lastDDLFinishedTs = job.BinlogInfo.FinishedTS
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.pendingDDLJobs = append(h.pendingDDLJobs, job)
