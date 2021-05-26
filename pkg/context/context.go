@@ -17,20 +17,43 @@ import (
 	"context"
 	"log"
 
+<<<<<<< HEAD
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/pkg/config"
+=======
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	tidbkv "github.com/pingcap/tidb/kv"
+>>>>>>> 2b373e41 (new_owner: a ddl puller wrapper for owner (#1776))
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 // Vars contains some vars which can be used anywhere in a pipeline
 // All field in Vars should be READ-ONLY and THREAD-SAFE
+<<<<<<< HEAD
 type Vars struct {
 	// TODO add more vars
 	CaptureAddr   string
 	PDClient      pd.Client
 	SchemaStorage entry.SchemaStorage
 	Config        *config.ReplicaConfig
+=======
+type GlobalVars struct {
+	PDClient    pd.Client
+	KVStorage   tidbkv.Storage
+	CaptureInfo *model.CaptureInfo
+	EtcdClient  *kv.CDCEtcdClient
+}
+
+// ChangefeedVars contains some vars which can be used anywhere in a pipeline
+// the lifecycle of vars in the ChangefeedVars shoule be aligned with the changefeed.
+// All field in Vars should be READ-ONLY and THREAD-SAFE
+type ChangefeedVars struct {
+	ID   model.ChangeFeedID
+	Info *model.ChangeFeedInfo
+>>>>>>> 2b373e41 (new_owner: a ddl puller wrapper for owner (#1776))
 }
 
 // Context contains Vars(), Done(), Throw(error) and StdContext() context.Context
@@ -68,7 +91,11 @@ func NewContext(stdCtx context.Context, vars *Vars) Context {
 	ctx := &rootContext{
 		vars: vars,
 	}
+<<<<<<< HEAD
 	return withStdCancel(ctx, stdCtx)
+=======
+	return WithStd(ctx, stdCtx)
+>>>>>>> 2b373e41 (new_owner: a ddl puller wrapper for owner (#1776))
 }
 
 func (ctx *rootContext) Vars() *Vars {
@@ -92,22 +119,32 @@ func (ctx *stdContext) Done() <-chan struct{} {
 	return ctx.stdCtx.Done()
 }
 
+<<<<<<< HEAD
 func (ctx *stdContext) StdContext() context.Context {
 	return ctx.stdCtx
 }
 
 //revive:disable:context-as-argument
 func withStdCancel(ctx Context, stdCtx context.Context) Context {
+=======
+// WithStd returns a Context with the standard Context
+func WithStd(ctx Context, stdCtx context.Context) Context { //revive:disable:context-as-argument
+>>>>>>> 2b373e41 (new_owner: a ddl puller wrapper for owner (#1776))
 	return &stdContext{
 		stdCtx:  stdCtx,
 		Context: ctx,
 	}
 }
 
-// WithCancel return a Context with the cancel function
+// WithCancel returns a Context with the cancel function
 func WithCancel(ctx Context) (Context, context.CancelFunc) {
+<<<<<<< HEAD
 	stdCtx, cancel := context.WithCancel(ctx.StdContext())
 	return withStdCancel(ctx, stdCtx), cancel
+=======
+	stdCtx, cancel := context.WithCancel(ctx)
+	return WithStd(ctx, stdCtx), cancel
+>>>>>>> 2b373e41 (new_owner: a ddl puller wrapper for owner (#1776))
 }
 
 type throwContext struct {
@@ -133,3 +170,35 @@ func (ctx *throwContext) Throw(err error) {
 		ctx.Context.Throw(err)
 	}
 }
+<<<<<<< HEAD
+=======
+
+// NewBackendContext4Test returns a new pipeline context for test
+func NewBackendContext4Test(withChangefeedVars bool) Context {
+	ctx := NewContext(context.Background(), &GlobalVars{
+		CaptureInfo: &model.CaptureInfo{
+			ID:            "capture-id-test",
+			AdvertiseAddr: "127.0.0.1:0000",
+		},
+	})
+	if withChangefeedVars {
+		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
+			ID: "changefeed-id-test",
+			Info: &model.ChangeFeedInfo{
+				Config: config.GetDefaultReplicaConfig(),
+			},
+		})
+	}
+	return ctx
+}
+
+// ZapFieldCapture returns a zap field containing capture address
+func ZapFieldCapture(ctx Context) zap.Field {
+	return zap.String("capture", ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+}
+
+// ZapFieldChangefeed returns a zap field containing changefeed id
+func ZapFieldChangefeed(ctx Context) zap.Field {
+	return zap.String("changefeed", ctx.ChangefeedVars().ID)
+}
+>>>>>>> 2b373e41 (new_owner: a ddl puller wrapper for owner (#1776))
