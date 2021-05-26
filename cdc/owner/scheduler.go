@@ -109,7 +109,7 @@ func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool) {
 				return status, false, nil
 			}
 			if status.Operation != nil && status.Operation[job.tableID] != nil {
-				// skip remove this table to avoid the remove operation created by rebalance function to influence the operation created by other function
+				// skip removing this table to avoid the remove operation created by the rebalance function interfering with the operation created by another function
 				return status, false, nil
 			}
 			status.RemoveTable(job.tableID, s.state.Status.CheckpointTs, false)
@@ -213,7 +213,7 @@ func (s *scheduler) syncTablesWithSchemaManager() []*schedulerJob {
 			delete(allTableListeningNow, tableID)
 			continue
 		}
-		// table which should be listened but not, add adding-table job to pending job list
+		// For each table which should be listened but is not, add an adding-table job to the pending job list
 		boundaryTs := globalCheckpointTs
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:         schedulerJobTypeAddTable,
@@ -246,7 +246,7 @@ func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 			switch job.Tp {
 			case schedulerJobTypeAddTable:
 				if status == nil {
-					// if task status is not found, we can just skip to set adding-table operation, this table will be added in next tick
+					// if task status is not found, we can just skip adding the adding-table operation, since this table will be added in the next tick
 					log.Warn("task status of the capture is not found, may be the capture is already down. specify a new capture and redo the job", zap.Any("job", job))
 					return status, false, nil
 				}
@@ -256,11 +256,11 @@ func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 				}, job.BoundaryTs)
 			case schedulerJobTypeRemoveTable:
 				failpoint.Inject("OwnerRemoveTableError", func() {
-					// just skip remove this table
+					// just skip removing this table
 					failpoint.Return(status, false, nil)
 				})
 				if status == nil {
-					log.Warn("task status of the capture is not found, may be the capture is already down. specify a new capture and redo the job", zap.Any("job", job))
+					log.Warn("Task status of the capture is not found. Maybe the capture is already down. Specify a new capture and redo the job", zap.Any("job", job))
 					return status, false, nil
 				}
 				status.RemoveTable(job.TableID, job.BoundaryTs, false)
