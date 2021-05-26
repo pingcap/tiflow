@@ -115,7 +115,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	}
 
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	if err := c.gcManager.CheckTsTooFarBehindToStop(ctx, checkpointTs); err != nil {
+	if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
 	}
 	if !c.preCheck(captures) {
