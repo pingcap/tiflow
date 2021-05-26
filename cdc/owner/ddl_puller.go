@@ -58,12 +58,12 @@ type ddlPullerImpl struct {
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	pdCli := ctx.GlobalVars().PDClient
 	conf := config.GetGlobalServerConfig()
-	kvStorage := ctx.GlobalVars().KVStorage
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	var plr puller.Puller
+	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(ctx, pdCli, conf.Security, kvStorage, startTs,
