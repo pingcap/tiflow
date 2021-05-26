@@ -33,7 +33,7 @@ import (
 )
 
 // DDLPuller is a wrapper of the Puller interface for the owner
-// DDLPuller start a puller and listen to the DDL range, add the received DDL into an internal queue
+// DDLPuller starts a puller, listens to the DDL range, adds the received DDLs into an internal queue
 type DDLPuller interface {
 	// Run runs the DDLPuller
 	Run(ctx cdcContext.Context) error
@@ -73,8 +73,8 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 
 	return &ddlPullerImpl{
 		puller: plr,
-		// the puller will listen changed events from `startTs`(including `startTs`)
-		// so `startTs - 1` is a available resolvedTS, it means that all txn before `startTs - 1` is received(or don't need to receive)
+		// the puller will listen to change events from `startTs` (including `startTs`)
+		// `startTs - 1` is a valid resolvedTS, which means that all transactions before `startTs - 1` have been received (or don't need to be received)
 		resolvedTS: startTs - 1,
 		filter:     f,
 		cancel:     func() {},
