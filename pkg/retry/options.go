@@ -75,7 +75,7 @@ func WithMaxTries(tries int64) Option {
 	}
 }
 
-// WithInfiniteTries configures to retry forever till success
+// WithInfiniteTries configures to retry forever till success or got canceled
 func WithInfiniteTries() Option {
 	return func(o *retryOptions) {
 		o.maxTries = math.Inf(1)
