@@ -58,8 +58,8 @@ type TablePipeline interface {
 	Status() TableStatus
 	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
 	Cancel()
-	// Wait waits for all node destroyed and returns errors
-	Wait() []error
+	// Wait waits for table pipeline destroyed
+	Wait()
 }
 
 type tablePipelineImpl struct {
@@ -141,9 +141,9 @@ func (t *tablePipelineImpl) Cancel() {
 	t.cancel()
 }
 
-// Wait waits for all node destroyed and returns errors
-func (t *tablePipelineImpl) Wait() []error {
-	return t.p.Wait()
+// Wait waits for table pipeline destroyed
+func (t *tablePipelineImpl) Wait() {
+	t.p.Wait()
 }
 
 // NewTablePipeline creates a table pipeline
@@ -161,7 +161,7 @@ func NewTablePipeline(ctx context.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
-	targetTs model.Ts) (context.Context, TablePipeline) {
+	targetTs model.Ts) TablePipeline {
 	ctx, cancel := context.WithCancel(ctx)
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
@@ -170,7 +170,6 @@ func NewTablePipeline(ctx context.Context,
 		cancel:      cancel,
 	}
 
-	ctx, p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
 	log.Debug("creating table flow controller",
 		zap.String("changefeed-id", changefeedID),
@@ -178,6 +177,8 @@ func NewTablePipeline(ctx context.Context,
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
+  
+	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
 	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
@@ -188,5 +189,5 @@ func NewTablePipeline(ctx context.Context,
 	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
 	p.AppendNode(ctx, "sink", tablePipeline.sinkNode)
 	tablePipeline.p = p
-	return ctx, tablePipeline
+	return tablePipeline
 }
