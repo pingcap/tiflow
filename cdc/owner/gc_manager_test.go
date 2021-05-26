@@ -24,6 +24,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 )
@@ -47,6 +48,7 @@ func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 }
 
 func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
+	defer testleak.AfterTest(c)()
 	gcManager := newGCManager()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
@@ -122,19 +124,20 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 }
 
 func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
+	defer testleak.AfterTest(c)()
 	gcManager := newGCManager()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
 	t1, err := gcManager.currentTimeFromPDCached(ctx)
 	c.Assert(err, check.IsNil)
-	c.Assert(t1, check.Equals, gcManager.pdTimeCached)
+	c.Assert(t1, check.Equals, gcManager.pdPhysicalTimeCache)
 
 	time.Sleep(50 * time.Millisecond)
 	// should return cached time
 	t2, err := gcManager.currentTimeFromPDCached(ctx)
 	c.Assert(err, check.IsNil)
-	c.Assert(t2, check.Equals, gcManager.pdTimeCached)
+	c.Assert(t2, check.Equals, gcManager.pdPhysicalTimeCache)
 	c.Assert(t2, check.Equals, t1)
 
 	time.Sleep(50 * time.Millisecond)
@@ -142,19 +145,20 @@ func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 	gcManager.lastUpdatedPdTime = time.Now().Add(-time.Hour)
 	t3, err := gcManager.currentTimeFromPDCached(ctx)
 	c.Assert(err, check.IsNil)
-	c.Assert(t3, check.Equals, gcManager.pdTimeCached)
+	c.Assert(t3, check.Equals, gcManager.pdPhysicalTimeCache)
 	// should return new time
 	c.Assert(t3, check.Not(check.Equals), t2)
 }
 
-func (s *gcManagerSuite) TestCheckTsTooFarBehindToStop(c *check.C) {
+func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	gcManager := newGCManager()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
-	err := gcManager.CheckTsTooFarBehindToStop(ctx, 10)
+	err := gcManager.CheckStaleCheckpointTs(ctx, 10)
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 
-	err = gcManager.CheckTsTooFarBehindToStop(ctx, oracle.GoTimeToTS(time.Now()))
+	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
 }
