@@ -86,7 +86,7 @@ const ddlPullerName = "DDL_PULLER"
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
-	log.Debug("DDL puller started")
+	log.Debug("DDL puller started", zap.String("changefeed-id", ctx.ChangefeedVars().ID))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, ddlPullerName)
 	errg, stdCtx := errgroup.WithContext(stdCtx)
 	ctx = cdcContext.WithStd(ctx, stdCtx)
