@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -46,7 +48,15 @@ import (
 	"google.golang.org/grpc"
 )
 
-func Test(t *testing.T) { check.TestingT(t) }
+func Test(t *testing.T) {
+	conf := config.GetDefaultServerConfig()
+	config.StoreGlobalServerConfig(conf)
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(context.Background()) //nolint:errcheck
+	}()
+	check.TestingT(t)
+}
 
 type clientSuite struct {
 }
@@ -688,8 +698,7 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cancel()
 }
 
-func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -966,6 +975,17 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			Ts:      145,
 		},
 	}
+	multiSize := 100
+	regions := make([]uint64, multiSize)
+	for i := range regions {
+		regions[i] = 3
+	}
+	multipleResolved := &cdcpb.ChangeDataEvent{
+		ResolvedTs: &cdcpb.ResolvedTs{
+			Regions: regions,
+			Ts:      160,
+		},
+	}
 
 	expected := []*model.RegionFeedEvent{
 		{
@@ -1055,6 +1075,13 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 			RegionID: 3,
 		},
 	}
+	multipleExpected := &model.RegionFeedEvent{
+		Resolved: &model.ResolvedSpan{
+			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			ResolvedTs: 160,
+		},
+		RegionID: 3,
+	}
 
 	ch1 <- eventsBeforeInit
 	ch1 <- initialized
@@ -1071,7 +1098,35 @@ func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
 		}
 	}
 
+	ch1 <- multipleResolved
+	for i := 0; i < multiSize; i++ {
+		select {
+		case event := <-eventCh:
+			c.Assert(event, check.DeepEquals, multipleExpected)
+		case <-time.After(time.Second):
+			c.Errorf("expected event %v not received", multipleExpected)
+		}
+	}
+
 	cancel()
+}
+
+func (s *etcdSuite) TestHandleFeedEvent(c *check.C) {
+	defer testleak.AfterTest(c)()
+	s.testHandleFeedEvent(c)
+}
+
+func (s *etcdSuite) TestHandleFeedEventWithWorkerPool(c *check.C) {
+	defer testleak.AfterTest(c)()
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 8
+	regionWorkerLowWatermark = 2
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	s.testHandleFeedEvent(c)
 }
 
 // TestStreamSendWithError mainly tests the scenario that the `Send` call of a gPRC
@@ -3048,6 +3103,125 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 			c.Assert(event, check.DeepEquals, expectedEv)
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+
+	cancel()
+}
+
+// TestConcurrentProcessRangeRequest when region range request channel is full,
+// the kv client can process it correctly without deadlock. This is more likely
+// to happen when region split and merge frequently and large stale requests exist.
+func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	requestIDs := new(sync.Map)
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				return
+			}
+			requestIDs.Store(req.RegionId, req.RequestId)
+		}
+	}
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	storeID := uint64(1)
+	regionID := uint64(1000)
+	peerID := regionID + 1
+	cluster.AddStore(storeID, addr1)
+	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientMockRangeLock", "1*return(20)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientMockRangeLock")
+	}()
+	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// the kv client is blocked by failpoint injection, and after region has split
+	// into more sub regions, the kv client will continue to handle and will find
+	// stale region requests (which is also caused by failpoint injection).
+	regionNum := 20
+	for i := 1; i < regionNum; i++ {
+		regionID := uint64(i + 1000)
+		peerID := regionID + 1
+		// split regions to [min, b1001), [b1001, b1002), ... [bN, max)
+		cluster.SplitRaw(regionID-1, regionID, []byte(fmt.Sprintf("b%d", regionID)), []uint64{peerID}, peerID)
+	}
+
+	// wait for all regions requested from cdc kv client
+	err = retry.Run(time.Millisecond*200, 20, func() error {
+		count := 0
+		requestIDs.Range(func(_, _ interface{}) bool {
+			count++
+			return true
+		})
+		if count == regionNum {
+			return nil
+		}
+		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
+	})
+	c.Assert(err, check.IsNil)
+
+	// send initialized event and a resolved ts event to each region
+	requestIDs.Range(func(key, value interface{}) bool {
+		regionID := key.(uint64)
+		requestID := value.(uint64)
+		initialized := mockInitializedEvent(regionID, requestID)
+		ch1 <- initialized
+		resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+			{
+				RegionId:  regionID,
+				RequestId: requestID,
+				Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 120},
+			},
+		}}
+		ch1 <- resolved
+		return true
+	})
+
+	resolvedCount := 0
+checkEvent:
+	for {
+		select {
+		case <-eventCh:
+			resolvedCount++
+			if resolvedCount == regionNum*2 {
+				break checkEvent
+			}
+		case <-time.After(time.Second):
+			c.Errorf("no more events received")
 		}
 	}
 
