@@ -15,6 +15,7 @@ package context
 
 import (
 	"context"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"log"
 	"time"
 
@@ -184,7 +185,8 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
 			ID: "changefeed-id-test",
 			Info: &model.ChangeFeedInfo{
-				Config: config.GetDefaultReplicaConfig(),
+				StartTs: oracle.GoTimeToTS(time.Now()),
+				Config:  config.GetDefaultReplicaConfig(),
 			},
 		})
 	}
