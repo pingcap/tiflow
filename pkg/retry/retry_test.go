@@ -15,12 +15,15 @@ package retry
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"go.uber.org/zap"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -39,6 +42,8 @@ func (s *runSuite) TestShouldRetryAtMostSpecifiedTimes(c *check.C) {
 
 	err := Run(500*time.Millisecond, 3, f)
 	c.Assert(err, check.ErrorMatches, "test")
+	// 👇 i think tries = first call + maxRetries, so not weird 😎
+
 	// It's weird that backoff may retry one more time than maxTries.
 	// Because the steps in backoff.Retry is:
 	// 1. Call function
@@ -120,4 +125,97 @@ func (s *runSuite) TestInfiniteRetry(c *check.C) {
 	c.Assert(err, check.Equals, context.DeadlineExceeded)
 	c.Assert(reportedElapsed, check.Greater, time.Second)
 	c.Assert(reportedElapsed, check.LessEqual, 3*time.Second)
+}
+
+func (s *runSuite) Test_DoShouldRetryAtMostSpecifiedTimes(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var callCount int
+	f := func() error {
+		callCount++
+		return errors.New("test")
+	}
+
+	err := Do(context.Background(), f, WithMaxTries(3))
+	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(callCount, check.Equals, 3)
+}
+
+func (s *runSuite) Test_DoShouldStopOnSuccess(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var callCount int
+	f := func() error {
+		callCount++
+		if callCount == 2 {
+			return nil
+		}
+		return errors.New("test")
+	}
+
+	err := Do(context.Background(), f, WithMaxTries(3))
+	c.Assert(err, check.IsNil)
+	c.Assert(callCount, check.Equals, 2)
+}
+
+func (s *runSuite) Test_IsRetryable(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var callCount int
+	f := func() error {
+		callCount++
+		return errors.Annotate(context.Canceled, "test")
+	}
+
+	err := Do(context.Background(), f, WithMaxTries(3), WithIsRetryableErr(func(err error) bool {
+		switch errors.Cause(err) {
+		case context.Canceled:
+			return false
+		}
+		return true
+	}))
+
+	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	c.Assert(callCount, check.Equals, 1)
+
+	callCount = 0
+	err = Do(context.Background(), f, WithMaxTries(3))
+
+	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	c.Assert(callCount, check.Equals, 3)
+}
+
+func (s *runSuite) Test_DoCancelInfiniteRetry(c *check.C) {
+	defer testleak.AfterTest(c)()
+	callCount := 0
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*20)
+	defer cancel()
+	f := func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		callCount++
+		return errors.New("test")
+	}
+
+	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
+	log.Info("Test_DoCancelInfiniteRetry run f times", zap.Int("tries", callCount))
+	c.Assert(err, check.Equals, context.DeadlineExceeded)
+	c.Assert(callCount, check.GreaterEqual, 1, check.Commentf("tries:%d", callCount))
+	c.Assert(float64(callCount), check.Less, math.Inf(1))
+}
+
+func (s *runSuite) Test_DoCancelAtBeginning(c *check.C) {
+	defer testleak.AfterTest(c)()
+	callCount := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	f := func() error {
+		callCount++
+		return errors.New("test")
+	}
+
+	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
+	log.Info("Test_DoCancelAtBeginning run f times", zap.Int("tries", callCount))
+	c.Assert(err, check.Equals, context.Canceled)
+	c.Assert(callCount, check.Equals, 0, check.Commentf("tries:%d", callCount))
 }
