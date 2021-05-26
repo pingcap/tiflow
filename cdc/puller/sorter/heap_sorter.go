@@ -158,7 +158,6 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			}
 			return nil
 		}
-		h.heap = make(sortHeap, 0, sortHeapCapacity)
 	} else {
 		task.dealloc = func() error {
 			task.markDeallocated()
