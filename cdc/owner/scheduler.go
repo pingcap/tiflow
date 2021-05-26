@@ -44,11 +44,11 @@ type moveTableJob struct {
 }
 
 type scheduler struct {
-	state                    *model.ChangefeedReactorState
-	allTableShouldBeListened []model.TableID
-	captures                 map[model.CaptureID]*model.CaptureInfo
+	state         *model.ChangefeedReactorState
+	currentTables []model.TableID
+	captures      map[model.CaptureID]*model.CaptureInfo
 
-	moveTableTarget       map[model.TableID]model.CaptureID
+	moveTableTargets      map[model.TableID]model.CaptureID
 	moveTableJobQueue     []*moveTableJob
 	needRebalanceNextTick bool
 	lastTickCaptureCount  int
@@ -56,22 +56,21 @@ type scheduler struct {
 
 func newScheduler() *scheduler {
 	return &scheduler{
-		moveTableTarget: make(map[model.TableID]model.CaptureID),
+		moveTableTargets: make(map[model.TableID]model.CaptureID),
 	}
 }
 
 // Tick is a main process of scheduler, it dispatches tables into captures, and handles move-table and rebalance events.
 // Tick returns a bool represents the changefeed state can be update in this tick.
 // The state can be update only if all the tables which should be listened dispatched to captures and no operation sent to captures in this tick.
-func (s *scheduler) Tick(state *model.ChangefeedReactorState, allTableShouldBeListened []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool) {
+func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool) {
 	s.state = state
-	s.allTableShouldBeListened = allTableShouldBeListened
+	s.currentTables = currentTables
 	s.captures = captures
 
-	log.Debug("LEOPPRO", zap.Any("allTableShouldBeListened", allTableShouldBeListened))
 	s.cleanUpFinishedOperations()
 	pendingJob := s.syncTablesWithSchemaManager()
-	s.dispatchTargetCapture(pendingJob)
+	s.dispatchToTargetCaptures(pendingJob)
 	if len(pendingJob) != 0 {
 		log.Debug("scheduler:generated pending job to be executed", zap.Any("pendingJob", pendingJob))
 	}
@@ -101,7 +100,7 @@ func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool) {
 		if !exist {
 			return
 		}
-		s.moveTableTarget[job.tableID] = job.target
+		s.moveTableTargets[job.tableID] = job.target
 		job := job
 		shouldUpdateState = false
 		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
@@ -144,7 +143,7 @@ func (s *scheduler) table2CaptureIndex() map[model.TableID]model.CaptureID {
 	return table2CaptureIndex
 }
 
-func (s *scheduler) dispatchTargetCapture(pendingJobs []*schedulerJob) {
+func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 	workloads := make(map[model.CaptureID]uint64)
 
 	for captureID := range s.captures {
@@ -160,12 +159,12 @@ func (s *scheduler) dispatchTargetCapture(pendingJobs []*schedulerJob) {
 
 	for _, pendingJob := range pendingJobs {
 		if pendingJob.TargetCapture == "" {
-			target, exist := s.moveTableTarget[pendingJob.TableID]
+			target, exist := s.moveTableTargets[pendingJob.TableID]
 			if !exist {
 				continue
 			}
 			pendingJob.TargetCapture = target
-			delete(s.moveTableTarget, pendingJob.TableID)
+			delete(s.moveTableTargets, pendingJob.TableID)
 			continue
 		}
 		switch pendingJob.Tp {
@@ -209,7 +208,7 @@ func (s *scheduler) syncTablesWithSchemaManager() []*schedulerJob {
 	var pendingJob []*schedulerJob
 	allTableListeningNow := s.table2CaptureIndex()
 	globalCheckpointTs := s.state.Status.CheckpointTs
-	for _, tableID := range s.allTableShouldBeListened {
+	for _, tableID := range s.currentTables {
 		if _, exist := allTableListeningNow[tableID]; exist {
 			delete(allTableListeningNow, tableID)
 			continue
@@ -223,8 +222,8 @@ func (s *scheduler) syncTablesWithSchemaManager() []*schedulerJob {
 		})
 	}
 	// The remaining tables is the tables which should be not listened
-	tableShouldNotListened := allTableListeningNow
-	for tableID, captureID := range tableShouldNotListened {
+	tablesThatShouldNotBeListened := allTableListeningNow
+	for tableID, captureID := range tablesThatShouldNotBeListened {
 		opts := s.state.TaskStatuses[captureID].Operation
 		if opts != nil && opts[tableID] != nil && opts[tableID].Delete {
 			// the table is removing, skip
@@ -314,7 +313,7 @@ func (s *scheduler) shouldRebalance() bool {
 // rebalanceByTableNum removes the tables in captures which of number is too much
 // the removed table will be dispatched again by syncTablesWithSchemaManager function
 func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
-	totalTableNum := len(s.allTableShouldBeListened)
+	totalTableNum := len(s.currentTables)
 	captureNum := len(s.captures)
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
 	shouldUpdateState = true
