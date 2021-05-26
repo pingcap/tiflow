@@ -18,7 +18,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -31,6 +33,7 @@ type GlobalVars struct {
 	PDClient    pd.Client
 	KVStorage   tidbkv.Storage
 	CaptureInfo *model.CaptureInfo
+	EtcdClient  *kv.CDCEtcdClient
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
@@ -74,7 +77,7 @@ func NewContext(stdCtx context.Context, globalVars *GlobalVars) Context {
 	ctx := &rootContext{
 		globalVars: globalVars,
 	}
-	return withStd(ctx, stdCtx)
+	return WithStd(ctx, stdCtx)
 }
 
 func (ctx *rootContext) GlobalVars() *GlobalVars {
@@ -131,18 +134,18 @@ func (ctx *stdContext) Done() <-chan struct{} {
 	return ctx.stdCtx.Done()
 }
 
-//revive:disable:context-as-argument
-func withStd(ctx Context, stdCtx context.Context) Context {
+// WithStd returns a Context with the standard Context
+func WithStd(ctx Context, stdCtx context.Context) Context { //revive:disable:context-as-argument
 	return &stdContext{
 		stdCtx:  stdCtx,
 		Context: ctx,
 	}
 }
 
-// WithCancel return a Context with the cancel function
+// WithCancel returns a Context with the cancel function
 func WithCancel(ctx Context) (Context, context.CancelFunc) {
 	stdCtx, cancel := context.WithCancel(ctx)
-	return withStd(ctx, stdCtx), cancel
+	return WithStd(ctx, stdCtx), cancel
 }
 
 type throwContext struct {
@@ -173,13 +176,16 @@ func (ctx *throwContext) Throw(err error) {
 func NewBackendContext4Test(withChangefeedVars bool) Context {
 	ctx := NewContext(context.Background(), &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
-			ID:            "capture-id-4-test",
+			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
 		},
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
-			ID: "changefeed-id-4-test",
+			ID: "changefeed-id-test",
+			Info: &model.ChangeFeedInfo{
+				Config: config.GetDefaultReplicaConfig(),
+			},
 		})
 	}
 	return ctx
