@@ -245,6 +245,7 @@ func (m *mockDDLPuller) Run(ctx cdcContext.Context) error {
 				return errors.Trace(err)
 			}
 			m.ddlQueueMu.Lock()
+			log.Info("resolvedts ddl",zap.Uint64("re",ver.Ver))
 			m.resolvedTs = ver.Ver
 			m.ddlQueueMu.Unlock()
 		}
