@@ -33,7 +33,7 @@ import (
 
 const (
 	flushRateLimitPerSecond = 10
-	sortHeapCapacity        = 65536
+	sortHeapCapacity        = 32
 )
 
 type flushTask struct {
@@ -149,6 +149,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	}
 	h.taskCounter++
 
+	var oldHeap sortHeap
 	if !isEmptyFlush {
 		task.dealloc = func() error {
 			backEnd := task.GetBackEnd()
@@ -158,6 +159,8 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			}
 			return nil
 		}
+		oldHeap = h.heap
+		h.heap = make(sortHeap, 0, sortHeapCapacity)
 	} else {
 		task.dealloc = func() error {
 			task.markDeallocated()
@@ -217,7 +220,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			})
 
 			counter := 0
-			for h.heap.Len() > 0 {
+			for oldHeap.Len() > 0 {
 				failpoint.Inject("asyncFlushInProcessDelay", func() {
 					log.Debug("asyncFlushInProcessDelay")
 				})
@@ -228,7 +231,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 				}
 				counter++
 
-				event := heap.Pop(&h.heap).(*sortItem).entry
+				event := heap.Pop(&oldHeap).(*sortItem).entry
 				err := writer.writeNext(event)
 				if err != nil {
 					task.finished <- errors.Trace(err)
@@ -266,9 +269,6 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		if err != nil {
 			close(task.finished)
 			return errors.Trace(err)
-		}
-		if cap(h.heap) > sortHeapCapacity {
-			h.heap = make(sortHeap, 0, sortHeapCapacity)
 		}
 	}
 
