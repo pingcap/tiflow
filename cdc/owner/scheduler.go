@@ -16,11 +16,9 @@ package owner
 import (
 	"math"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -64,7 +62,7 @@ func newScheduler() *scheduler {
 
 // Tick is a main process of scheduler, it dispatches tables into captures, and handles move-table and rebalance events.
 // Tick returns a bool represents the changefeed state can be update in this tick.
-// The state can be update only if all the tables which should be listened dispatched to captures and no operation sent to captures in this tick.
+// The state can be updated only if all the tables which should be listened have been dispatched to captures and no operation sent to captures in this tick.
 func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool, err error) {
 	s.state = state
 	s.currentTables = currentTables
