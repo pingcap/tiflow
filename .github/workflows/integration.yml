@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.15.8'
+          go-version: '1.16.4'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -79,7 +79,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.15.8'
+          go-version: '1.16.4'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -134,7 +134,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.15.8'
+          go-version: '1.16.4'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -190,7 +190,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.15.8'
+          go-version: '1.16.4'
 
       - name: Cache Vendor
         id: cache-vendor
@@ -245,7 +245,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.15.8'
+          go-version: '1.16.4'
 
       - name: Cache Vendor
         id: cache-vendor
