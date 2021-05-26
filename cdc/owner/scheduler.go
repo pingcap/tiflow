@@ -62,9 +62,9 @@ func newScheduler() *scheduler {
 	}
 }
 
-// Tick is a main process of scheduler, it dispatches tables into captures, and handles move-table and rebalance events.
-// Tick returns a bool represents the changefeed state can be update in this tick.
-// The state can be updated only if all the tables which should be listened have been dispatched to captures and no operation sent to captures in this tick.
+// Tick is the main function of scheduler. It dispatches tables to captures and handles move-table and rebalance events.
+// Tick returns a bool representing whether the changefeed's state can be updated in this tick.
+// The state can be updated only if all the tables which should be listened to have been dispatched to captures and no operations have been sent to captures in this tick.
 func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool, err error) {
 	s.state = state
 	s.currentTables = currentTables
@@ -81,8 +81,8 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []mo
 	}
 	s.handleJobs(pendingJob)
 
-	// only if the pending job is empty and no table being rebalance or moved,
-	// the global resolved ts and checkpoint ts can be updated
+	// only if the pending job list is empty and no table is being rebalanced or moved,
+	// can the global resolved ts and checkpoint ts be updated
 	shouldUpdateState = len(pendingJob) == 0
 	shouldUpdateState = s.rebalance() && shouldUpdateState
 	shouldUpdateStateInMoveTable, err := s.handleMoveTableJob()
@@ -158,8 +158,8 @@ func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, err
 	return table2CaptureIndex, nil
 }
 
-// dispatchToTargetCaptures set the the TargetCapture of scheduler jobs
-// if the TargetCapture of a job is not set, choose a capture which of workload is minimum and set the capture to the TargetCapture
+// dispatchToTargetCaptures sets the the TargetCapture of scheduler jobs
+// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload and sets the TargetCapture to the capture.
 func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 	workloads := make(map[model.CaptureID]uint64)
 
@@ -246,7 +246,7 @@ func (s *scheduler) syncTablesWithSchemaManager() ([]*schedulerJob, error) {
 	for tableID, captureID := range tablesThatShouldNotBeListened {
 		opts := s.state.TaskStatuses[captureID].Operation
 		if opts != nil && opts[tableID] != nil && opts[tableID].Delete {
-			// the table is removing, skip
+			// the table is being removed, skip
 			continue
 		}
 		pendingJob = append(pendingJob, &schedulerJob{
@@ -331,7 +331,7 @@ func (s *scheduler) shouldRebalance() bool {
 	return false
 }
 
-// rebalanceByTableNum removes the tables in captures which of number is too much
+// rebalanceByTableNum removes tables from captures replicating an above-average number of tables.
 // the removed table will be dispatched again by syncTablesWithSchemaManager function
 func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 	totalTableNum := len(s.currentTables)
