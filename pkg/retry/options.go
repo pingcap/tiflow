@@ -82,7 +82,7 @@ func WithInfiniteTries() Option {
 	}
 }
 
-// WithIsRetryableErr configures the error handler, if not set, retry by default
+// WithIsRetryableErr configures the error should retry or not, if not set, retry by default
 func WithIsRetryableErr(f func(error) bool) Option {
 	return func(o *retryOptions) {
 		if f != nil {
