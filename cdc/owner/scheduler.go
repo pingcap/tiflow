@@ -75,6 +75,9 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []mo
 		log.Debug("scheduler:generated pending job to be executed", zap.Any("pendingJob", pendingJob))
 	}
 	s.handleJobs(pendingJob)
+
+	// only if the pending job is empty and no table being rebalance or moved,
+	// the global resolved ts and checkpoint ts can be updated
 	shouldUpdateState = len(pendingJob) == 0
 	shouldUpdateState = s.rebalance() && shouldUpdateState
 	shouldUpdateState = s.handleMoveTableJob() && shouldUpdateState
@@ -290,6 +293,7 @@ func (s *scheduler) cleanUpFinishedOperations() {
 
 func (s *scheduler) rebalance() (shouldUpdateState bool) {
 	if !s.shouldRebalance() {
+		// if no table is rebalanced, we can update the resolved ts and checkpoint ts
 		return true
 	}
 	// we only support rebalance by table number for now
@@ -329,6 +333,9 @@ func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 		if tableNum2Remove <= 0 {
 			continue
 		}
+
+		// here we pick `tableNum2Remove` tables to delete,
+		// and then the removed tables will be dispatched by `syncTablesWithSchemaManager` function in the next tick
 		for tableID := range taskStatus.Tables {
 			tableID := tableID
 			if tableNum2Remove <= 0 {
