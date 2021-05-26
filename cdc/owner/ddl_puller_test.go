@@ -183,10 +183,15 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	})
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(c, p, 25)
-	// only one ddl should be received
+
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(25))
 	c.Assert(ddl.ID, check.Equals, int64(3))
+	resolvedTs, ddl = p.PopFrontDDL()
+	c.Assert(resolvedTs, check.Equals, uint64(25))
+	c.Assert(ddl.ID, check.Equals, int64(3))
+
+	waitResolvedTsGrowing(c, p, 30)
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(30))
 	c.Assert(ddl, check.IsNil)
