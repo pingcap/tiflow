@@ -214,10 +214,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	s.workers[addr] = worker
 	s.workersLock.Unlock()
 
-	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
-		reconnectInterval = time.Duration(val.(int)) * time.Second
-	})
-
 	g.Go(func() error {
 		return worker.run(ctx)
 	})
