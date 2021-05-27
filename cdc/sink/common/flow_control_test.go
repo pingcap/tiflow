@@ -417,6 +417,48 @@ func (s *flowControlSuite) TestFlowControlCallBack(c *check.C) {
 	c.Assert(atomic.LoadUint64(&consumedBytes), check.Equals, uint64(0))
 }
 
+func (s *flowControlSuite) TestFlowControlCallBackNotBlockingRelease(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	var wg sync.WaitGroup
+	controller := NewTableFlowController(512)
+	wg.Add(1)
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	go func() {
+		defer wg.Done()
+		err := controller.Consume(1, 511, func() error {
+			c.Fatalf("unreachable")
+			return nil
+		})
+		c.Assert(err, check.IsNil)
+
+		var isBlocked int32
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-time.After(time.Second * 1)
+			// makes sure that this test case is valid
+			c.Assert(atomic.LoadInt32(&isBlocked), check.Equals, int32(1))
+			controller.Release(1)
+			cancel()
+		}()
+
+		err = controller.Consume(2, 511, func() error {
+			atomic.StoreInt32(&isBlocked, 1)
+			<-ctx.Done()
+			atomic.StoreInt32(&isBlocked, 0)
+			return ctx.Err()
+		})
+
+		c.Assert(err, check.ErrorMatches, ".*context canceled.*")
+	}()
+
+	wg.Wait()
+}
+
 func (s *flowControlSuite) TestFlowControlCallBackError(c *check.C) {
 	defer testleak.AfterTest(c)()
 
