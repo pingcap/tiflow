@@ -1438,9 +1438,6 @@ func (s *eventFeedSession) singleEventFeed(
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
 	})
-	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
-		reconnectInterval = time.Duration(val.(int)) * time.Second
-	})
 
 	for {
 		var event *regionEvent

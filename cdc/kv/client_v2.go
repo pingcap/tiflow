@@ -94,9 +94,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 		state.start()
 		worker.setRegionState(event.RegionId, state)
-		// TODO: If a region doesn't receive any event from TiKV, this region
-		// can't be reconnected since the region state is not initialized.
-		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
 
 		// send resolved event when starting a single event feed
 		select {
@@ -116,6 +113,12 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 			zap.Uint64("requestID", event.RequestId),
 			zap.String("addr", addr))
 		return nil
+	}
+
+	// TODO: If a region doesn't receive any event from TiKV, this region
+	// can't be reconnected since the region state is not initialized.
+	if !state.isInitialized() {
+		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
 	}
 
 	select {
@@ -208,10 +211,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	s.workersLock.Lock()
 	s.workers[addr] = worker
 	s.workersLock.Unlock()
-
-	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
-		reconnectInterval = time.Duration(val.(int)) * time.Second
-	})
 
 	g.Go(func() error {
 		return worker.run(ctx)

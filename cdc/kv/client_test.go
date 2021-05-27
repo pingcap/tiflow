@@ -2815,11 +2815,11 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval", "return(1)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval", "return(3)")
-	c.Assert(err, check.IsNil)
+	originalReconnectInterval := reconnectInterval
+	reconnectInterval = 3 * time.Second
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval")
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval")
+		reconnectInterval = originalReconnectInterval
 	}()
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
@@ -3084,14 +3084,14 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval", "return(3)")
-	c.Assert(err, check.IsNil)
+	originalReconnectInterval := reconnectInterval
+	reconnectInterval = 3 * time.Second
 	// check interval is less than reconnect interval, so we can test both the hit and miss case
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientCheckUnInitRegionInterval", "return(1)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientReconnectInterval")
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientCheckUnInitRegionInterval")
+		reconnectInterval = originalReconnectInterval
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
@@ -3217,6 +3217,123 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 			c.Assert(event, check.DeepEquals, expectedEv)
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+
+	cancel()
+}
+
+// TestEvTimeUpdate creates a new event feed, send N committed events every 100ms,
+// use failpoint to set reconnect interval to 1s, the last event time of region
+// should be updated correctly and no reconnect is triggered
+func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(1, addr1)
+	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
+
+	originalReconnectInterval := reconnectInterval
+	reconnectInterval = 1500 * time.Millisecond
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientCheckUnInitRegionInterval", "return(2)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientCheckUnInitRegionInterval")
+		reconnectInterval = originalReconnectInterval
+	}()
+
+	baseAllocatedID := currentRequestID()
+	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+
+	eventCount := 20
+	for i := 0; i < eventCount; i++ {
+		events := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+			{
+				RegionId:  3,
+				RequestId: currentRequestID(),
+				Event: &cdcpb.Event_Entries_{
+					Entries: &cdcpb.Event_Entries{
+						Entries: []*cdcpb.Event_Row{{
+							Type:     cdcpb.Event_COMMITTED,
+							OpType:   cdcpb.Event_Row_PUT,
+							Key:      []byte("aaaa"),
+							Value:    []byte("committed put event before init"),
+							StartTs:  105,
+							CommitTs: 115,
+						}},
+					},
+				},
+			},
+		}}
+		ch1 <- events
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	expected := []*model.RegionFeedEvent{
+		{
+			Resolved: &model.ResolvedSpan{
+				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+				ResolvedTs: 100,
+			},
+			RegionID: 3,
+		},
+		{
+			Val: &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      []byte("aaaa"),
+				Value:    []byte("committed put event before init"),
+				StartTs:  105,
+				CRTs:     115,
+				RegionID: 3,
+			},
+			RegionID: 3,
+		},
+	}
+
+	for i := 0; i < eventCount+1; i++ {
+		select {
+		case event := <-eventCh:
+			if i == 0 {
+				c.Assert(event, check.DeepEquals, expected[0])
+			} else {
+				c.Assert(event, check.DeepEquals, expected[1])
+			}
+		case <-time.After(time.Second):
+			c.Errorf("expected event not received, %d received", i)
 		}
 	}
 
