@@ -703,7 +703,7 @@ this api supports POST method only
 
 ["CDC:ErrTableListenReplicated"]
 error = '''
-A table is replicated by two processor(%s, %s), please report a bug
+A table is being replicated by at least two processors(%s, %s), please report a bug
 '''
 
 ["CDC:ErrTableProcessorStoppedSafely"]
