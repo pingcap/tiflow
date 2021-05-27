@@ -214,6 +214,10 @@ func newQueryChangefeedCommand() *cobra.Command {
 			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
+			if err != nil && cerror.ErrChangeFeedNotExists.Equal(err) {
+				log.Error("This changefeed does not exist", zap.String("changefeed", changefeedID))
+				return err
+			}
 			taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
 			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
@@ -232,7 +236,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			}
 			meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
 			if info == nil {
-				log.Warn("this changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.")
+				log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", changefeedID))
 			}
 			return jsonPrint(cmd, meta)
 		},
