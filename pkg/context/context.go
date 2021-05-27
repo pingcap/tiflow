@@ -18,12 +18,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
-
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -136,15 +135,15 @@ func (ctx *stdContext) Done() <-chan struct{} {
 	return ctx.stdCtx.Done()
 }
 
-//revive:disable:context-as-argument
-func WithStd(ctx Context, stdCtx context.Context) Context {
+// WithStd returns a Context with the standard Context
+func WithStd(ctx Context, stdCtx context.Context) Context { //revive:disable:context-as-argument
 	return &stdContext{
 		stdCtx:  stdCtx,
 		Context: ctx,
 	}
 }
 
-// WithCancel return a Context with the cancel function
+// WithCancel returns a Context with the cancel function
 func WithCancel(ctx Context) (Context, context.CancelFunc) {
 	stdCtx, cancel := context.WithCancel(ctx)
 	return WithStd(ctx, stdCtx), cancel

@@ -32,10 +32,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DDLPuller is a wrapper of the Puller interface for the owner
+// DDLPuller starts a puller, listens to the DDL range, adds the received DDLs into an internal queue
 type DDLPuller interface {
+	// Run runs the DDLPuller
 	Run(ctx cdcContext.Context) error
+	// FrontDDL returns the first DDL job in the internal queue
 	FrontDDL() (uint64, *timodel.Job)
+	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
+	// Close closes the DDLPuller
 	Close()
 }
 
@@ -52,13 +58,13 @@ type ddlPullerImpl struct {
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	pdCli := ctx.GlobalVars().PDClient
 	conf := config.GetGlobalServerConfig()
-	kvStorage := ctx.GlobalVars().KVStorage
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	var plr puller.Puller
-	// kvStorage can be nil only in test
+	kvStorage := ctx.GlobalVars().KVStorage
+	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(ctx, pdCli, conf.Security, kvStorage, startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
@@ -66,18 +72,22 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}
 
 	return &ddlPullerImpl{
-		puller:     plr,
+		puller: plr,
+		// the puller will listen to change events from `startTs` (including `startTs`)
+		// `startTs - 1` is a valid resolvedTS, which means that all transactions before `startTs - 1` have been received (or don't need to be received)
 		resolvedTS: startTs - 1,
 		filter:     f,
 		cancel:     func() {},
 	}, nil
 }
 
+const ddlPullerName = "DDL_PULLER"
+
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
-	log.Debug("DDL puller started")
-	stdCtx := util.PutTableInfoInCtx(ctx, -1, "DDL_PULLER")
+	log.Debug("DDL puller started", zap.String("changefeed-id", ctx.ChangefeedVars().ID))
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, ddlPullerName)
 	errg, stdCtx := errgroup.WithContext(stdCtx)
 	ctx = cdcContext.WithStd(ctx, stdCtx)
 
@@ -87,7 +97,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 
 	rawDDLCh := puller.SortOutput(ctx, h.puller.Output())
 
-	var lastDDLFinishedTs uint64
 	receiveDDL := func(rawDDL *model.RawKVEntry) error {
 		if rawDDL == nil {
 			return nil
@@ -111,10 +120,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 			return nil
 		}
-		if job.BinlogInfo.FinishedTS == lastDDLFinishedTs {
-			return nil
-		}
-		lastDDLFinishedTs = job.BinlogInfo.FinishedTS
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.pendingDDLJobs = append(h.pendingDDLJobs, job)

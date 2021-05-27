@@ -1,8 +1,22 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package owner
 
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -89,16 +104,24 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 }
 
 func (s *ddlPullerSuite) TestPuller(c *check.C) {
+	defer testleak.AfterTest(c)()
 	startTs := uint64(10)
 	mockPuller := newMockPuller(c, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, err := newDDLPuller(ctx, startTs)
 	c.Assert(err, check.IsNil)
 	p.(*ddlPullerImpl).puller = mockPuller
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := p.Run(ctx)
+		if errors.Cause(err) == context.Canceled {
+			err = nil
+		}
 		c.Assert(err, check.IsNil)
 	}()
+	defer wg.Wait()
 	defer p.Close()
 
 	// test initialize state
@@ -160,10 +183,15 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	})
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(c, p, 25)
-	// only one ddl should be received
+
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(25))
 	c.Assert(ddl.ID, check.Equals, int64(3))
+	resolvedTs, ddl = p.PopFrontDDL()
+	c.Assert(resolvedTs, check.Equals, uint64(25))
+	c.Assert(ddl.ID, check.Equals, int64(3))
+
+	waitResolvedTsGrowing(c, p, 30)
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(30))
 	c.Assert(ddl, check.IsNil)
