@@ -157,7 +157,15 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	var resultErr error
+	var resultErrMu sync.Mutex
+	getResultErr := func() error {
+		resultErrMu.Lock()
+		defer resultErrMu.Unlock()
+		return resultErr
+	}
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
+		resultErrMu.Lock()
+		defer resultErrMu.Unlock()
 		resultErr = err
 		return nil
 	})
@@ -173,16 +181,16 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 			break
 		}
 	}
-	c.Assert(resultErr, check.IsNil)
+	c.Assert(getResultErr(), check.IsNil)
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
 	for {
 		done, err := sink.EmitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
-		if done || resultErr != nil {
+		if done || getResultErr() != nil {
 			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
 			break
 		}
 	}
-	c.Assert(cerror.ErrExecDDLFailed.Equal(errors.Cause(resultErr)), check.IsTrue)
+	c.Assert(cerror.ErrExecDDLFailed.Equal(errors.Cause(getResultErr())), check.IsTrue)
 }
