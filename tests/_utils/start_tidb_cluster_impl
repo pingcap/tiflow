@@ -276,7 +276,7 @@ runAsDaemon = true
 kvstore_path = "${OUT_DIR}/tiflash/kvstore"
 pd_addr = "${UP_PD_HOST_1}:${UP_PD_PORT_1}"
 ignore_databases = "system,default"
-storage_engine = "tmt"
+storage_engine = "dt"
 EOF
 
 cat - >"$OUT_DIR/tiflash-proxy.toml" <<EOF
