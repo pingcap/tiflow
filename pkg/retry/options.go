@@ -28,7 +28,6 @@ const (
 // Option ...
 type Option func(*retryOptions)
 
-// retryOptions ...
 type retryOptions struct {
 	maxTries    int64
 	backoffBase float64

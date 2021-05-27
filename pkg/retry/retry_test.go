@@ -125,7 +125,7 @@ func (s *runSuite) TestInfiniteRetry(c *check.C) {
 	c.Assert(reportedElapsed, check.LessEqual, 3*time.Second)
 }
 
-func (s *runSuite) Test_DoShouldRetryAtMostSpecifiedTimes(c *check.C) {
+func (s *runSuite) TestDoShouldRetryAtMostSpecifiedTimes(c *check.C) {
 	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
@@ -138,7 +138,7 @@ func (s *runSuite) Test_DoShouldRetryAtMostSpecifiedTimes(c *check.C) {
 	c.Assert(callCount, check.Equals, 3)
 }
 
-func (s *runSuite) Test_DoShouldStopOnSuccess(c *check.C) {
+func (s *runSuite) TestDoShouldStopOnSuccess(c *check.C) {
 	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
@@ -154,7 +154,7 @@ func (s *runSuite) Test_DoShouldStopOnSuccess(c *check.C) {
 	c.Assert(callCount, check.Equals, 2)
 }
 
-func (s *runSuite) Test_IsRetryable(c *check.C) {
+func (s *runSuite) TestIsRetryable(c *check.C) {
 	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
@@ -180,7 +180,7 @@ func (s *runSuite) Test_IsRetryable(c *check.C) {
 	c.Assert(callCount, check.Equals, 3)
 }
 
-func (s *runSuite) Test_DoCancelInfiniteRetry(c *check.C) {
+func (s *runSuite) TestDoCancelInfiniteRetry(c *check.C) {
 	defer testleak.AfterTest(c)()
 	callCount := 0
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*20)
@@ -198,10 +198,10 @@ func (s *runSuite) Test_DoCancelInfiniteRetry(c *check.C) {
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
 	c.Assert(err, check.Equals, context.DeadlineExceeded)
 	c.Assert(callCount, check.GreaterEqual, 1, check.Commentf("tries:%d", callCount))
-	c.Assert(float64(callCount), check.Less, math.Inf(1))
+	c.Assert(callCount, check.Less, math.MaxInt64)
 }
 
-func (s *runSuite) Test_DoCancelAtBeginning(c *check.C) {
+func (s *runSuite) TestDoCancelAtBeginning(c *check.C) {
 	defer testleak.AfterTest(c)()
 	callCount := 0
 	ctx, cancel := context.WithCancel(context.Background())
@@ -214,4 +214,44 @@ func (s *runSuite) Test_DoCancelAtBeginning(c *check.C) {
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
 	c.Assert(err, check.Equals, context.Canceled)
 	c.Assert(callCount, check.Equals, 0, check.Commentf("tries:%d", callCount))
+}
+
+func (s *runSuite) TestDoCornerCases(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var callCount int
+	f := func() error {
+		callCount++
+		return errors.New("test")
+	}
+
+	err := Do(context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithBackoffMaxDelay(math.MaxInt64), WithMaxTries(2))
+	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(callCount, check.Equals, 2)
+
+	callCount = 0
+	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MaxInt64), WithBackoffMaxDelay(math.MinInt64), WithMaxTries(2))
+	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(callCount, check.Equals, 2)
+
+	callCount = 0
+	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithBackoffMaxDelay(math.MinInt64), WithMaxTries(2))
+	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(callCount, check.Equals, 2)
+
+	callCount = 0
+	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MaxInt64), WithBackoffMaxDelay(math.MaxInt64), WithMaxTries(2))
+	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(callCount, check.Equals, 2)
+
+	var i int64
+	for i = -10; i < 10; i++ {
+		callCount = 0
+		err = Do(context.Background(), f, WithBackoffBaseDelay(i), WithBackoffMaxDelay(i), WithMaxTries(i))
+		c.Assert(err, check.ErrorMatches, "*test")
+		if i > 0 {
+			c.Assert(int64(callCount), check.Equals, i)
+		} else {
+			c.Assert(callCount, check.Equals, defaultMaxTries)
+		}
+	}
 }
