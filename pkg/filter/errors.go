@@ -30,6 +30,7 @@ func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	switch errCode {
 	case cerror.ErrStartTsBeforeGC.RFCCode():
 		return true
+	default:
+		return false
 	}
-	return false
 }
