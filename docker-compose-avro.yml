@@ -43,6 +43,7 @@ services:
       - --log-file=/logs/capturer0.log
       - --log-level=debug
       - --advertise-addr=capturer0:8300
+      - --tz=${CDC_TIME_ZONE:-SYSTEM}
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
@@ -64,6 +65,7 @@ services:
       - --log-file=/logs/capturer1.log
       - --log-level=debug
       - --advertise-addr=capturer1:8300
+      - --tz=${CDC_TIME_ZONE:-SYSTEM}
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
@@ -85,6 +87,7 @@ services:
       - --log-file=/logs/capturer2.log
       - --log-level=debug
       - --advertise-addr=capturer2:8300
+      - --tz=${CDC_TIME_ZONE:-SYSTEM}
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
