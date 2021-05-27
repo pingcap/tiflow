@@ -241,19 +241,19 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 	return filter.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }
 
-// CheckErrorHistoryV2 checks error history of a changefeed
-// if having error record older than GC interval, set needSave to true.
-// if error counts reach threshold, set canInit to false.
-func (info *ChangeFeedInfo) CheckErrorHistoryV2() (canInit bool) {
+// ErrorsReachedThreshold checks error history of a changefeed
+// returns true if error counts reach threshold
+func (info *ChangeFeedInfo) ErrorsReachedThreshold() bool {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
 		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
 	})
-	return len(info.ErrorHis)-i < ErrorHistoryThreshold
+	return len(info.ErrorHis)-i >= ErrorHistoryThreshold
 }
 
 // CleanUpOutdatedErrorHistory cleans up the outdated error history
-func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory() (needSave bool) {
+// return true if the ErrorHis changed
+func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory() bool {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
 		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
