@@ -28,15 +28,13 @@ const (
 // Option ...
 type Option func(*retryOptions)
 
-// IsRetryableErr checks the error is safe to retry or not, eg. "context.Canceled" better not retry
-type IsRetryableErr func(error) bool
-
 // retryOptions ...
 type retryOptions struct {
 	maxTries    float64
 	backoffBase float64
 	backoffCap  float64
-	isRetryable IsRetryableErr
+	// isRetryable checks the error is safe to retry or not, eg. "context.Canceled" better not retry
+	isRetryable func(error) bool
 }
 
 func newRetryOptions() *retryOptions {
