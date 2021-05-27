@@ -1,0 +1,18 @@
+[replication]
+# Set it to 1 to make sure we have enough replicas to run placement-rules.
+max-replicas = 1
+enable-placement-rules = true
+
+[schedule]
+# decrease the split-merge-interval to trigger fast region merge
+split-merge-interval = "3s"
+merge-schedule-limit = 32
+
+[[schedule.schedulers]]
+type = "random-merge"
+
+[[schedule.schedulers]]
+type = "balance-region"
+
+[[schedule.schedulers]]
+type = "balance-leader"

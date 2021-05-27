@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -1312,8 +1313,19 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
+	var requestID uint64
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv1 := newMockChangeDataService(c, ch1)
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				return
+			}
+			atomic.StoreUint64(&requestID, req.RequestId)
+		}
+	}
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
 
 	defer func() {
@@ -1350,6 +1362,14 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 
 	// wait request id allocated with: new session, new request
 	waitRequestID(c, baseAllocatedID+1)
+	err = retry.Run(time.Millisecond*50, 10, func() error {
+		if atomic.LoadUint64(&requestID) == currentRequestID() {
+			return nil
+		}
+		return errors.Errorf("request is not received, requestID: %d, expected: %d",
+			atomic.LoadUint64(&requestID), currentRequestID())
+	})
+	c.Assert(err, check.IsNil)
 	initialized1 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized1
 	err = retry.Run(time.Millisecond*200, 10, func() error {
@@ -1393,6 +1413,14 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 
 	// wait request id allocated with: new session, new request*2
 	waitRequestID(c, baseAllocatedID+2)
+	err = retry.Run(time.Millisecond*50, 10, func() error {
+		if atomic.LoadUint64(&requestID) == currentRequestID() {
+			return nil
+		}
+		return errors.Errorf("request is not received, requestID: %d, expected: %d",
+			atomic.LoadUint64(&requestID), currentRequestID())
+	})
+	c.Assert(err, check.IsNil)
 	initialized2 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized2
 	err = retry.Run(time.Millisecond*200, 10, func() error {
@@ -2800,6 +2828,125 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 			c.Assert(event, check.DeepEquals, expectedEv)
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
+		}
+	}
+
+	cancel()
+}
+
+// TestConcurrentProcessRangeRequest when region range request channel is full,
+// the kv client can process it correctly without deadlock. This is more likely
+// to happen when region split and merge frequently and large stale requests exist.
+func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	requestIDs := new(sync.Map)
+	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv1 := newMockChangeDataService(c, ch1)
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				return
+			}
+			requestIDs.Store(req.RegionId, req.RequestId)
+		}
+	}
+	server1, addr1 := newMockService(ctx, c, srv1, wg)
+
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
+	defer kvStorage.Close() //nolint:errcheck
+
+	storeID := uint64(1)
+	regionID := uint64(1000)
+	peerID := regionID + 1
+	cluster.AddStore(storeID, addr1)
+	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientMockRangeLock", "1*return(20)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientMockRangeLock")
+	}()
+	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+		wg.Done()
+	}()
+
+	// the kv client is blocked by failpoint injection, and after region has split
+	// into more sub regions, the kv client will continue to handle and will find
+	// stale region requests (which is also caused by failpoint injection).
+	regionNum := 20
+	for i := 1; i < regionNum; i++ {
+		regionID := uint64(i + 1000)
+		peerID := regionID + 1
+		// split regions to [min, b1001), [b1001, b1002), ... [bN, max)
+		cluster.SplitRaw(regionID-1, regionID, []byte(fmt.Sprintf("b%d", regionID)), []uint64{peerID}, peerID)
+	}
+
+	// wait for all regions requested from cdc kv client
+	err = retry.Run(time.Millisecond*200, 20, func() error {
+		count := 0
+		requestIDs.Range(func(_, _ interface{}) bool {
+			count++
+			return true
+		})
+		if count == regionNum {
+			return nil
+		}
+		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
+	})
+	c.Assert(err, check.IsNil)
+
+	// send initialized event and a resolved ts event to each region
+	requestIDs.Range(func(key, value interface{}) bool {
+		regionID := key.(uint64)
+		requestID := value.(uint64)
+		initialized := mockInitializedEvent(regionID, requestID)
+		ch1 <- initialized
+		resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+			{
+				RegionId:  regionID,
+				RequestId: requestID,
+				Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 120},
+			},
+		}}
+		ch1 <- resolved
+		return true
+	})
+
+	resolvedCount := 0
+checkEvent:
+	for {
+		select {
+		case <-eventCh:
+			resolvedCount++
+			if resolvedCount == regionNum*2 {
+				break checkEvent
+			}
+		case <-time.After(time.Second):
+			c.Errorf("no more events received")
 		}
 	}
 
