@@ -781,3 +781,13 @@ error = '''
 wrong table info in unflatten, table id %d, index table id: %d
 '''
 
+["ErrConflictingFileLocks"]
+error = '''
+file lock conflict: %s
+'''
+
+["ErrSortDirLockError"]
+error = '''
+error encountered when locking sort-dir
+'''
+
