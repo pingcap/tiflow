@@ -286,7 +286,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
-		if ddlJob == nil {
+		if ddlJob == nil || ddlResolvedTs != barrierTs {
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}

@@ -15,9 +15,10 @@ package context
 
 import (
 	"context"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"log"
 	"time"
+
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"

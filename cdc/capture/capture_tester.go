@@ -116,8 +116,8 @@ func (t *Tester) CreateChangefeed(ctx context.Context, name string, startTs uint
 	t.c.Assert(err, check.IsNil)
 }
 
-func (t *Tester) CurrentVersion() model.Ts{
-	ver,err:=t.schemaHelper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+func (t *Tester) CurrentVersion() model.Ts {
+	ver, err := t.schemaHelper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	t.c.Assert(err, check.IsNil)
 	return ver.Ver
 }
@@ -245,7 +245,7 @@ func (m *mockDDLPuller) Run(ctx cdcContext.Context) error {
 				return errors.Trace(err)
 			}
 			m.ddlQueueMu.Lock()
-			log.Info("resolvedts ddl",zap.Uint64("re",ver.Ver))
+			log.Info("resolvedts ddl", zap.Uint64("re", ver.Ver))
 			m.resolvedTs = ver.Ver
 			m.ddlQueueMu.Unlock()
 		}
