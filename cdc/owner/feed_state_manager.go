@@ -61,8 +61,8 @@ func (m *feedStateManager) ShouldRunning() bool {
 
 func (m *feedStateManager) MarkFinished() {
 	if m.state == nil {
-		// when state is nil, it means that Tick is never not called
-		// skip this and wait next tick to finish the changefeed
+		// when state is nil, it means that Tick has never been called
+		// skip this and wait for the next tick to finish the changefeed
 		return
 	}
 	m.pushAdminJob(&model.AdminJob{
@@ -75,7 +75,7 @@ func (m *feedStateManager) PushAdminJob(job *model.AdminJob) {
 	switch job.Type {
 	case model.AdminStop, model.AdminResume, model.AdminRemove:
 	default:
-		log.Panic("can not handle this job", zap.String("changefeedID", m.state.ID),
+		log.Panic("Can not handle this job", zap.String("changefeedID", m.state.ID),
 			zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 	}
 	m.pushAdminJob(job)
