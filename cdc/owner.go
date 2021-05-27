@@ -85,13 +85,9 @@ func (o *Owner) getMinGCSafePointCache(ctx context.Context) model.Ts {
 			return o.minGCSafePointCache.ts
 		}
 		o.minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(o.gcTTL*1000), logicalTs)
-		// get minimum safepoint across all services
-		actualGCSafePoint, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCMinGCSafePointCacheServiceID, CDCMinGCSafePointCacheServiceTTL, o.minGCSafePointCache.ts)
-		if err != nil {
-			log.Warn("Fail to get actualGCSafePoint from PD.", zap.Error(err))
-		}
-		if actualGCSafePoint < o.minGCSafePointCache.ts {
-			o.minGCSafePointCache.ts = actualGCSafePoint
+
+		if o.pdGCSafePoint < o.minGCSafePointCache.ts {
+			o.minGCSafePointCache.ts = o.pdGCSafePoint
 		}
 
 		o.minGCSafePointCache.lastUpdated = time.Now()
@@ -136,6 +132,8 @@ type Owner struct {
 	gcSafepointLastUpdate time.Time
 	// stores the ts obtained from PD and is updated every MinGCSafePointCacheUpdateInterval.
 	minGCSafePointCache minGCSafePointCacheEntry
+	// stores the actual gcSafePoint store in pd
+	pdGCSafePoint model.Ts
 	// record last time that flushes all changefeeds' replication status
 	lastFlushChangefeeds    time.Time
 	flushChangefeedInterval time.Duration
@@ -145,10 +143,6 @@ type Owner struct {
 const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
-	// CDCMinGCSafePointCacheServiceID is this service GC safe point ID
-	CDCMinGCSafePointCacheServiceID = "ticdc-minGCSafePoint-cache"
-	// CDCMinGCSafePointCacheServiceTTL is this service GC safe point TTL
-	CDCMinGCSafePointCacheServiceTTL = 10 * 60 // 10mins
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
 	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
@@ -768,7 +762,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			// A changefeed will not enter the map twice, because in run(),
 			// handleAdminJob() will always be executed before flushChangeFeedInfos(),
 			// ensuring that the previous changefeed in staleChangeFeeds has been stopped and removed from o.changeFeeds.
-			if changefeed.status.CheckpointTs <= minGCSafePoint {
+			if minGCSafePoint != 0 && changefeed.status.CheckpointTs <= minGCSafePoint {
 				staleChangeFeeds[id] = changefeed.status
 			}
 
@@ -794,7 +788,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		// If a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant.
 		// It should never be resumed. This part of the logic is in newChangeFeed()
 		// So here we can skip it.
-		if status.CheckpointTs <= minGCSafePoint {
+		if minGCSafePoint != 0 && status.CheckpointTs <= minGCSafePoint {
 			continue
 		}
 
@@ -820,6 +814,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 				return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 			}
 		} else {
+			o.pdGCSafePoint = actual
 			o.gcSafepointLastUpdate = time.Now()
 		}
 

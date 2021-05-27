@@ -237,7 +237,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
-	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
 
 	err = mockOwner.handleAdminJob(s.ctx)
 	c.Assert(err, check.IsNil)
@@ -247,7 +247,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 	time.Sleep(7 * time.Second) // wait for gcTTL time pass
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
-	c.Assert(mockPDCli.invokeCounter, check.Equals, 4)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
 
 	err = mockOwner.handleAdminJob(s.ctx)
 	c.Assert(err, check.IsNil)
@@ -297,23 +297,6 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 				"capture_2": {},
 			},
 		},
-		"test_change_feed_3": {
-			info:    &model.ChangeFeedInfo{State: model.StateNormal},
-			etcdCli: s.client,
-			status: &model.ChangeFeedStatus{
-				CheckpointTs: 0,
-			},
-			targetTs: 2000,
-			ddlState: model.ChangeFeedSyncDML,
-			taskStatus: model.ProcessorsInfos{
-				"capture_1": {},
-				"capture_2": {},
-			},
-			taskPositions: map[string]*model.TaskPosition{
-				"capture_1": {},
-				"capture_2": {},
-			},
-		},
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
@@ -326,32 +309,41 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 		etcdClient:              s.client,
 		lastFlushChangefeeds:    time.Now(),
 		flushChangefeedInterval: 1 * time.Hour,
-		// gcSafepointLastUpdate:   time.Now(),
-		gcTTL:               6, // 6 seconds
-		changeFeeds:         changeFeeds,
-		cfRWriter:           s.client,
-		stoppedFeeds:        make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
-		minGCSafePointCache: minGCSafePointCacheEntry{},
+		gcSafepointLastUpdate:   time.Now().Add(-4 * time.Second),
+		gcTTL:                   6, // 6 seconds
+		changeFeeds:             changeFeeds,
+		cfRWriter:               s.client,
+		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		minGCSafePointCache:     minGCSafePointCacheEntry{},
 	}
 
-	time.Sleep(3 * time.Second)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
+
+	time.Sleep(2 * time.Second)
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
 
-	err = mockOwner.handleAdminJob(s.ctx)
-	c.Assert(err, check.IsNil)
-	err = mockOwner.handleAdminJob(s.ctx)
-	c.Assert(err, check.IsNil)
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
-	c.Assert(mockOwner.stoppedFeeds["test_change_feed_3"], check.NotNil)
 	c.Assert(mockOwner.changeFeeds["test_change_feed_2"].info.State, check.Equals, model.StateNormal)
 
 	time.Sleep(6 * time.Second)
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
-	c.Assert(mockPDCli.invokeCounter, check.Equals, 4)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 3)
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
 
+	time.Sleep(2 * time.Second)
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 4)
 	err = mockOwner.handleAdminJob(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_2"], check.NotNil)
@@ -419,7 +411,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 
 	err = mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
-	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
 
 	err = mockOwner.handleAdminJob(s.ctx)
 	c.Assert(err, check.IsNil)
