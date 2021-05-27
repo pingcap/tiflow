@@ -145,9 +145,9 @@ type Owner struct {
 const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
-	// minGCSafePointCacheServiceID is this service GC safe point ID
+	// CDCMinGCSafePointCacheServiceID is this service GC safe point ID
 	CDCMinGCSafePointCacheServiceID = "ticdc-minGCSafePoint-cache"
-	//CDCMinGCSafePointCacheServiceTTL is this service GC safe point TTL
+	// CDCMinGCSafePointCacheServiceTTL is this service GC safe point TTL
 	CDCMinGCSafePointCacheServiceTTL = 10 * 60 // 10mins
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
 	GCSafepointUpdateInterval = time.Duration(2 * time.Second)

@@ -17,12 +17,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
@@ -193,6 +194,8 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 	s.TearDownTest(c)
 }
 
+// Test whether it is possible to successfully create a changefeed
+// with startTs less than currentTs - gcTTL when tikv_gc_life_time is greater than gc-ttl
 func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 	defer testleak.AfterTest(c)
 	mockPDCli := &mockPDClient{}
@@ -203,7 +206,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 			info:    &model.ChangeFeedInfo{State: model.StateNormal},
 			etcdCli: s.client,
 			status: &model.ChangeFeedStatus{
-				CheckpointTs: oracle.GoTimeToTS(time.Now()),
+				CheckpointTs: oracle.GoTimeToTS(time.Now().Add(-6 * time.Second)),
 			},
 			targetTs: 2000,
 			ddlState: model.ChangeFeedSyncDML,
@@ -241,6 +244,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 2)
 
 	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.IsNil)
 	c.Assert(mockOwner.changeFeeds["test_change_feed_1"].info.State, check.Equals, model.StateNormal)
 
@@ -254,7 +258,6 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.IsNil)
 
 	s.TearDownTest(c)
-
 }
 
 // Test whether the owner handles the stagnant task correctly, so that it can't block the update of gcSafePoint.
