@@ -22,9 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -119,7 +116,6 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 	}
 	if m.mockTiKVGCLifeTime {
 		Ts := oracle.GoTimeToTS(time.Now().Add(-TiKVGCLifeTime))
-		log.Info("actual ts is", zap.Time("actual", oracle.GetTimeFromTS(Ts)))
 		return Ts, nil
 	}
 	return safePoint, nil
