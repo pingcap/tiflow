@@ -60,8 +60,8 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 		}
 
 		try++
-		if float64(try) >= retryOption.maxTries {
-			return errors.Wrapf(err, "reach maximum try:%f", retryOption.maxTries)
+		if int64(try) >= retryOption.maxTries {
+			return errors.Wrapf(err, "reach maximum try:%d", retryOption.maxTries)
 		}
 
 		backOff = getBackoffInMs(retryOption.backoffBase, retryOption.backoffCap, float64(try))
