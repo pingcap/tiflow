@@ -109,6 +109,12 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		return nil
 	}
 
+	// TODO: If a region doesn't receive any event from TiKV, this region
+	// can't be reconnected since the region state is not initialized.
+	if !state.isInitialized() {
+		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
