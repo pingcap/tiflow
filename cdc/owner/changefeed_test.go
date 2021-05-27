@@ -3,6 +3,7 @@ package owner
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 type mockDDLPuller struct {
@@ -47,6 +49,8 @@ type mockAsyncSink struct {
 	ddlExecuting *model.DDLEvent
 	ddlDone      bool
 	checkpointTs model.Ts
+	syncPoint    model.Ts
+	syncPointHis []model.Ts
 }
 
 func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
@@ -56,7 +60,12 @@ func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 }
 
 func (m *mockAsyncSink) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error {
-	panic("implement me")
+	if checkpointTs == m.syncPoint {
+		return nil
+	}
+	m.syncPoint = checkpointTs
+	m.syncPointHis = append(m.syncPointHis, checkpointTs)
+	return nil
 }
 
 func (m *mockAsyncSink) Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error {
@@ -212,4 +221,67 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
 	c.Assert(state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, check.HasKey, job.TableID)
+}
+
+func (s *changefeedSuite) TestSyncPoint(c *check.C) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx.ChangefeedVars().Info.SyncPointEnabled = true
+	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
+	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+	mockAsyncSink := cf.sink.(*mockAsyncSink)
+	c.Assert(mockAsyncSink.syncPoint, check.Equals, state.Status.CheckpointTs)
+	// add 5s to resolvedTs
+	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
+	// tick 20 times
+	for i := 0; i <= 20; i++ {
+		cf.Tick(ctx, state, captures)
+		tester.MustApplyPatches()
+	}
+
+	syncPointDurations := make([]time.Duration, len(mockAsyncSink.syncPointHis))
+	startGoTime := oracle.GetTimeFromTS(ctx.ChangefeedVars().Info.StartTs)
+	for i, syncPoint := range mockAsyncSink.syncPointHis {
+		syncPointDurations[i] = oracle.GetTimeFromTS(syncPoint).Sub(startGoTime)
+	}
+	c.Assert(syncPointDurations, check.DeepEquals,
+		[]time.Duration{
+			0, 1 * time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second,
+			// the last sync point shoule be equal to the last checkpoint ts
+			oracle.GetTimeFromTS(state.Status.CheckpointTs).Sub(startGoTime),
+		})
+}
+
+func (s *changefeedSuite) TestFinished(c *check.C) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
+	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller.resolvedTs += 2000
+	// tick many times to make sure the change feed is stopped
+	for i := 0; i <= 10; i++ {
+		cf.Tick(ctx, state, captures)
+		tester.MustApplyPatches()
+	}
+
+	c.Assert(state.Status.CheckpointTs, check.Equals, state.Info.TargetTs)
+	c.Assert(state.Info.State, check.Equals, model.StateFinished)
 }

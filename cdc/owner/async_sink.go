@@ -31,6 +31,8 @@ type asyncSinkImpl struct {
 
 	checkpointTs model.Ts
 
+	lastSyncPoint model.Ts
+
 	ddlCh         chan *model.DDLEvent
 	ddlFinishedTs model.Ts
 	ddlSentTs     model.Ts
@@ -147,6 +149,10 @@ func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent
 }
 
 func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error {
+	if checkpointTs == s.lastSyncPoint {
+		return nil
+	}
+	s.lastSyncPoint = checkpointTs
 	// TODO implement async sink syncpoint
 	return s.syncpointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }
