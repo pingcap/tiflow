@@ -30,7 +30,7 @@ type Option func(*retryOptions)
 
 // retryOptions ...
 type retryOptions struct {
-	maxTries    float64
+	maxTries    int64
 	backoffBase float64
 	backoffCap  float64
 	// isRetryable checks the error is safe to retry or not, eg. "context.Canceled" better not retry
@@ -68,15 +68,15 @@ func WithBackoffMaxDelay(delayInMs int64) Option {
 func WithMaxTries(tries int64) Option {
 	return func(o *retryOptions) {
 		if tries > 0 {
-			o.maxTries = float64(tries)
+			o.maxTries = tries
 		}
 	}
 }
 
-// WithInfiniteTries configures to retry forever till success or got canceled
+// WithInfiniteTries configures to retry forever (math.MaxInt64 times) till success or got canceled
 func WithInfiniteTries() Option {
 	return func(o *retryOptions) {
-		o.maxTries = math.Inf(1)
+		o.maxTries = math.MaxInt64
 	}
 }
 
