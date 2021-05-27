@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 	}
 
 	var t *time.Timer
-	try := 0.0
+	try := 0
 	backOff := time.Duration(0)
 	for {
 		err := op()
@@ -60,11 +60,11 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 		}
 
 		try++
-		if try >= retryOption.maxTries {
+		if float64(try) >= retryOption.maxTries {
 			return errors.Wrapf(err, "reach maximum try:%f", retryOption.maxTries)
 		}
 
-		backOff = getBackoffInMs(retryOption.backoffBase, retryOption.backoffCap, try)
+		backOff = getBackoffInMs(retryOption.backoffBase, retryOption.backoffCap, float64(try))
 		if t == nil {
 			t = time.NewTimer(backOff)
 			defer t.Stop()

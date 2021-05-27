@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,9 +21,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"go.uber.org/zap"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -198,7 +196,6 @@ func (s *runSuite) Test_DoCancelInfiniteRetry(c *check.C) {
 	}
 
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
-	log.Info("Test_DoCancelInfiniteRetry run f times", zap.Int("tries", callCount))
 	c.Assert(err, check.Equals, context.DeadlineExceeded)
 	c.Assert(callCount, check.GreaterEqual, 1, check.Commentf("tries:%d", callCount))
 	c.Assert(float64(callCount), check.Less, math.Inf(1))
@@ -215,7 +212,6 @@ func (s *runSuite) Test_DoCancelAtBeginning(c *check.C) {
 	}
 
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
-	log.Info("Test_DoCancelAtBeginning run f times", zap.Int("tries", callCount))
 	c.Assert(err, check.Equals, context.Canceled)
 	c.Assert(callCount, check.Equals, 0, check.Commentf("tries:%d", callCount))
 }
