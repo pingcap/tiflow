@@ -102,4 +102,5 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(txnCounter)
 	registry.MustRegister(updateInfoDuration)
 	registry.MustRegister(processorErrorCounter)
+	registry.MustRegister(tableMemoryGauge)
 }
