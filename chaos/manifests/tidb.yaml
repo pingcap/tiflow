@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tidb
+  labels:
+    app: tidb
+spec:
+  ports:
+    - name: tidb
+      port: 4000
+      targetPort: 4000
+  selector:
+    app: tidb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tidb
+  labels:
+    app: tidb
+spec:
+  selector:
+    matchLabels:
+      app: tidb
+  serviceName: tidb
+  replicas: 1 # only 1 TiDB instance
+  template:
+    metadata:
+      labels:
+        app: tidb
+    spec:
+      containers:
+        - name: tidb
+          image: pingcap/tidb:latest # latest release version
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /data
+              name: tidb
+          ports:
+            - containerPort: 4000
+              name: tidb
+          args:
+            - "--path=/data"
+  volumeClaimTemplates:
+    - metadata:
+        name: tidb
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi

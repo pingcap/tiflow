@@ -1,0 +1,9 @@
+source-id: "replica-02"
+enable-gtid: false
+enable-relay: false
+
+from:
+  host: "mysql8-0.sources" # same namespace with MySQL
+  user: "root"
+  password: ""
+  port: 3306
