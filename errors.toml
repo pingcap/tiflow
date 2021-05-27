@@ -246,6 +246,16 @@ error = '''
 filter rule is invalid
 '''
 
+["CDC:ErrFlowControllerAborted"]
+error = '''
+flow controller is aborted
+'''
+
+["CDC:ErrFlowControllerEventLargerThanQuota"]
+error = '''
+event is larger than the total memory quota, size: %d, quota: %d
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
@@ -779,5 +789,15 @@ write ts conflict
 ["CDC:ErrWrongTableInfo"]
 error = '''
 wrong table info in unflatten, table id %d, index table id: %d
+'''
+
+["ErrConflictingFileLocks"]
+error = '''
+file lock conflict: %s
+'''
+
+["ErrSortDirLockError"]
+error = '''
+error encountered when locking sort-dir
 '''
 
