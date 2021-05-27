@@ -25,7 +25,7 @@ func ChangefeedFastFailError(err error) bool {
 }
 
 // ChangefeedFastFailErrorCode checks the error, returns true if it is meaningless
-//// to retry on this error
+// to retry on this error
 func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	switch errCode {
 	case cerror.ErrStartTsBeforeGC.RFCCode():
