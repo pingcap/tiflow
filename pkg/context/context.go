@@ -15,10 +15,12 @@ package context
 
 import (
 	"context"
+	"log"
 
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/pkg/config"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 // Vars contains some vars which can be used anywhere in a pipeline
@@ -73,7 +75,13 @@ func (ctx *rootContext) Vars() *Vars {
 	return ctx.vars
 }
 
-func (ctx *rootContext) Throw(error) { /* do nothing */ }
+func (ctx *rootContext) Throw(err error) {
+	if err == nil {
+		return
+	}
+	// make sure all error has been catched
+	log.Panic("an error has escaped, please report a bug", zap.Error(err))
+}
 
 type stdContext struct {
 	stdCtx context.Context
@@ -104,11 +112,13 @@ func WithCancel(ctx Context) (Context, context.CancelFunc) {
 
 type throwContext struct {
 	Context
-	f func(error)
+	f func(error) error
 }
 
 // WithErrorHandler creates a new context that can watch the Throw function
-func WithErrorHandler(ctx Context, f func(error)) Context {
+// if the function `f` specified in WithErrorHandler returns an error,
+// the error will be thrown to the parent context.
+func WithErrorHandler(ctx Context, f func(error) error) Context {
 	return &throwContext{
 		Context: ctx,
 		f:       f,
@@ -119,6 +129,7 @@ func (ctx *throwContext) Throw(err error) {
 	if err == nil {
 		return
 	}
-	ctx.f(err)
-	ctx.Context.Throw(err)
+	if err := ctx.f(err); err != nil {
+		ctx.Context.Throw(err)
+	}
 }
