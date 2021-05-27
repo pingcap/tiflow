@@ -85,6 +85,15 @@ func (o *Owner) getMinGCSafePointCache(ctx context.Context) model.Ts {
 			return o.minGCSafePointCache.ts
 		}
 		o.minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(o.gcTTL*1000), logicalTs)
+		// get minimum safepoint across all services
+		actualGCSafePoint, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCMinGCSafePointCacheServiceID, CDCMinGCSafePointCacheServiceTTL, o.minGCSafePointCache.ts)
+		if err != nil {
+			log.Warn("Fail to get actualGCSafePoint from PD.", zap.Error(err))
+		}
+		if actualGCSafePoint < o.minGCSafePointCache.ts {
+			o.minGCSafePointCache.ts = actualGCSafePoint
+		}
+
 		o.minGCSafePointCache.lastUpdated = time.Now()
 	}
 	return o.minGCSafePointCache.ts
@@ -136,6 +145,10 @@ type Owner struct {
 const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
+	// minGCSafePointCacheServiceID is this service GC safe point ID
+	CDCMinGCSafePointCacheServiceID = "ticdc-minGCSafePoint-cache"
+	//CDCMinGCSafePointCacheServiceTTL is this service GC safe point TTL
+	CDCMinGCSafePointCacheServiceTTL = 10 * 60 // 10mins
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
 	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
@@ -758,7 +771,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			// A changefeed will not enter the map twice, because in run(),
 			// handleAdminJob() will always be executed before flushChangeFeedInfos(),
 			// ensuring that the previous changefeed in staleChangeFeeds has been stopped and removed from o.changeFeeds.
-			if changefeed.status.CheckpointTs < minGCSafePoint {
+			if changefeed.status.CheckpointTs <= minGCSafePoint {
 				staleChangeFeeds[id] = changefeed.status
 			}
 
@@ -784,7 +797,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		// If a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant.
 		// It should never be resumed. This part of the logic is in newChangeFeed()
 		// So here we can skip it.
-		if status.CheckpointTs < minGCSafePoint {
+		if status.CheckpointTs <= minGCSafePoint {
 			continue
 		}
 
