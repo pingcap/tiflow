@@ -572,6 +572,7 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
 				c.orphanTables[tableID] = replicaInfo.StartTs
+				delete(c.moveTableJobs, tableID)
 				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
 				continue
 			}
@@ -677,6 +678,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("schema", todoDDLJob.SchemaName),
 		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("start-ts", todoDDLJob.StartTS),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
 	ddlEvent := new(model.DDLEvent)
