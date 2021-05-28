@@ -79,7 +79,7 @@ const (
 type testcase interface {
 	prepare(ctx context.Context, db *sql.DB, accounts int, tableID int, concurrency int) error
 	workload(ctx context.Context, tx *sql.Tx, accounts int, tableID int) error
-	verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string) error
+	verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error
 	cleanup(ctx context.Context, db *sql.DB, accounts, tableID int, force bool) bool
 }
 
@@ -144,7 +144,7 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 	return nil
 }
 
-func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string) error {
+func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
 	query := fmt.Sprintf("SELECT sequence FROM accounts_seq%d ORDER BY sequence", tableID)
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
@@ -206,7 +206,7 @@ func (*bankTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tableID
 	fromBalance -= amount
 	toBalance += amount
 
-	sqlFormat = fmt.Sprintf("UPDATE accounts%d set balance = ? where id = ?", tableID)
+	sqlFormat = fmt.Sprintf("UPDATE accounts%d SET balance = ? WHERE id = ?", tableID)
 	if _, err := tx.ExecContext(ctx, sqlFormat, fromBalance, from); err != nil {
 		return errors.Trace(err)
 	}
@@ -236,8 +236,13 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 	return nil
 }
 
-func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string) error {
+func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
 	var obtained, expect int
+
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)); err != nil {
+		log.Error("bank set tidb_snapshot failed", zap.String("endTs", endTs))
+		return errors.Trace(err)
+	}
 
 	query := fmt.Sprintf("SELECT SUM(balance) as total FROM accounts%d", tableID)
 	if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
@@ -260,6 +265,11 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 	}
 
 	log.Info("bank verify pass", zap.String("tag", tag))
+
+	if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
+		log.Warn("bank reset tidb_snapshot failed")
+	}
+
 	return nil
 }
 
@@ -342,7 +352,7 @@ func cleanupImpl(ctx context.Context, test testcase, tableName string, db *sql.D
 		return true
 	}
 
-	if err := test.verify(ctx, db, accounts, tableID, "tryDropDB"); err != nil {
+	if err := test.verify(ctx, db, accounts, tableID, "tryDropDB", ""); err != nil {
 		dropTable(ctx, db, tableName)
 		return true
 	}
@@ -404,7 +414,7 @@ func openDB(ctx context.Context, dsn string) *sql.DB {
 
 func run(
 	ctx context.Context, upstream, downstream string, accounts, tables int,
-	concurrency int, interval time.Duration, testRound int64, cleanupOnly bool,
+	concurrency int, interval int64, testRound int64, cleanupOnly bool,
 ) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -447,49 +457,15 @@ func run(
 	waitCancel()
 	log.Info("all tables synced")
 
-	g := new(errgroup.Group)
 	var (
 		verifiedRound int64 = 0
-		passed              = true
+		counts        int64 = 0
+		g                   = new(errgroup.Group)
+		tblChan             = make(chan string, 1)
 	)
 
 	for id := 0; id < tables; id++ {
 		tableID := id
-		// Verify
-		g.Go(func() error {
-			for {
-				passed = true
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(interval):
-					for _, test := range tests {
-						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*10)
-						if err := test.verify(verifyCtx, upstreamDB, accounts, tableID, upstream); err != nil {
-							passed = false
-							log.Error("upstream verify fails", zap.Error(err))
-						}
-						verifyCancel()
-
-						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
-						if err := test.verify(verifyCtx, downstreamDB, accounts, tableID, downstream); err != nil {
-							passed = false
-							log.Error("downstream verify fails", zap.Error(err))
-						}
-						verifyCancel()
-					}
-				}
-
-				if !passed {
-					continue
-				}
-
-				if atomic.AddInt64(&verifiedRound, 1) == testRound {
-					cancel()
-				}
-			}
-		})
-
 		// Workload
 		g.Go(func() error {
 			workload := func(workloadCtx context.Context) error {
@@ -497,15 +473,27 @@ func run(
 				if err != nil {
 					return errors.Trace(err)
 				}
-				defer func() { _ = tx.Rollback() }()
 
 				for _, test := range tests {
 					if err := test.workload(workloadCtx, tx, accounts, tableID); err != nil {
+						_ = tx.Rollback()
 						return errors.Trace(err)
 					}
 				}
 
-				return errors.Trace(tx.Commit())
+				if err := tx.Commit(); err != nil {
+					_ = tx.Rollback()
+					return errors.Trace(err)
+				}
+
+				if atomic.AddInt64(&counts, 1)%1000 == 0 {
+					tblName := fmt.Sprintf("finishmark%d", atomic.LoadInt64(&counts))
+					ddl := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (foo BIGINT PRIMARY KEY)", tblName)
+					mustExec(ctx, upstreamDB, ddl)
+
+					tblChan <- tblName
+				}
+				return nil
 			}
 
 			for {
@@ -513,15 +501,87 @@ func run(
 				case <-ctx.Done():
 					return ctx.Err()
 				default:
+					ctx1, cancel1 := context.WithTimeout(ctx, time.Second*10)
+					err := workload(ctx1)
+					if err != nil && errors.Cause(err) != context.Canceled {
+						log.Warn("workload failed", zap.Error(err))
+					}
+					cancel1()
 				}
-				ctx1, cancel1 := context.WithTimeout(ctx, time.Second*10)
-				err := workload(ctx1)
-				if err != nil && errors.Cause(err) != context.Canceled {
-					log.Warn("workload failed", zap.Error(err))
+			}
+		})
+
+		// Verify
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case tblName := <-tblChan:
+					waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Minute)
+					waitTable(waitCtx, downstreamDB, tblName)
+					waitCancel()
+					log.Info("ddl synced", zap.String("table", tblName))
+
+					endTs, err := getDDLEndTs(downstreamDB, tblName)
+					if err != nil {
+						log.Fatal("[cdc-bank] get ddl end ts error %v", zap.Error(err))
+					}
+
+					for _, test := range tests {
+						verfifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*10)
+						if err := test.verify(verfifyCtx, upstreamDB, accounts, tableID, upstream, endTs); err != nil {
+							log.Panic("upstream verify failed", zap.Error(err))
+						}
+						verifyCancel()
+
+						verfifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
+						if err := test.verify(verfifyCtx, upstreamDB, accounts, tableID, upstream, endTs); err != nil {
+							log.Panic("upstream verify failed", zap.Error(err))
+						}
+						verifyCancel()
+					}
+
 				}
-				cancel1()
+				if atomic.AddInt64(&verifiedRound, 1) == testRound {
+					cancel()
+				}
 			}
 		})
 	}
 	_ = g.Wait()
+}
+
+type dataRow struct {
+	JobID       int64
+	DBName      string
+	TblName     string
+	JobType     string
+	SchemaState string
+	SchemeID    int64
+	TblID       int64
+	RowCount    int64
+	StartTime   string
+	EndTime     string
+	State       string
+}
+
+func getDDLEndTs(db *sql.DB, tableName string) (result string, err error) {
+	rows, err := db.Query("admin show ddl jobs")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var line dataRow
+	for rows.Next() {
+		if err := rows.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
+			&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
+			return "", err
+		}
+		if line.JobType == "create table" && line.TblName == tableName && line.State == "synced" {
+			return line.EndTime, nil
+		}
+	}
+	return "", errors.New(fmt.Sprintf("cannot find in ddl history, tableName: %s", tableName))
 }

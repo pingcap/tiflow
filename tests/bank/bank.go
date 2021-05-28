@@ -16,11 +16,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/spf13/cobra"
@@ -53,10 +51,10 @@ func main() {
 	}()
 
 	var (
-		upstream, downstream, interval string
-		accounts, tables, concurrency  int
-		testRound                      int64
-		cleanupOnly                    bool
+		upstream, downstream          string
+		accounts, tables, concurrency int
+		testRound, interval           int64
+		cleanupOnly                   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "bank",
@@ -65,19 +63,19 @@ func main() {
 			if len(upstream) == 0 || len(downstream) == 0 {
 				log.Fatal("upstream and downstream should not be empty")
 			}
+			//
+			// verifiedInterval, err := time.ParseDuration(interval)
+			// if err != nil {
+			// 	log.Fatal("fail to parse interval", zap.String("interval", interval), zap.Error(err))
+			// }
 
-			verifiedInterval, err := time.ParseDuration(interval)
-			if err != nil {
-				log.Fatal("fail to parse interval", zap.String("interval", interval), zap.Error(err))
-			}
-
-			run(ctx, upstream, downstream, accounts, tables, concurrency, verifiedInterval, testRound, cleanupOnly)
+			run(ctx, upstream, downstream, accounts, tables, concurrency, interval, testRound, cleanupOnly)
 		},
 	}
 	cmd.PersistentFlags().StringVarP(&upstream, "upstream", "u", "", "Upstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVarP(&downstream, "downstream", "d", "", "Downstream TiDB DSN, please specify target database in DSN")
-	cmd.PersistentFlags().StringVar(&interval, "interval", "2s", "Interval of verify tables")
-	cmd.PersistentFlags().Int64Var(&testRound, "test-round", math.MaxInt64, "Total around of verify tables")
+	cmd.PersistentFlags().Int64Var(&interval, "interval", 1000, "Interval of verify tables")
+	cmd.PersistentFlags().Int64Var(&testRound, "test-round", 100, "Total around of verify tables")
 	cmd.PersistentFlags().IntVar(&tables, "tables", 1, "The number of tables for db")
 	cmd.PersistentFlags().IntVar(&accounts, "accounts", 100, "The number of Accounts for each table")
 	cmd.PersistentFlags().IntVar(&concurrency, "concurrency", 10, "concurrency of transaction for each table")
