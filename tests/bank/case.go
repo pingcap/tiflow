@@ -145,6 +145,11 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 }
 
 func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)); err != nil {
+		log.Error("sequenceTest set tidb_snapshot failed", zap.String("endTs", endTs))
+		return errors.Trace(err)
+	}
+
 	query := fmt.Sprintf("SELECT sequence FROM accounts_seq%d ORDER BY sequence", tableID)
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
@@ -167,6 +172,11 @@ func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID i
 	}
 
 	log.Info("sequence verify pass", zap.String("tag", tag))
+
+	if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
+		log.Warn("sequenceTest reset tidb_snapshot failed")
+	}
+
 	return nil
 }
 
@@ -336,6 +346,11 @@ func prepareImpl(
 	return nil
 }
 
+func dropDB(ctx context.Context, db *sql.DB) {
+	log.Info("drop database")
+	mustExec(ctx, db, "DROP DATABASES IF EXISTS bank")
+}
+
 func dropTable(ctx context.Context, db *sql.DB, table string) {
 	log.Info("drop tables", zap.String("table", table))
 	mustExec(ctx, db, fmt.Sprintf("DROP TABLE IF EXISTS %s", table))
@@ -434,8 +449,10 @@ func run(
 				tests[i].cleanup(ctx, downstreamDB, accounts, tableID, true)
 			}
 		}
-		dropTable(ctx, upstreamDB, "finishmark")
-		dropTable(ctx, downstreamDB, "finishmark")
+
+		// a lot of ddl executed at upstream, just drop the db
+		dropDB(ctx, upstreamDB)
+		dropDB(ctx, downstreamDB)
 		log.Info("cleanup done")
 		return
 	}
@@ -458,8 +475,7 @@ func run(
 	log.Info("all tables synced")
 
 	var (
-		verifiedRound int64 = 0
-		counts        int64 = 0
+		counts, round int64 = 0, 0
 		g                   = new(errgroup.Group)
 		tblChan             = make(chan string, 1)
 	)
@@ -486,7 +502,7 @@ func run(
 					return errors.Trace(err)
 				}
 
-				if atomic.AddInt64(&counts, 1)%1000 == 0 {
+				if atomic.AddInt64(&counts, 1)%interval == 0 {
 					tblName := fmt.Sprintf("finishmark%d", atomic.LoadInt64(&counts))
 					ddl := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (foo BIGINT PRIMARY KEY)", tblName)
 					mustExec(ctx, upstreamDB, ddl)
@@ -525,25 +541,24 @@ func run(
 
 					endTs, err := getDDLEndTs(downstreamDB, tblName)
 					if err != nil {
-						log.Fatal("[cdc-bank] get ddl end ts error %v", zap.Error(err))
+						log.Fatal("[cdc-bank] get ddl end ts error", zap.Error(err))
 					}
 
 					for _, test := range tests {
-						verfifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*10)
-						if err := test.verify(verfifyCtx, upstreamDB, accounts, tableID, upstream, endTs); err != nil {
+						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*10)
+						if err := test.verify(verifyCtx, upstreamDB, accounts, tableID, upstream, ""); err != nil {
 							log.Panic("upstream verify failed", zap.Error(err))
 						}
 						verifyCancel()
 
-						verfifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
-						if err := test.verify(verfifyCtx, upstreamDB, accounts, tableID, upstream, endTs); err != nil {
-							log.Panic("upstream verify failed", zap.Error(err))
+						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
+						if err := test.verify(verifyCtx, downstreamDB, accounts, tableID, downstream, endTs); err != nil {
+							log.Panic("downstream verify failed", zap.Error(err))
 						}
 						verifyCancel()
 					}
-
 				}
-				if atomic.AddInt64(&verifiedRound, 1) == testRound {
+				if atomic.AddInt64(&round, 1) == testRound {
 					cancel()
 				}
 			}
