@@ -278,7 +278,7 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 		m.patchState(model.StateFailed)
 		return
 	}
-	// if errors is too many to reach the error threshold, stop the changefeed
+	// if the number of errors has reached the error threshold, stop the changefeed
 	if m.state.Info.ErrorsReachedThreshold() {
 		m.shouldBeRunning = false
 		m.patchState(model.StateError)
