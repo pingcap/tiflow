@@ -37,6 +37,13 @@ type regionStatefulEvent struct {
 	changeEvent *cdcpb.Event
 	resolvedTs  *cdcpb.ResolvedTs
 	state       *regionFeedState
+
+	// regionID is used for load balancer, we don't use fileds in state to reduce lock usage
+	regionID uint64
+
+	// finishedCounter is used to mark events that are sent from a give region
+	// worker to this worker(one of the workers in worker pool) are all processed.
+	finishedCounter *int32
 }
 
 func (s *eventFeedSession) sendRegionChangeEventV2(
@@ -87,9 +94,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 		state.start()
 		worker.setRegionState(event.RegionId, state)
-		// TODO: If a region doesn't receive any event from TiKV, this region
-		// can't be reconnected since the region state is not initialized.
-		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
 
 		// send resolved event when starting a single event feed
 		select {
@@ -111,11 +115,18 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		return nil
 	}
 
+	// TODO: If a region doesn't receive any event from TiKV, this region
+	// can't be reconnected since the region state is not initialized.
+	if !state.isInitialized() {
+		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case worker.inputCh <- &regionStatefulEvent{
 		changeEvent: event,
+		regionID:    event.RegionId,
 		state:       state,
 	}:
 	}
@@ -142,6 +153,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 			select {
 			case worker.inputCh <- &regionStatefulEvent{
 				resolvedTs: resolvedTs,
+				regionID:   regionID,
 				state:      state,
 			}:
 			case <-ctx.Done():
@@ -201,10 +213,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	s.workersLock.Lock()
 	s.workers[addr] = worker
 	s.workersLock.Unlock()
-
-	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
-		reconnectInterval = time.Duration(val.(int)) * time.Second
-	})
 
 	g.Go(func() error {
 		return worker.run(ctx)

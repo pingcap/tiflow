@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,15 +13,8 @@
 
 package config
 
-import (
-	"github.com/pingcap/parser/model"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
-)
-
-// FilterConfig represents filter config for a changefeed
-type FilterConfig struct {
-	Rules []string `toml:"rules" json:"rules"`
-	*filter.MySQLReplicationRules
-	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
-	DDLAllowlist     []model.ActionType `toml:"ddl-allow-list" json:"ddl-allow-list,omitempty"`
+// KVClientConfig represents config for kv client
+type KVClientConfig struct {
+	WorkerConcurrent int `toml:"worker-concurrent" json:"worker-concurrent"`
+	WorkerPoolSize   int `toml:"worker-pool-size" json:"worker-pool-size"`
 }
