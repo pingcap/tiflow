@@ -223,7 +223,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 		ErrorHis: []int64{},
 	}
 	for i := 0; i < 5; i++ {
-		tm := now.Add(-ErrorHistoryGCInterval)
+		tm := now.Add(-errorHistoryGCInterval)
 		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}
