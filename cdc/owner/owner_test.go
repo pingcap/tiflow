@@ -61,22 +61,96 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
 
-	// remove changefeed forcibly
+	// delete changefeed info key to remove changefeed
 	tester.MustUpdate(cdcKey.String(), nil)
+	// this tick to clean the leak info fo the removed changefeed
+	_, err = owner.Tick(ctx, state)
+	// this tick to remove the changefeed state in memory
+	tester.MustApplyPatches()
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
-}
-
-func (s *ownerSuite) TestCaptureOffline(c *check.C) {
-
+	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
 func (s *ownerSuite) TestStopChangefeed(c *check.C) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	changefeedID := "test-changefeed"
+	changefeedInfo := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
 
+	// remove changefeed forcibly
+	owner.EnqueueJob(model.AdminJob{
+		CfID: changefeedID,
+		Type: model.AdminRemove,
+		Opts: &model.AdminJobOption{
+			ForceRemove: true,
+		},
+	})
+
+	// this tick to clean the leak info fo the removed changefeed
+	_, err = owner.Tick(ctx, state)
+	// this tick to remove the changefeed state in memory
+	tester.MustApplyPatches()
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
 func (s *ownerSuite) TestAdminJob(c *check.C) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, _, _ := createOwner4Test(ctx, c)
+	owner.EnqueueJob(model.AdminJob{
+		CfID: "test-changefeed1",
+		Type: model.AdminResume,
+	})
+	owner.TriggerRebalance("test-changefeed2")
+	owner.ManualSchedule("test-changefeed3", "test-caputre1", 10)
+	owner.WriteDebugInfo(nil)
 
+	// remove job.done, it's hard to check deep equals
+	jobs := owner.takeOnwerJobs()
+	for _, job := range jobs {
+		c.Assert(job.done, check.NotNil)
+		job.done = nil
+	}
+	c.Assert(jobs, check.DeepEquals, []*ownerJob{
+		{
+			tp: ownerJobTypeAdminJob,
+			adminJob: &model.AdminJob{
+				CfID: "test-changefeed1",
+				Type: model.AdminResume,
+			},
+			changefeedID: "test-changefeed1",
+		}, {
+			tp:           ownerJobTypeRebalance,
+			changefeedID: "test-changefeed2",
+		}, {
+			tp:              ownerJobTypeManualSchedule,
+			changefeedID:    "test-changefeed3",
+			targetCaptureID: "test-caputre1",
+			tableID:         10,
+		}, {
+			tp:         ownerJobTypeDebugInfo,
+			httpWriter: nil,
+		},
+	})
+	c.Assert(owner.takeOnwerJobs(), check.HasLen, 0)
 }
