@@ -29,41 +29,41 @@ const (
 type Option func(*retryOptions)
 
 type retryOptions struct {
-	maxTries    int64
-	backoffBase float64
-	backoffCap  float64
+	maxTries        int64
+	backoffBaseInMs float64
+	backoffCapInMs  float64
 	// isRetryable checks the error is safe to retry or not, eg. "context.Canceled" better not retry
 	isRetryable func(error) bool
 }
 
 func newRetryOptions() *retryOptions {
 	return &retryOptions{
-		maxTries:    defaultMaxTries,
-		backoffBase: defaultBackoffBaseInMs,
-		backoffCap:  defaultBackoffCapInMs,
-		isRetryable: func(err error) bool { return true },
+		maxTries:        defaultMaxTries,
+		backoffBaseInMs: defaultBackoffBaseInMs,
+		backoffCapInMs:  defaultBackoffCapInMs,
+		isRetryable:     func(err error) bool { return true },
 	}
 }
 
-// WithBackoffBaseDelay configures the initial delay
+// WithBackoffBaseDelay configures the initial delay, if delayInMs <= 0 "defaultBackoffBaseInMs" will be used
 func WithBackoffBaseDelay(delayInMs int64) Option {
 	return func(o *retryOptions) {
 		if delayInMs > 0 {
-			o.backoffBase = float64(delayInMs)
+			o.backoffBaseInMs = float64(delayInMs)
 		}
 	}
 }
 
-// WithBackoffMaxDelay configures the maximum delay
+// WithBackoffMaxDelay configures the maximum delay, if delayInMs <= 0 "defaultBackoffCapInMs" will be used
 func WithBackoffMaxDelay(delayInMs int64) Option {
 	return func(o *retryOptions) {
 		if delayInMs > 0 {
-			o.backoffCap = float64(delayInMs)
+			o.backoffCapInMs = float64(delayInMs)
 		}
 	}
 }
 
-// WithMaxTries configures maximum tries
+// WithMaxTries configures maximum tries, if tries <= 0 "defaultMaxTries" will be used
 func WithMaxTries(tries int64) Option {
 	return func(o *retryOptions) {
 		if tries > 0 {
