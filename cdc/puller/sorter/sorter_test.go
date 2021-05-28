@@ -73,7 +73,8 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -97,7 +98,8 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -228,16 +230,17 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 	pool = nil
 	poolMu.Unlock()
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll("/tmp/sorter_local", 0o755)
 	c.Assert(err, check.IsNil)
 	// We expect the local setting to override the changefeed setting
 	config.GetGlobalServerConfig().Sorter.SortDir = "/tmp/sorter_local"
 
-	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+	_, err = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
 		"test-cf",
 		"test",
 		0,
 		"0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	poolMu.Lock()
 	defer poolMu.Unlock()
@@ -260,11 +263,12 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	// We expect the changefeed setting to take effect
 	config.GetGlobalServerConfig().Sorter.SortDir = ""
 
-	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+	_, err = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
 		"test-cf",
 		"test",
 		0,
 		"0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	poolMu.Lock()
 	defer poolMu.Unlock()
@@ -307,9 +311,10 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	}()
 
 	for i := 0; i < 5; i++ {
-		sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+		sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+		c.Assert(err, check.IsNil)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err := testSorter(ctx, c, sorter, 100000000, true)
+		err = testSorter(ctx, c, sorter, 100000000, true)
 		c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 		cancel()
 	}
@@ -334,7 +339,8 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -402,7 +408,8 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 	err := os.MkdirAll("/tmp/sorter", 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

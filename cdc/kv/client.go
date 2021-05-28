@@ -357,7 +357,6 @@ type CDCClient struct {
 // NewCDCClient creates a CDCClient instance
 func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
-	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	var store TiKVStorage
 	if kvStorage != nil {
@@ -582,10 +581,17 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return ctx.Err()
 			case task := <-s.requestRangeCh:
 				s.rangeChSizeGauge.Dec()
-				err := s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				// divideAndSendEventFeedToRegions could be block for some time,
+				// since it must wait for the region lock available. In order to
+				// consume region range request from `requestRangeCh` as soon as
+				// possible, we create a new goroutine to handle it.
+				// The sequence of region range we process is not matter, the
+				// region lock keeps the region access sequence.
+				// Besides the count or frequency of range request is limitted,
+				// we use ephemeral goroutine instead of permanent gourotine.
+				g.Go(func() error {
+					return s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
+				})
 			}
 		}
 	})
@@ -653,6 +659,25 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	}
 
 	res := s.rangeLock.LockRange(ctx, sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
+	failpoint.Inject("kvClientMockRangeLock", func(val failpoint.Value) {
+		// short sleep to wait region has split
+		time.Sleep(time.Second)
+		s.rangeLock.UnlockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer(), sri.ts)
+		regionNum := val.(int)
+		retryRanges := make([]regionspan.ComparableSpan, 0, regionNum)
+		start := []byte("a")
+		end := []byte("b1001")
+		for i := 0; i < regionNum; i++ {
+			span := regionspan.Span{Start: start, End: end}
+			retryRanges = append(retryRanges, regionspan.ToComparableSpan(span))
+			start = end
+			end = []byte(fmt.Sprintf("b%d", 1002+i))
+		}
+		res = regionspan.LockRangeResult{
+			Status:      regionspan.LockRangeStatusStale,
+			RetryRanges: retryRanges,
+		}
+	})
 
 	if res.Status == regionspan.LockRangeStatusWait {
 		res = res.WaitFn()
