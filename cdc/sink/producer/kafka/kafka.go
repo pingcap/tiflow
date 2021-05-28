@@ -45,7 +45,6 @@ type Config struct {
 	ClientID        string
 	Credential      *security.Credential
 	SaslScram 		*security.SaslScram
-	// TODO support SASL authentication
 	// control whether to create topic and verify partition number
 	TopicPreProcess bool
 }
