@@ -25,6 +25,7 @@ GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race
 endif
+GOVERSIONGE116 := $(shell expr $$(go version|cut -f3 -d' '|tr -d "go"|cut -f2 -d.) \>= 16)
 
 ARCH  := "`uname -s`"
 LINUX := "Linux"
@@ -107,7 +108,13 @@ leak_test: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 check_failpoint_ctl:
+ifeq "$(GOVERSIONGE116)" "1"
+	# use -mod=mod to avoid error: missing go.sum entry for module providing package
+	# ref: https://github.com/golang/go/issues/44129
+	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILDNOVENDOR) -mod=mod -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl && go mod tidy
+else
 	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILDNOVENDOR) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
+endif
 
 check_third_party_binary:
 	@which bin/tidb-server
@@ -172,7 +179,7 @@ check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
 	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
