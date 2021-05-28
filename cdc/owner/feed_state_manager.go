@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/filter"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -273,7 +273,7 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 	}
 	// if one of the error stored by changefeed state(error in the last tick) or the error specified by this function(error in the this tick)
 	// is a fast-fail error, the changefeed should be failed
-	if m.state.Info.HasFastFailError() || (err != nil && filter.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code))) {
+	if m.state.Info.HasFastFailError() || (err != nil && cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code))) {
 		m.shouldBeRunning = false
 		m.patchState(model.StateFailed)
 		return
