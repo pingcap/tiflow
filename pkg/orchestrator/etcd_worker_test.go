@@ -108,7 +108,7 @@ type simpleReactorState struct {
 	values  [][]int
 	sum     int
 	deltas  []*delta
-	patches []*DataPatch
+	patches []DataPatch
 }
 
 var keyParseRegexp = regexp.MustCompile(regexp.QuoteMeta(testEtcdKeyPrefix) + `/(.+)`)
@@ -118,17 +118,21 @@ func (s *simpleReactorState) Get(i1, i2 int) int {
 }
 
 func (s *simpleReactorState) Inc(i1, i2 int) {
-	patch := &DataPatch{
+	patch := &SingleDataPatch{
 		Key: util.NewEtcdKey(testEtcdKeyPrefix + "/" + strconv.Itoa(i1)),
-		Fun: func(old []byte) ([]byte, error) {
+		Func: func(old []byte) ([]byte, bool, error) {
 			var oldJSON []int
 			err := json.Unmarshal(old, &oldJSON)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, false, errors.Trace(err)
 			}
 
 			oldJSON[i2]++
-			return json.Marshal(oldJSON)
+			newValue, err := json.Marshal(oldJSON)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
+			return newValue, true, nil
 		},
 	}
 
@@ -136,10 +140,10 @@ func (s *simpleReactorState) Inc(i1, i2 int) {
 }
 
 func (s *simpleReactorState) SetSum(sum int) {
-	patch := &DataPatch{
+	patch := &SingleDataPatch{
 		Key: util.NewEtcdKey(testEtcdKeyPrefix + "/sum"),
-		Fun: func(_ []byte) ([]byte, error) {
-			return []byte(strconv.Itoa(sum)), nil
+		Func: func(_ []byte) ([]byte, bool, error) {
+			return []byte(strconv.Itoa(sum)), true, nil
 		},
 	}
 
@@ -187,7 +191,7 @@ func (s *simpleReactorState) Update(key util.EtcdKey, value []byte, isInit bool)
 	return nil
 }
 
-func (s *simpleReactorState) GetPatches() []*DataPatch {
+func (s *simpleReactorState) GetPatches() []DataPatch {
 	ret := s.patches
 	s.patches = nil
 	return ret
@@ -289,8 +293,8 @@ func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	return nil
 }
 
-func (s *intReactorState) GetPatches() []*DataPatch {
-	return []*DataPatch{}
+func (s *intReactorState) GetPatches() []DataPatch {
+	return []DataPatch{}
 }
 
 type linearizabilityReactor struct {
@@ -359,7 +363,7 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 
 type commonReactorState struct {
 	state          map[string]string
-	pendingPatches []*DataPatch
+	pendingPatches []DataPatch
 }
 
 func (s *commonReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
@@ -367,14 +371,14 @@ func (s *commonReactorState) Update(key util.EtcdKey, value []byte, isInit bool)
 	return nil
 }
 
-func (s *commonReactorState) AppendPatch(key util.EtcdKey, fun PatchFunc) {
-	s.pendingPatches = append(s.pendingPatches, &DataPatch{
-		Key: key,
-		Fun: fun,
+func (s *commonReactorState) AppendPatch(key util.EtcdKey, fun func(old []byte) (newValue []byte, changed bool, err error)) {
+	s.pendingPatches = append(s.pendingPatches, &SingleDataPatch{
+		Key:  key,
+		Func: fun,
 	})
 }
 
-func (s *commonReactorState) GetPatches() []*DataPatch {
+func (s *commonReactorState) GetPatches() []DataPatch {
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
 	return pendingPatches
@@ -389,23 +393,20 @@ type finishedReactor struct {
 func (r *finishedReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
 	r.state = state.(*commonReactorState)
 	if r.tickNum < 2 {
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			newValue = append(old, []byte("abc")...)
-			return
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return append(old, []byte("abc")...), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-			newValue = append(old, []byte("123")...)
-			return
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return append(old, []byte("123")...), true, nil
 		})
 		r.tickNum++
 		return r.state, nil
 	}
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-		newValue = append(old, []byte("fin")...)
-		return
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return append(old, []byte("fin")...), true, nil
 	})
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-		return nil, nil
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return nil, true, nil
 	})
 	return r.state, cerrors.ErrReactorFinished
 }
@@ -449,39 +450,32 @@ type coverReactor struct {
 func (r *coverReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
 	r.state = state.(*commonReactorState)
 	if r.tickNum < 2 {
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			newValue = append(old, []byte("abc")...)
-			return
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return append(old, []byte("abc")...), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-			newValue = append(old, []byte("123")...)
-			return
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return append(old, []byte("123")...), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			newValue = append(old, []byte("cba")...)
-			return
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return append(old, []byte("cba")...), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-			newValue = append(old, []byte("321")...)
-			return
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return append(old, []byte("321")...), true, nil
 		})
 		r.tickNum++
 		return r.state, nil
 	}
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-		newValue = append(old, []byte("fin")...)
-		return
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return append(old, []byte("fin")...), true, nil
 	})
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-		newValue = append(old, []byte("fin")...)
-		return
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return append(old, []byte("fin")...), true, nil
 	})
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-		return nil, nil
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return nil, true, nil
 	})
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-		newValue = append(old, []byte("fin")...)
-		return
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return append(old, []byte("fin")...), true, nil
 	})
 	return r.state, cerrors.ErrReactorFinished
 }
@@ -527,14 +521,14 @@ type emptyTxnReactor struct {
 func (r *emptyTxnReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
 	r.state = state.(*commonReactorState)
 	if r.tickNum == 0 {
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			return []byte("abc"), nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return []byte("abc"), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-			return []byte("123"), nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return []byte("123"), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			return nil, nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return nil, true, nil
 		})
 		r.tickNum++
 		return r.state, nil
@@ -546,20 +540,20 @@ func (r *emptyTxnReactor) Tick(ctx context.Context, state ReactorState) (nextSta
 			return nil, errors.Trace(err)
 		}
 
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-			return []byte("123"), nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return []byte("123"), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			return nil, nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return nil, true, nil
 		})
 		r.tickNum++
 		return r.state, nil
 	}
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-		return nil, nil
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return nil, true, nil
 	})
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-		return []byte("123"), nil
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return []byte("123"), true, nil
 	})
 	return r.state, cerrors.ErrReactorFinished
 }
@@ -604,30 +598,30 @@ type emptyOrNilReactor struct {
 func (r *emptyOrNilReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
 	r.state = state.(*commonReactorState)
 	if r.tickNum == 0 {
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			return []byte(""), nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return []byte(""), true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-			return nil, nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return nil, true, nil
 		})
 		r.tickNum++
 		return r.state, nil
 	}
 	if r.tickNum == 1 {
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-			return nil, nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return nil, true, nil
 		})
-		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-			return []byte(""), nil
+		r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+			return []byte(""), true, nil
 		})
 		r.tickNum++
 		return r.state, nil
 	}
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, err error) {
-		return []byte(""), nil
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key1"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return []byte(""), true, nil
 	})
-	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, err error) {
-		return nil, nil
+	r.state.AppendPatch(util.NewEtcdKey(r.prefix+"/key2"), func(old []byte) (newValue []byte, changed bool, err error) {
+		return nil, true, nil
 	})
 	return r.state, cerrors.ErrReactorFinished
 }
@@ -660,149 +654,4 @@ func (s *etcdWorkerSuite) TestEmptyOrNil(c *check.C) {
 	c.Assert(resp.Kvs, check.HasLen, 0)
 	err = cli.Unwrap().Close()
 	c.Assert(err, check.IsNil)
-}
-
-func (s *etcdWorkerSuite) TestMergePatches(c *check.C) {
-	defer testleak.AfterTest(c)()
-	testCases := []struct {
-		state   map[util.EtcdKey][]byte
-		patches []*DataPatch
-	}{
-		{
-			state:   map[util.EtcdKey][]byte{},
-			patches: []*DataPatch{},
-		},
-		{
-			state: map[util.EtcdKey][]byte{
-				util.NewEtcdKey("key1"): []byte("aa"),
-			},
-			patches: []*DataPatch{
-				{
-					Key: util.NewEtcdKey("key1"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("bb")...)
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key1"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("cc")...)
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key1"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("dd")...)
-						return
-					},
-				},
-			},
-		},
-		{
-			state: map[util.EtcdKey][]byte{
-				util.NewEtcdKey("key1"): []byte("aa"),
-			},
-			patches: []*DataPatch{
-				{
-					Key: util.NewEtcdKey("key1"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("bb")...)
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key2"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("cc")...)
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key1"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("dd")...)
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key2"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("ee")...)
-						return
-					},
-				},
-			},
-		},
-		{
-			state: map[util.EtcdKey][]byte{
-				util.NewEtcdKey("key1"): []byte("aa"),
-			},
-			patches: []*DataPatch{
-				{
-					Key: util.NewEtcdKey("key1"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("bb")...)
-						err = cerrors.ErrEtcdIgnore
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key2"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("cc")...)
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key1"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("dd")...)
-						return
-					},
-				},
-				{
-					Key: util.NewEtcdKey("key2"),
-					Fun: func(old []byte) (newValue []byte, err error) {
-						newValue = append(old, []byte("ee")...)
-						err = cerrors.ErrEtcdIgnore
-						return
-					},
-				},
-			},
-		},
-	}
-
-	applyPatches := func(state map[util.EtcdKey][]byte, patches []*DataPatch) map[util.EtcdKey][]byte {
-		// clone state map
-		clonedState := make(map[util.EtcdKey][]byte, len(state))
-		for k, v := range state {
-			clonedState[k] = v
-		}
-		// apply patches
-		for _, p := range patches {
-			newValue, err := p.Fun(clonedState[p.Key])
-			if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
-				continue
-			}
-			c.Assert(err, check.IsNil)
-			clonedState[p.Key] = newValue
-		}
-		return clonedState
-	}
-	for _, tc := range testCases {
-		mergedPatches := mergePatch(tc.patches)
-		c.Assert(applyPatches(tc.state, mergedPatches), check.DeepEquals, applyPatches(tc.state, tc.patches))
-	}
-}
-
-func (s *etcdWorkerSuite) TestEtcdValueEqual(c *check.C) {
-	defer testleak.AfterTest(c)()
-	c.Assert(etcdValueEqual(nil, nil), check.IsTrue)
-	c.Assert(etcdValueEqual(nil, []byte{}), check.IsFalse)
-	c.Assert(etcdValueEqual([]byte{}, nil), check.IsFalse)
-	c.Assert(etcdValueEqual([]byte{}, []byte{}), check.IsTrue)
-	c.Assert(etcdValueEqual([]byte{11}, []byte{11}), check.IsTrue)
-	c.Assert(etcdValueEqual([]byte{11}, []byte{12}), check.IsFalse)
 }

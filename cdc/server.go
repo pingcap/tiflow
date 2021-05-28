@@ -108,6 +108,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	kv.InitWorkerPool()
 	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
 	if err != nil {
 		return errors.Trace(err)
@@ -235,13 +236,11 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	conf := config.GetGlobalServerConfig()
-
-	opts := &captureOpts{
-		flushCheckpointInterval: time.Duration(conf.ProcessorFlushInterval),
-		captureSessionTTL:       conf.CaptureSessionTTL,
+	kvStorage, err := util.KVStorageFromCtx(ctx)
+	if err != nil {
+		return errors.Trace(err)
 	}
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 	if err != nil {
 		return err
 	}
@@ -261,6 +260,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return sorter.RunWorkerPool(cctx)
+	})
+
+	wg.Go(func() error {
+		return kv.RunWorkerPool(cctx)
 	})
 
 	wg.Go(func() error {

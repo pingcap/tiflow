@@ -45,6 +45,7 @@ type FeedState string
 // All FeedStates
 const (
 	StateNormal   FeedState = "normal"
+	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
 	StateRemoved  FeedState = "removed"
@@ -76,7 +77,8 @@ type ChangeFeedInfo struct {
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType AdminJobType `json:"admin-job-type"`
 	Engine       SortEngine   `json:"sort-engine"`
-	SortDir      string       `json:"sort-dir"`
+	// SortDir is deprecated
+	SortDir string `json:"-"`
 
 	Config   *config.ReplicaConfig `json:"config"`
 	State    FeedState             `json:"state"`

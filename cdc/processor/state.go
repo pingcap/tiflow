@@ -45,7 +45,7 @@ func (s *globalState) Update(key util.EtcdKey, value []byte, isInit bool) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if k.Tp == etcd.CDCKeyTypeCapture || k.Tp == etcd.CDCKeyTypeOnwer {
+	if k.Tp == etcd.CDCKeyTypeCapture || k.Tp == etcd.CDCKeyTypeOwner {
 		return nil
 	}
 	if len(k.CaptureID) != 0 && k.CaptureID != s.CaptureID {
@@ -65,8 +65,8 @@ func (s *globalState) Update(key util.EtcdKey, value []byte, isInit bool) error 
 	return nil
 }
 
-func (s *globalState) GetPatches() []*orchestrator.DataPatch {
-	var pendingPatches []*orchestrator.DataPatch
+func (s *globalState) GetPatches() []orchestrator.DataPatch {
+	var pendingPatches []orchestrator.DataPatch
 	for _, changefeedState := range s.Changefeeds {
 		pendingPatches = append(pendingPatches, changefeedState.GetPatches()...)
 	}
@@ -82,7 +82,7 @@ type changefeedState struct {
 	TaskStatus   *model.TaskStatus
 	Workload     model.TaskWorkload
 
-	pendingPatches []*orchestrator.DataPatch
+	pendingPatches []orchestrator.DataPatch
 }
 
 func newChangeFeedState(id model.ChangeFeedID, captureID model.CaptureID) *changefeedState {
@@ -182,7 +182,7 @@ func (s *changefeedState) Active() bool {
 	return s.Info != nil && s.Status != nil && s.TaskStatus != nil
 }
 
-func (s *changefeedState) GetPatches() []*orchestrator.DataPatch {
+func (s *changefeedState) GetPatches() []orchestrator.DataPatch {
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
 	return pendingPatches
@@ -240,26 +240,30 @@ func (s *changefeedState) PatchTaskWorkload(fn func(model.TaskWorkload) (model.T
 }
 
 func (s *changefeedState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, error)) {
-	patch := &orchestrator.DataPatch{
+	patch := &orchestrator.SingleDataPatch{
 		Key: util.NewEtcdKey(key),
-		Fun: func(v []byte) ([]byte, error) {
+		Func: func(v []byte) ([]byte, bool, error) {
 			var e interface{}
 			if v != nil {
 				tp := reflect.TypeOf(tpi)
 				e = reflect.New(tp.Elem()).Interface()
 				err := json.Unmarshal(v, e)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, false, errors.Trace(err)
 				}
 			}
 			ne, err := fn(e)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, false, errors.Trace(err)
 			}
 			if reflect.ValueOf(ne).IsNil() {
-				return nil, nil
+				return nil, true, nil
 			}
-			return json.Marshal(ne)
+			v, err = json.Marshal(ne)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
+			return v, true, nil
 		},
 	}
 	s.pendingPatches = append(s.pendingPatches, patch)

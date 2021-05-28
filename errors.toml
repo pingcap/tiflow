@@ -396,6 +396,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrLeaseExpired"]
+error = '''
+owner lease expired 
+'''
+
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
@@ -659,6 +664,11 @@ service safepoint lost. current safepoint is %d, please remove all changefeed(s)
 ["CDC:ErrSinkURIInvalid"]
 error = '''
 sink uri invalid
+'''
+
+["CDC:ErrSnapshotLostByGC"]
+error = '''
+fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d
 '''
 
 ["CDC:ErrSnapshotSchemaExists"]
