@@ -64,7 +64,7 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 			return errors.Annotatef(err, "reach maximum try:%d", retryOption.maxTries)
 		}
 
-		backOff = getBackoffInMs(retryOption.backoffBase, retryOption.backoffCap, float64(try))
+		backOff = getBackoffInMs(retryOption.backoffBaseInMs, retryOption.backoffCapInMs, float64(try))
 		if t == nil {
 			t = time.NewTimer(backOff)
 			defer t.Stop()
