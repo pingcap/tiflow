@@ -35,10 +35,17 @@ const (
 )
 
 // AsyncSink is a async sink design for owner
+// The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
+// Other functions are still synchronization
 type AsyncSink interface {
 	Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error
+	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
+	// this function will return after recording the checkpointTs specified in memory immediately
+	// and the recorded checkpointTs will be sent and updated to downstream data source every second
 	EmitCheckpointTs(ctx cdcContext.Context, ts uint64)
-	// EmitDDLEvent emits DDL event asynchronously and retuen true if the DDL is executed
+	// EmitDDLEvent emits DDL event asynchronously and return true if the DDL is executed
+	// the DDL event will be sent to another goroutine and execute to downstream
+	// the caller of this function can call again and again until a true returned
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close() error
