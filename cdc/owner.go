@@ -757,11 +757,16 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < gcSafePoint {
 				gcSafePoint = changefeed.status.CheckpointTs
 			}
-			// If changefeed's appliedCheckpoinTs < minGCSafePoint, it means this changefeed is stagnant.
+			// 1. If changefeed's appliedCheckpoinTs <= minGCSafePoint, it means this changefeed is stagnant.
 			// They are collected into this map, and then handleStaleChangeFeed() is called to deal with these stagnant changefeed.
 			// A changefeed will not enter the map twice, because in run(),
 			// handleAdminJob() will always be executed before flushChangeFeedInfos(),
 			// ensuring that the previous changefeed in staleChangeFeeds has been stopped and removed from o.changeFeeds.
+			// 2. We need to check minGCSafePoint != 0 here because o.pdGCSafePoint may be 0 at the beginning,
+			// resulting in minGCSafePoint being 0 and will stop all changefeed.
+			// 3. We need the <= check here is because when a changefeed is stagnant, its checkpointTs will be updated to pd,
+			// and it would be the minimum gcSafePoint of cdc. In order to avoid circular dependence, it is necessary to check for equality.
+			// Checking whether they are equal will make the loop assignment to happen only once, and then it will be skipped in next time.
 			if minGCSafePoint != 0 && changefeed.status.CheckpointTs <= minGCSafePoint {
 				staleChangeFeeds[id] = changefeed.status
 			}
