@@ -696,53 +696,25 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		p.sendError(err)
 		return nil
 	})
-	var tableName *model.TableName
-	retry.Run(time.Millisecond*5, 3, func() error { //nolint:errcheck
+	var tableName string
+	err := retry.Run(time.Millisecond*5, 3, func() error { //nolint:errcheck
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = &name
+			tableName = name.QuoteString()
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	})
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		// Retry to find mark table ID
-		var markTableID model.TableID
-		err := retry.Run(50*time.Millisecond, 20, func() error {
-			if tableName == nil {
-				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
-				if !exist {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s)", tableID)
-				}
-				tableName = &name
-			}
-			markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchameName, markTableTableName)
-			if !exist {
-				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
-			}
-			markTableID = tableInfo.ID
-			return nil
-		})
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		replicaInfo.MarkTableID = markTableID
+	if err != nil {
+		log.Warn("get table name for metric", zap.Error(err))
+		tableName = strconv.Itoa(int(tableID))
 	}
-	var tableNameStr string
-	if tableName == nil {
-		log.Warn("failed to get table name for metric")
-		tableNameStr = strconv.Itoa(int(tableID))
-	} else {
-		tableNameStr = tableName.QuoteString()
-	}
-
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
 		p.limitter,
 		p.mounter,
 		tableID,
-		tableNameStr,
+		tableName,
 		replicaInfo,
 		sink,
 		p.changefeed.Info.GetTargetTs(),
