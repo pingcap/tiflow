@@ -16,6 +16,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -27,6 +28,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 type processorSuite struct{}
 
@@ -498,7 +501,7 @@ func (s *processorSuite) TestProcessorError(c *check.C) {
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID], check.DeepEquals, &model.TaskPosition{
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
-			Code:    "CDC:ErrSinkURIInvalid",
+			Code:    "CDC:ErrProcessorUnknown",
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 		},
 	})
@@ -622,7 +625,7 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	tester.MustApplyPatches()
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].Error, check.DeepEquals, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
-		Code:    "CDC:ErrSinkURIInvalid",
+		Code:    "CDC:ErrProcessorUnknown",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 	})
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.IsNil)

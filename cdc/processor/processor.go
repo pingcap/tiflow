@@ -135,8 +135,8 @@ func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	p.metricProcessorErrorCounter.Inc()
 	// record error information in etcd
 	var code string
-	if rfcCode, ok := cerror.RFCCode(err); ok {
-		code = string(rfcCode)
+	if terror, ok := err.(*errors.Error); ok {
+		code = string(terror.RFCCode())
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}
@@ -417,6 +417,9 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
 				}
+				if p.changefeed.Info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
+					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
+				}
 				if replicaInfo.StartTs != opt.BoundaryTs {
 					log.Warn("the startTs and BoundaryTs of add table operation should be always equaled", zap.Any("replicaInfo", replicaInfo))
 				}
@@ -433,11 +436,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if !exist {
 					log.Warn("table which was added is not found",
 						cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperDispatched
-						return nil
-					})
-					continue
 				}
 				localResolvedTs := p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs
 				globalResolvedTs := p.changefeed.Status.ResolvedTs
@@ -548,10 +546,8 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 		if opt != nil && opt[tableID] != nil {
 			continue
 		}
-		log.Info("start to listen the table immediately", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
-		if replicaInfo.StartTs < p.changefeed.Status.CheckpointTs {
-			log.Warn("")
-			replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
+		if p.initialized {
+			log.Warn("the table should be listen but not, already listen the table again, please report a bug", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 		}
 		err := p.addTable(ctx, tableID, replicaInfo)
 		if err != nil {
