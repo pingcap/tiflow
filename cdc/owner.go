@@ -762,12 +762,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			// A changefeed will not enter the map twice, because in run(),
 			// handleAdminJob() will always be executed before flushChangeFeedInfos(),
 			// ensuring that the previous changefeed in staleChangeFeeds has been stopped and removed from o.changeFeeds.
-			// 2. We need to check minGCSafePoint != 0 here because o.pdGCSafePoint may be 0 at the beginning,
-			// resulting in minGCSafePoint being 0 and will stop all changefeed.
-			// 3. We need the <= check here is because when a changefeed is stagnant, its checkpointTs will be updated to pd,
+			// 2. We need the <= check here is because when a changefeed is stagnant, its checkpointTs will be updated to pd,
 			// and it would be the minimum gcSafePoint of cdc. In order to avoid circular dependence, it is necessary to check for equality.
 			// Checking whether they are equal will make the loop assignment to happen only once, and then it will be skipped in next time.
-			if minGCSafePoint != 0 && changefeed.status.CheckpointTs <= minGCSafePoint {
+			if changefeed.status.CheckpointTs <= minGCSafePoint {
 				staleChangeFeeds[id] = changefeed.status
 			}
 
@@ -790,10 +788,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	for _, status := range o.stoppedFeeds {
-		// If a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant.
+		// If a stopped changefeed's CheckpoinTs <= minGCSafePoint, means this changefeed is stagnant.
 		// It should never be resumed. This part of the logic is in newChangeFeed()
 		// So here we can skip it.
-		if minGCSafePoint != 0 && status.CheckpointTs <= minGCSafePoint {
+		if status.CheckpointTs <= minGCSafePoint {
 			continue
 		}
 
