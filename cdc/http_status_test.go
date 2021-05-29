@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -58,7 +59,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	conf.Addr = advertiseAddr4Test
 	conf.AdvertiseAddr = advertiseAddr4Test
 	config.StoreGlobalServerConfig(conf)
-	server, err := NewServer([]string{"http://127.0.0.1:2379"})
+	server, err := NewServer(context.Background(), []string{"http://127.0.0.1:2379"})
 	c.Assert(err, check.IsNil)
 	err = server.startStatusHTTP()
 	c.Assert(err, check.IsNil)

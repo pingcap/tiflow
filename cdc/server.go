@@ -55,29 +55,19 @@ type Server struct {
 }
 
 // NewServer creates a Server instance.
-func NewServer(pdEndpoints []string) (*Server, error) {
+func NewServer(ctx context.Context, pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
 		zap.Strings("pd-addrs", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
 
-	s := &Server{
-		pdEndpoints: pdEndpoints,
-	}
-	return s, nil
-}
-
-// Run runs the server.
-func (s *Server) Run(ctx context.Context) error {
-	conf := config.GetGlobalServerConfig()
-
 	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	pdClient, err := pd.NewClientWithContext(
-		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
+		ctx, pdEndpoints, conf.Security.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -92,14 +82,22 @@ func (s *Server) Run(ctx context.Context) error {
 			}),
 		))
 	if err != nil {
-		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
+		return nil, cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
-	s.pdClient = pdClient
 
+	return &Server{
+		pdEndpoints: pdEndpoints,
+		pdClient:    pdClient,
+	}, nil
+}
+
+// Run runs the server.
+func (s *Server) Run(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], conf.Security, errorTiKVIncompatible)
+	err := version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], conf.Security, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}

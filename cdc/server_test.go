@@ -63,7 +63,7 @@ func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 		"http://" + s.clientURL.Host,
 		"http://invalid-pd-host:2379",
 	}
-	server, err := NewServer(pdEndpoints)
+	server, err := NewServer(context.Background(), pdEndpoints)
 	c.Assert(err, check.IsNil)
 	c.Assert(server, check.NotNil)
 
