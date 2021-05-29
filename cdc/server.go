@@ -297,4 +297,6 @@ func (s *Server) Close() {
 		}
 		s.statusServer = nil
 	}
+
+	sorter.UnifiedSorterCleanUp()
 }
