@@ -34,7 +34,9 @@ import (
 const NewReplicaImpl = true
 
 func init() {
-	StoreGlobalServerConfig(GetDefaultServerConfig())
+	config := GetDefaultServerConfig()
+	config.Sorter.SortDir = config.DataDir + "/" + config.Sorter.SortDir
+	StoreGlobalServerConfig(config)
 }
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -147,6 +149,7 @@ var defaultServerConfig = &ServerConfig{
 	AdvertiseAddr: "",
 	LogFile:       "",
 	LogLevel:      "info",
+	DataDir:       "",           // TODO: add a specified value ?
 	GcTTL:         24 * 60 * 60, // 24H
 	TZ:            "System",
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
@@ -179,6 +182,7 @@ type ServerConfig struct {
 
 	LogFile  string `toml:"log-file" json:"log-file"`
 	LogLevel string `toml:"log-level" json:"log-level"`
+	DataDir  string `toml:"data-dir" json:"data-dir"`
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
