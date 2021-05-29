@@ -38,7 +38,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *Server) startStatusHTTP() error {
+func (s *Server) createStatusHTTP() error {
 	serverMux := http.NewServeMux()
 
 	serverMux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -70,7 +70,23 @@ func (s *Server) startStatusHTTP() error {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return errors.Trace(err)
 	}
-	s.statusServer = &http.Server{Addr: conf.Addr, Handler: serverMux, TLSConfig: tlsConfig}
+
+	s.statusServer = &http.Server{
+		Addr:      conf.Addr,
+		Handler:   serverMux,
+		TLSConfig: tlsConfig,
+	}
+
+	return nil
+}
+
+func (s *Server) startStatusHTTP() error {
+	conf := config.GetGlobalServerConfig()
+	tlsConfig, err := conf.Security.ToTLSConfig()
+	if err != nil {
+		log.Error("status server get tls config failed", zap.Error(err))
+		return errors.Trace(err)
+	}
 
 	ln, err := net.Listen("tcp", conf.Addr)
 	if err != nil {

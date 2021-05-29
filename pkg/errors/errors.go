@@ -162,6 +162,7 @@ var (
 	ErrInvalidTaskKey               = errors.Normalize("invalid task key: %s", errors.RFCCodeText("CDC:ErrInvalidTaskKey"))
 	ErrInvalidServerOption          = errors.Normalize("invalid server option", errors.RFCCodeText("CDC:ErrInvalidServerOption"))
 	ErrServerNewPDClient            = errors.Normalize("server creates pd client failed", errors.RFCCodeText("CDC:ErrServerNewPDClient"))
+	ErrServerNewStatusHTTP          = errors.Normalize("server creates status http failed", errors.RFCCodeText("CDC:ErrServerNewStatusHTTP"))
 	ErrServeHTTP                    = errors.Normalize("serve http error", errors.RFCCodeText("CDC:ErrServeHTTP"))
 	ErrCaptureCampaignOwner         = errors.Normalize("campaign owner failed", errors.RFCCodeText("CDC:ErrCaptureCampaignOwner"))
 	ErrCaptureResignOwner           = errors.Normalize("resign owner failed", errors.RFCCodeText("CDC:ErrCaptureResignOwner"))

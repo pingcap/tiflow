@@ -85,10 +85,16 @@ func NewServer(ctx context.Context, pdEndpoints []string) (*Server, error) {
 		return nil, cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 
-	return &Server{
+	server := &Server{
 		pdEndpoints: pdEndpoints,
 		pdClient:    pdClient,
-	}, nil
+	}
+
+	if err := server.createStatusHTTP(); err != nil {
+		return nil, cerror.WrapError(cerror.ErrServerNewStatusHTTP, err)
+	}
+
+	return server, nil
 }
 
 // Run runs the server.
