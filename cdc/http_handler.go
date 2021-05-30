@@ -39,6 +39,8 @@ const (
 	APIOpVarTargetCaptureID = "target-cp-id"
 	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table-id"
+	// APIOpVarChangefeedList is the key of list option in HTTP API
+	APIOpVarChangefeedListAll = "all"
 	// APIOpForceRemoveChangefeed is used when remove a changefeed
 	APIOpForceRemoveChangefeed = "force-remove"
 )
@@ -46,6 +48,12 @@ const (
 type commonResp struct {
 	Status  bool   `json:"status"`
 	Message string `json:"message"`
+}
+
+// ChangefeedCommonInfo holds some common usage information of a changefeed
+type ChangefeedCommonInfo struct {
+	ID      string         `json:"id"`
+	Summary ChangefeedResp `json:"summary"`
 }
 
 // ChangefeedResp holds the most common usage information for a changefeed
@@ -258,6 +266,99 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
 	writeData(w, resp)
+}
+
+func (s *Server) handleChangefeedList(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
+		return
+	}
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
+	}
+
+	err := req.ParseForm()
+	if err != nil {
+		writeInternalServerError(w, cerror.WrapError(cerror.ErrInternalServerError, err))
+		return
+	}
+
+	_, raw, err := s.owner.etcdClient.GetChangeFeeds(req.Context())
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	changefeedIDs := make(map[string]struct{}, len(raw))
+	for id := range raw {
+		changefeedIDs[id] = struct{}{}
+	}
+
+	listOpt := req.Form.Get(APIOpVarChangefeedListAll)
+	if listOpt == "true" {
+		statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
+		if err != nil {
+			writeInternalServerError(w, err)
+			return
+		}
+		for cid := range statuses {
+			changefeedIDs[cid] = struct{}{}
+		}
+	}
+
+	resps := make([]*ChangefeedCommonInfo, len(changefeedIDs))
+	index := 0
+	for changefeedID, _ := range changefeedIDs {
+		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
+		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+			writeInternalServerError(w, err)
+			return
+		}
+		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+			writeInternalServerError(w, err)
+			return
+		}
+		respInfo := &ChangefeedCommonInfo{
+			ID: changefeedID,
+		}
+		resp := ChangefeedResp{
+			FeedState: string(feedState),
+		}
+		if cf != nil {
+			resp.RunningError = cf.info.Error
+		} else if feedInfo != nil {
+			resp.RunningError = feedInfo.Error
+		}
+		if status != nil {
+			resp.TSO = status.CheckpointTs
+			tm := oracle.GetTimeFromTS(status.CheckpointTs)
+			resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
+		}
+		respInfo.Summary = resp
+		resps[index] = respInfo
+		index++
+	}
+	writeData(w, resps)
+}
+
+func (s *Server) handleChangefeedListAll(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
+		return
+	}
+	s.handleChangefeedList(w, req)
+	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	changefeedIDs := make(map[string]struct{}, len(statuses))
+	for cid := range statuses {
+		changefeedIDs[cid] = struct{}{}
+	}
 }
 
 func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
