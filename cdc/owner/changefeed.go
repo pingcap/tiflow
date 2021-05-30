@@ -132,7 +132,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	if err != nil {
 		return errors.Trace(err)
 	}
-	shouldUpdateState := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+	shouldUpdateState, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	if shouldUpdateState {
 		c.updateStatus(barrierTs)
 	}
