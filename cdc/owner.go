@@ -654,7 +654,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			}
 			cfInfo.ErrorHis = append(cfInfo.ErrorHis, time.Now().UnixNano()/1e6)
 
-			if filter.ChangefeedFastFailError(err) {
+			if cerror.ChangefeedFastFailError(err) {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
 					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
