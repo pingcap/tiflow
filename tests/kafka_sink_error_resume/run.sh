@@ -51,6 +51,7 @@ function run() {
 
     for i in $(seq 1 4); do
         ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
+        sleep 5
         cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
         sleep 5
     done
