@@ -115,7 +115,7 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 		return 0, errors.New("injected PD failure")
 	}
 	if m.mockTiKVGCLifeTime {
-		Ts := oracle.GoTimeToTS(time.Now().Add(-TiKVGCLifeTime))
+		Ts := oracle.EncodeTSO(oracle.GetPhysical(time.Now().Add(-TiKVGCLifeTime)))
 		return Ts, nil
 	}
 	return safePoint, nil
@@ -202,7 +202,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 			info:    &model.ChangeFeedInfo{State: model.StateNormal},
 			etcdCli: s.client,
 			status: &model.ChangeFeedStatus{
-				CheckpointTs: oracle.GoTimeToTS(time.Now().Add(-6 * time.Second)),
+				CheckpointTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now().Add(-6*time.Second))),
 			},
 			targetTs: 2000,
 			ddlState: model.ChangeFeedSyncDML,
@@ -217,8 +217,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 		},
 	}
 
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
