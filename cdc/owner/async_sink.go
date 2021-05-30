@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package owner
 
 import (
@@ -17,9 +30,22 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultErrChSize = 1024
+)
+
+// AsyncSink is a async sink design for owner
+// The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
+// Other functions are still synchronization
 type AsyncSink interface {
 	Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error
+	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
+	// this function will return after recording the checkpointTs specified in memory immediately
+	// and the recorded checkpointTs will be sent and updated to downstream data source every second
 	EmitCheckpointTs(ctx cdcContext.Context, ts uint64)
+	// EmitDDLEvent emits DDL event asynchronously and return true if the DDL is executed
+	// the DDL event will be sent to another goroutine and execute to downstream
+	// the caller of this function can call again and again until a true returned
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
 	Close() error
@@ -107,12 +133,8 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
-			if err == nil {
-				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
-				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
-			} else if cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-				// If DDL executing failed, and the error can be ignored, mark the ddl is executed successfully and print a log
-				log.Info("Execute DDL ignored", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Reflect("ddl", ddl))
+			if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
 				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 			} else {
 				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed

@@ -31,10 +31,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	defaultErrChSize = 1024
-)
-
 type changefeed struct {
 	state *model.ChangefeedReactorState
 

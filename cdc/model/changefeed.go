@@ -20,8 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/filter"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -55,11 +53,11 @@ const (
 )
 
 const (
-	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
-	ErrorHistoryGCInterval = time.Minute * 10
+	// errorHistoryGCInterval represents how long we keep error record in changefeed info
+	errorHistoryGCInterval = time.Minute * 10
 
-	// ErrorHistoryCheckInterval represents time window for failure check
-	ErrorHistoryCheckInterval = time.Minute * 2
+	// errorHistoryCheckInterval represents time window for failure check
+	errorHistoryCheckInterval = time.Minute * 2
 
 	// ErrorHistoryThreshold represents failure upper limit in time window.
 	// Before a changefeed is initialized, check the the failure count of this
@@ -218,7 +216,7 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryGCInterval
 	})
 	info.ErrorHis = info.ErrorHis[i:]
 
@@ -228,35 +226,40 @@ func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 
 	i = sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
 	})
 	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
 	return
 }
 
+// HasFastFailError returns true if the error in changefeed is fast-fail
 func (info *ChangeFeedInfo) HasFastFailError() bool {
 	if info.Error == nil {
 		return false
 	}
-	return filter.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }
 
-// CheckErrorHistoryV2 checks error history of a changefeed
-// if having error record older than GC interval, set needSave to true.
-// if error counts reach threshold, set canInit to false.
-func (info *ChangeFeedInfo) CheckErrorHistoryV2() (canInit bool) {
+// findActiveErrors finds all errors occurring within errorHistoryCheckInterval
+func (info *ChangeFeedInfo) findActiveErrors() []int64 {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
+		// ts is a errors occurrence time, here to find all errors occurring within errorHistoryCheckInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
 	})
-	return len(info.ErrorHis)-i < ErrorHistoryThreshold
+	return info.ErrorHis[i:]
 }
 
-func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory() (needSave bool) {
-	i := sort.Search(len(info.ErrorHis), func(i int) bool {
-		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
-	})
-	info.ErrorHis = info.ErrorHis[i:]
-	return i > 0
+// ErrorsReachedThreshold checks error history of a changefeed
+// returns true if error counts reach threshold
+func (info *ChangeFeedInfo) ErrorsReachedThreshold() bool {
+	return len(info.findActiveErrors()) >= ErrorHistoryThreshold
+}
+
+// CleanUpOutdatedErrorHistory cleans up the outdated error history
+// return true if the ErrorHis changed
+func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory() bool {
+	lastLenOfErrorHis := len(info.ErrorHis)
+	info.ErrorHis = info.findActiveErrors()
+	return lastLenOfErrorHis != len(info.ErrorHis)
 }

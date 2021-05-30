@@ -28,6 +28,23 @@ func WrapError(rfcError *errors.Error, err error) error {
 	return rfcError.Wrap(err).GenWithStackByCause()
 }
 
+// ChangefeedFastFailError checks the error, returns true if it is meaningless
+// to retry on this error
+func ChangefeedFastFailError(err error) bool {
+	return ErrStartTsBeforeGC.Equal(errors.Cause(err))
+}
+
+// ChangefeedFastFailErrorCode checks the error, returns true if it is meaningless
+// to retry on this error
+func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
+	switch errCode {
+	case ErrStartTsBeforeGC.RFCCode():
+		return true
+	default:
+		return false
+	}
+}
+
 func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	type rfcCoder interface {
 		RFCCode() errors.RFCErrorCode
