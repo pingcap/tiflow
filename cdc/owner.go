@@ -85,6 +85,15 @@ func (o *Owner) getMinGCSafePointCache(ctx context.Context) model.Ts {
 			return o.minGCSafePointCache.ts
 		}
 		o.minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(o.gcTTL*1000), logicalTs)
+
+		// o.pdGCSafePoint pd is the smallest gcSafePoint across all services.
+		// If tikv_gc_life_time > gcTTL, means that tikv_gc_safe_point < o.minGCSafePointCache.ts here.
+		// It also means that pd.pdGCSafePoint < o.minGCSafePointCache.ts here, we should use its value as the min value.
+		// This ensures that when tikv_gc_life_time > gcTTL , cdc will not advance the gcSafePoint.
+		if o.pdGCSafePoint < o.minGCSafePointCache.ts {
+			o.minGCSafePointCache.ts = o.pdGCSafePoint
+		}
+
 		o.minGCSafePointCache.lastUpdated = time.Now()
 	}
 	return o.minGCSafePointCache.ts
@@ -127,6 +136,8 @@ type Owner struct {
 	gcSafepointLastUpdate time.Time
 	// stores the ts obtained from PD and is updated every MinGCSafePointCacheUpdateInterval.
 	minGCSafePointCache minGCSafePointCacheEntry
+	// stores the actual gcSafePoint stored in pd
+	pdGCSafePoint model.Ts
 	// record last time that flushes all changefeeds' replication status
 	lastFlushChangefeeds    time.Time
 	flushChangefeedInterval time.Duration
@@ -753,12 +764,18 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < gcSafePoint {
 				gcSafePoint = changefeed.status.CheckpointTs
 			}
-			// If changefeed's appliedCheckpoinTs < minGCSafePoint, it means this changefeed is stagnant.
+			// 1. If changefeed's appliedCheckpoinTs <= minGCSafePoint, it means this changefeed is stagnant.
 			// They are collected into this map, and then handleStaleChangeFeed() is called to deal with these stagnant changefeed.
 			// A changefeed will not enter the map twice, because in run(),
 			// handleAdminJob() will always be executed before flushChangeFeedInfos(),
 			// ensuring that the previous changefeed in staleChangeFeeds has been stopped and removed from o.changeFeeds.
-			if changefeed.status.CheckpointTs < minGCSafePoint {
+			// 2. We need the `<=` check here is because when a changefeed is stagnant, its checkpointTs will be updated to pd,
+			// and it would be the minimum gcSafePoint across all services.
+			// So as described above(line 92) minGCSafePoint = gcSafePoint = CheckpointTs would happens.
+			// In this case, if we check `<` here , this changefeed will not be put into staleChangeFeeds, and its checkpoints will be updated to pd again and again.
+			// This will cause the cdc's gcSafePoint never advance.
+			// If we check `<=` here, when we encounter the changefeed again, we will put it into staleChangeFeeds.
+			if changefeed.status.CheckpointTs <= minGCSafePoint {
 				staleChangeFeeds[id] = changefeed.status
 			}
 
@@ -781,10 +798,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	for _, status := range o.stoppedFeeds {
-		// If a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant.
+		// If a stopped changefeed's CheckpoinTs <= minGCSafePoint, means this changefeed is stagnant.
 		// It should never be resumed. This part of the logic is in newChangeFeed()
 		// So here we can skip it.
-		if status.CheckpointTs < minGCSafePoint {
+		if status.CheckpointTs <= minGCSafePoint {
 			continue
 		}
 
@@ -810,6 +827,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 				return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 			}
 		} else {
+			o.pdGCSafePoint = actual
 			o.gcSafepointLastUpdate = time.Now()
 		}
 
