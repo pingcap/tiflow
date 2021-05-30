@@ -202,7 +202,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 			info:    &model.ChangeFeedInfo{State: model.StateNormal},
 			etcdCli: s.client,
 			status: &model.ChangeFeedStatus{
-				CheckpointTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now().Add(-6 * time.Second))),
+				CheckpointTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now().Add(-6*time.Second))),
 			},
 			targetTs: 2000,
 			ddlState: model.ChangeFeedSyncDML,
