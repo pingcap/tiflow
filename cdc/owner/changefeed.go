@@ -226,7 +226,7 @@ func (c *changefeed) releaseResources() {
 	c.ddlPuller.Close()
 	c.schema = nil
 	if err := c.sink.Close(); err != nil {
-		log.Warn("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
@@ -236,7 +236,7 @@ func (c *changefeed) releaseResources() {
 	c.initialized = false
 }
 
-func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
+func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureInfo) (ok bool) {
 	passCheck = true
 	if c.state.Status == nil {
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
