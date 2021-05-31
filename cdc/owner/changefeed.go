@@ -42,15 +42,25 @@ type changefeed struct {
 	feedStateManager *feedStateManager
 	gcManager        *gcManager
 
-	schema        *schemaWrap4Owner
-	sink          AsyncSink
-	ddlPuller     DDLPuller
-	initialized   bool
+	schema      *schemaWrap4Owner
+	sink        AsyncSink
+	ddlPuller   DDLPuller
+	initialized bool
+
+	// only used for asyncExecDDL function
+	// the ddlEventCache is not nil when the changefeed is executing the DDL event asynchronously
+	// when the DDL event is executed, the ddlEventCache will be set to nil
 	ddlEventCache *model.DDLEvent
 
 	errCh  chan error
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+
+	// the changefeed will start some backend goroutine in initialize function,
+	// such as DDLPuller, Sink, etc.
+	// the wait group is used to manager those backend goroutine.
+	// but the wait group only manager the DDLPuller for now.
+	// TODO: manager the Sink and another backend goroutine.
+	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
@@ -153,7 +163,9 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 	if c.initialized {
 		return nil
 	}
-	// empty the errCh
+	// clean the errCh
+	// when the changefeed is resumed after stopped, the changefeed instance will be reuse,
+	// so we should make sure that the errCh is empty when the changefeed restarting
 LOOP:
 	for {
 		select {
@@ -236,6 +248,9 @@ func (c *changefeed) releaseResources() {
 	c.initialized = false
 }
 
+// preCheck makes sure the metadata is enough to run the tick
+// if the metadata is not complete, for example, the ChangeFeedStatus is nil,
+// this function will create the lost metadata and skip this tick.
 func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
 	passCheck = true
 	if c.state.Status == nil {
