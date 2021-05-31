@@ -537,6 +537,10 @@ func (s *processorSuite) TestProcessorExit(c *check.C) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})
+	p.changefeed.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		status.AdminJobType = model.AdminStop
+		return status, true, nil
+	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(cerror.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
