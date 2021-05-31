@@ -263,7 +263,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	return w.session.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	})
+	}, state.isInitialized())
 }
 
 func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
@@ -628,7 +628,7 @@ func (w *regionWorker) handleEventEntry(
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
-				log.Warn("The time cost of initializing is too mush",
+				log.Warn("The time cost of initializing is too much",
 					zap.Duration("timeCost", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
@@ -643,6 +643,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 			w.notifyEvTimeUpdate(regionID, true /* isDelete */)
 			state.initialized = true
+			w.session.regionRouter.RevokeToken()
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)
@@ -784,7 +785,7 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 				err: &rpcCtxUnavailableErr{
 					verID: singleRegionInfo.verID,
 				},
-			})
+			}, state.isInitialized())
 			return err == nil
 		})
 	}

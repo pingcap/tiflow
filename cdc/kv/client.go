@@ -70,6 +70,9 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
+
+	// defines the scan region limit for each table
+	regionScanLimitPerTable = 40
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -485,7 +488,7 @@ func (c *CDCClient) EventFeed(
 	isPullerInit PullerInitialization,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span,
+	s := newEventFeedSession(ctx, c, c.regionCache, c.kvStorage, span,
 		lockResolver, isPullerInit,
 		enableOldValue, ts, eventCh)
 	return s.eventFeed(ctx, ts)
@@ -516,7 +519,7 @@ type eventFeedSession struct {
 	// The channel to send the processed events.
 	eventCh chan<- *model.RegionFeedEvent
 	// The channel to put the region that will be sent requests.
-	regionCh chan singleRegionInfo
+	regionRouter LimitRegionRouter
 	// The channel to notify that an error is happening, so that the error will be handled and the affected region
 	// will be re-requested.
 	errCh chan regionErrorInfo
@@ -528,10 +531,9 @@ type eventFeedSession struct {
 	enableKVClientV2 bool
 
 	// To identify metrics of different eventFeedSession
-	id                string
-	regionChSizeGauge prometheus.Gauge
-	errChSizeGauge    prometheus.Gauge
-	rangeChSizeGauge  prometheus.Gauge
+	id               string
+	errChSizeGauge   prometheus.Gauge
+	rangeChSizeGauge prometheus.Gauge
 
 	streams          map[string]cdcpb.ChangeData_EventFeedClient
 	streamsLock      sync.RWMutex
@@ -547,6 +549,7 @@ type rangeRequestTask struct {
 }
 
 func newEventFeedSession(
+	ctx context.Context,
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
 	kvStorage TiKVStorage,
@@ -558,27 +561,28 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+	changefeed := util.ChangefeedIDFromCtx(ctx)
+	regionTokenGauge := clientRegionTokenSize.WithLabelValues(id, changefeed)
 	return &eventFeedSession{
-		client:            client,
-		regionCache:       regionCache,
-		kvStorage:         kvStorage,
-		totalSpan:         totalSpan,
-		eventCh:           eventCh,
-		regionCh:          make(chan singleRegionInfo, 16),
-		errCh:             make(chan regionErrorInfo, 16),
-		requestRangeCh:    make(chan rangeRequestTask, 16),
-		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
-		enableOldValue:    enableOldValue,
-		enableKVClientV2:  enableKVClientV2,
-		lockResolver:      lockResolver,
-		isPullerInit:      isPullerInit,
-		id:                id,
-		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
-		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
-		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
-		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
-		streamsCanceller:  make(map[string]context.CancelFunc),
-		workers:           make(map[string]*regionWorker),
+		client:           client,
+		regionCache:      regionCache,
+		kvStorage:        kvStorage,
+		totalSpan:        totalSpan,
+		eventCh:          eventCh,
+		regionRouter:     NewSizedRegionRouter(regionScanLimitPerTable, regionTokenGauge),
+		errCh:            make(chan regionErrorInfo, 16),
+		requestRangeCh:   make(chan rangeRequestTask, 16),
+		rangeLock:        regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
+		enableOldValue:   enableOldValue,
+		enableKVClientV2: enableKVClientV2,
+		lockResolver:     lockResolver,
+		isPullerInit:     isPullerInit,
+		id:               id,
+		errChSizeGauge:   clientChannelSize.WithLabelValues(id, "err"),
+		rangeChSizeGauge: clientChannelSize.WithLabelValues(id, "range"),
+		streams:          make(map[string]cdcpb.ChangeData_EventFeedClient),
+		streamsCanceller: make(map[string]context.CancelFunc),
+		workers:          make(map[string]*regionWorker),
 	}
 }
 
@@ -631,6 +635,10 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
+	g.Go(func() error {
+		return s.regionRouter.Run(ctx)
+	})
+
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 	s.rangeChSizeGauge.Inc()
 
@@ -655,12 +663,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 		switch res.Status {
 		case regionspan.LockRangeStatusSuccess:
 			sri.ts = res.CheckpointTs
-			select {
-			case s.regionCh <- sri:
-				s.regionChSizeGauge.Inc()
-			case <-ctx.Done():
-			}
-
+			s.regionRouter.AddRegion(sri)
 		case regionspan.LockRangeStatusStale:
 			log.Info("request expired",
 				zap.Uint64("regionID", sri.verID.GetID()),
@@ -709,9 +712,12 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
 // error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) error {
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, initialized bool) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
+	if !initialized {
+		s.regionRouter.RevokeToken()
+	}
 	select {
 	case s.errCh <- errorInfo:
 		s.errChSizeGauge.Inc()
@@ -750,8 +756,7 @@ MainLoop:
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case sri = <-s.regionCh:
-			s.regionChSizeGauge.Dec()
+		case sri = <-s.regionRouter.Chan():
 		}
 
 		log.Debug("dispatching region", zap.Uint64("regionID", sri.verID.GetID()))
@@ -773,7 +778,7 @@ MainLoop:
 					err: &rpcCtxUnavailableErr{
 						verID: sri.verID,
 					},
-				})
+				}, false /* initialized */)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -1009,7 +1014,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	})
+	}, state.isInitialized())
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -1169,7 +1174,7 @@ func (s *eventFeedSession) receiveFromStream(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			})
+			}, false /* initialized */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
@@ -1509,12 +1514,13 @@ func (s *eventFeedSession) singleEventFeed(
 					switch entry.Type {
 					case cdcpb.Event_INITIALIZED:
 						if time.Since(startFeedTime) > 20*time.Second {
-							log.Warn("The time cost of initializing is too mush",
+							log.Warn("The time cost of initializing is too much",
 								zap.Duration("timeCost", time.Since(startFeedTime)),
 								zap.Uint64("regionID", regionID))
 						}
 						metricPullEventInitializedCounter.Inc()
 						initialized = true
+						s.regionRouter.RevokeToken()
 						cachedEvents := matcher.matchCachedRow()
 						for _, cachedEvent := range cachedEvents {
 							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
