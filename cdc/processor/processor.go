@@ -299,16 +299,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
-
-	// Clean up possible residual error states
-	// TODO(leoppro) the position should be removed by owner
-	//p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-	//	if position != nil && position.Error != nil {
-	//		position.Error = nil
-	//		return position, true, nil
-	//	}
-	//	return position, false, nil
-	//})
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
@@ -354,18 +344,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 		})
 	}
 	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
-	// TODO: 👇👇 remove this six lines after the new owner is implemented, applied operation should be removed by owner
-	//if !taskStatus.SomeOperationsUnapplied() && len(taskStatus.Operation) != 0 {
-	//	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-	//		if status == nil {
-	//			// for safety, status should never be nil
-	//			return nil, false, nil
-	//		}
-	//		status.Operation = nil
-	//		return status, true, nil
-	//	})
-	//}
-	// 👆👆 remove this six lines
 	for tableID, opt := range taskStatus.Operation {
 		if opt.TableApplied() {
 			continue
@@ -404,24 +382,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					operation.Done = true
 					return nil
 				})
-
-				//p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-				//	if status.Tables == nil {
-				//		log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-				//	}
-				//	delete(status.Tables, tableID)
-				//	if status.Operation == nil {
-				//		log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-				//	}
-				//	operation := status.Operation[tableID]
-				//	if opt == nil {
-				//		log.Panic("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-				//	}
-				//	operation.BoundaryTs = table.CheckpointTs()
-				//	operation.Status = model.OperFinished
-				//	operation.Done = true
-				//	return status, true, nil
-				//})
 				// TODO: check if the goroutines created by table pipeline is actually exited. (call tablepipeline.Wait())
 				table.Cancel()
 				delete(p.tables, tableID)
@@ -815,23 +775,6 @@ func (p *processor) Close() error {
 	p.wg.Wait()
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
-
-	// TODO(leoppro) the metadata of a closed processor should be removed by owner
-	//p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-	//	if position == nil {
-	//		return nil, false, nil
-	//	}
-	//	if position.Error != nil {
-	//		return position, true, nil
-	//	}
-	//	return nil, true, nil
-	//})
-	//p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(_ *model.TaskStatus) (*model.TaskStatus, bool, error) {
-	//	return nil, true, nil
-	//})
-	//p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(_ model.TaskWorkload) (model.TaskWorkload, bool, error) {
-	//	return nil, true, nil
-	//})
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)

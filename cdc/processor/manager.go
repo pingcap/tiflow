@@ -19,12 +19,11 @@ import (
 	"io"
 	"time"
 
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
@@ -63,6 +62,7 @@ func NewManager() *Manager {
 	}
 }
 
+// NewManager4Test creates a new processor manager for test
 func NewManager4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
