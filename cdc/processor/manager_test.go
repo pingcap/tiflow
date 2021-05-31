@@ -102,6 +102,10 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})
+	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		status.AdminJobType = model.AdminStop
+		return status, true, nil
+	})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
 	s.tester.MustApplyPatches()
