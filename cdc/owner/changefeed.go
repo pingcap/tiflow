@@ -131,7 +131,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
 	}
-	if !c.preCheck(captures) {
+	if !c.preflightCheck(captures) {
 		return nil
 	}
 	if err := c.initialize(ctx); err != nil {
@@ -238,7 +238,7 @@ func (c *changefeed) releaseResources() {
 	c.ddlPuller.Close()
 	c.schema = nil
 	if err := c.sink.Close(); err != nil {
-		log.Warn("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
@@ -248,11 +248,11 @@ func (c *changefeed) releaseResources() {
 	c.initialized = false
 }
 
-// preCheck makes sure the metadata is enough to run the tick
+// preflightCheck makes sure the metadata is enough to run the tick
 // if the metadata is not complete, for example, the ChangeFeedStatus is nil,
 // this function will create the lost metadata and skip this tick.
-func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
-	passCheck = true
+func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureInfo) (ok bool) {
+	ok = true
 	if c.state.Status == nil {
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			if status == nil {
@@ -265,7 +265,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			}
 			return status, false, nil
 		})
-		passCheck = false
+		ok = false
 	}
 	for captureID := range captures {
 		if _, exist := c.state.TaskStatuses[captureID]; !exist {
@@ -276,7 +276,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 				}
 				return status, false, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 	for captureID := range c.state.TaskStatuses {
@@ -284,7 +284,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 				return nil, status != nil, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 
@@ -293,7 +293,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				return nil, position != nil, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 	for captureID := range c.state.Workloads {
@@ -301,7 +301,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			c.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 				return nil, workload != nil, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 	return
