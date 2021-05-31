@@ -17,6 +17,7 @@ import (
 	"context"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -28,10 +29,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type changefeed struct {
+	id    model.ChangeFeedID
 	state *model.ChangefeedReactorState
 
 	scheduler        *scheduler
@@ -49,12 +52,16 @@ type changefeed struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
+	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
+
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(gcManager *gcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
 	c := &changefeed{
+		id:               id,
 		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
@@ -70,11 +77,11 @@ func newChangefeed(gcManager *gcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	gcManager *gcManager,
+	id model.ChangeFeedID, gcManager *gcManager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
-	c := newChangefeed(gcManager)
+	c := newChangefeed(id, gcManager)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	return c
@@ -197,6 +204,10 @@ LOOP:
 		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
+
+	// init metrics
+	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
+	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
 	c.initialized = true
 	return nil
 }
@@ -211,11 +222,15 @@ func (c *changefeed) releaseResources() {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	c.initialized = false
 	if err := c.sink.Close(); err != nil {
 		log.Warn("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
+	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
+	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
+	c.metricsChangefeedCheckpointTsGauge = nil
+	c.metricsChangefeedCheckpointTsLagGauge = nil
+	c.initialized = false
 }
 
 func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
@@ -392,6 +407,12 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 		}
 		return status, changed, nil
 	})
+
+	phyTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
+	// It is more accurate to get tso from PD, but in most cases we have
+	// deployed NTP service, a little bias is acceptable here.
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 }
 
 func (c *changefeed) Close() {

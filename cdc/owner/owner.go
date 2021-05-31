@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -64,16 +65,18 @@ type Owner struct {
 
 	ownerJobQueue   []*ownerJob
 	ownerJobQueueMu sync.Mutex
+	lastTickTime    time.Time
 
 	close int32
 
-	newChangefeed func(gcManager *gcManager) *changefeed
+	newChangefeed func(id model.ChangeFeedID, gcManager *gcManager) *changefeed
 }
 
 func NewOwner() *Owner {
 	return &Owner{
 		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
 		gcManager:     newGCManager(),
+		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
 	}
 }
@@ -82,8 +85,8 @@ func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error)) *Owner {
 	o := NewOwner()
-	o.newChangefeed = func(gcManager *gcManager) *changefeed {
-		return newChangefeed4Test(gcManager, newDDLPuller, newSink)
+	o.newChangefeed = func(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
+		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
 	return o
 }
@@ -95,6 +98,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	failpoint.Inject("sleep-in-owner-tick", nil)
 	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*model.GlobalReactorState)
+	o.updateMetrics(state)
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	err = o.gcManager.updateGCSafePoint(ctx, state)
 	if err != nil {
@@ -112,7 +116,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			cfReactor = o.newChangefeed(o.gcManager)
+			cfReactor = o.newChangefeed(changefeedID, o.gcManager)
 			o.changefeeds[changefeedID] = cfReactor
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
@@ -195,6 +199,26 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 			return nil, workload != nil, nil
 		})
+	}
+}
+
+func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
+	// Keep the value of prometheus expression `rate(counter)` = 1
+	// Please also change alert rule in ticdc.rules.yml when change the expression value.
+	now := time.Now()
+	ownershipCounter.Add(float64(now.Sub(o.lastTickTime) / time.Second))
+	o.lastTickTime = now
+
+	ownerMaintainTableNumGauge.Reset()
+	for changefeedID, changefeedState := range state.Changefeeds {
+		for captureID, captureInfo := range state.Captures {
+			taskStatus, exist := changefeedState.TaskStatuses[captureID]
+			if !exist {
+				continue
+			}
+			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
+			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
+		}
 	}
 }
 
