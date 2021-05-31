@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"path"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -35,7 +36,8 @@ const NewReplicaImpl = true
 
 func init() {
 	config := GetDefaultServerConfig()
-	config.Sorter.SortDir = config.DataDir + "/" + config.Sorter.SortDir
+	config.initDataDir()
+
 	StoreGlobalServerConfig(config)
 }
 
@@ -236,6 +238,10 @@ func (c *ServerConfig) Clone() *ServerConfig {
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	return clone
+}
+
+func (c *ServerConfig) initDataDir() {
+	c.Sorter.SortDir = path.Join(c.DataDir, c.Sorter.SortDir)
 }
 
 // ValidateAndAdjust validates and adjusts the server configuration
