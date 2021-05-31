@@ -662,7 +662,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 						ReplicationGap: fmt.Sprintf("%dms", replicationGap),
 						Count:          count,
 					}
-					jsonPrint(cmd, &statistics)
+					_ = jsonPrint(cmd, &statistics)
 					lastCount = count
 					lastTime = now
 				}
