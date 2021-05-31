@@ -40,7 +40,7 @@ const (
 	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table-id"
 	// APIOpVarChangefeedList is the key of list option in HTTP API
-	APIOpVarChangefeedListAll = "all"
+	APIOpVarChangefeeds = "state"
 	// APIOpForceRemoveChangefeed is used when remove a changefeed
 	APIOpForceRemoveChangefeed = "force-remove"
 )
@@ -268,7 +268,14 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	writeData(w, resp)
 }
 
-func (s *Server) handleChangefeedList(w http.ResponseWriter, req *http.Request) {
+func (s *Server) handleChangefeeds(w http.ResponseWriter, req *http.Request) {
+	if req.Method == http.MethodGet {
+		s.handleChangefeedsList(w, req)
+		return
+	}
+}
+
+func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
@@ -286,26 +293,24 @@ func (s *Server) handleChangefeedList(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	_, raw, err := s.owner.etcdClient.GetChangeFeeds(req.Context())
+	state := req.Form.Get(APIOpVarChangefeeds)
+	switch state {
+	case "all":
+	case "normal":
+	case "stoped":
+	case "removed":
+	case "finished":
+	case "error":
+	}
+
+	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
+	changefeedIDs := make(map[string]struct{}, len(statuses))
 	if err != nil {
 		writeInternalServerError(w, err)
 		return
 	}
-	changefeedIDs := make(map[string]struct{}, len(raw))
-	for id := range raw {
-		changefeedIDs[id] = struct{}{}
-	}
-
-	listOpt := req.Form.Get(APIOpVarChangefeedListAll)
-	if listOpt == "true" {
-		statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
-		if err != nil {
-			writeInternalServerError(w, err)
-			return
-		}
-		for cid := range statuses {
-			changefeedIDs[cid] = struct{}{}
-		}
+	for cid := range statuses {
+		changefeedIDs[cid] = struct{}{}
 	}
 
 	resps := make([]*ChangefeedCommonInfo, len(changefeedIDs))
@@ -342,23 +347,6 @@ func (s *Server) handleChangefeedList(w http.ResponseWriter, req *http.Request) 
 		index++
 	}
 	writeData(w, resps)
-}
-
-func (s *Server) handleChangefeedListAll(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
-		return
-	}
-	s.handleChangefeedList(w, req)
-	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
-	if err != nil {
-		writeInternalServerError(w, err)
-		return
-	}
-	changefeedIDs := make(map[string]struct{}, len(statuses))
-	for cid := range statuses {
-		changefeedIDs[cid] = struct{}{}
-	}
 }
 
 func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
