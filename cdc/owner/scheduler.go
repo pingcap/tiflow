@@ -241,7 +241,7 @@ func (s *scheduler) syncTablesWithSchemaManager() ([]*schedulerJob, error) {
 			BoundaryTs: boundaryTs,
 		})
 	}
-	// The remaining tables is the tables which should be not listened
+	// The remaining tables are the tables which should be not listened
 	tablesThatShouldNotBeListened := allTableListeningNow
 	for tableID, captureID := range tablesThatShouldNotBeListened {
 		opts := s.state.TaskStatuses[captureID].Operation
