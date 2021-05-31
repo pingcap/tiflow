@@ -61,13 +61,26 @@ func NewServer(ctx context.Context, pdEndpoints []string) (*Server, error) {
 		zap.Strings("pd-addrs", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
+	server := &Server{
+		pdEndpoints: pdEndpoints,
+	}
+
+	if err := server.createStatusHTTP(); err != nil {
+		return nil, cerror.WrapError(cerror.ErrServerNewStatusHTTP, err)
+	}
+
+	return server, nil
+}
+
+func (s *Server) initPDClient(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
 
 	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	pdClient, err := pd.NewClientWithContext(
-		ctx, pdEndpoints, conf.Security.PDSecurityOption(),
+		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -82,28 +95,24 @@ func NewServer(ctx context.Context, pdEndpoints []string) (*Server, error) {
 			}),
 		))
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrServerNewPDClient, err)
+		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
+	s.pdClient = pdClient
 
-	server := &Server{
-		pdEndpoints: pdEndpoints,
-		pdClient:    pdClient,
-	}
-
-	if err := server.createStatusHTTP(); err != nil {
-		return nil, cerror.WrapError(cerror.ErrServerNewStatusHTTP, err)
-	}
-
-	return server, nil
+	return nil
 }
 
 // Run runs the server.
-func (s *Server) Run(ctx context.Context) error {
+func (s *Server) Run(ctx context.Context) (err error) {
+	if err = s.initPDClient(ctx); err != nil {
+		return err
+	}
+
 	conf := config.GetGlobalServerConfig()
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err := version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], conf.Security, errorTiKVIncompatible)
+	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], conf.Security, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}

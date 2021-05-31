@@ -656,6 +656,11 @@ error = '''
 server creates pd client failed
 '''
 
+["CDC:ErrServerNewStatusHTTP"]
+error = '''
+server creates status http failed
+'''
+
 ["CDC:ErrServiceSafepointLost"]
 error = '''
 service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
