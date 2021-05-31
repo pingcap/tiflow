@@ -48,18 +48,18 @@ type changefeed struct {
 	initialized bool
 
 	// only used for asyncExecDDL function
-	// the ddlEventCache is not nil when the changefeed is executing the DDL event asynchronously
-	// when the DDL event is executed, the ddlEventCache will be set to nil
+	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
+	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
 
 	errCh  chan error
 	cancel context.CancelFunc
 
-	// the changefeed will start some backend goroutine in initialize function,
+	// The changefeed will start some backend goroutines in the function `initialize`,
 	// such as DDLPuller, Sink, etc.
-	// the wait group is used to manager those backend goroutine.
-	// but the wait group only manager the DDLPuller for now.
-	// TODO: manager the Sink and another backend goroutine.
+	// `wg` is used to manage those backend goroutines.
+	// But it only manages the DDLPuller for now.
+	// TODO: manage the Sink and other backend goroutines.
 	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
@@ -164,8 +164,8 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 		return nil
 	}
 	// clean the errCh
-	// when the changefeed is resumed after stopped, the changefeed instance will be reuse,
-	// so we should make sure that the errCh is empty when the changefeed restarting
+	// When the changefeed is resumed after being stopped, the changefeed instance will be reused,
+	// So we should make sure that the errCh is empty when the changefeed is restarting
 LOOP:
 	for {
 		select {
@@ -248,9 +248,9 @@ func (c *changefeed) releaseResources() {
 	c.initialized = false
 }
 
-// preflightCheck makes sure the metadata is enough to run the tick
-// if the metadata is not complete, for example, the ChangeFeedStatus is nil,
-// this function will create the lost metadata and skip this tick.
+// preflightCheck makes sure that the metadata in Etcd is complete enough to run the tick.
+// If the metadata is not complete, such as when the ChangeFeedStatus is nil,
+// this function will reconstruct the lost metadata and skip this tick.
 func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureInfo) (ok bool) {
 	ok = true
 	if c.state.Status == nil {
@@ -428,7 +428,7 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 
 	phyTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	// It is more accurate to get tso from PD, but in most cases we have
+	// It is more accurate to get tso from PD, but in most cases since we have
 	// deployed NTP service, a little bias is acceptable here.
 	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 }
