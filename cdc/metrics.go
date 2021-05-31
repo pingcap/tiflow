@@ -16,6 +16,7 @@ package cdc
 import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/cdc/processor"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
@@ -39,9 +40,10 @@ func init() {
 	if config.NewReplicaImpl {
 		processor.InitMetrics(registry)
 		tablepipeline.InitMetrics(registry)
+		owner.InitMetrics(registry)
 	} else {
 		initProcessorMetrics(registry)
+		initOwnerMetrics(registry)
 	}
-	initOwnerMetrics(registry)
 	initServerMetrics(registry)
 }
