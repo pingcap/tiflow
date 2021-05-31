@@ -100,6 +100,11 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 
 // NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTables bool) (*SingleSchemaSnapshot, error) {
+	if meta == nil {
+		snap := newEmptySchemaSnapshot(explicitTables)
+		snap.currentTs = currentTs
+		return snap, nil
+	}
 	return newSchemaSnapshotFromMeta(meta, currentTs, explicitTables)
 }
 
