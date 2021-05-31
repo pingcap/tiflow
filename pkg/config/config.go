@@ -17,7 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"path"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -241,7 +241,7 @@ func (c *ServerConfig) Clone() *ServerConfig {
 }
 
 func (c *ServerConfig) initDataDir() {
-	c.Sorter.SortDir = path.Join(c.DataDir, c.Sorter.SortDir)
+	c.Sorter.SortDir = filepath.Join(c.DataDir, c.Sorter.SortDir)
 }
 
 // ValidateAndAdjust validates and adjusts the server configuration

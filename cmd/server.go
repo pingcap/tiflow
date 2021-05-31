@@ -147,6 +147,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.LogFile = serverConfig.LogFile
 		case "log-level":
 			conf.LogLevel = serverConfig.LogLevel
+		case "data-dir":
+			conf.DataDir = serverConfig.DataDir
 		case "owner-flush-interval":
 			conf.OwnerFlushInterval = serverConfig.OwnerFlushInterval
 		case "processor-flush-interval":
