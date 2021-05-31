@@ -31,9 +31,9 @@ const (
 type LimitRegionRouter interface {
 	// Chan returns a singleRegionInfo channel that can be consumed from
 	Chan() <-chan singleRegionInfo
-	// AddRegion adds an singleRegionInfo to buffer
+	// AddRegion adds an singleRegionInfo to buffer, this function is thread-safe
 	AddRegion(task singleRegionInfo)
-	// RevokeToken gives back one token
+	// RevokeToken gives back one token, this function is thread-safe
 	RevokeToken()
 	// Run runs in background and does some logic work
 	Run(ctx context.Context) error

@@ -1014,7 +1014,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, state.isInitialized())
+	}, state.initialized)
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned

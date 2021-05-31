@@ -263,7 +263,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	return w.session.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, state.isInitialized())
+	}, state.initialized)
 }
 
 func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
@@ -779,13 +779,14 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			if state.lastResolvedTs > singleRegionInfo.ts {
 				singleRegionInfo.ts = state.lastResolvedTs
 			}
+			initialized := state.initialized
 			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
 				err: &rpcCtxUnavailableErr{
 					verID: singleRegionInfo.verID,
 				},
-			}, state.isInitialized())
+			}, initialized)
 			return err == nil
 		})
 	}
