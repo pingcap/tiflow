@@ -71,7 +71,7 @@ func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []mo
 	s.captures = captures
 
 	s.cleanUpFinishedOperations()
-	pendingJob, err := s.syncTablesWithSchemaManager()
+	pendingJob, err := s.syncTablesWithCurrentTables()
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -101,6 +101,7 @@ func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
 	})
 }
 
+// handleMoveTableJob handles the move table job add be MoveTable function
 func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool, err error) {
 	shouldUpdateState = true
 	if len(s.moveTableJobQueue) == 0 {
@@ -118,6 +119,8 @@ func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool, err error) {
 		s.moveTableTargets[job.tableID] = job.target
 		job := job
 		shouldUpdateState = false
+		// for all move table job, this just remove the table from the source capture.
+		// and the removed table by this function will be added to target function by syncTablesWithCurrentTables in the next tick.
 		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
 				// the capture may be down, just skip remove this table
@@ -221,7 +224,9 @@ func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 	}
 }
 
-func (s *scheduler) syncTablesWithSchemaManager() ([]*schedulerJob, error) {
+// syncTablesWithCurrentTables iterates all current tables and check whether all the table has been listened.
+// if not, this function will return scheduler jobs to make sure all the table will be listened.
+func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
 	var pendingJob []*schedulerJob
 	allTableListeningNow, err := s.table2CaptureIndex()
 	if err != nil {
@@ -241,7 +246,7 @@ func (s *scheduler) syncTablesWithSchemaManager() ([]*schedulerJob, error) {
 			BoundaryTs: boundaryTs,
 		})
 	}
-	// The remaining tables is the tables which should be not listened
+	// The remaining tables are the tables which should be not listened
 	tablesThatShouldNotBeListened := allTableListeningNow
 	for tableID, captureID := range tablesThatShouldNotBeListened {
 		opts := s.state.TaskStatuses[captureID].Operation
@@ -332,7 +337,7 @@ func (s *scheduler) shouldRebalance() bool {
 }
 
 // rebalanceByTableNum removes tables from captures replicating an above-average number of tables.
-// the removed table will be dispatched again by syncTablesWithSchemaManager function
+// the removed table will be dispatched again by syncTablesWithCurrentTables function
 func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 	totalTableNum := len(s.currentTables)
 	captureNum := len(s.captures)
@@ -352,7 +357,7 @@ func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 		}
 
 		// here we pick `tableNum2Remove` tables to delete,
-		// and then the removed tables will be dispatched by `syncTablesWithSchemaManager` function in the next tick
+		// and then the removed tables will be dispatched by `syncTablesWithCurrentTables` function in the next tick
 		for tableID := range taskStatus.Tables {
 			tableID := tableID
 			if tableNum2Remove <= 0 {
