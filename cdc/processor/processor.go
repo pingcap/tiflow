@@ -163,7 +163,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !p.checkChangefeedNormal() {
+	if p.changefeed.TaskStatuses[p.captureInfo.ID].AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	if skip := p.checkPosition(); skip {
@@ -191,14 +191,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 		return nil, errors.Trace(err)
 	}
 	return p.changefeed, nil
-}
-
-func (p *processor) checkChangefeedNormal() bool {
-	if p.changefeed.Info.AdminJobType.IsStopState() || p.changefeed.Status.AdminJobType.IsStopState() {
-		return false
-	}
-	p.changefeed.CheckChangefeedNormal()
-	return true
 }
 
 // checkPosition create a new task position, and put it into the etcd state.
