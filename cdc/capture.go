@@ -156,7 +156,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	}
 	if config.NewReplicaImpl {
 		sessionCli := c.session.Client()
-		etcdWorker, err := orchestrator.NewEtcdWorker(kv.NewCDCEtcdClient(ctx, sessionCli).Client, kv.EtcdKeyBase, c.processorManager, processor.NewGlobalState(c.info.ID))
+		etcdWorker, err := orchestrator.NewEtcdWorker(kv.NewCDCEtcdClient(ctx, sessionCli).Client, kv.EtcdKeyBase, c.processorManager, model.NewGlobalState())
 		if err != nil {
 			return errors.Trace(err)
 		}
