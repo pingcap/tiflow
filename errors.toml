@@ -696,6 +696,11 @@ error = '''
 this api supports POST method only
 '''
 
+["CDC:ErrTableListenReplicated"]
+error = '''
+A table is being replicated by at least two processors(%s, %s), please report a bug
+'''
+
 ["CDC:ErrTableProcessorStoppedSafely"]
 error = '''
 table processor stopped safely
