@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"reflect"
 	"sync"
 	"time"
 
@@ -103,7 +102,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		return nil
 	})
 	if err := c.tick(ctx, state, captures); err != nil {
-		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err), zap.Stringer("tp", reflect.TypeOf(err)))
+		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string
 		if rfcCode, ok := cerror.RFCCode(err); ok {
 			code = string(rfcCode)
@@ -192,8 +191,10 @@ LOOP:
 			return errors.Trace(err)
 		}
 	}
+	if c.state.Info.SyncPointEnabled {
+		c.barriers.Update(syncPointBarrier, startTs)
+	}
 	c.barriers.Update(ddlJobBarrier, startTs)
-	c.barriers.Update(syncPointBarrier, startTs)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
 	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
@@ -337,10 +338,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
 
 	case syncPointBarrier:
-		if !c.state.Info.SyncPointEnabled {
-			c.barriers.Remove(syncPointBarrier)
-			return barrierTs, nil
-		}
 		if !blocked {
 			return barrierTs, nil
 		}
