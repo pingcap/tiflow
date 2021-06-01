@@ -154,9 +154,11 @@ func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
 	if ddl.CommitTs <= ddlFinishedTs {
+		// the DDL event is executed successfully, and done is true
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
+		// the DDL event is executing and not finished yes, return false
 		return false, nil
 	}
 	select {
