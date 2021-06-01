@@ -301,7 +301,7 @@ func (o *Owner) newChangeFeed(
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
+		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, id, checkpointTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
