@@ -23,6 +23,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -55,6 +56,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 }
 
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
@@ -90,6 +92,7 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 }
 
 func (s *ownerSuite) TestStopChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
@@ -134,6 +137,7 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 }
 
 func (s *ownerSuite) TestAdminJob(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, _, _ := createOwner4Test(ctx, c)
 	owner.EnqueueJob(model.AdminJob{
