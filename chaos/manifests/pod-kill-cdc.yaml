@@ -1,20 +1,17 @@
 apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
-  name: pod-kill-dm
+  name: pod-kill-cdc
   labels:
-    app: pod-kill-dm
+    app: pod-kill-cdc
 spec:
   action: pod-kill
   mode: one
   selector:
     pods:
       default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
+        - cdc-0
+        - cdc-1
+        - cdc-2
   scheduler:
     cron: "@every 1m"

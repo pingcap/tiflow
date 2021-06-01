@@ -3,21 +3,18 @@
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
-  name: network-loss-dm
+  name: network-loss-cdc
   labels:
-    app: network-loss-dm
+    app: network-loss-cdc
 spec:
   action: loss
   mode: one
   selector:
     pods:
       default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
+        - cdc-0
+        - cdc-1
+        - cdc-2
   loss:
     loss: "25"
     correlation: "25"
@@ -31,21 +28,18 @@ spec:
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
-  name: network-delay-dm
+  name: network-delay-cdc
   labels:
-    app: network-delay-dm
+    app: network-delay-cdc
 spec:
   action: delay
   mode: one
   selector:
     pods:
       default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
+        - cdc-0
+        - cdc-1
+        - cdc-2
   delay:
     latency: "90ms"
     correlation: "25"
@@ -59,21 +53,18 @@ spec:
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
-  name: network-duplicate-dm
+  name: network-cdc
   labels:
-    app: network-duplicate-dm
+    app: network-cdc
 spec:
   action: duplicate
   mode: one
   selector:
     pods:
       default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
+        - cdc-0
+        - cdc-1
+        - cdc-2
   duplicate:
     duplicate: "40"
     correlation: "25"
@@ -86,21 +77,18 @@ spec:
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
-  name: network-corrupt-dm
+  name: network-corrupt-cdc
   labels:
-    app: network-corrupt-dm
+    app: network-corrupt-cdc
 spec:
   action: corrupt
   mode: one
   selector:
     pods:
       default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
+        - cdc-0
+        - cdc-1
+        - cdc-2
   corrupt:
     corrupt: "40"
     correlation: "25"

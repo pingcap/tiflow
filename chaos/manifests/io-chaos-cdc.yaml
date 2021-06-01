@@ -1,23 +1,20 @@
 apiVersion: chaos-mesh.org/v1alpha1
 kind: IoChaos
 metadata:
-  name: io-delay-dm
+  name: io-delay-cdc
   labels:
-    app: io-delay-dm
+    app: io-delay-cdc
 spec:
   action: latency
   mode: one
   selector:
     pods:
       default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
+        - cdc-0
+        - cdc-1
+        - cdc-2
   volumePath: /data
-  path: "/data/**/*"
+  path: "/data/**/*"   # todo: figure this out, maybe /data/*
   delay: "100ms"
   percent: 50
   duration: "60s"

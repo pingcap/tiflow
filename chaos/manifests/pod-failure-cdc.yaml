@@ -1,9 +1,9 @@
 apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
-  name: pod-failure-dm
+  name: pod-failure-cdc
   labels:
-    app: pod-failure-dm
+    app: pod-failure-cdc
 spec:
   action: pod-failure
   mode: one
@@ -11,11 +11,8 @@ spec:
   selector:
     pods:
       default: # default namespace
-        - dm-master-0
-        - dm-master-1
-        - dm-master-2
-        - dm-worker-0
-        - dm-worker-1
-        - dm-worker-2
+        - cdc-0
+        - cdc-1
+        - cdc-2
   scheduler:
     cron: "@every 2m"
