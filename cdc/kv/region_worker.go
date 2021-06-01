@@ -450,6 +450,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			log.Info("region worker closed by error")
 			exitEventHandler = true
 			err = w.evictAllRegions(ctx)
+			if err != nil {
+				log.Warn("region worker evict all regions error", zap.Error(err))
+			}
 			return
 		}
 		if event.state.isStopped() {
@@ -473,9 +476,6 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		}
 		exitEventHandler, skipEvent, err := preprocess(event, ok)
 		if exitEventHandler {
-			if err != nil {
-				log.Warn("region worker process error", zap.Error(err))
-			}
 			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
 		if skipEvent {
@@ -504,7 +504,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				}
 				exitEventHandler, skipEvent, err := preprocess(event, ok)
 				if exitEventHandler {
-					return err
+					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 				}
 				if skipEvent {
 					continue
