@@ -192,9 +192,9 @@ LOOP:
 		}
 	}
 	if c.state.Info.SyncPointEnabled {
-		c.barriers.Update(syncPointBarrier, startTs)
+		c.barriers.Update(syncPointBarrier, startTs-1)
 	}
-	c.barriers.Update(ddlJobBarrier, startTs)
+	c.barriers.Update(ddlJobBarrier, startTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
 	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
@@ -258,8 +258,8 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			if status == nil {
 				status = &model.ChangeFeedStatus{
-					ResolvedTs:   c.state.Info.StartTs,
-					CheckpointTs: c.state.Info.StartTs,
+					ResolvedTs:   c.state.Info.StartTs - 1,
+					CheckpointTs: c.state.Info.StartTs - 1,
 					AdminJobType: model.AdminNone,
 				}
 				return status, true, nil
