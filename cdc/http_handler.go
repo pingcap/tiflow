@@ -268,6 +268,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	writeData(w, resp)
 }
 
+// handleChangefeeds dispatch the request to the specified handleFunc according to the request method.
 func (s *Server) handleChangefeeds(w http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodGet {
 		s.handleChangefeedsList(w, req)
@@ -293,16 +294,6 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	state := req.Form.Get(APIOpVarChangefeeds)
-	switch state {
-	case "all":
-	case "normal":
-	case "stoped":
-	case "removed":
-	case "finished":
-	case "error":
-	}
-
 	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
 	changefeedIDs := make(map[string]struct{}, len(statuses))
 	if err != nil {
@@ -313,14 +304,37 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 		changefeedIDs[cid] = struct{}{}
 	}
 
-	resps := make([]*ChangefeedCommonInfo, len(changefeedIDs))
-	index := 0
+	state := req.Form.Get(APIOpVarChangefeeds)
+	filters := map[model.FeedState]struct{}{
+		model.StateNormal:   {},
+		model.StateStopped:  {},
+		model.StateFailed:   {},
+		model.StateFinished: {},
+		model.StateRemoved:  {},
+		model.StateError:    {},
+	}
+	switch state {
+	case "all":
+		filters = make(map[model.FeedState]struct{})
+	case "":
+		delete(filters, model.StateNormal)
+		delete(filters, model.StateStopped)
+		delete(filters, model.StateFailed)
+	default:
+		delete(filters, model.FeedState(state))
+	}
+
+	resps := make([]*ChangefeedCommonInfo, 0)
 	for changefeedID, _ := range changefeedIDs {
 		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerError(w, err)
 			return
 		}
+		if _, ok := filters[feedState]; ok {
+			continue
+		}
+
 		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerError(w, err)
@@ -343,8 +357,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 		}
 		respInfo.Summary = resp
-		resps[index] = respInfo
-		index++
+		resps = append(resps, respInfo)
 	}
 	writeData(w, resps)
 }

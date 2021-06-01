@@ -54,7 +54,7 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/capture/owner/rebalance_trigger", s.handleRebalanceTrigger)
 	serverMux.HandleFunc("/capture/owner/move_table", s.handleMoveTable)
 	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
-	serverMux.HandleFunc("/api/changefeeds", s.handleChangefeeds) // lists all changefeeds in cdc
+	serverMux.HandleFunc("/api/v1/changefeeds", s.handleChangefeeds)
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
 
 	if util.FailpointBuild {
