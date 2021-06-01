@@ -195,6 +195,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
 	defer cf.Close()
 	helper := entry.NewSchemaTestHelper(c)
+	defer helper.Close()
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
