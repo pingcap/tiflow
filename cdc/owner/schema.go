@@ -34,6 +34,7 @@ type schemaWrap4Owner struct {
 	config         *config.ReplicaConfig
 
 	allPhysicalTablesCache []model.TableID
+	ddlHandledTs           model.Ts
 }
 
 func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *config.ReplicaConfig) (*schemaWrap4Owner, error) {
@@ -45,7 +46,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 			return nil, errors.Trace(err)
 		}
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs-1, config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -57,6 +58,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 		schemaSnapshot: schemaSnap,
 		filter:         f,
 		config:         config,
+		ddlHandledTs:   startTs - 1,
 	}, nil
 }
 
@@ -84,8 +86,16 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
+	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
+		return nil
+	}
 	s.allPhysicalTablesCache = nil
-	return s.schemaSnapshot.HandleDDL(job)
+	err := s.schemaSnapshot.HandleDDL(job)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.ddlHandledTs = job.BinlogInfo.FinishedTS
+	return nil
 }
 
 func (s *schemaWrap4Owner) IsIneligibleTableID(tableID model.TableID) bool {
