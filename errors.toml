@@ -501,6 +501,11 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
+["CDC:ErrNotOwner"]
+error = '''
+this capture is not a owner
+'''
+
 ["CDC:ErrOldValueNotEnabled"]
 error = '''
 old value is not enabled
@@ -514,6 +519,11 @@ operate on a closed notifier
 ["CDC:ErrOwnerCampaignKeyDeleted"]
 error = '''
 owner campaign key deleted
+'''
+
+["CDC:ErrOwnerChangedUnexpectedly"]
+error = '''
+owner changed unexpectedly
 '''
 
 ["CDC:ErrOwnerChangefeedNotFound"]
