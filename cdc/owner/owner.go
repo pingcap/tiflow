@@ -69,7 +69,7 @@ type Owner struct {
 	ownerJobQueueMu sync.Mutex
 	lastTickTime    time.Time
 
-	close int32
+	closed int32
 
 	newChangefeed func(id model.ChangeFeedID, gcManager *gcManager) *changefeed
 }
@@ -135,7 +135,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
-	if atomic.LoadInt32(&o.close) != 0 {
+	if atomic.LoadInt32(&o.closed) != 0 {
 		for _, cfReactor := range o.changefeeds {
 			cfReactor.Close()
 		}
@@ -185,7 +185,7 @@ func (o *Owner) WriteDebugInfo(w http.ResponseWriter) {
 
 // AsyncStop stops the owner asynchronously
 func (o *Owner) AsyncStop() {
-	atomic.StoreInt32(&o.close, 1)
+	atomic.StoreInt32(&o.closed, 1)
 }
 
 func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
