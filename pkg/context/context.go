@@ -19,6 +19,11 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/pkg/config"
+<<<<<<< HEAD
+=======
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+>>>>>>> 857d2c05 (new_owner: a changefeed implement (#1894))
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -133,3 +138,36 @@ func (ctx *throwContext) Throw(err error) {
 		ctx.Context.Throw(err)
 	}
 }
+<<<<<<< HEAD
+=======
+
+// NewBackendContext4Test returns a new pipeline context for test
+func NewBackendContext4Test(withChangefeedVars bool) Context {
+	ctx := NewContext(context.Background(), &GlobalVars{
+		CaptureInfo: &model.CaptureInfo{
+			ID:            "capture-id-test",
+			AdvertiseAddr: "127.0.0.1:0000",
+		},
+	})
+	if withChangefeedVars {
+		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
+			ID: "changefeed-id-test",
+			Info: &model.ChangeFeedInfo{
+				StartTs: oracle.GoTimeToTS(time.Now()),
+				Config:  config.GetDefaultReplicaConfig(),
+			},
+		})
+	}
+	return ctx
+}
+
+// ZapFieldCapture returns a zap field containing capture address
+func ZapFieldCapture(ctx Context) zap.Field {
+	return zap.String("capture", ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+}
+
+// ZapFieldChangefeed returns a zap field containing changefeed id
+func ZapFieldChangefeed(ctx Context) zap.Field {
+	return zap.String("changefeed", ctx.ChangefeedVars().ID)
+}
+>>>>>>> 857d2c05 (new_owner: a changefeed implement (#1894))
