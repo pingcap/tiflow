@@ -473,7 +473,10 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		}
 		exitEventHandler, skipEvent, err := preprocess(event, ok)
 		if exitEventHandler {
-			return err
+			if err != nil {
+				log.Warn("region worker process error", zap.Error(err))
+			}
+			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
 		if skipEvent {
 			continue
