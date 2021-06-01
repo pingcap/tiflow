@@ -591,6 +591,11 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRegionWorkerExit"]
+error = '''
+region worker exited
+'''
+
 ["CDC:ErrRegionsNotCoverSpan"]
 error = '''
 regions not completely left cover span, span %v regions: %v
