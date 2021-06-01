@@ -118,6 +118,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
 	if err = s.statusServer.start(); err != nil {
 		return err
 	}
@@ -166,13 +167,12 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 
 		// Campaign to be an owner, it blocks until it becomes the owner
 		if err := s.capture.Campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
+			if errors.Cause(err) == context.Canceled {
 				return nil
-			case mvcc.ErrCompacted:
-				continue
 			}
-			log.Warn("campaign owner failed", zap.Error(err))
+			if errors.Cause(err) != mvcc.ErrCompacted {
+				log.Warn("campaign owner failed", zap.Error(err))
+			}
 			continue
 		}
 		captureID := s.capture.info.ID
@@ -229,7 +229,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 		case <-ticker.C:
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*10))
+				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 				req, err := http.NewRequestWithContext(
 					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
 				if err != nil {

@@ -52,10 +52,10 @@ type ownership struct {
 	tickTime     time.Duration
 }
 
-func newOwnersip(tickTime time.Duration) ownership {
+func newOwnership(tickTime time.Duration) ownership {
 	minTickTime := 5 * time.Second
 	if tickTime > minTickTime {
-		log.Panic("ownership counter must be incearsed every 5 seconds")
+		log.Panic("ownership counter must be increased every 5 seconds")
 	}
 	return ownership{
 		tickTime: minTickTime,
@@ -1254,7 +1254,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
-	ownership := newOwnersip(tickTime)
+	ownership := newOwnership(tickTime)
 loop:
 	for {
 		select {
@@ -1310,7 +1310,7 @@ restart:
 	if resp.Count == 0 {
 		return cerror.ErrOwnerCampaignKeyDeleted.GenWithStackByArgs()
 	}
-	// watch the key change from the next revision relatived to the current
+	// watch the key change from the next revision relative to the current
 	wch := o.etcdClient.Client.Watch(ctx, key, clientv3.WithRev(resp.Header.Revision+1))
 	for resp := range wch {
 		err := resp.Err()
@@ -1556,7 +1556,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	failpoint.Inject("sleep-before-watch-capture", nil)
 
 	// When an owner just starts, changefeed information is not updated at once.
-	// Supposing a crased capture should be removed now, the owner will miss deleting
+	// Supposing a crashed capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
 	// If the task positions and status decode failed, remove them.
 	if err := o.checkAndCleanTasksInfo(ctx); err != nil {
