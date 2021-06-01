@@ -31,14 +31,14 @@ func WrapError(rfcError *errors.Error, err error) error {
 // ChangefeedFastFailError checks the error, returns true if it is meaningless
 // to retry on this error
 func ChangefeedFastFailError(err error) bool {
-	return ErrStartTsBeforeGC.Equal(errors.Cause(err))
+	return ErrStartTsBeforeGC.Equal(errors.Cause(err)) || ErrSnapshotLostByGC.Equal(errors.Cause(err))
 }
 
 // ChangefeedFastFailErrorCode checks the error, returns true if it is meaningless
 // to retry on this error
 func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	switch errCode {
-	case ErrStartTsBeforeGC.RFCCode():
+	case ErrStartTsBeforeGC.RFCCode(), ErrSnapshotLostByGC.RFCCode():
 		return true
 	default:
 		return false
