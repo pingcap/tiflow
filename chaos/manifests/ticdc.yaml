@@ -22,8 +22,8 @@ spec:
   selector:
     matchLabels:
       app: cdc
-  serviceName: dm-worker
-  replicas: 3 # 3 ticdc instances
+  serviceName: cdc
+  replicas: 3  # 3 cdc instances
   podManagementPolicy: Parallel
   template:
     metadata:
@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: cdc
-          image: cdc:chaos         # build this image in GitHub action workflow
+          image: cdc:chaos # build this image in GitHub action workflow
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /data
@@ -49,11 +49,11 @@ spec:
           ports:
             - containerPort: 8300
               name: cdc
-          command:
-#            - "/cdc"
+          command:    # todo: start cdc instance
+            - "/cdc"
 #            - "--name=$(MY_POD_NAME)"
-#            - "--worker-addr=0.0.0.0:8262"
-#            - "--advertise-addr=$(MY_POD_NAME).dm-worker.$(MY_POD_NAMESPACE):8262"
+#            - "--worker-addr=0.0.0.0:8300"
+#            - "--advertise-addr=$(MY_POD_NAME).cdc.$(MY_POD_NAMESPACE):8300"
 #            - "--join=dm-master-0.dm-master.$(MY_POD_NAMESPACE):8261,dm-master-1.dm-master.$(MY_POD_NAMESPACE):8261,dm-master-2.dm-master.$(MY_POD_NAMESPACE):8261"
           readinessProbe:
             httpGet:
@@ -65,7 +65,7 @@ spec:
             failureThreshold: 5
   volumeClaimTemplates:
     - metadata:
-        name: dm-worker
+        name: cdc
       spec:
         accessModes:
           - ReadWriteOnce

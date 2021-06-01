@@ -1,6 +1,6 @@
 ### Makefile for ticdc
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
-	integration_test_build integration_test integration_test_mysql integration_test_kafka
+	integration_test_build integration_test integration_test_mysql integration_test_kafka chaos-case
 
 PROJECT=ticdc
 
@@ -222,3 +222,6 @@ failpoint-enable: check_failpoint_ctl
 
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
+
+chaos-case:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/chaos-case ./chaos/cases
