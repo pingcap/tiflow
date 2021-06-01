@@ -609,7 +609,13 @@ func (w *regionWorker) run(ctx context.Context) error {
 	wg.Go(func() error {
 		return w.collectWorkpoolError(ctx)
 	})
-	return wg.Wait()
+	err := wg.Wait()
+	// ErrRegionWorkerExit means the region worker exits normally, but we don't
+	// need to terminate the other goroutines in errgroup
+	if cerror.ErrRegionWorkerExit.Equal(err) {
+		return nil
+	}
+	return err
 }
 
 func (w *regionWorker) handleEventEntry(

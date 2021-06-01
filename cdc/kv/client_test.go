@@ -1348,7 +1348,6 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
-			log.Info("receive event", zap.Reflect("event", event), zap.Reflect("expected", expectedEv))
 			c.Assert(event, check.DeepEquals, expectedEv)
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
