@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package owner
 
 import (
@@ -12,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -91,7 +105,7 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *mo
 		return safePoint, nil
 	}}
 	gcManager := newGCManager()
-	cf := newChangefeed4Test(gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
+	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
@@ -99,6 +113,7 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *mo
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		c.Assert(info, check.IsNil)
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
@@ -108,6 +123,7 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *mo
 }
 
 func (s *changefeedSuite) TestPreCheck(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
 	cf.Tick(ctx, state, captures)
@@ -138,6 +154,7 @@ func (s *changefeedSuite) TestPreCheck(c *check.C) {
 }
 
 func (s *changefeedSuite) TestInitialize(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
 	// pre check
@@ -151,6 +168,7 @@ func (s *changefeedSuite) TestInitialize(c *check.C) {
 }
 
 func (s *changefeedSuite) TestHandleError(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
 	// pre check
@@ -170,6 +188,7 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 }
 
 func (s *changefeedSuite) TestExecDDL(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
 	helper := entry.NewSchemaTestHelper(c)
@@ -224,6 +243,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 }
 
 func (s *changefeedSuite) TestSyncPoint(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
@@ -262,6 +282,7 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 }
 
 func (s *changefeedSuite) TestFinished(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)

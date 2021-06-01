@@ -45,6 +45,7 @@ func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	}
 }
 
+// RFCCode returns a RFCCode from an error
 func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	type rfcCoder interface {
 		RFCCode() errors.RFCErrorCode

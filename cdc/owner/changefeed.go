@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"reflect"
 	"sync"
 	"time"
 
@@ -42,15 +41,25 @@ type changefeed struct {
 	feedStateManager *feedStateManager
 	gcManager        *gcManager
 
-	schema        *schemaWrap4Owner
-	sink          AsyncSink
-	ddlPuller     DDLPuller
-	initialized   bool
+	schema      *schemaWrap4Owner
+	sink        AsyncSink
+	ddlPuller   DDLPuller
+	initialized bool
+
+	// only used for asyncExecDDL function
+	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
+	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
 
 	errCh  chan error
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+
+	// The changefeed will start some backend goroutines in the function `initialize`,
+	// such as DDLPuller, Sink, etc.
+	// `wg` is used to manage those backend goroutines.
+	// But it only manages the DDLPuller for now.
+	// TODO: manage the Sink and other backend goroutines.
+	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
@@ -93,7 +102,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		return nil
 	})
 	if err := c.tick(ctx, state, captures); err != nil {
-		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err), zap.Stringer("tp", reflect.TypeOf(err)))
+		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string
 		if rfcCode, ok := cerror.RFCCode(err); ok {
 			code = string(rfcCode)
@@ -121,7 +130,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
 	}
-	if !c.preCheck(captures) {
+	if !c.preflightCheck(captures) {
 		return nil
 	}
 	if err := c.initialize(ctx); err != nil {
@@ -153,7 +162,9 @@ func (c *changefeed) initialize(ctx cdcContext.Context) error {
 	if c.initialized {
 		return nil
 	}
-	// empty the errCh
+	// clean the errCh
+	// When the changefeed is resumed after being stopped, the changefeed instance will be reused,
+	// So we should make sure that the errCh is empty when the changefeed is restarting
 LOOP:
 	for {
 		select {
@@ -180,8 +191,10 @@ LOOP:
 			return errors.Trace(err)
 		}
 	}
+	if c.state.Info.SyncPointEnabled {
+		c.barriers.Update(syncPointBarrier, startTs)
+	}
 	c.barriers.Update(ddlJobBarrier, startTs)
-	c.barriers.Update(syncPointBarrier, startTs)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
 	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
@@ -191,6 +204,9 @@ LOOP:
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 	c.sink, err = c.newSink(cancelCtx)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
 	if err != nil {
 		return errors.Trace(err)
@@ -223,7 +239,7 @@ func (c *changefeed) releaseResources() {
 	c.ddlPuller.Close()
 	c.schema = nil
 	if err := c.sink.Close(); err != nil {
-		log.Warn("release the owner resources failed", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
@@ -233,8 +249,11 @@ func (c *changefeed) releaseResources() {
 	c.initialized = false
 }
 
-func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (passCheck bool) {
-	passCheck = true
+// preflightCheck makes sure that the metadata in Etcd is complete enough to run the tick.
+// If the metadata is not complete, such as when the ChangeFeedStatus is nil,
+// this function will reconstruct the lost metadata and skip this tick.
+func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureInfo) (ok bool) {
+	ok = true
 	if c.state.Status == nil {
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			if status == nil {
@@ -247,7 +266,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			}
 			return status, false, nil
 		})
-		passCheck = false
+		ok = false
 	}
 	for captureID := range captures {
 		if _, exist := c.state.TaskStatuses[captureID]; !exist {
@@ -258,7 +277,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 				}
 				return status, false, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 	for captureID := range c.state.TaskStatuses {
@@ -266,7 +285,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 				return nil, status != nil, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 
@@ -275,7 +294,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				return nil, position != nil, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 	for captureID := range c.state.Workloads {
@@ -283,7 +302,7 @@ func (c *changefeed) preCheck(captures map[model.CaptureID]*model.CaptureInfo) (
 			c.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 				return nil, workload != nil, nil
 			})
-			passCheck = false
+			ok = false
 		}
 	}
 	return
@@ -319,10 +338,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
 
 	case syncPointBarrier:
-		if !c.state.Info.SyncPointEnabled {
-			c.barriers.Remove(syncPointBarrier)
-			return barrierTs, nil
-		}
 		if !blocked {
 			return barrierTs, nil
 		}
@@ -410,7 +425,7 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 
 	phyTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-	// It is more accurate to get tso from PD, but in most cases we have
+	// It is more accurate to get tso from PD, but in most cases since we have
 	// deployed NTP service, a little bias is acceptable here.
 	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 }
