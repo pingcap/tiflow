@@ -59,7 +59,7 @@ type ownerJob struct {
 }
 
 // Owner manages many changefeeds
-// All published functions is THREAD-SAFE, except for Tick, Tick is only used for etcd worker
+// All public functions are THREAD-SAFE, except for Tick, Tick is only used for etcd worker
 type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
 
