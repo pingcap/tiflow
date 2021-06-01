@@ -23,7 +23,10 @@ import (
 )
 
 const (
+	// buffer size for ranged region consumer
 	regionOutputChanSize = 16
+	// sizedRegionRouter checks region buffer every 100ms
+	sizedRegionCheckInterval = 100 * time.Millisecond
 )
 
 // LimitRegionRouter defines an interface that can buffer singleRegionInfo
@@ -82,7 +85,7 @@ func (r *sizedRegionRouter) RevokeToken() {
 }
 
 func (r *sizedRegionRouter) Run(ctx context.Context) error {
-	ticker := time.NewTicker(time.Millisecond * 100)
+	ticker := time.NewTicker(sizedRegionCheckInterval)
 	defer ticker.Stop()
 	for {
 		select {

@@ -518,7 +518,8 @@ type eventFeedSession struct {
 
 	// The channel to send the processed events.
 	eventCh chan<- *model.RegionFeedEvent
-	// The channel to put the region that will be sent requests.
+	// The token based region router, it controls the uninitialzied regions with
+	// a given size limit.
 	regionRouter LimitRegionRouter
 	// The channel to notify that an error is happening, so that the error will be handled and the affected region
 	// will be re-requested.
