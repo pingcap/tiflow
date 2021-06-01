@@ -76,7 +76,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	err = testSorter(ctx, c, sorter, 10000, true)
 	c.Assert(err, check.ErrorMatches, ".*context cancel.*")
