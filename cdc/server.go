@@ -49,13 +49,13 @@ type Server struct {
 	capture      *Capture
 	owner        *Owner
 	ownerLock    sync.RWMutex
-	statusServer *http.Server
+	statusServer *statusServer
 	pdClient     pd.Client
 	pdEndpoints  []string
 }
 
 // NewServer creates a Server instance.
-func NewServer(ctx context.Context, pdEndpoints []string) (*Server, error) {
+func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
 		zap.Strings("pd-addrs", pdEndpoints),
@@ -65,9 +65,11 @@ func NewServer(ctx context.Context, pdEndpoints []string) (*Server, error) {
 		pdEndpoints: pdEndpoints,
 	}
 
-	if err := server.createStatusHTTP(); err != nil {
+	statusServer, err := newStatusServer(server)
+	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrServerNewStatusHTTP, err)
 	}
+	server.statusServer = statusServer
 
 	return server, nil
 }
@@ -116,8 +118,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	err = s.startStatusHTTP()
-	if err != nil {
+	if err = s.statusServer.start(); err != nil {
 		return err
 	}
 

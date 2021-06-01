@@ -38,7 +38,11 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *Server) createStatusHTTP() error {
+type statusServer struct {
+	*http.Server
+}
+
+func newStatusServer(s *Server) (ret *statusServer, err error) {
 	serverMux := http.NewServeMux()
 
 	serverMux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -68,19 +72,17 @@ func (s *Server) createStatusHTTP() error {
 	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
-	s.statusServer = &http.Server{
+	return &statusServer{&http.Server{
 		Addr:      conf.Addr,
 		Handler:   serverMux,
 		TLSConfig: tlsConfig,
-	}
-
-	return nil
+	}}, nil
 }
 
-func (s *Server) startStatusHTTP() error {
+func (s *statusServer) start() error {
 	conf := config.GetGlobalServerConfig()
 	tlsConfig, err := conf.Security.ToTLSConfig()
 	if err != nil {
@@ -95,9 +97,9 @@ func (s *Server) startStatusHTTP() error {
 	go func() {
 		log.Info("status http server is running", zap.String("addr", conf.Addr))
 		if tlsConfig != nil {
-			err = s.statusServer.ServeTLS(ln, conf.Security.CertPath, conf.Security.KeyPath)
+			err = s.ServeTLS(ln, conf.Security.CertPath, conf.Security.KeyPath)
 		} else {
-			err = s.statusServer.Serve(ln)
+			err = s.Serve(ln)
 		}
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("status server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
