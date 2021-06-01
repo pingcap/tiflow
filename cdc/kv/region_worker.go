@@ -474,7 +474,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		exitEventHandler, skipEvent, err := preprocess(event, ok)
+		exitEventHandler, skipEvent, _ := preprocess(event, ok)
 		if exitEventHandler {
 			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
@@ -502,7 +502,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				exitEventHandler, skipEvent, err := preprocess(event, ok)
+				exitEventHandler, skipEvent, _ := preprocess(event, ok)
 				if exitEventHandler {
 					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 				}
