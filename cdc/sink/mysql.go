@@ -1384,6 +1384,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	err = tx.Commit()
+	log.Info("recorded sync point", zap.Uint64("primary_ts", checkpointTs), zap.String("secondary_ts", secondaryTs))
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 

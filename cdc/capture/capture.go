@@ -166,10 +166,6 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// no matter why the processor is exited, return to let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 	}()
-	go func() {
-		<-ctx.Done()
-		log.Info("LEOPPRO cancelled")
-	}()
 	wg.Wait()
 	if ownerErr != nil {
 		return errors.Annotate(ownerErr, "owner exited with error")
@@ -231,7 +227,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
 		if err != nil {
-			// for other errors, return error and let capture exits or restart
+			// for errors, return error and let capture exits or restart
 			return errors.Trace(err)
 		}
 		// if owner exits normally, continue the campaign loop and try to election owner again
@@ -244,7 +240,6 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 		return errors.Trace(err)
 	}
 	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
-		log.Debug("LEOPPRO etcd worker err", zap.Error(err))
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
