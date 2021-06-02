@@ -713,10 +713,10 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
 // error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, initialized bool) error {
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
-	if !initialized {
+	if revokeToken {
 		s.regionRouter.RevokeToken()
 	}
 	select {
@@ -779,7 +779,7 @@ MainLoop:
 					err: &rpcCtxUnavailableErr{
 						verID: sri.verID,
 					},
-				}, false /* initialized */)
+				}, false /* revokeToken */)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -918,6 +918,8 @@ MainLoop:
 				}
 
 				continue
+			} else {
+				s.regionRouter.UseToken()
 			}
 
 			break
@@ -1012,10 +1014,11 @@ func (s *eventFeedSession) partialRegionFeed(
 		}
 	}
 
+	revokeToken := !state.initialized
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, state.initialized)
+	}, revokeToken)
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -1175,7 +1178,7 @@ func (s *eventFeedSession) receiveFromStream(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			}, false /* initialized */)
+			}, true /* revokeToken */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return

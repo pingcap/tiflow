@@ -38,15 +38,21 @@ func (s *tokenRegionSuite) TestRouter(c *check.C) {
 	for i := 0; i < limit; i++ {
 		r.AddRegion(singleRegionInfo{ts: uint64(i)})
 	}
-	c.Assert(r.tokenUsed, check.Equals, limit)
+	regions := make([]singleRegionInfo, 0, limit)
+	// limit is less than regionScanLimitPerTable
 	for i := 0; i < limit; i++ {
 		select {
 		case sri := <-r.Chan():
 			c.Assert(sri.ts, check.Equals, uint64(i))
-			r.RevokeToken()
+			r.UseToken()
+			regions = append(regions, sri)
 		default:
 			c.Error("expect region info from router")
 		}
+	}
+	c.Assert(r.tokenUsed, check.Equals, limit)
+	for range regions {
+		r.RevokeToken()
 	}
 	c.Assert(r.tokenUsed, check.Equals, 0)
 }
@@ -71,19 +77,32 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 	for i := 0; i < limit*2; i++ {
 		r.AddRegion(singleRegionInfo{ts: uint64(i)})
 	}
+	received := uint64(0)
+	for i := 0; i < regionRouterChanSize; i++ {
+		<-r.Chan()
+		atomic.AddUint64(&received, 1)
+		r.UseToken()
+	}
 
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
 		return r.Run(ctx)
 	})
 
-	var received uint64
+	wg.Go(func() error {
+		for i := 0; i < regionRouterChanSize; i++ {
+			r.RevokeToken()
+		}
+		return nil
+	})
+
 	wg.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-r.Chan():
+				r.UseToken()
 				atomic.AddUint64(&received, 1)
 				r.RevokeToken()
 				funcDoSth()

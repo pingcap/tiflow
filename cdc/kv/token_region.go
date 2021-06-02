@@ -24,7 +24,7 @@ import (
 
 const (
 	// buffer size for ranged region consumer
-	regionOutputChanSize = 16
+	regionRouterChanSize = 16
 	// sizedRegionRouter checks region buffer every 100ms
 	sizedRegionCheckInterval = 100 * time.Millisecond
 )
@@ -36,6 +36,8 @@ type LimitRegionRouter interface {
 	Chan() <-chan singleRegionInfo
 	// AddRegion adds an singleRegionInfo to buffer, this function is thread-safe
 	AddRegion(task singleRegionInfo)
+	// UseToken uses one token
+	UseToken()
 	// RevokeToken gives back one token, this function is thread-safe
 	RevokeToken()
 	// Run runs in background and does some logic work
@@ -55,7 +57,7 @@ type sizedRegionRouter struct {
 func NewSizedRegionRouter(sizeLimit int, metric prometheus.Gauge) *sizedRegionRouter {
 	return &sizedRegionRouter{
 		buffer:          make([]singleRegionInfo, 0),
-		output:          make(chan singleRegionInfo, regionOutputChanSize),
+		output:          make(chan singleRegionInfo, regionRouterChanSize),
 		sizeLimit:       sizeLimit,
 		metricTokenSize: metric,
 	}
@@ -67,14 +69,19 @@ func (r *sizedRegionRouter) Chan() <-chan singleRegionInfo {
 
 func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 	r.lock.Lock()
-	if r.sizeLimit > r.tokenUsed && len(r.output) < regionOutputChanSize {
+	if r.sizeLimit > r.tokenUsed && len(r.output) < regionRouterChanSize {
 		r.output <- sri
-		r.tokenUsed++
-		r.metricTokenSize.Inc()
 	} else {
 		r.buffer = append(r.buffer, sri)
 	}
 	r.lock.Unlock()
+}
+
+func (r *sizedRegionRouter) UseToken() {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	r.tokenUsed++
+	r.metricTokenSize.Inc()
 }
 
 func (r *sizedRegionRouter) RevokeToken() {
@@ -99,8 +106,8 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 			}
 			// to avoid deadlock because when consuming from the output channel.
 			// onRegionFail could decrease tokenUsed, which requires lock protection.
-			if available > regionOutputChanSize-len(r.output) {
-				available = regionOutputChanSize - len(r.output)
+			if available > regionRouterChanSize-len(r.output) {
+				available = regionRouterChanSize - len(r.output)
 			}
 			if available == 0 {
 				r.lock.Unlock()
@@ -115,8 +122,6 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 				}
 			}
 			r.buffer = r.buffer[available:]
-			r.tokenUsed += available
-			r.metricTokenSize.Add(float64(available))
 			r.lock.Unlock()
 		}
 	}

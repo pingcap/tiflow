@@ -260,10 +260,11 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		}
 	})
 
+	revokeToken := !state.initialized
 	return w.session.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, state.initialized)
+	}, revokeToken)
 }
 
 func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
@@ -779,14 +780,14 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			if state.lastResolvedTs > singleRegionInfo.ts {
 				singleRegionInfo.ts = state.lastResolvedTs
 			}
-			initialized := state.initialized
+			revokeToken := !state.initialized
 			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
 				err: &rpcCtxUnavailableErr{
 					verID: singleRegionInfo.verID,
 				},
-			}, initialized)
+			}, revokeToken)
 			return err == nil
 		})
 	}
