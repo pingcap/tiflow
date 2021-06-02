@@ -39,7 +39,7 @@ const (
 	APIOpVarTargetCaptureID = "target-cp-id"
 	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table-id"
-	// APIOpVarChangefeedList is the key of list option in HTTP API
+	// APIOpVarChangefeeds is the key of list option in HTTP API
 	APIOpVarChangefeeds = "state"
 	// APIOpForceRemoveChangefeed is used when remove a changefeed
 	APIOpForceRemoveChangefeed = "force-remove"
@@ -71,6 +71,18 @@ func handleOwnerResp(w http.ResponseWriter, err error) {
 			return
 		}
 		writeInternalServerError(w, err)
+		return
+	}
+	writeData(w, commonResp{Status: true})
+}
+
+func handleOwnerRespJSON(w http.ResponseWriter, err error) {
+	if err != nil {
+		if errors.Cause(err) == concurrency.ErrElectionNotLeader {
+			writeErrorJSON(w, http.StatusBadRequest, err)
+			return
+		}
+		writeInternalServerErrorJSON(w, err)
 		return
 	}
 	writeData(w, commonResp{Status: true})
@@ -284,20 +296,20 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		handleOwnerRespJSON(w, concurrency.ErrElectionNotLeader)
 		return
 	}
 
 	err := req.ParseForm()
 	if err != nil {
-		writeInternalServerError(w, cerror.WrapError(cerror.ErrInternalServerError, err))
+		writeInternalServerErrorJSON(w, cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
 
 	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
 	changefeedIDs := make(map[string]struct{}, len(statuses))
 	if err != nil {
-		writeInternalServerError(w, err)
+		writeInternalServerErrorJSON(w, err)
 		return
 	}
 	for cid := range statuses {
@@ -325,10 +337,10 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	}
 
 	resps := make([]*ChangefeedCommonInfo, 0)
-	for changefeedID, _ := range changefeedIDs {
+	for changefeedID := range changefeedIDs {
 		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-			writeInternalServerError(w, err)
+			writeInternalServerErrorJSON(w, err)
 			return
 		}
 		if _, ok := filters[feedState]; ok {
@@ -337,7 +349,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 
 		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-			writeInternalServerError(w, err)
+			writeInternalServerErrorJSON(w, err)
 			return
 		}
 		respInfo := &ChangefeedCommonInfo{

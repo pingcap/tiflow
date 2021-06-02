@@ -99,6 +99,11 @@ type status struct {
 	IsOwner bool   `json:"is_owner"`
 }
 
+// err of cec server
+type httpError struct {
+	Error string `json:"error"`
+}
+
 func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
 	resp, err := cli.Client.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
@@ -152,11 +157,30 @@ func writeInternalServerError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusInternalServerError, err)
 }
 
+func writeInternalServerErrorJSON(w http.ResponseWriter, err error) {
+	writeErrorJSON(w, http.StatusInternalServerError, err)
+}
+
 func writeError(w http.ResponseWriter, statusCode int, err error) {
 	w.WriteHeader(statusCode)
 	_, err = w.Write([]byte(err.Error()))
 	if err != nil {
 		log.Error("write error", zap.Error(err))
+	}
+}
+
+func writeErrorJSON(w http.ResponseWriter, statusCode int, err error) {
+	httpErr := httpError{Error: err.Error()}
+	js, err := json.MarshalIndent(httpErr, "", " ")
+	if err != nil {
+		log.Error("invalid json data", zap.Reflect("data", err), zap.Error(err))
+		return
+	}
+	w.WriteHeader(statusCode)
+	w.Header().Set("Content-Type", "application/json")
+	_, err = w.Write(js)
+	if err != nil {
+		log.Error("fail to write data", zap.Error(err))
 	}
 }
 
