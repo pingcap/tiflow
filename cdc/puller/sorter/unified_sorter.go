@@ -33,7 +33,7 @@ import (
 const (
 	inputChSize       = 128
 	outputChSize      = 128
-	heapCollectChSize = 1024   // this should be not be too small, to guarantee IO concurrency
+	heapCollectChSize = 4096   // this should be not be too small, to guarantee IO concurrency
 	maxOpenHeapNum    = 128000 // maximum number of pending sorted runs of events
 )
 
