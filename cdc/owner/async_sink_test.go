@@ -133,8 +133,6 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 	ddl3 := &model.DDLEvent{CommitTs: 3}
 	_, err := sink.EmitDDLEvent(ctx, ddl2)
 	c.Assert(err, check.IsNil)
-	_, err = sink.EmitDDLEvent(ctx, ddl3)
-	c.Assert(err, check.IsNil)
 	for {
 		done, err := sink.EmitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
@@ -143,6 +141,8 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 			break
 		}
 	}
+	_, err = sink.EmitDDLEvent(ctx, ddl3)
+	c.Assert(err, check.IsNil)
 	for {
 		done, err := sink.EmitDDLEvent(ctx, ddl3)
 		c.Assert(err, check.IsNil)
