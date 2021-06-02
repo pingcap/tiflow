@@ -112,7 +112,7 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli *kv.CDCEtcdClient, w io.
 }
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
-	s.capture.WriteDebugInfo(w)
+	s.captureV2.WriteDebugInfo(w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
 	s.writeEtcdInfo(req.Context(), s.etcdClient, w)
 }
@@ -123,9 +123,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
-	if s.capture != nil {
-		st.ID = s.capture.Info().ID
-		st.IsOwner = s.capture.IsOwner()
+	if s.captureV2 != nil {
+		st.ID = s.captureV2.Info().ID
+		st.IsOwner = s.captureV2.IsOwner()
 	}
 	writeData(w, st)
 }

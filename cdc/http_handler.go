@@ -75,7 +75,7 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	err := s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.AsyncStop()
 		return nil
 	})
@@ -115,7 +115,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		Opts: opts,
 	}
 
-	err = s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.EnqueueJob(job)
 		return nil
 	})
@@ -139,7 +139,7 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	err = s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.TriggerRebalance(changefeedID)
 		return nil
 	})
@@ -176,7 +176,7 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid tableID: %s", tableIDStr))
 		return
 	}
-	err = s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.ManualSchedule(changefeedID, to, tableID)
 		return nil
 	})
