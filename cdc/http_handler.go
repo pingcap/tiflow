@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -75,17 +76,51 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.AsyncStop()
-		return nil
+	if config.NewReplicaImpl {
+		err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.AsyncStop()
+			return nil
+		})
+		handleOwnerResp(w, err)
+		return
+	}
+	s.ownerLock.RLock()
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		s.ownerLock.RUnlock()
+		return
+	}
+	// Resign is a complex process that needs to be synchronized because
+	// it happens in two separate goroutines
+	//
+	// Imagine that we have goroutines A and B
+	// A1. Notify the owner to exit
+	// B1. The owner exits gracefully
+	// A2. Delete the leader key until the owner has exited
+	// B2. Restart to campaign
+	//
+	// A2 must occur between B1 and B2, so we register the Resign process
+	// as the stepDown function which is called when the owner exited.
+	s.owner.Close(req.Context(), func(ctx context.Context) error {
+		return s.capture.Resign(ctx)
 	})
-	handleOwnerResp(w, err)
+	s.ownerLock.RUnlock()
+	s.setOwner(nil)
+	handleOwnerResp(w, nil)
 }
 
 func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
+	}
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
@@ -114,11 +149,14 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		Type: model.AdminJobType(typ),
 		Opts: opts,
 	}
-
-	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.EnqueueJob(job)
-		return nil
-	})
+	if config.NewReplicaImpl {
+		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.EnqueueJob(job)
+			return nil
+		})
+	} else {
+		err = s.owner.EnqueueJob(job)
+	}
 	handleOwnerResp(w, err)
 }
 
@@ -126,6 +164,14 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
+	}
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
@@ -139,17 +185,29 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.TriggerRebalance(changefeedID)
-		return nil
-	})
-	handleOwnerResp(w, err)
+	if config.NewReplicaImpl {
+		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.TriggerRebalance(changefeedID)
+			return nil
+		})
+	} else {
+		s.owner.TriggerRebalance(changefeedID)
+	}
+	handleOwnerResp(w, nil)
 }
 
 func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
+	}
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
@@ -176,17 +234,29 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid tableID: %s", tableIDStr))
 		return
 	}
-	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.ManualSchedule(changefeedID, to, tableID)
-		return nil
-	})
-	handleOwnerResp(w, err)
+	if config.NewReplicaImpl {
+		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.ManualSchedule(changefeedID, to, tableID)
+			return nil
+		})
+	} else {
+		s.owner.ManualSchedule(changefeedID, to, tableID)
+	}
+	handleOwnerResp(w, nil)
 }
 
 func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
+	}
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
@@ -214,10 +284,9 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	resp := &ChangefeedResp{
-		FeedState: string(cfInfo.State),
-	}
+	resp := &ChangefeedResp{}
 	if cfInfo != nil {
+		resp.FeedState = string(cfInfo.State)
 		resp.RunningError = cfInfo.Error
 	}
 	if cfStatus != nil {

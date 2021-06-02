@@ -112,9 +112,31 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli *kv.CDCEtcdClient, w io.
 }
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
-	s.captureV2.WriteDebugInfo(w)
+	if config.NewReplicaImpl {
+		s.captureV2.WriteDebugInfo(w)
+		fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
+		s.writeEtcdInfo(req.Context(), s.etcdClient, w)
+		return
+	}
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
+	if s.owner != nil {
+		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
+		s.owner.writeDebugInfo(w)
+	}
+
+	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
+	if config.NewReplicaImpl {
+		s.capture.processorManager.WriteDebugInfo(w)
+	} else {
+		for _, p := range s.capture.processors {
+			p.writeDebugInfo(w)
+			fmt.Fprintf(w, "\n")
+		}
+	}
+
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	s.writeEtcdInfo(req.Context(), s.etcdClient, w)
+	s.writeEtcdInfo(req.Context(), &s.capture.etcdClient, w)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
@@ -123,10 +145,18 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
-	if s.captureV2 != nil {
-		st.ID = s.captureV2.Info().ID
-		st.IsOwner = s.captureV2.IsOwner()
+	if config.NewReplicaImpl {
+		if s.captureV2 != nil {
+			st.ID = s.captureV2.Info().ID
+			st.IsOwner = s.captureV2.IsOwner()
+		}
 	}
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
+	if s.capture != nil {
+		st.ID = s.capture.info.ID
+	}
+	st.IsOwner = s.owner != nil
 	writeData(w, st)
 }
 
