@@ -478,6 +478,7 @@ func run(
 		counts, round int64 = 0, 0
 		g                   = new(errgroup.Group)
 		tblChan             = make(chan string, 1)
+		valid, tried  int64 = 0, 0
 	)
 
 	for id := 0; id < tables; id++ {
@@ -539,10 +540,17 @@ func run(
 					waitCancel()
 					log.Info("ddl synced", zap.String("table", tblName))
 
+					atomic.AddInt64(&tried, 1)
+
 					endTs, err := getDDLEndTs(downstreamDB, tblName)
 					if err != nil {
 						log.Fatal("[cdc-bank] get ddl end ts error", zap.Error(err))
 					}
+					if endTs == "" {
+						continue
+					}
+
+					atomic.AddInt64(&valid, 1)
 
 					for _, test := range tests {
 						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*10)
@@ -564,6 +572,13 @@ func run(
 			}
 		})
 	}
+
+	if tried == 0 {
+		log.Warn("bank test finished, but tries is 0")
+	} else {
+		log.Info("bank test finished", zap.Int64("valid", valid), zap.Int64("tries", tried), zap.Float64("ratio", float64(valid)/float64(tried)))
+	}
+
 	_ = g.Wait()
 }
 
@@ -577,7 +592,7 @@ type dataRow struct {
 	TblID       int64
 	RowCount    int64
 	StartTime   string
-	EndTime     string
+	EndTime     *string
 	State       string
 }
 
@@ -595,7 +610,10 @@ func getDDLEndTs(db *sql.DB, tableName string) (result string, err error) {
 			return "", err
 		}
 		if line.JobType == "create table" && line.TblName == tableName && line.State == "synced" {
-			return line.EndTime, nil
+			if line.EndTime == nil {
+				return "", nil
+			}
+			return *line.EndTime, nil
 		}
 	}
 	return "", errors.New(fmt.Sprintf("cannot find in ddl history, tableName: %s", tableName))
