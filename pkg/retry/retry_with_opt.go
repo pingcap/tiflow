@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // Operation is the action need to retry
@@ -42,7 +43,7 @@ func setOptions(opts ...Option) *retryOptions {
 func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Trace(ctx.Err())
 	default:
 	}
 
@@ -61,7 +62,7 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 
 		try++
 		if int64(try) >= retryOption.maxTries {
-			return errors.Annotatef(err, "reach maximum try:%d", retryOption.maxTries)
+			return cerror.ErrReachMaxTry.Wrap(err).GenWithStackByArgs(retryOption.maxTries)
 		}
 
 		backOff = getBackoffInMs(retryOption.backoffBaseInMs, retryOption.backoffCapInMs, float64(try))
@@ -74,7 +75,7 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case <-t.C:
 		}
 	}
