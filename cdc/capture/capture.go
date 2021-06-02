@@ -111,6 +111,7 @@ func (c *Capture) reset() error {
 	return nil
 }
 
+// Run runs the capture
 func (c *Capture) Run(ctx context.Context) error {
 	for {
 		select {
@@ -178,6 +179,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 	return nil
 }
 
+// Info gets the capture info
 func (c *Capture) Info() model.CaptureInfo {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
@@ -271,6 +273,7 @@ func (c *Capture) setOwner(owner *owner.Owner) {
 	c.owner = owner
 }
 
+// OperateOwnerUnderLock operates the owner with lock
 func (c *Capture) OperateOwnerUnderLock(fn func(*owner.Owner) error) error {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
@@ -305,13 +308,13 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 	return nil
 }
 
-// Close closes the capture by unregistering it from etcd
+// AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
 	atomic.StoreInt32(&c.stopCampaign, 1)
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
 		o.AsyncStop()
 		return nil
-	}) //nolint:errcheck
+	})
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
@@ -319,12 +322,13 @@ func (c *Capture) AsyncClose() {
 	}
 }
 
+// WriteDebugInfo writes the debug info into writer.
 func (c *Capture) WriteDebugInfo(w io.Writer) {
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
 		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w)
 		return nil
-	}) //nolint:errcheck
+	})
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
@@ -333,6 +337,7 @@ func (c *Capture) WriteDebugInfo(w io.Writer) {
 	}
 }
 
+// IsOwner returns whether the capture is an owner
 func (c *Capture) IsOwner() bool {
 	return c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		return nil

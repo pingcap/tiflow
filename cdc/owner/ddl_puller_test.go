@@ -126,10 +126,10 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 
 	// test initialize state
 	resolvedTs, ddl := p.FrontDDL()
-	c.Assert(resolvedTs, check.Equals, startTs-1)
+	c.Assert(resolvedTs, check.Equals, startTs)
 	c.Assert(ddl, check.IsNil)
 	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, startTs-1)
+	c.Assert(resolvedTs, check.Equals, startTs)
 	c.Assert(ddl, check.IsNil)
 
 	// test send resolvedTs
