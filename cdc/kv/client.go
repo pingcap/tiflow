@@ -122,9 +122,13 @@ func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan,
 // happens, kv client needs to recover region request from singleRegionInfo
 func (s *singleRegionInfo) partialClone() singleRegionInfo {
 	sri := singleRegionInfo{
-		verID: s.verID,
-		span:  s.span.Clone(),
-		ts:    s.ts,
+		verID:  s.verID,
+		span:   s.span.Clone(),
+		ts:     s.ts,
+		rpcCtx: &tikv.RPCContext{},
+	}
+	if s.rpcCtx != nil {
+		sri.rpcCtx.Addr = s.rpcCtx.Addr
 	}
 	return sri
 }

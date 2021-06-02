@@ -2449,7 +2449,7 @@ func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	c.Assert(sri.span.String(), check.Equals, "[61, 63)")
 	c.Assert(sri2.ts, check.Equals, uint64(2000))
 	c.Assert(sri2.span.String(), check.Equals, "[61, 62)")
-	c.Assert(sri2.rpcCtx, check.IsNil)
+	c.Assert(sri2.rpcCtx, check.DeepEquals, &tikv.RPCContext{})
 }
 
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally
