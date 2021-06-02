@@ -301,7 +301,7 @@ func (o *Owner) newChangeFeed(
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
+		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, id, checkpointTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -654,7 +654,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			}
 			cfInfo.ErrorHis = append(cfInfo.ErrorHis, time.Now().UnixNano()/1e6)
 
-			if filter.ChangefeedFastFailError(err) {
+			if cerror.ChangefeedFastFailError(err) {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
 					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
