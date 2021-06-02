@@ -311,11 +311,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
-	if blocked && c.state.Info.SyncPointEnabled {
-		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
-			return 0, errors.Trace(err)
-		}
-	}
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
@@ -342,6 +337,9 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			return barrierTs, nil
 		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
+		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
+			return 0, errors.Trace(err)
+		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 
 	case finishBarrier:
@@ -392,22 +390,26 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 
 func (c *changefeed) updateStatus(barrierTs model.Ts) {
 	resolvedTs := barrierTs
-	for _, position := range c.state.TaskPositions {
+	log.Debug("LEOPPRO calculate ts", zap.Uint64("barrierTs", barrierTs))
+	for id, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
 			resolvedTs = position.ResolvedTs
+			log.Debug("LEOPPRO calculate ts", zap.Uint64("position.ResolvedTs", position.ResolvedTs), zap.String("capture", id))
 		}
 	}
-	for _, taskStatus := range c.state.TaskStatuses {
+	for id, taskStatus := range c.state.TaskStatuses {
 		for _, opt := range taskStatus.Operation {
 			if resolvedTs > opt.BoundaryTs {
 				resolvedTs = opt.BoundaryTs
+				log.Debug("LEOPPRO calculate ts", zap.Uint64("opt.BoundaryTs", opt.BoundaryTs), zap.String("capture", id), zap.Reflect("opt", opt))
 			}
 		}
 	}
 	checkpointTs := resolvedTs
-	for _, position := range c.state.TaskPositions {
+	for id, position := range c.state.TaskPositions {
 		if checkpointTs > position.CheckPointTs {
 			checkpointTs = position.CheckPointTs
+			log.Debug("LEOPPRO calculate ts", zap.Uint64("position.CheckPointTs", position.ResolvedTs), zap.String("capture", id))
 		}
 	}
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
