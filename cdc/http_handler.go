@@ -21,15 +21,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
-
-	"github.com/pingcap/ticdc/cdc/owner"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/owner"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/logutil"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
