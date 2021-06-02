@@ -15,6 +15,7 @@ package capture
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -311,15 +312,17 @@ func (c *Capture) AsyncClose() {
 	}
 }
 
-// DebugInfo writes the debug info into writer.
-func (c *Capture) DebugInfo(w io.Writer) {
+// WriteDebugInfo writes the debug info into writer.
+func (c *Capture) WriteDebugInfo(w io.Writer) {
 	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
+		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w)
 		return nil
 	})
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
+		fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 		c.processorManager.WriteDebugInfo(w)
 	}
 }
