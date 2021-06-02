@@ -173,12 +173,12 @@ LOOP:
 			break LOOP
 		}
 	}
-	startTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpoint ts", startTs))
+		zap.Uint64("checkpoint ts", checkpointTs))
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
-		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(startTs-300, startTs))
+		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 
 	failpoint.Inject("NewChangefeedRetryError", func() {
@@ -186,18 +186,18 @@ LOOP:
 	})
 
 	if c.state.Info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, startTs)
+		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
 	if c.state.Info.SyncPointEnabled {
-		c.barriers.Update(syncPointBarrier, startTs-1)
+		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
-	c.barriers.Update(ddlJobBarrier, startTs-1)
+	c.barriers.Update(ddlJobBarrier, checkpointTs)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
-	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
+	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, checkpointTs, c.state.Info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -211,7 +211,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, startTs)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
