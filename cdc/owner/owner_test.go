@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package owner
 
 import (
@@ -10,6 +23,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -42,6 +56,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 }
 
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
@@ -65,9 +80,11 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	tester.MustUpdate(cdcKey.String(), nil)
 	// this tick to clean the leak info fo the removed changefeed
 	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
 	// this tick to remove the changefeed state in memory
 	tester.MustApplyPatches()
 	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
@@ -75,6 +92,7 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 }
 
 func (s *ownerSuite) TestStopChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
@@ -105,9 +123,13 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 
 	// this tick to clean the leak info fo the removed changefeed
 	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
+	c.Assert(err, check.IsNil)
 	// this tick to remove the changefeed state in memory
 	tester.MustApplyPatches()
 	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
+	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
@@ -115,6 +137,7 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 }
 
 func (s *ownerSuite) TestAdminJob(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, _, _ := createOwner4Test(ctx, c)
 	owner.EnqueueJob(model.AdminJob{

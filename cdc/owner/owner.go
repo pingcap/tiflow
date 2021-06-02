@@ -59,20 +59,24 @@ type ownerJob struct {
 	done chan struct{}
 }
 
+// Owner manages many changefeeds
+// All public functions are THREAD-SAFE, except for Tick, Tick is only used for etcd worker
 type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
 
 	gcManager *gcManager
 
-	ownerJobQueue   []*ownerJob
 	ownerJobQueueMu sync.Mutex
-	lastTickTime    time.Time
+	ownerJobQueue   []*ownerJob
 
-	close int32
+	lastTickTime time.Time
+
+	closed int32
 
 	newChangefeed func(id model.ChangeFeedID, gcManager *gcManager) *changefeed
 }
 
+// NewOwner creates a new Owner
 func NewOwner() *Owner {
 	return &Owner{
 		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
@@ -82,6 +86,7 @@ func NewOwner() *Owner {
 	}
 }
 
+// NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error)) *Owner {
@@ -92,6 +97,7 @@ func NewOwner4Test(
 	return o
 }
 
+// Tick implements the Reactor interface
 func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(nil, errors.New("owner run with injected error"))
@@ -105,7 +111,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	o.handleJob()
+	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
@@ -131,7 +137,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
-	if atomic.LoadInt32(&o.close) != 0 {
+	if atomic.LoadInt32(&o.closed) != 0 {
 		for _, cfReactor := range o.changefeeds {
 			cfReactor.Close()
 		}
@@ -140,6 +146,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	return state, nil
 }
 
+// EnqueueJob enqueues a admin job into a internal queue, and the Owner will handle the job in the next tick
 func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
 	o.pushOwnerJob(&ownerJob{
 		tp:           ownerJobTypeAdminJob,
@@ -149,6 +156,7 @@ func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
 	})
 }
 
+// TriggerRebalance triggers a rebalance for the specified changefeed
 func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
 	o.pushOwnerJob(&ownerJob{
 		tp:           ownerJobTypeRebalance,
@@ -157,6 +165,7 @@ func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
 	})
 }
 
+// ManualSchedule moves a table from a capture to another capture
 func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID) {
 	o.pushOwnerJob(&ownerJob{
 		tp:              ownerJobTypeManualSchedule,
@@ -167,6 +176,7 @@ func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureI
 	})
 }
 
+// WriteDebugInfo writes debug info into the specified http writer
 func (o *Owner) WriteDebugInfo(w io.Writer) {
 	timeout := time.Second * 3
 	done := make(chan struct{})
@@ -183,8 +193,9 @@ func (o *Owner) WriteDebugInfo(w io.Writer) {
 	}
 }
 
+// AsyncStop stops the owner asynchronously
 func (o *Owner) AsyncStop() {
-	atomic.StoreInt32(&o.close, 1)
+	atomic.StoreInt32(&o.closed, 1)
 }
 
 func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
@@ -231,7 +242,7 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 	}
 }
 
-func (o *Owner) handleJob() {
+func (o *Owner) handleJobs() {
 	jobs := o.takeOnwerJobs()
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
@@ -250,6 +261,7 @@ func (o *Owner) handleJob() {
 		case ownerJobTypeDebugInfo:
 			panic("unimplemented") // TODO
 		}
+		close(job.done)
 	}
 }
 
