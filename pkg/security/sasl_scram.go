@@ -13,10 +13,11 @@
 
 package security
 
+// SaslScram holds necessary path parameter to support sasl-scram
 type SaslScram struct {
-	SaslUser        string   `toml:"sasl-user" json:"sasl-user"`
-	SaslPassword    string   `toml:"sasl-password" json:"sasl-password"`
-	SaslMechanism   string   `toml:"sasl-mechanism" json:"sasl-mechanism"`
+	SaslUser      string `toml:"sasl-user" json:"sasl-user"`
+	SaslPassword  string `toml:"sasl-password" json:"sasl-password"`
+	SaslMechanism string `toml:"sasl-mechanism" json:"sasl-mechanism"`
 }
 
 // IsSaslScramEnabled checks whether SASL SCRAM is enabled or not.

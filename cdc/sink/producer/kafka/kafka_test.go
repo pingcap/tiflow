@@ -290,12 +290,13 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	saslConfig.Version = "2.6.0"
 	saslConfig.ClientID = "test-sasl-scram"
 	saslConfig.SaslScram = &security.SaslScram{
-		SaslUser: "user",
-		SaslPassword: "password",
+		SaslUser:      "user",
+		SaslPassword:  "password",
 		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
 	cfg, err := newSaramaConfigImpl(ctx, saslConfig)
+	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.NotNil)
 	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
 	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
