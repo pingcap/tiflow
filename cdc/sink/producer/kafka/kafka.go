@@ -44,7 +44,7 @@ type Config struct {
 	Compression     string
 	ClientID        string
 	Credential      *security.Credential
-	SaslScram 		*security.SaslScram
+	SaslScram       *security.SaslScram
 	// control whether to create topic and verify partition number
 	TopicPreProcess bool
 }
