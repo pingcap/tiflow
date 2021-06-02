@@ -50,7 +50,7 @@ function run() {
     run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES ();"
 
     for i in $(seq 1 4); do
-        ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
+        ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "error"
         cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
         sleep 5
     done
