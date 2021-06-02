@@ -65,9 +65,10 @@ type Owner struct {
 
 	gcManager *gcManager
 
-	ownerJobQueue   []*ownerJob
 	ownerJobQueueMu sync.Mutex
-	lastTickTime    time.Time
+	ownerJobQueue   []*ownerJob
+
+	lastTickTime time.Time
 
 	closed int32
 
@@ -109,7 +110,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	o.handleJob()
+	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
@@ -232,7 +233,7 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 	}
 }
 
-func (o *Owner) handleJob() {
+func (o *Owner) handleJobs() {
 	jobs := o.takeOnwerJobs()
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
