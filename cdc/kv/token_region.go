@@ -37,28 +37,29 @@ type LimitRegionRouter interface {
 	// AddRegion adds an singleRegionInfo to buffer, this function is thread-safe
 	AddRegion(task singleRegionInfo)
 	// UseToken uses one token
-	UseToken()
+	UseToken(id string)
 	// RevokeToken gives back one token, this function is thread-safe
-	RevokeToken()
+	RevokeToken(id string)
 	// Run runs in background and does some logic work
 	Run(ctx context.Context) error
 }
 
 type sizedRegionRouter struct {
-	buffer          []singleRegionInfo
+	buffer          map[string][]singleRegionInfo
 	output          chan singleRegionInfo
 	lock            sync.Mutex
 	metricTokenSize prometheus.Gauge
-	tokenUsed       int
+	tokens          map[string]int
 	sizeLimit       int
 }
 
 // NewSizedRegionRouter creates a new sizedRegionRouter
 func NewSizedRegionRouter(sizeLimit int, metric prometheus.Gauge) *sizedRegionRouter {
 	return &sizedRegionRouter{
-		buffer:          make([]singleRegionInfo, 0),
+		buffer:          make(map[string][]singleRegionInfo),
 		output:          make(chan singleRegionInfo, regionRouterChanSize),
 		sizeLimit:       sizeLimit,
+		tokens:          make(map[string]int),
 		metricTokenSize: metric,
 	}
 }
@@ -69,25 +70,30 @@ func (r *sizedRegionRouter) Chan() <-chan singleRegionInfo {
 
 func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 	r.lock.Lock()
-	if r.sizeLimit > r.tokenUsed && len(r.output) < regionRouterChanSize {
+	var id string
+	// if rpcCtx is not provided, use the default "" bucket
+	if sri.rpcCtx != nil {
+		id = sri.rpcCtx.Addr
+	}
+	if r.sizeLimit > r.tokens[id] && len(r.output) < regionRouterChanSize {
 		r.output <- sri
 	} else {
-		r.buffer = append(r.buffer, sri)
+		r.buffer[id] = append(r.buffer[id], sri)
 	}
 	r.lock.Unlock()
 }
 
-func (r *sizedRegionRouter) UseToken() {
+func (r *sizedRegionRouter) UseToken(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.tokenUsed++
+	r.tokens[id]++
 	r.metricTokenSize.Inc()
 }
 
-func (r *sizedRegionRouter) RevokeToken() {
+func (r *sizedRegionRouter) RevokeToken(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.tokenUsed--
+	r.tokens[id]--
 	r.metricTokenSize.Dec()
 }
 
@@ -100,28 +106,29 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			r.lock.Lock()
-			available := r.sizeLimit - r.tokenUsed
-			if available > len(r.buffer) {
-				available = len(r.buffer)
-			}
-			// to avoid deadlock because when consuming from the output channel.
-			// onRegionFail could decrease tokenUsed, which requires lock protection.
-			if available > regionRouterChanSize-len(r.output) {
-				available = regionRouterChanSize - len(r.output)
-			}
-			if available == 0 {
-				r.lock.Unlock()
-				continue
-			}
-			for i := 0; i < available; i++ {
-				select {
-				case <-ctx.Done():
-					r.lock.Unlock()
-					return errors.Trace(ctx.Err())
-				case r.output <- r.buffer[i]:
+			for id, buf := range r.buffer {
+				available := r.sizeLimit - r.tokens[id]
+				if available > len(buf) {
+					available = len(buf)
 				}
+				// to avoid deadlock because when consuming from the output channel.
+				// onRegionFail could decrease tokens, which requires lock protection.
+				if available > regionRouterChanSize-len(r.output) {
+					available = regionRouterChanSize - len(r.output)
+				}
+				if available == 0 {
+					continue
+				}
+				for i := 0; i < available; i++ {
+					select {
+					case <-ctx.Done():
+						r.lock.Unlock()
+						return errors.Trace(ctx.Err())
+					case r.output <- buf[i]:
+					}
+				}
+				r.buffer[id] = r.buffer[id][available:]
 			}
-			r.buffer = r.buffer[available:]
 			r.lock.Unlock()
 		}
 	}

@@ -680,7 +680,6 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				s.regionChSizeGauge.Inc()
 			case <-ctx.Done():
 			}
-			// s.regionRouter.AddRegion(sri)
 		case regionspan.LockRangeStatusStale:
 			log.Info("request expired",
 				zap.Uint64("regionID", sri.verID.GetID()),
@@ -733,7 +732,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if revokeToken {
-		s.regionRouter.RevokeToken()
+		s.regionRouter.RevokeToken(errorInfo.rpcCtx.Addr)
 	}
 	select {
 	case s.errCh <- errorInfo:
@@ -908,7 +907,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				return errors.Trace(err)
 			}
 		} else {
-			s.regionRouter.UseToken()
+			s.regionRouter.UseToken(rpcCtx.Addr)
 		}
 	}
 }
@@ -987,7 +986,8 @@ func (s *eventFeedSession) partialRegionFeed(
 	}()
 
 	ts := state.sri.ts
-	maxTs, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span, state.sri.ts, receiver)
+	maxTs, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span,
+		state.sri.ts, state.sri.rpcCtx.Addr, receiver)
 	log.Debug("singleEventFeed quit")
 
 	if err == nil || errors.Cause(err) == context.Canceled {
@@ -1419,6 +1419,7 @@ func (s *eventFeedSession) singleEventFeed(
 	regionID uint64,
 	span regionspan.ComparableSpan,
 	startTs uint64,
+	storeAddr string,
 	receiverCh <-chan *regionEvent,
 ) (uint64, error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
@@ -1562,7 +1563,7 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 						metricPullEventInitializedCounter.Inc()
 						initialized = true
-						s.regionRouter.RevokeToken()
+						s.regionRouter.RevokeToken(storeAddr)
 						cachedEvents := matcher.matchCachedRow()
 						for _, cachedEvent := range cachedEvents {
 							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
