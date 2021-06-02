@@ -15,6 +15,7 @@ package capture
 
 import (
 	"context"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -317,8 +318,16 @@ func (c *Capture) AsyncClose() {
 	}
 }
 
-func (c *Capture) DebugInfo() string {
-	return "TODO debug info"
+func (c *Capture) DebugInfo(w io.Writer) {
+	c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+		o.WriteDebugInfo(w)
+		return nil
+	}) //nolint:errcheck
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
+	if c.processorManager != nil {
+		c.processorManager.WriteDebugInfo(w)
+	}
 }
 
 func (c *Capture) IsOwner() bool {

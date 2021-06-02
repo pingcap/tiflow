@@ -100,6 +100,11 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
 				continue
 			}
+			// the processor should start after one table added to this processor at least
+			taskStatus := changefeedState.TaskStatuses[captureID]
+			if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
+				continue
+			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 			processor = m.newProcessor(ctx)
 			m.processors[changefeedID] = processor
@@ -146,7 +151,7 @@ func (m *Manager) WriteDebugInfo(w io.Writer) {
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		fmt.Fprintf(w, "failed to print debug info\n")
+		fmt.Fprintf(w, "failed to print debug info for processor\n")
 	}
 }
 

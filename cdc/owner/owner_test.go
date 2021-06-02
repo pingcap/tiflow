@@ -148,8 +148,8 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 			targetCaptureID: "test-caputre1",
 			tableID:         10,
 		}, {
-			tp:         ownerJobTypeDebugInfo,
-			httpWriter: nil,
+			tp:              ownerJobTypeDebugInfo,
+			debugInfoWriter: nil,
 		},
 	})
 	c.Assert(owner.takeOnwerJobs(), check.HasLen, 0)

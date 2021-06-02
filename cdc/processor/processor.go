@@ -207,11 +207,6 @@ func (p *processor) checkPosition() (skipThisTick bool) {
 	if p.changefeed.TaskPositions[p.captureInfo.ID] != nil {
 		return false
 	}
-	// the processor should write task position after one table added to this processor at least
-	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
-	if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
-		return true
-	}
 	if p.initialized {
 		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
 	}
