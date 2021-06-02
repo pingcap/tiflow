@@ -134,7 +134,7 @@ func (s *runSuite) TestDoShouldRetryAtMostSpecifiedTimes(c *check.C) {
 	}
 
 	err := Do(context.Background(), f, WithMaxTries(3))
-	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
 	c.Assert(callCount, check.Equals, 3)
 }
 
@@ -196,8 +196,8 @@ func (s *runSuite) TestDoCancelInfiniteRetry(c *check.C) {
 	}
 
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
-	c.Assert(err, check.Equals, context.DeadlineExceeded)
-	c.Assert(callCount, check.GreaterEqual, 1, check.Commentf("tries:%d", callCount))
+	c.Assert(errors.Cause(err), check.Equals, context.DeadlineExceeded)
+	c.Assert(callCount, check.GreaterEqual, 1, check.Commentf("tries: %d", callCount))
 	c.Assert(callCount, check.Less, math.MaxInt64)
 }
 
@@ -212,7 +212,7 @@ func (s *runSuite) TestDoCancelAtBeginning(c *check.C) {
 	}
 
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
-	c.Assert(err, check.Equals, context.Canceled)
+	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	c.Assert(callCount, check.Equals, 0, check.Commentf("tries:%d", callCount))
 }
 
@@ -225,29 +225,30 @@ func (s *runSuite) TestDoCornerCases(c *check.C) {
 	}
 
 	err := Do(context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithBackoffMaxDelay(math.MaxInt64), WithMaxTries(2))
-	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
 	c.Assert(callCount, check.Equals, 2)
 
 	callCount = 0
 	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MaxInt64), WithBackoffMaxDelay(math.MinInt64), WithMaxTries(2))
-	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
 	c.Assert(callCount, check.Equals, 2)
 
 	callCount = 0
 	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithBackoffMaxDelay(math.MinInt64), WithMaxTries(2))
-	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
 	c.Assert(callCount, check.Equals, 2)
 
 	callCount = 0
 	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MaxInt64), WithBackoffMaxDelay(math.MaxInt64), WithMaxTries(2))
-	c.Assert(err, check.ErrorMatches, "*test")
+	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
 	c.Assert(callCount, check.Equals, 2)
 
 	var i int64
 	for i = -10; i < 10; i++ {
 		callCount = 0
 		err = Do(context.Background(), f, WithBackoffBaseDelay(i), WithBackoffMaxDelay(i), WithMaxTries(i))
-		c.Assert(err, check.ErrorMatches, "*test")
+		c.Assert(errors.Cause(err), check.ErrorMatches, "test")
+		c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
 		if i > 0 {
 			c.Assert(int64(callCount), check.Equals, i)
 		} else {
