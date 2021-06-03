@@ -73,6 +73,7 @@ func (tr *testRunner) execSQLs(sqls []string) {
 // RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
+
 	ineligibleTable(tr, src, dst)
 
 	tr.run(caseUpdateWhileAddingCol)

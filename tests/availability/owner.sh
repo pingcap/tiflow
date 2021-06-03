@@ -14,8 +14,6 @@ function test_owner_ha() {
     test_hang_up_owner
     test_expire_owner
     test_owner_cleanup_stale_tasks
-    # FIXME: this test case should be owner crashed during task cleanup
-    # test_owner_cleanup_stale_tasks
     test_owner_retryable_error
     test_gap_between_watch_capture
 }
@@ -161,7 +159,8 @@ function test_owner_cleanup_stale_tasks() {
 function test_owner_retryable_error() {
     echo "run test case test_owner_retryable_error"
 
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/capture-campaign-compacted-error=1*return(true)'
+    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/capture-campaign-compacted-error=1*return(true)' # old owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/capture/capture-campaign-compacted-error=1*return(true)' # new owner
 
     # start a capture server
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_owner_retryable_error.server1
@@ -173,7 +172,8 @@ function test_owner_retryable_error() {
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
 
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner-run-with-error=1*return(true);github.com/pingcap/ticdc/cdc/capture-resign-failed=1*return(true)'
+    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner-run-with-error=1*return(true);github.com/pingcap/ticdc/cdc/capture-resign-failed=1*return(true)' # old owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/owner-run-with-error=1*return(true);github.com/pingcap/ticdc/cdc/capture/capture-resign-failed=1*return(true)' # new owner
 
     # run another server
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_owner_retryable_error.server2 --addr "127.0.0.1:8301"
@@ -198,7 +198,8 @@ function test_owner_retryable_error() {
 function test_gap_between_watch_capture() {
     echo "run test case test_gap_between_watch_capture"
 
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sleep-before-watch-capture=1*sleep(6000)'
+    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sleep-before-watch-capture=1*sleep(6000)' # old owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/sleep-in-owner-tick=1*sleep(6000)' # new owner
 
     # start a capture server
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_gap_between_watch_capture.server1

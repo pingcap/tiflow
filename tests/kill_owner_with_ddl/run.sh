@@ -25,7 +25,11 @@ function kill_cdc_and_restart() {
     work_dir=$2
     cdc_binary=$3
     MAX_RETRIES=10
-    cdc_pid=$(curl -s http://127.0.0.1:8300/status|jq '.pid')
+    status=$(curl -s http://127.0.0.1:8300/status)
+    cdc_pid=$(echo "$status"|jq '.pid')
+    echo "$status"
+    echo "$cdc_pid"
+
     kill $cdc_pid
     ensure $MAX_RETRIES check_capture_count $pd_addr 0
     run_cdc_server --workdir $work_dir --binary $cdc_binary --addr "127.0.0.1:8300" --pd $pd_addr
@@ -54,7 +58,8 @@ function run() {
     run_sql "CREATE table kill_owner_with_ddl.t1 (id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "kill_owner_with_ddl.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkExecDDLDelay=return(true);github.com/pingcap/ticdc/cdc/ownerFlushIntervalInject=return(0)'
+    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkExecDDLDelay=return(true);github.com/pingcap/ticdc/cdc/ownerFlushIntervalInject=return(0)' # old owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkExecDDLDelay=return(true);github.com/pingcap/ticdc/cdc/capture/ownerFlushIntervalInject=return(10)' # new owner
     kill_cdc_and_restart $pd_addr $WORK_DIR $CDC_BINARY
 
     for i in $(seq 2 3); do
