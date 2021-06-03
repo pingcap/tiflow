@@ -57,6 +57,11 @@ const (
 	JobKeyPrefix = EtcdKeyBase + "/job"
 )
 
+const (
+	backoffBaseDelayInMs = 100
+	maxTries             = 3
+)
+
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
 func GetEtcdKeyChangeFeedList() string {
 	return fmt.Sprintf("%s/changefeed/info", EtcdKeyBase)
@@ -616,12 +621,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 ) (*model.TaskStatus, int64, error) {
 	var status *model.TaskStatus
 	var newModRevision int64
-	err := retry.Run(100*time.Millisecond, 3, func() error {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		default:
-		}
+	err := retry.Do(ctx, func() error {
 		var modRevision int64
 		var err error
 		modRevision, status, err = c.GetTaskStatus(ctx, changefeedID, captureID)
@@ -665,7 +665,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		}
 		newModRevision = resp.Header.GetRevision()
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if err != nil {
 		return nil, newModRevision, errors.Trace(err)
 	}

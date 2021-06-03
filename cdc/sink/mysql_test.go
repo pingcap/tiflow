@@ -1102,24 +1102,26 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	c.Assert(err, check.IsNil)
 
-	err = retry.Run(time.Millisecond*20, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, uint64(2))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(2) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
 	c.Assert(err, check.IsNil)
 
-	err = retry.Run(time.Millisecond*20, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, uint64(4))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(4) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
 	c.Assert(err, check.IsNil)
 
 	err = sink.Close()

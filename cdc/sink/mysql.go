@@ -25,7 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -64,6 +63,12 @@ const (
 	defaultWriteTimeout        = "2m"
 	defaultDialTimeout         = "2m"
 	defaultSafeMode            = true
+)
+
+const (
+	backoffBaseDelayInMs = 500
+	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
+	backoffMaxDelayInMs = 60 * 1000
 )
 
 // SyncpointTableName is the name of table where all syncpoint maps sit
@@ -179,7 +184,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
-	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
+	err := s.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
 }
 
@@ -188,22 +193,18 @@ func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 	return nil
 }
 
-func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {
-	return retry.Run(500*time.Millisecond, maxRetries,
-		func() error {
-			err := s.execDDL(ctx, ddl)
-			if isIgnorableDDLError(err) {
-				log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
-				return nil
-			}
-			if errors.Cause(err) == context.Canceled {
-				return backoff.Permanent(err)
-			}
-			if err != nil {
-				log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
-			}
-			return err
-		})
+func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
+	return retry.Do(ctx, func() error {
+		err := s.execDDL(ctx, ddl)
+		if isIgnorableDDLError(err) {
+			log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
+			return nil
+		}
+		if err != nil {
+			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
+		}
+		return err
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDDLMaxRetryTime), retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -839,68 +840,62 @@ func (s *mysqlSink) Close() error {
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
-func (s *mysqlSink) execDMLWithMaxRetries(
-	ctx context.Context, dmls *preparedDMLs, maxRetries uint64, bucket int,
-) error {
+func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 	}
-	checkTxnErr := func(err error) error {
-		if errors.Cause(err) == context.Canceled {
-			return backoff.Permanent(err)
-		}
+	logTxnErr := func(err error) error {
 		log.Warn("execute DMLs with error, retry later", zap.Error(err))
 		return err
 	}
-	return retry.Run(500*time.Millisecond, maxRetries,
-		func() error {
-			failpoint.Inject("MySQLSinkTxnRandomError", func() {
-				failpoint.Return(checkTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
-			})
-			failpoint.Inject("MySQLSinkHangLongTime", func() {
-				time.Sleep(time.Hour)
-			})
-			err := s.statistics.RecordBatchExecution(func() (int, error) {
-				tx, err := s.db.BeginTx(ctx, nil)
-				if err != nil {
-					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
-				}
-				for i, query := range dmls.sqls {
-					args := dmls.values[i]
-					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
-					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-						if rbErr := tx.Rollback(); rbErr != nil {
-							log.Warn("failed to rollback txn", zap.Error(err))
-						}
-						return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
-					}
-				}
-				if len(dmls.markSQL) != 0 {
-					log.Debug("exec row", zap.String("sql", dmls.markSQL))
-					if _, err := tx.ExecContext(ctx, dmls.markSQL); err != nil {
-						if rbErr := tx.Rollback(); rbErr != nil {
-							log.Warn("failed to rollback txn", zap.Error(err))
-						}
-						return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
-					}
-				}
-				if err = tx.Commit(); err != nil {
-					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
-				}
-				return dmls.rowCount, nil
-			})
+
+	return retry.Do(ctx, func() error {
+		failpoint.Inject("MySQLSinkTxnRandomError", func() {
+			failpoint.Return(logTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
+		})
+		failpoint.Inject("MySQLSinkHangLongTime", func() {
+			time.Sleep(time.Hour)
+		})
+		err := s.statistics.RecordBatchExecution(func() (int, error) {
+			tx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
-				return errors.Trace(err)
+				return 0, logTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 			}
-			log.Debug("Exec Rows succeeded",
-				zap.String("changefeed", s.params.changefeedID),
-				zap.Int("num of Rows", dmls.rowCount),
-				zap.Int("bucket", bucket))
-			return nil
-		},
-	)
+			for i, query := range dmls.sqls {
+				args := dmls.values[i]
+				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+					if rbErr := tx.Rollback(); rbErr != nil {
+						log.Warn("failed to rollback txn", zap.Error(err))
+					}
+					return 0, logTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				}
+			}
+			if len(dmls.markSQL) != 0 {
+				log.Debug("exec row", zap.String("sql", dmls.markSQL))
+				if _, err := tx.ExecContext(ctx, dmls.markSQL); err != nil {
+					if rbErr := tx.Rollback(); rbErr != nil {
+						log.Warn("failed to rollback txn", zap.Error(err))
+					}
+					return 0, logTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				}
+			}
+			if err = tx.Commit(); err != nil {
+				return 0, logTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+			}
+			return dmls.rowCount, nil
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("Exec Rows succeeded",
+			zap.String("changefeed", s.params.changefeedID),
+			zap.Int("num of Rows", dmls.rowCount),
+			zap.Int("bucket", bucket))
+		return nil
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 type preparedDMLs struct {
@@ -1013,7 +1008,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	})
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
-	if err := s.execDMLWithMaxRetries(ctx, dmls, defaultDMLMaxRetryTime, bucket); err != nil {
+	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
 		log.Error("execute DMLs failed", zap.String("err", err.Error()))
 		return errors.Trace(err)
 	}

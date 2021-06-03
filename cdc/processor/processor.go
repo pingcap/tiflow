@@ -49,6 +49,9 @@ const (
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	schemaStorageGCLag = time.Minute * 20
+
+	backoffBaseDelayInMs = 5
+	maxTries             = 3
 )
 
 type processor struct {
@@ -658,13 +661,14 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 		return nil
 	})
 	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
+
+	err := retry.Do(ctx, func() error {
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
 			tableName = name.QuoteString()
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if err != nil {
 		log.Warn("get table name for metric", zap.Error(err))
 		tableName = strconv.Itoa(int(tableID))

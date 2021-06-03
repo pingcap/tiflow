@@ -14,6 +14,8 @@
 package errors
 
 import (
+	"context"
+
 	"github.com/pingcap/errors"
 )
 
@@ -43,4 +45,14 @@ func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	default:
 		return false
 	}
+}
+
+// IsRetryableError check the error is safe or worth to retry
+func IsRetryableError(err error) bool {
+	switch errors.Cause(err) {
+	case context.Canceled, context.DeadlineExceeded:
+		return false
+	}
+
+	return true
 }
