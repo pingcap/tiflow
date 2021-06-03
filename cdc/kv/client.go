@@ -848,6 +848,9 @@ func (s *eventFeedSession) requestRegionToStore(
 					singleRegionInfo: sri,
 					err:              &connectToStoreErr{},
 				}, false /* revokeToken */)
+				if err != nil {
+					return errors.Trace(err)
+				}
 				continue
 			}
 			s.addStream(rpcCtx.Addr, stream, streamCancel)
