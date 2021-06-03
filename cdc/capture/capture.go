@@ -148,6 +148,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 		defer log.Info("owner goroutine is exited")
 		defer wg.Done()
 		defer c.AsyncClose()
+		// when the campaignOwner returns an error, it means that the the owner throws an unrecoverable serious errors
+		// (recoverable errors are intercepted in the owner tick)
+		// so we should also stop the processor and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
 	}()
 	go func() {
@@ -156,10 +159,13 @@ func (c *Capture) run(stdCtx context.Context) error {
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
-		// no matter why the processor is exited, return to let capture restart or exit
+		// when the etcd worker of processor returns an error, it means that the the processor throws an unrecoverable serious errors
+		// (recoverable errors are intercepted in the processor tick)
+		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 	}()
 	wg.Wait()
+	log.Info("the capture exited", zap.NamedError("ownerErr", ownerErr), zap.NamedError("processorError", processorErr))
 	if ownerErr != nil {
 		return errors.Annotate(ownerErr, "owner exited with error")
 	}

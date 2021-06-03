@@ -258,6 +258,9 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			if status == nil {
 				status = &model.ChangeFeedStatus{
+					// the changefeed status is nil when the changefeed is just created.
+					// the txn in start ts is not replicated at that time,
+					// so the checkpoint ts and resolved ts should less than start ts.
 					ResolvedTs:   c.state.Info.StartTs - 1,
 					CheckpointTs: c.state.Info.StartTs - 1,
 					AdminJobType: model.AdminNone,
