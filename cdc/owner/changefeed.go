@@ -412,7 +412,7 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 	for id, position := range c.state.TaskPositions {
 		if checkpointTs > position.CheckPointTs {
 			checkpointTs = position.CheckPointTs
-			log.Debug("LEOPPRO calculate ts", zap.Uint64("position.CheckPointTs", position.ResolvedTs), zap.String("capture", id))
+			log.Debug("LEOPPRO calculate ts", zap.Uint64("position.CheckPointTs", position.CheckPointTs), zap.String("capture", id))
 		}
 	}
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
