@@ -173,12 +173,12 @@ LOOP:
 			break LOOP
 		}
 	}
-	startTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpoint ts", startTs))
+		zap.Uint64("checkpoint ts", checkpointTs))
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
-		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(startTs-300, startTs))
+		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 
 	failpoint.Inject("NewChangefeedRetryError", func() {
@@ -186,18 +186,18 @@ LOOP:
 	})
 
 	if c.state.Info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, startTs)
+		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
 	if c.state.Info.SyncPointEnabled {
-		c.barriers.Update(syncPointBarrier, startTs)
+		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
-	c.barriers.Update(ddlJobBarrier, startTs)
+	c.barriers.Update(ddlJobBarrier, checkpointTs)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
-	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, startTs, c.state.Info.Config)
+	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, checkpointTs, c.state.Info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -211,7 +211,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, startTs)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -258,8 +258,11 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			if status == nil {
 				status = &model.ChangeFeedStatus{
-					ResolvedTs:   c.state.Info.StartTs,
-					CheckpointTs: c.state.Info.StartTs,
+					// the changefeed status is nil when the changefeed is just created.
+					// the txn in start ts is not replicated at that time,
+					// so the checkpoint ts and resolved ts should less than start ts.
+					ResolvedTs:   c.state.Info.StartTs - 1,
+					CheckpointTs: c.state.Info.StartTs - 1,
 					AdminJobType: model.AdminNone,
 				}
 				return status, true, nil
@@ -311,11 +314,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
-	if blocked && c.state.Info.SyncPointEnabled {
-		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
-			return 0, errors.Trace(err)
-		}
-	}
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
@@ -342,6 +340,9 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			return barrierTs, nil
 		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
+		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
+			return 0, errors.Trace(err)
+		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 
 	case finishBarrier:
