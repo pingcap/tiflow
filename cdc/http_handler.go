@@ -64,11 +64,11 @@ func (t JSONTime) MarshalJSON() ([]byte, error) {
 
 // ChangefeedCommonInfo holds some common usage information of a changefeed and use by RESTful API only.
 type ChangefeedCommonInfo struct {
-	ID           string              `json:"id"`
-	FeedState    string              `json:"state"`
-	TSO          uint64              `json:"tso"`
-	Checkpoint   JSONTime            `json:"checkpoint"`
-	RunningError *model.RunningError `json:"error"`
+	ID             string              `json:"id"`
+	FeedState      string              `json:"state"`
+	CheckpointTSO  uint64              `json:"checkpoint-tso"`
+	CheckpointTime JSONTime            `json:"checkpoint-time"`
+	RunningError   *model.RunningError `json:"error"`
 }
 
 // ChangefeedResp holds the most common usage information for a changefeed
@@ -86,18 +86,6 @@ func handleOwnerResp(w http.ResponseWriter, err error) {
 			return
 		}
 		writeInternalServerError(w, err)
-		return
-	}
-	writeData(w, commonResp{Status: true})
-}
-
-func handleOwnerRespJSON(w http.ResponseWriter, err error) {
-	if err != nil {
-		if errors.Cause(err) == concurrency.ErrElectionNotLeader {
-			writeErrorJSON(w, http.StatusBadRequest, err)
-			return
-		}
-		writeInternalServerErrorJSON(w, err)
 		return
 	}
 	writeData(w, commonResp{Status: true})
@@ -308,7 +296,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerRespJSON(w, concurrency.ErrElectionNotLeader)
+		writeErrorJSON(w, http.StatusOK, *cerror.ErrNotOwner)
 		return
 	}
 
@@ -341,7 +329,6 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			continue
 		}
 		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
-
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerErrorJSON(w, err)
 			return
@@ -358,9 +345,9 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 		}
 
 		if status != nil {
-			resp.TSO = status.CheckpointTs
+			resp.CheckpointTSO = status.CheckpointTs
 			tm := oracle.GetTimeFromTS(status.CheckpointTs)
-			resp.Checkpoint = JSONTime(tm)
+			resp.CheckpointTime = JSONTime(tm)
 		}
 		resps = append(resps, resp)
 	}
@@ -391,4 +378,9 @@ func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	log.Warn("log level changed", zap.String("level", level))
 
 	writeData(w, struct{}{})
+}
+
+// handleHealth check if is this server is health
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }

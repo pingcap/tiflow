@@ -54,8 +54,9 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/capture/owner/rebalance_trigger", s.handleRebalanceTrigger)
 	serverMux.HandleFunc("/capture/owner/move_table", s.handleMoveTable)
 	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
-	serverMux.HandleFunc("/api/v1/changefeeds", s.handleChangefeeds)
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
+	serverMux.HandleFunc("/api/v1/changefeeds", s.handleChangefeeds)
+	serverMux.HandleFunc("/api/v1/health", s.handleHealth)
 
 	if util.FailpointBuild {
 		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
@@ -101,7 +102,8 @@ type status struct {
 
 // err of cdc http api
 type httpError struct {
-	Error string `json:"error"`
+	Message string              `json:"error"`
+	Code    errors.RFCErrorCode `json:"errorCode"`
 }
 
 func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
@@ -158,7 +160,7 @@ func writeInternalServerError(w http.ResponseWriter, err error) {
 }
 
 func writeInternalServerErrorJSON(w http.ResponseWriter, err error) {
-	writeErrorJSON(w, http.StatusInternalServerError, err)
+	writeErrorJSON(w, http.StatusInternalServerError, *cerror.ErrInternalServerError.Wrap(err))
 }
 
 func writeError(w http.ResponseWriter, statusCode int, err error) {
@@ -169,8 +171,8 @@ func writeError(w http.ResponseWriter, statusCode int, err error) {
 	}
 }
 
-func writeErrorJSON(w http.ResponseWriter, statusCode int, err error) {
-	httpErr := httpError{Error: err.Error()}
+func writeErrorJSON(w http.ResponseWriter, statusCode int, cerr errors.Error) {
+	httpErr := httpError{Code: cerr.RFCCode(), Message: cerr.GetMsg()}
 	jsonStr, err := json.MarshalIndent(httpErr, "", " ")
 	if err != nil {
 		log.Error("invalid json data", zap.Reflect("data", err), zap.Error(err))
