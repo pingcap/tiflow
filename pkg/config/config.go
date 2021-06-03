@@ -242,6 +242,8 @@ func (c *ServerConfig) Clone() *ServerConfig {
 	return clone
 }
 
+// this can be used to put any path related to data-dir,
+// at the moment, only for sort-dir
 func (c *ServerConfig) initDataDir() {
 	c.Sorter.SortDir = filepath.Join(c.DataDir, c.Sorter.SortDir)
 }
