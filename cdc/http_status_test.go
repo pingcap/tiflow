@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -74,7 +75,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	testHandleRebalance(c)
 	testHandleMoveTable(c)
 	testHandleChangefeedQuery(c)
-	testHandleChangefeedsList(c)
+	testHandleChangefeeds(c)
 	testHandleFailpoint(c)
 }
 
@@ -117,14 +118,16 @@ func testHandleChangefeedQuery(c *check.C) {
 	testRequestNonOwnerFailed(c, uri)
 }
 
-func testHandleChangefeedsList(c *check.C) {
+func testHandleChangefeeds(c *check.C) {
 	uri := fmt.Sprintf("http://%s/api/v1/changefeeds", advertiseAddr4Test)
-	resp, err := http.PostForm(uri, url.Values{})
+	resp, err := http.Get(uri)
 	c.Assert(err, check.IsNil)
-	_, err = ioutil.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
+	data, err := ioutil.ReadAll(resp.Body)
+	httpErr := httpError{}
+	json.Unmarshal(data, &httpErr)
 	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, http.StatusOK)
+	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
+	c.Assert(httpErr.Error, check.Equals, concurrency.ErrElectionNotLeader.Error())
 }
 
 func testHTTPPostOnly(c *check.C, uri string) {

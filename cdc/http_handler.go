@@ -16,14 +16,17 @@ package cdc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -50,12 +53,21 @@ type commonResp struct {
 	Message string `json:"message"`
 }
 
-// ChangefeedCommonInfo holds some common usage information of a changefeed
+// JSONTime used to wrap time into json format
+type JSONTime time.Time
+
+// MarshalJSON use to specify the time format
+func (t JSONTime) MarshalJSON() ([]byte, error) {
+	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05.000"))
+	return []byte(stamp), nil
+}
+
+// ChangefeedCommonInfo holds some common usage information of a changefeed and use by RESTful API only.
 type ChangefeedCommonInfo struct {
 	ID           string              `json:"id"`
 	FeedState    string              `json:"state"`
 	TSO          uint64              `json:"tso"`
-	Checkpoint   string              `json:"checkpoint"`
+	Checkpoint   JSONTime            `json:"checkpoint"`
 	RunningError *model.RunningError `json:"error"`
 }
 
@@ -291,11 +303,8 @@ func (s *Server) handleChangefeeds(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// handleChangefeedsList will only received request with Get method from dispatcher.
 func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
-		return
-	}
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
@@ -320,25 +329,6 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	}
 
 	state := req.Form.Get(APIOpVarChangefeeds)
-	// changefeed whose status is in the blacklist will be filtered out.
-	blackList := map[model.FeedState]struct{}{
-		model.StateNormal:   {},
-		model.StateStopped:  {},
-		model.StateFailed:   {},
-		model.StateFinished: {},
-		model.StateRemoved:  {},
-		model.StateError:    {},
-	}
-	switch state {
-	case "all":
-		blackList = make(map[model.FeedState]struct{})
-	case "":
-		delete(blackList, model.StateNormal)
-		delete(blackList, model.StateStopped)
-		delete(blackList, model.StateFailed)
-	default:
-		delete(blackList, model.FeedState(state))
-	}
 
 	resps := make([]*ChangefeedCommonInfo, 0)
 	for changefeedID := range changefeedIDs {
@@ -347,27 +337,30 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
-		if _, ok := blackList[feedState]; ok {
+		if !httputil.IsFilter(state, feedState) {
 			continue
 		}
-
 		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
 		resp := &ChangefeedCommonInfo{
-			ID: changefeedID,
+			ID:        changefeedID,
+			FeedState: string(feedState),
 		}
+
 		if cf != nil {
 			resp.RunningError = cf.info.Error
 		} else if feedInfo != nil {
 			resp.RunningError = feedInfo.Error
 		}
+
 		if status != nil {
 			resp.TSO = status.CheckpointTs
 			tm := oracle.GetTimeFromTS(status.CheckpointTs)
-			resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
+			resp.Checkpoint = JSONTime(tm)
 		}
 		resps = append(resps, resp)
 	}

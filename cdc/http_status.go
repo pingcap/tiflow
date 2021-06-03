@@ -99,7 +99,7 @@ type status struct {
 	IsOwner bool   `json:"is_owner"`
 }
 
-// err of cec server
+// err of cdc http api
 type httpError struct {
 	Error string `json:"error"`
 }
@@ -171,14 +171,14 @@ func writeError(w http.ResponseWriter, statusCode int, err error) {
 
 func writeErrorJSON(w http.ResponseWriter, statusCode int, err error) {
 	httpErr := httpError{Error: err.Error()}
-	js, err := json.MarshalIndent(httpErr, "", " ")
+	jsonStr, err := json.MarshalIndent(httpErr, "", " ")
 	if err != nil {
 		log.Error("invalid json data", zap.Reflect("data", err), zap.Error(err))
 		return
 	}
 	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(js)
+	_, err = w.Write(jsonStr)
 	if err != nil {
 		log.Error("fail to write data", zap.Error(err))
 	}
