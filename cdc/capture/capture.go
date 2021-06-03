@@ -130,7 +130,8 @@ func (c *Capture) Run(ctx context.Context) error {
 		// if capture suicided, reset the capture and run again.
 		// if the canceled error throw, there are two possible scenarios:
 		//   1. the internal context canceled, it means some error happened in the internal, and the routine is exited, we should restart the capture
-		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will be exited in the above `select` block
+		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
+		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
 		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
 			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
 			continue
@@ -241,7 +242,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
 		if resignErr := c.resign(ctx); resignErr != nil {
-			// if regisn owner failed, return error to let capture exits
+			// if resigning owner failed, return error to let capture exits
 			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
 		if err != nil {
