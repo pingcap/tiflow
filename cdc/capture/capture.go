@@ -231,7 +231,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
 		if resignErr := c.resign(ctx); resignErr != nil {
-			// if regisn owner failed, return error to let capture exits
+			// if resigning owner failed, return error to let capture exits
 			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
 		if err != nil {
