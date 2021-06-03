@@ -124,7 +124,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
-			SortDir:                filepath.Join(dataDir, "/tmp/just_a_test"),
+			SortDir:                filepath.Join(dataDir, "/tmp/cdc_sort"),
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -188,7 +188,7 @@ sort-dir = "/tmp/just_a_test"
 			MaxMemoryPressure:      3,
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                filepath.Join(dataDir, "/tmp/just_a_test"),
+			SortDir:                filepath.Join(dataDir, "/tmp/cdc_sort"),
 		},
 		Security:            &config.SecurityConfig{},
 		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
@@ -244,7 +244,7 @@ cert-allowed-cn = ["dd","ee"]
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                filepath.Join(dataDir, "/tmp/just_a_test"),
+			SortDir:                filepath.Join(dataDir, "/tmp/cdc_sort"),
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
