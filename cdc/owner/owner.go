@@ -15,7 +15,8 @@ package owner
 
 import (
 	"context"
-	"net/http"
+	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,7 +54,7 @@ type ownerJob struct {
 	adminJob *model.AdminJob
 
 	// for debug info only
-	httpWriter http.ResponseWriter
+	debugInfoWriter io.Writer
 
 	done chan struct{}
 }
@@ -176,12 +177,20 @@ func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureI
 }
 
 // WriteDebugInfo writes debug info into the specified http writer
-func (o *Owner) WriteDebugInfo(w http.ResponseWriter) {
+func (o *Owner) WriteDebugInfo(w io.Writer) {
+	timeout := time.Second * 3
+	done := make(chan struct{})
 	o.pushOwnerJob(&ownerJob{
-		tp:         ownerJobTypeDebugInfo,
-		httpWriter: w,
-		done:       make(chan struct{}),
+		tp:              ownerJobTypeDebugInfo,
+		debugInfoWriter: w,
+		done:            done,
 	})
+	// wait the debug info printed
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		fmt.Fprintf(w, "failed to print debug info for owner\n")
+	}
 }
 
 // AsyncStop stops the owner asynchronously

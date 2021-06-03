@@ -165,7 +165,7 @@ func (s *changefeedSuite) TestInitialize(c *check.C) {
 	// initialize
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
+	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs-1)
 }
 
 func (s *changefeedSuite) TestHandleError(c *check.C) {
@@ -185,7 +185,7 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	// handle error
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
+	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs-1)
 	c.Assert(state.Info.Error.Message, check.Equals, "fake error")
 }
 
@@ -264,7 +264,6 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 
 	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
 	mockAsyncSink := cf.sink.(*mockAsyncSink)
-	c.Assert(mockAsyncSink.syncPoint, check.Equals, state.Status.CheckpointTs)
 	// add 5s to resolvedTs
 	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
 	// tick 20 times
@@ -273,17 +272,8 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 		tester.MustApplyPatches()
 	}
 
-	syncPointDurations := make([]time.Duration, len(mockAsyncSink.syncPointHis))
-	startGoTime := oracle.GetTimeFromTS(ctx.ChangefeedVars().Info.StartTs)
-	for i, syncPoint := range mockAsyncSink.syncPointHis {
-		syncPointDurations[i] = oracle.GetTimeFromTS(syncPoint).Sub(startGoTime)
-	}
-	c.Assert(syncPointDurations, check.DeepEquals,
-		[]time.Duration{
-			0, 1 * time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second,
-			// the last sync point shoule be equal to the last checkpoint ts
-			oracle.GetTimeFromTS(state.Status.CheckpointTs).Sub(startGoTime),
-		})
+	c.Assert(mockAsyncSink.syncPointHis[0], check.Equals, ctx.ChangefeedVars().Info.StartTs-1)
+	c.Assert(mockAsyncSink.syncPointHis[len(mockAsyncSink.syncPointHis)-1], check.Equals, state.Status.CheckpointTs)
 }
 
 func (s *changefeedSuite) TestFinished(c *check.C) {
