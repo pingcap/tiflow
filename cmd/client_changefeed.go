@@ -168,20 +168,20 @@ func newListChangefeedCommand() *cobra.Command {
 			}
 			cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
 			for id := range changefeedIDs {
-				cfci := &changefeedCommonInfo{ID: id}
+				commonInfo := &changefeedCommonInfo{ID: id}
 				resp, err := applyOwnerChangefeedQuery(ctx, id, getCredential())
 				if err != nil {
 					// if no capture is available, the query will fail, just add a warning here
 					log.Warn("query changefeed info failed", zap.String("error", err.Error()))
 				} else {
-					info := &cdc.ChangefeedResp{}
-					err = json.Unmarshal([]byte(resp), info)
+					summary := &cdc.ChangefeedResp{}
+					err = json.Unmarshal([]byte(resp), summary)
 					if err != nil {
 						return err
 					}
-					cfci.Summary = info
+					commonInfo.Summary = summary
 				}
-				cfs = append(cfs, cfci)
+				cfs = append(cfs, commonInfo)
 			}
 			return jsonPrint(cmd, cfs)
 		},
@@ -193,7 +193,7 @@ func newListChangefeedCommand() *cobra.Command {
 func newQueryChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query",
-		Short: "Query information and status of a replicaiton task (changefeed)",
+		Short: "Query information and status of a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 
@@ -247,7 +247,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
-func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if sinkURI == "" {
 			return nil, errors.New("Creating chengfeed without a sink-uri")
@@ -361,7 +361,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 
 	if sortDir != "" {
 		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. " +
-			"Please use `cdc server --sort-dir` if possible. " +
+			"Please use `cdc server --data-dir instead` if possible. " +
 			"The sort-dir here will be no-op\n")
 	}
 
@@ -464,7 +464,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential(), captureInfos)
+			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), captureInfos)
 			if err != nil {
 				return err
 			}
@@ -662,7 +662,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 						ReplicationGap: fmt.Sprintf("%dms", replicationGap),
 						Count:          count,
 					}
-					jsonPrint(cmd, &statistics)
+					_ = jsonPrint(cmd, &statistics)
 					lastCount = count
 					lastTime = now
 				}

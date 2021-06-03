@@ -44,17 +44,17 @@ enable-old-value = false
 	c.Assert(err, check.IsNil)
 
 	sinkURI = "blackhole:///?protocol=maxwell"
-	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil, nil)
+	info, err := verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 	c.Assert(info.SortDir, check.Equals, defaultSortDir)
 
 	sinkURI = ""
-	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil, nil)
+	_, err = verifyChangefeedParameters(ctx, cmd, true /* isCreate */, nil, nil)
 	c.Assert(err, check.NotNil)
 
 	sinkURI = "blackhole:///"
-	info, err = verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil, []*model.CaptureInfo{{Version: "4.0.0"}})
+	info, err = verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil, []*model.CaptureInfo{{Version: "4.0.0"}})
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsFalse)
 	c.Assert(info.Engine, check.Equals, model.SortInMemory)
