@@ -171,8 +171,6 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.KeyPath = serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
-		// case "sort-dir":
-		// 	conf.Sorter.SortDir = serverConfig.Sorter.SortDir
 		case "pd", "config":
 			// do nothing
 		default:
