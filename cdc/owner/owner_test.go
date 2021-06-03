@@ -14,6 +14,7 @@
 package owner
 
 import (
+	"bytes"
 	"context"
 	"time"
 
@@ -146,12 +147,14 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 	})
 	owner.TriggerRebalance("test-changefeed2")
 	owner.ManualSchedule("test-changefeed3", "test-caputre1", 10)
-	owner.WriteDebugInfo(nil)
+	var buf bytes.Buffer
+	owner.WriteDebugInfo(&buf)
 
 	// remove job.done, it's hard to check deep equals
 	jobs := owner.takeOnwerJobs()
 	for _, job := range jobs {
 		c.Assert(job.done, check.NotNil)
+		close(job.done)
 		job.done = nil
 	}
 	c.Assert(jobs, check.DeepEquals, []*ownerJob{
@@ -171,8 +174,8 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 			targetCaptureID: "test-caputre1",
 			tableID:         10,
 		}, {
-			tp:         ownerJobTypeDebugInfo,
-			httpWriter: nil,
+			tp:              ownerJobTypeDebugInfo,
+			debugInfoWriter: &buf,
 		},
 	})
 	c.Assert(owner.takeOnwerJobs(), check.HasLen, 0)
