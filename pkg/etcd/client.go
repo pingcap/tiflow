@@ -15,10 +15,10 @@ package etcd
 
 import (
 	"context"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
@@ -33,6 +33,13 @@ const (
 	EtcdDel    = "Del"
 	EtcdGrant  = "Grant"
 	EtcdRevoke = "Revoke"
+)
+
+const (
+	backoffBaseDelayInMs = 500
+	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
+	backoffMaxDelayInMs = 60 * 1000
+	maxTries            = 8
 )
 
 // Client is a simple wrapper that adds retry to etcd RPC
@@ -57,17 +64,16 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 	// Retry at least two election timeout to handle the case that two PDs restarted
 	// (the first election maybe failed).
 	// 16s = \sum_{n=0}^{6} 0.5*1.5^n
-	return retry.Run(500*time.Millisecond, 7+1, // +1 for the inital request.
-		func() error {
-			err := etcdRPC()
-			if err != nil && errors.Cause(err) != context.Canceled {
-				log.Warn("etcd RPC failed", zap.String("RPC", rpcName), zap.Error(err))
-			}
-			if metric != nil {
-				metric.Inc()
-			}
-			return err
-		})
+	return retry.Do(context.Background(), func() error {
+		err := etcdRPC()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("etcd RPC failed", zap.String("RPC", rpcName), zap.Error(err))
+		}
+		if metric != nil {
+			metric.Inc()
+		}
+		return err
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }
 
 // Put delegates request to clientv3.KV.Put
