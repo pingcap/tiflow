@@ -246,6 +246,16 @@ error = '''
 filter rule is invalid
 '''
 
+["CDC:ErrFlowControllerAborted"]
+error = '''
+flow controller is aborted
+'''
+
+["CDC:ErrFlowControllerEventLargerThanQuota"]
+error = '''
+event is larger than the total memory quota, size: %d, quota: %d
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
@@ -386,6 +396,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrLeaseExpired"]
+error = '''
+owner lease expired 
+'''
+
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
@@ -481,6 +496,11 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
+["CDC:ErrNotOwner"]
+error = '''
+this capture is not a owner
+'''
+
 ["CDC:ErrOldValueNotEnabled"]
 error = '''
 old value is not enabled
@@ -494,6 +514,11 @@ operate on a closed notifier
 ["CDC:ErrOwnerCampaignKeyDeleted"]
 error = '''
 owner campaign key deleted
+'''
+
+["CDC:ErrOwnerChangedUnexpectedly"]
+error = '''
+owner changed unexpectedly
 '''
 
 ["CDC:ErrOwnerChangefeedNotFound"]
@@ -514,6 +539,11 @@ owner encountered inconsistent state. report a bug if this happens frequently. %
 ["CDC:ErrOwnerSortDir"]
 error = '''
 owner sort dir
+'''
+
+["CDC:ErrOwnerUnknown"]
+error = '''
+owner running unknown error
 '''
 
 ["CDC:ErrPDBatchLoadRegions"]
@@ -574,6 +604,11 @@ pulsar send message failed
 ["CDC:ErrReactorFinished"]
 error = '''
 the reactor has done its job and should no longer be executed
+'''
+
+["CDC:ErrRegionWorkerExit"]
+error = '''
+region worker exited
 '''
 
 ["CDC:ErrRegionsNotCoverSpan"]
@@ -651,6 +686,11 @@ error = '''
 sink uri invalid
 '''
 
+["CDC:ErrSnapshotLostByGC"]
+error = '''
+fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d
+'''
+
 ["CDC:ErrSnapshotSchemaExists"]
 error = '''
 schema %s(%d) already exists
@@ -679,6 +719,11 @@ fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTableListenReplicated"]
+error = '''
+A table is being replicated by at least two processors(%s, %s), please report a bug
 '''
 
 ["CDC:ErrTableProcessorStoppedSafely"]
@@ -714,6 +759,11 @@ url format is invalid
 ["CDC:ErrUnifiedSorterBackendTerminating"]
 error = '''
 unified sorter backend is terminating
+'''
+
+["CDC:ErrUnifiedSorterIOError"]
+error = '''
+unified sorter IO error
 '''
 
 ["CDC:ErrUnknownKVEventType"]
@@ -769,5 +819,15 @@ write ts conflict
 ["CDC:ErrWrongTableInfo"]
 error = '''
 wrong table info in unflatten, table id %d, index table id: %d
+'''
+
+["ErrConflictingFileLocks"]
+error = '''
+file lock conflict: %s
+'''
+
+["ErrSortDirLockError"]
+error = '''
+error encountered when locking sort-dir
 '''
 

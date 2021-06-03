@@ -214,6 +214,10 @@ func newQueryChangefeedCommand() *cobra.Command {
 			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
+			if err != nil && cerror.ErrChangeFeedNotExists.Equal(err) {
+				log.Error("This changefeed does not exist", zap.String("changefeed", changefeedID))
+				return err
+			}
 			taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
 			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
@@ -232,7 +236,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			}
 			meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
 			if info == nil {
-				log.Warn("this changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.")
+				log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", changefeedID))
 			}
 			return jsonPrint(cmd, meta)
 		},
@@ -255,7 +259,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			}
 			startTs = oracle.ComposeTS(ts, logical)
 		}
-		if err := verifyStartTs(ctx, startTs); err != nil {
+		if err := verifyStartTs(ctx, changefeedID, startTs); err != nil {
 			return nil, err
 		}
 		if err := confirmLargeDataGap(ctx, cmd, startTs); err != nil {
@@ -349,29 +353,22 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		TargetTs:          targetTs,
 		Config:            cfg,
 		Engine:            sortEngine,
-		SortDir:           sortDir,
 		State:             model.StateNormal,
 		SyncPointEnabled:  syncPointEnabled,
 		SyncPointInterval: syncPointInterval,
 		CreatorVersion:    version.ReleaseVersion,
 	}
 
-	if info.SortDir != "" {
-		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. "+
-			"Please use `cdc server --sort-dir` if possible. "+
-			"If you wish to continue, make sure %s is writable ON EACH SERVER where you run TiCDC", info.SortDir)
-	}
-
-	if info.Engine != model.SortInMemory && (info.SortDir == ".") {
-		cmd.Printf("[WARN] you are using the directory containing the cdc binary as sort-dir. " +
-			"make sure that is what you intend, and that the directory is writable. " +
-			"Adjust \"sort-dir\" accordingly if you'd like to use another directory. ")
+	if sortDir != "" {
+		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. " +
+			"Please use `cdc server --sort-dir` if possible. " +
+			"The sort-dir here will be no-op\n")
 	}
 
 	if info.Engine == model.SortInFile {
 		cmd.Printf("[WARN] file sorter is deprecated. " +
 			"make sure that you DO NOT use it in production. " +
-			"Adjust \"sort-engine\" to make use of the right sorter.")
+			"Adjust \"sort-engine\" to make use of the right sorter.\n")
 	}
 
 	tz, err := util.GetTimezone(timezone)
@@ -448,6 +445,7 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
 	command.PersistentFlags().BoolVar(&syncPointEnabled, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
 	command.PersistentFlags().DurationVar(&syncPointInterval, "sync-interval", 10*time.Minute, "(Expremental) Set the interval for syncpoint in replication(default 10min)")
+	command.PersistentFlags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
 func newCreateChangefeedCommand() *cobra.Command {
@@ -499,7 +497,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 		Use:   "update",
 		Short: "Update config of an existing replication task (changefeed)",
 		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := defaultContext
 
 			old, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
@@ -519,8 +517,8 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SinkURI = sinkURI
 				case "config":
 					cfg := info.Config
-					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
-						log.Panic("decode config file error", zap.Error(err))
+					if err = strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+						log.Error("decode config file error", zap.Error(err))
 					}
 				case "opts":
 					for _, opt := range opts {
@@ -541,8 +539,6 @@ func newUpdateChangefeedCommand() *cobra.Command {
 
 				case "sort-engine":
 					info.Engine = sortEngine
-				case "sort-dir":
-					info.SortDir = sortDir
 				case "cyclic-replica-id":
 					filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
 					for _, id := range cyclicFilterReplicaIDs {
@@ -562,6 +558,9 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
 				}
 			})
+			if err != nil {
+				return err
+			}
 
 			resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
 			// if no cdc owner exists, allow user to update changefeed config

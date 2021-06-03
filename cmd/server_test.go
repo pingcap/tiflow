@@ -117,6 +117,11 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
 		},
+		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+		},
 	})
 
 	// test decode config file
@@ -169,7 +174,12 @@ sort-dir = "/tmp/just_a_test"
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                "/tmp/just_a_test",
 		},
-		Security: &config.SecurityConfig{},
+		Security:            &config.SecurityConfig{},
+		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+		},
 	})
 
 	configContent = configContent + `
@@ -222,6 +232,11 @@ cert-allowed-cn = ["dd","ee"]
 			CertPath:      "bb",
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
+		},
+		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
 		},
 	})
 }

@@ -33,21 +33,41 @@ import (
 
 const (
 	flushRateLimitPerSecond = 10
+	sortHeapCapacity        = 32
 )
 
 type flushTask struct {
 	taskID        int
 	heapSorterID  int
-	backend       backEnd
 	reader        backEndReader
 	tsLowerBound  uint64
 	maxResolvedTs uint64
 	finished      chan error
 	dealloc       func() error
-	isDeallocated int32
 	dataSize      int64
 	lastTs        uint64 // for debugging TODO remove
 	canceller     *asyncCanceller
+
+	isEmpty bool // read only field
+
+	deallocLock   sync.RWMutex
+	isDeallocated bool    // do not access directly
+	backend       backEnd // do not access directly
+}
+
+func (t *flushTask) markDeallocated() {
+	t.deallocLock.Lock()
+	defer t.deallocLock.Unlock()
+
+	t.backend = nil
+	t.isDeallocated = true
+}
+
+func (t *flushTask) GetBackEnd() backEnd {
+	t.deallocLock.RLock()
+	defer t.deallocLock.RUnlock()
+
+	return t.backend
 }
 
 type heapSorter struct {
@@ -67,7 +87,7 @@ func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 		id:        id,
 		inputCh:   make(chan *model.PolymorphicEvent, 1024*1024),
 		outputCh:  out,
-		heap:      make(sortHeap, 0, 65536),
+		heap:      make(sortHeap, 0, sortHeapCapacity),
 		canceller: new(asyncCanceller),
 	}
 }
@@ -104,6 +124,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	isEmptyFlush := h.heap.Len() == 0
 	var finishCh chan error
 	if !isEmptyFlush {
+		failpoint.Inject("InjectErrorBackEndAlloc", func() {
+			failpoint.Return(cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected alloc error")).FastGenWithCause())
+		})
+
 		var err error
 		backEnd, err = pool.alloc(ctx)
 		if err != nil {
@@ -121,25 +145,25 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		maxResolvedTs: maxResolvedTs,
 		finished:      finishCh,
 		canceller:     h.canceller,
+		isEmpty:       isEmptyFlush,
 	}
 	h.taskCounter++
 
 	var oldHeap sortHeap
 	if !isEmptyFlush {
 		task.dealloc = func() error {
-			if atomic.SwapInt32(&task.isDeallocated, 1) == 1 {
-				return nil
-			}
-			if task.backend != nil {
-				task.backend = nil
+			backEnd := task.GetBackEnd()
+			if backEnd != nil {
+				defer task.markDeallocated()
 				return pool.dealloc(backEnd)
 			}
 			return nil
 		}
 		oldHeap = h.heap
-		h.heap = make(sortHeap, 0, 65536)
+		h.heap = make(sortHeap, 0, sortHeapCapacity)
 	} else {
 		task.dealloc = func() error {
+			task.markDeallocated()
 			return nil
 		}
 	}
@@ -189,6 +213,11 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 				}
 				close(task.finished)
 			}()
+
+			failpoint.Inject("InjectErrorBackEndWrite", func() {
+				task.finished <- cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected write error")).FastGenWithCause()
+				failpoint.Return()
+			})
 
 			counter := 0
 			for oldHeap.Len() > 0 {

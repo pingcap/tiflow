@@ -100,6 +100,12 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 
 // NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTables bool) (*SingleSchemaSnapshot, error) {
+	// meta is nil only in unit tests
+	if meta == nil {
+		snap := newEmptySchemaSnapshot(explicitTables)
+		snap.currentTs = currentTs
+		return snap, nil
+	}
 	return newSchemaSnapshotFromMeta(meta, currentTs, explicitTables)
 }
 
@@ -632,6 +638,12 @@ func (s *schemaSnapshot) CloneTables() map[model.TableID]model.TableName {
 	}
 
 	return mp
+}
+
+// Tables return a map between table id and table info
+// the returned map must be READ-ONLY. Any modified of this map will lead to the internal state confusion in schema storage
+func (s *schemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
+	return s.tables
 }
 
 // SchemaStorage stores the schema information with multi-version

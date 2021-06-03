@@ -330,16 +330,6 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if tableInfo != nil {
-		for _, table := range tableInfo {
-			if table != nil {
-				err := s.storage.WriteFile(ctx, makeTableDirectoryName(table.TableID), nil)
-				if err != nil {
-					return errors.Annotate(
-						cerror.WrapError(cerror.ErrS3SinkStorageAPI, err),
-						"create table directory on s3 failed")
-				}
-			}
-		}
 		// update log meta to record the relationship about tableName and tableID
 		s.logMeta = makeLogMetaContent(tableInfo)
 
@@ -375,7 +365,7 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	}
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
-		SkipCheckPath:   false,
+		SkipCheckPath:   true,
 		HTTPClient:      nil,
 	})
 	if err != nil {

@@ -23,10 +23,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/security"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -48,55 +48,60 @@ type command struct {
 type Manager struct {
 	processors map[model.ChangeFeedID]*processor
 
-	pdCli       pd.Client
-	credential  *security.Credential
-	captureInfo *model.CaptureInfo
-
 	commandQueue chan *command
 
-	newProcessor func(
-		pdCli pd.Client,
-		changefeedID model.ChangeFeedID,
-		credential *security.Credential,
-		captureInfo *model.CaptureInfo,
-	) *processor
+	newProcessor func(cdcContext.Context) *processor
 }
 
 // NewManager creates a new processor manager
-func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *model.CaptureInfo) *Manager {
+func NewManager() *Manager {
 	return &Manager{
-		processors:  make(map[model.ChangeFeedID]*processor),
-		pdCli:       pdCli,
-		credential:  credential,
-		captureInfo: captureInfo,
-
+		processors:   make(map[model.ChangeFeedID]*processor),
 		commandQueue: make(chan *command, 4),
 		newProcessor: newProcessor,
 	}
 }
 
+// NewManager4Test creates a new processor manager for test
+func NewManager4Test(
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+) *Manager {
+	m := NewManager()
+	m.newProcessor = func(ctx cdcContext.Context) *processor {
+		return newProcessor4Test(ctx, createTablePipeline)
+	}
+	return m
+}
+
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
-func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	globalState := state.(*globalState)
+func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	ctx := stdCtx.(cdcContext.Context)
+	globalState := state.(*model.GlobalReactorState)
+	globalState.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
+	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
-		if !changefeedState.Active() {
+		if !changefeedState.Active(captureID) {
 			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
 		}
+		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+			ID:   changefeedID,
+			Info: changefeedState.Info,
+		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if changefeedState.TaskStatus.AdminJobType.IsStopState() {
+			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
 				continue
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(m.pdCli, changefeedID, m.credential, m.captureInfo)
+			processor = m.newProcessor(ctx)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {

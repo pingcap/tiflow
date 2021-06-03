@@ -37,6 +37,13 @@ type regionStatefulEvent struct {
 	changeEvent *cdcpb.Event
 	resolvedTs  *cdcpb.ResolvedTs
 	state       *regionFeedState
+
+	// regionID is used for load balancer, we don't use fileds in state to reduce lock usage
+	regionID uint64
+
+	// finishedCounter is used to mark events that are sent from a give region
+	// worker to this worker(one of the workers in worker pool) are all processed.
+	finishedCounter *int32
 }
 
 func (s *eventFeedSession) sendRegionChangeEventV2(
@@ -86,7 +93,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		}
 
 		state.start()
-		// Then spawn the goroutine to process messages of this region.
 		worker.setRegionState(event.RegionId, state)
 
 		// send resolved event when starting a single event feed
@@ -109,11 +115,18 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		return nil
 	}
 
+	// TODO: If a region doesn't receive any event from TiKV, this region
+	// can't be reconnected since the region state is not initialized.
+	if !state.isInitialized() {
+		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
+	}
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case worker.inputCh <- &regionStatefulEvent{
 		changeEvent: event,
+		regionID:    event.RegionId,
 		state:       state,
 	}:
 	}
@@ -140,6 +153,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 			select {
 			case worker.inputCh <- &regionStatefulEvent{
 				resolvedTs: resolvedTs,
+				regionID:   regionID,
 				state:      state,
 			}:
 			case <-ctx.Done():
@@ -171,6 +185,8 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
+
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			err := s.onRegionFail(ctx, regionErrorInfo{
@@ -193,7 +209,7 @@ func (s *eventFeedSession) receiveFromStreamV2(
 
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
-	worker := newRegionWorker(s, limiter)
+	worker := newRegionWorker(s, limiter, addr)
 	s.workersLock.Lock()
 	s.workers[addr] = worker
 	s.workersLock.Unlock()
@@ -210,13 +226,14 @@ func (s *eventFeedSession) receiveFromStreamV2(
 				worker.inputCh <- nil
 			}
 		})
-		failpoint.Inject("kvClientStreamRecvError", func() {
-			err = errors.New("injected stream recv error")
+		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+			errStr := msg.(string)
+			if errStr == io.EOF.Error() {
+				err = io.EOF
+			} else {
+				err = errors.New(errStr)
+			}
 		})
-		if err == io.EOF {
-			close(worker.inputCh)
-			return nil
-		}
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(

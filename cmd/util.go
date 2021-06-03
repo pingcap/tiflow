@@ -65,8 +65,7 @@ func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 	if isServer {
-		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity "+
-			"(cert Common Name). Use `,` to separate multiple CN")
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 	}
 }
 
@@ -218,11 +217,11 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	return nil
 }
 
-func verifyStartTs(ctx context.Context, startTs uint64) error {
+func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) error {
 	if disableGCSafePointCheck {
 		return nil
 	}
-	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
+	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
 }
 
 func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
