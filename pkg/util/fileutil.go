@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/pingcap/errors"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -41,4 +42,16 @@ func IsDirWritable(dir string) error {
 		return cerror.WrapError(cerror.ErrCheckDirWritable, err)
 	}
 	return cerror.WrapError(cerror.ErrCheckDirWritable, os.Remove(f))
+}
+
+// GetDiskAvailableSpace return the available space of the specified dir
+// the caller should guarantee that dir is a valid directory
+func GetDiskAvailableSpace(dir string) (int32, error) {
+	fs := syscall.Statfs_t{}
+	if err := syscall.Statfs(dir, &fs); err != nil {
+		return 0, cerror.WrapError(cerror.ErrGetDiskAvailableSpace, err)
+	}
+
+	available := fs.Bavail * uint64(fs.Bsize)
+	return int32(available / 1024 / 1024 / 1024), nil
 }

@@ -27,16 +27,21 @@ import (
 	"github.com/pingcap/ticdc/pkg/config/outdated"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
-// NewReplicaImpl is true if we using new processor
-// new owner should be also switched on after it implemented
-const NewReplicaImpl = true
+const (
+	// NewReplicaImpl is true if we using new processor
+	// new owner should be also switched on after it implemented
+	NewReplicaImpl = true
+	// warn if the free space of the specified data-dir is lower than dataDirWarnThreshold, unit is GB
+	dataDirWarnThreshold = 200
+)
 
 func init() {
 	config := GetDefaultServerConfig()
-	config.initDataDir()
+	config.initSortDir()
 
 	StoreGlobalServerConfig(config)
 }
@@ -240,7 +245,7 @@ func (c *ServerConfig) Clone() *ServerConfig {
 	return clone
 }
 
-func (c *ServerConfig) initDataDir() {
+func (c *ServerConfig) initSortDir() {
 	c.Sorter.SortDir = filepath.Join(c.DataDir, c.Sorter.SortDir)
 }
 
@@ -281,6 +286,21 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		if err != nil {
 			return errors.Annotate(err, "invalidate TLS config")
 		}
+	}
+
+	if c.DataDir == "" {
+		return cerror.ErrInvalidServerOption.GenWithStack("data-dir is not specified")
+	}
+	if err := util.IsDirAndWritable(c.DataDir); err != nil {
+		return cerror.ErrInvalidServerOption.GenWithStack("data-dir is not a directory or not be able to write")
+	}
+
+	available, err := util.GetDiskAvailableSpace(c.DataDir)
+	if err != nil {
+		return cerror.ErrInvalidServerOption.GenWithStack("try to get the available space of data-dir failed")
+	}
+	if available < dataDirWarnThreshold {
+		log.Warn(fmt.Sprintf("the available space of data-dir is %d, please make sure more than 200GB available for the disk", available))
 	}
 
 	if c.Sorter == nil {
