@@ -54,7 +54,8 @@ func newGCManager() *gcManager {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
-		gcTTL: serverConfig.GcTTL,
+		lastSucceededTime: time.Now(),
+		gcTTL:             serverConfig.GcTTL,
 	}
 }
 
