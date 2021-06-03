@@ -171,8 +171,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.KeyPath = serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
-		case "sort-dir":
-			conf.Sorter.SortDir = serverConfig.Sorter.SortDir
+		// case "sort-dir":
+		// 	conf.Sorter.SortDir = serverConfig.Sorter.SortDir
 		case "pd", "config":
 			// do nothing
 		default:
@@ -202,5 +202,11 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	if available < config.DataDirWarnThreshold {
 		log.Warn(fmt.Sprintf("the available space of data-dir is %dGB, please make sure more than 200GB available for the disk", available))
 	}
+
+	if serverConfig.Sorter.SortDir != "/tmp/cdc_sort" {
+		cmd.Printf("[WARN] --data-dir is specified, and sorter files will be located" +
+			"at {data-dir}/tmp/cdc_sort\n")
+	}
+
 	return conf, nil
 }
