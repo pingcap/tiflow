@@ -35,15 +35,12 @@ const (
 	// NewReplicaImpl is true if we using new processor
 	// new owner should be also switched on after it implemented
 	NewReplicaImpl = true
-	// warn if the free space of the specified data-dir is lower than dataDirWarnThreshold, unit is GB
-	dataDirWarnThreshold = 200
+	// DataDirWarnThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
+	DataDirWarnThreshold = 200
 )
 
 func init() {
-	config := GetDefaultServerConfig()
-	config.initSortDir()
-
-	StoreGlobalServerConfig(config)
+	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -156,7 +153,7 @@ var defaultServerConfig = &ServerConfig{
 	AdvertiseAddr: "",
 	LogFile:       "",
 	LogLevel:      "info",
-	DataDir:       "",           // TODO: add a specified value ?
+	DataDir:       "",
 	GcTTL:         24 * 60 * 60, // 24H
 	TZ:            "System",
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
@@ -245,7 +242,7 @@ func (c *ServerConfig) Clone() *ServerConfig {
 	return clone
 }
 
-func (c *ServerConfig) initSortDir() {
+func (c *ServerConfig) initDataDir() {
 	c.Sorter.SortDir = filepath.Join(c.DataDir, c.Sorter.SortDir)
 }
 
@@ -288,24 +285,11 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		}
 	}
 
-	if c.DataDir == "" {
-		return cerror.ErrInvalidServerOption.GenWithStack("data-dir is not specified")
-	}
-	if err := util.IsDirAndWritable(c.DataDir); err != nil {
-		return cerror.ErrInvalidServerOption.GenWithStack("data-dir is not a directory or not be able to write")
-	}
-
-	available, err := util.GetDiskAvailableSpace(c.DataDir)
-	if err != nil {
-		return cerror.ErrInvalidServerOption.GenWithStack("try to get the available space of data-dir failed")
-	}
-	if available < dataDirWarnThreshold {
-		log.Warn(fmt.Sprintf("the available space of data-dir is %d, please make sure more than 200GB available for the disk", available))
-	}
-
 	if c.Sorter == nil {
 		c.Sorter = defaultServerConfig.Sorter
 	}
+
+	c.initDataDir()
 
 	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
@@ -376,4 +360,20 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 	}
 	*d = TomlDuration(stdDuration)
 	return nil
+}
+
+func GetDataDirAvailableSpace(conf *ServerConfig) (result int32, err error) {
+	if conf.DataDir == "" {
+		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not specified")
+	}
+	if err := util.IsDirAndWritable(conf.DataDir); err != nil {
+		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not a directory or not be able to write")
+	}
+
+	available, err := util.GetDiskAvailableSpace(conf.DataDir)
+	if err != nil {
+		return 0, cerror.ErrInvalidServerOption.GenWithStack("try to get the available space of data-dir failed")
+	}
+
+	return available, nil
 }

@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -82,7 +83,6 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&serverConfig.Sorter.SortDir, "sort-dir", defaultServerConfig.Sorter.SortDir, "sorter's temporary file directory")
 
 	addSecurityFlags(cmd.Flags(), true /* isServer */)
-
 	cmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
 }
 
@@ -195,5 +195,12 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		}
 	}
 
+	available, err := config.GetDataDirAvailableSpace(conf)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if available < config.DataDirWarnThreshold {
+		log.Warn(fmt.Sprintf("the available space of data-dir is %d, please make sure more than 200GB available for the disk", available))
+	}
 	return conf, nil
 }
