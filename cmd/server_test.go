@@ -258,3 +258,21 @@ cert-allowed-cn = ["dd","ee"]
 		},
 	})
 }
+
+func (s *serverSuite) TestDataDir(c *check.C) {
+	// defer testleak.AfterTest(c)()
+	// cmd := new(cobra.Command)
+	// initServerCmd(cmd)
+	// c.Assert(cmd.ParseFlags([]string{"--PD="}), check.ErrorMatches, ".*unknown flag: --PD.*")
+	// _, err := loadAndVerifyServerConfig(cmd)
+	// c.Assert(err, check.ErrorMatches, "*data-dir is not specified*")
+	//
+	// // test data-dir
+	// dataDir := c.MkDir()
+	// c.Assert(cmd.ParseFlags([]string{"--data-dir=" + dataDir}), check.IsNil)
+	// cfg, err := loadAndVerifyServerConfig(cmd)
+	// c.Assert(err, check.IsNil)
+	//
+	// c.Assert(cfg.DataDir, check.Equals, dataDir)
+	// c.Assert(cfg.Sorter.SortDir, check.Equals, filepath.Join(dataDir, "tmp/cdc_sort"))
+}

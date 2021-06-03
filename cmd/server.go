@@ -200,7 +200,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		return nil, errors.Trace(err)
 	}
 	if available < config.DataDirWarnThreshold {
-		log.Warn(fmt.Sprintf("the available space of data-dir is %d, please make sure more than 200GB available for the disk", available))
+		log.Warn(fmt.Sprintf("the available space of data-dir is %dGB, please make sure more than 200GB available for the disk", available))
 	}
 	return conf, nil
 }

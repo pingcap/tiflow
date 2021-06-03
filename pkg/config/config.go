@@ -289,8 +289,6 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		c.Sorter = defaultServerConfig.Sorter
 	}
 
-	c.initDataDir()
-
 	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
 	}
@@ -316,6 +314,8 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.PerTableMemoryQuota < 6*1024*1024 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
 	}
+
+	c.initDataDir()
 
 	return nil
 }
