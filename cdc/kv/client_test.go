@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1237,6 +1239,13 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
 	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
+	// a hack way to check the goroutine count of region worker is 1
+	buf := make([]byte, 1<<20)
+	stacklen := runtime.Stack(buf, true)
+	stack := string(buf[:stacklen])
+	c.Assert(strings.Count(stack, "resolveLock"), check.Equals, 1)
+	c.Assert(strings.Count(stack, "collectWorkpoolError"), check.Equals, 1)
+
 	cancel()
 }
 
@@ -1348,7 +1357,6 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
-			log.Info("receive event", zap.Reflect("event", event), zap.Reflect("expected", expectedEv))
 			c.Assert(event, check.DeepEquals, expectedEv)
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
