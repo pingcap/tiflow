@@ -20,11 +20,6 @@ function check_changefeed_is_finished() {
         exit 1
     fi
 
-#    info=$(echo "$query"|sed "/has been deleted/d"|jq ".info")
-#    if [[ ! "$info" -eq "null" ]]; then
-#        echo "unexpected changefeed info $info, should be null"
-#        exit 1
-#    fi
 
     status_length=$(echo "$query"|sed "/has been deleted/d"|jq '."task-status"|length')
     if [[ ! "$status_length" -eq "0" ]]; then
