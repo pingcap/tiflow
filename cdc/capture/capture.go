@@ -46,8 +46,8 @@ type Capture struct {
 	captureMu sync.Mutex
 	info      *model.CaptureInfo
 
-	owner            *owner.Owner
 	ownerMu          sync.Mutex
+	owner            *owner.Owner
 	processorManager *processor.Manager
 
 	// session keeps alive between the capture and etcd
@@ -70,6 +70,7 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDC
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
 		etcdClient: etcdClient,
+		cancel:     func() {},
 
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
@@ -102,7 +103,7 @@ func (c *Capture) reset() error {
 
 // Run runs the capture
 func (c *Capture) Run(ctx context.Context) error {
-	defer log.Info("the capture routine is exited")
+	defer log.Info("the capture routine has exited")
 	for {
 		select {
 		case <-ctx.Done():
@@ -116,7 +117,10 @@ func (c *Capture) Run(ctx context.Context) error {
 		ctx, cancel := context.WithCancel(ctx)
 		c.cancel = cancel
 		err = c.run(ctx)
-		// if capture suicided, reset the capture and run again
+		// if capture suicided, reset the capture and run again.
+		// if the canceled error throw, there are two possible scenarios:
+		//   1. the internal context canceled, it means some error happened in the internal, and the routine is exited, we should restart the capture
+		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
 		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
 			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
 			continue
@@ -147,7 +151,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 	wg.Add(2)
 	var ownerErr, processorErr error
 	go func() {
-		defer log.Info("the owner routine is exited", zap.Error(ownerErr))
+		defer log.Info("the owner routine has exited", zap.Error(ownerErr))
 		defer wg.Done()
 		defer c.AsyncClose()
 		// when the campaignOwner returns an error, it means that the the owner throws an unrecoverable serious errors
@@ -156,7 +160,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		ownerErr = c.campaignOwner(ctx)
 	}()
 	go func() {
-		defer log.Info("the processor routine is exited", zap.Error(processorErr))
+		defer log.Info("the processor routine has exited", zap.Error(processorErr))
 		defer wg.Done()
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
@@ -211,6 +215,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			case context.Canceled:
 				return nil
 			case mvcc.ErrCompacted:
+				// the revision we requested is compacted, just retry
 				continue
 			}
 			log.Warn("campaign owner failed", zap.Error(err))
@@ -251,7 +256,7 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 		switch {
 		case cerror.ErrEtcdSessionDone.Equal(err),
 			cerror.ErrLeaseExpired.Equal(err):
-			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+			return cerror.WrapError(cerror.ErrCaptureSuicide, err)
 		}
 		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
