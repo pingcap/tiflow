@@ -27,8 +27,6 @@ function kill_cdc_and_restart() {
     MAX_RETRIES=10
     status=$(curl -s http://127.0.0.1:8300/status)
     cdc_pid=$(echo "$status"|jq '.pid')
-    echo "$status"
-    echo "$cdc_pid"
 
     kill $cdc_pid
     ensure $MAX_RETRIES check_capture_count $pd_addr 0
