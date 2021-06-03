@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,9 +58,10 @@ type Capture struct {
 	kvStorage  tidbkv.Storage
 	etcdClient *kv.CDCEtcdClient
 
+	cancel context.CancelFunc
+
 	newProcessorManager func() *processor.Manager
 	newOwner            func() *owner.Owner
-	stopCampaign        int32
 }
 
 // NewCapture returns a new Capture instance
@@ -106,13 +106,13 @@ func (c *Capture) reset() error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
-	atomic.StoreInt32(&c.stopCampaign, 0)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
 
 // Run runs the capture
 func (c *Capture) Run(ctx context.Context) error {
+	defer log.Info("the capture routine is exited")
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,9 +123,11 @@ func (c *Capture) Run(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		ctx, cancel := context.WithCancel(ctx)
+		c.cancel = cancel
 		err = c.run(ctx)
-		// if no error returned or capture suicide, reset the capture and run again
-		if err == nil || cerror.ErrCaptureSuicide.Equal(errors.Cause(err)) {
+		// if capture suicided, reset the capture and run again
+		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
 			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
 			continue
 		}
@@ -155,18 +157,23 @@ func (c *Capture) run(stdCtx context.Context) error {
 	wg.Add(2)
 	var ownerErr, processorErr error
 	go func() {
-		defer log.Info("owner goroutine is exited")
+		defer log.Info("the owner routine is exited", zap.Error(ownerErr))
 		defer wg.Done()
 		defer c.AsyncClose()
+		// when the campaignOwner returns an error, it means that the the owner throws an unrecoverable serious errors
+		// (recoverable errors are intercepted in the owner tick)
+		// so we should also stop the processor and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
 	}()
 	go func() {
-		defer log.Info("processor goroutine is exited")
+		defer log.Info("the processor routine is exited", zap.Error(processorErr))
 		defer wg.Done()
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
-		// no matter why the processor is exited, return to let capture restart or exit
+		// when the etcd worker of processor returns an error, it means that the the processor throws an unrecoverable serious errors
+		// (recoverable errors are intercepted in the processor tick)
+		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 	}()
 	wg.Wait()
@@ -196,8 +203,10 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	})
 	rl := rate.NewLimiter(0.05, 2)
 	for {
-		if atomic.LoadInt32(&c.stopCampaign) != 0 {
+		select {
+		case <-ctx.Done():
 			return nil
+		default:
 		}
 		err := rl.Wait(ctx)
 		if err != nil {
@@ -250,8 +259,8 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 		// 1/3 of session ttl that `session.Done` can't be triggered even
 		// the lease is already revoked.
 		switch {
-		case cerror.ErrEtcdSessionDone.Equal(errors.Cause(err)),
-			cerror.ErrLeaseExpired.Equal(errors.Cause(err)):
+		case cerror.ErrEtcdSessionDone.Equal(err),
+			cerror.ErrLeaseExpired.Equal(err):
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
@@ -310,7 +319,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 
 // AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
-	atomic.StoreInt32(&c.stopCampaign, 1)
+	defer c.cancel()
 	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
 		o.AsyncStop()
 		return nil
