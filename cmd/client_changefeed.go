@@ -362,8 +362,9 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 
 	if sortDir != "" {
 		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. " +
-			"Please use `cdc server --data-dir instead` if possible. " +
-			"The sort-dir here will be no-op\n")
+			"Please use `cdc server --data-dir` instead if possible. " +
+			"The sort-dir here will be no-op, and the sorter file will be" +
+			"located at {data-dir}/tmp/cdc_sort\n")
 	}
 
 	if info.Engine == model.SortInFile {
