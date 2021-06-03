@@ -174,6 +174,10 @@ func (c *changeFeed) dropSchema(schemaID model.SchemaID, targetTs model.Ts) {
 }
 
 func (c *changeFeed) addTable(tblInfo *model.TableInfo, targetTs model.Ts) {
+	// Ignore temporary table.
+	if tblInfo.TempTableType != TempTableNone {
+		return
+	}
 	if c.filter.ShouldIgnoreTable(tblInfo.TableName.Schema, tblInfo.TableName.Table) {
 		return
 	}
