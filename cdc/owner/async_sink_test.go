@@ -102,12 +102,12 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	defer sink.Close()
 
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
-		return retry.Run(100*time.Millisecond, 30, func() error {
+		return retry.Do(context.Background(), func() error {
 			if targetTs != atomic.LoadUint64(&m.checkpointTs) {
 				return errors.New("targetTs!=checkpointTs")
 			}
 			return nil
-		})
+		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(30))
 	}
 	sink.EmitCheckpointTs(ctx, 1)
 	c.Assert(waitCheckpointGrowingUp(mSink, 1), check.IsNil)

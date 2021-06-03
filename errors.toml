@@ -601,6 +601,11 @@ error = '''
 pulsar send message failed
 '''
 
+["CDC:ErrReachMaxTry"]
+error = '''
+reach maximum try: %d
+'''
+
 ["CDC:ErrReactorFinished"]
 error = '''
 the reactor has done its job and should no longer be executed
