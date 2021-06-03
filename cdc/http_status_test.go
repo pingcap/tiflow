@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -75,8 +74,8 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	testHandleRebalance(c)
 	testHandleMoveTable(c)
 	testHandleChangefeedQuery(c)
-	testHandleFailpoint(c)
 	testHandleChangefeedsList(c)
+	testHandleFailpoint(c)
 }
 
 func testPprof(c *check.C) {
@@ -122,13 +121,10 @@ func testHandleChangefeedsList(c *check.C) {
 	uri := fmt.Sprintf("http://%s/api/v1/changefeeds", advertiseAddr4Test)
 	resp, err := http.PostForm(uri, url.Values{})
 	c.Assert(err, check.IsNil)
-	data, err := ioutil.ReadAll(resp.Body)
+	_, err = ioutil.ReadAll(resp.Body)
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
-	httpErr := &httpError{}
-	json.Unmarshal(data, httpErr)
-	c.Assert(httpErr.Error, check.Equals, concurrency.ErrElectionNotLeader.Error())
+	c.Assert(resp.StatusCode, check.Equals, http.StatusOK)
 }
 
 func testHTTPPostOnly(c *check.C, uri string) {

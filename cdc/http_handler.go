@@ -52,8 +52,11 @@ type commonResp struct {
 
 // ChangefeedCommonInfo holds some common usage information of a changefeed
 type ChangefeedCommonInfo struct {
-	ID      string         `json:"id"`
-	Summary ChangefeedResp `json:"summary"`
+	ID           string              `json:"id"`
+	FeedState    string              `json:"state"`
+	TSO          uint64              `json:"tso"`
+	Checkpoint   string              `json:"checkpoint"`
+	RunningError *model.RunningError `json:"error"`
 }
 
 // ChangefeedResp holds the most common usage information for a changefeed
@@ -317,7 +320,8 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	}
 
 	state := req.Form.Get(APIOpVarChangefeeds)
-	filters := map[model.FeedState]struct{}{
+	// changefeed whose status is in the blacklist will be filtered out.
+	blackList := map[model.FeedState]struct{}{
 		model.StateNormal:   {},
 		model.StateStopped:  {},
 		model.StateFailed:   {},
@@ -327,13 +331,13 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	}
 	switch state {
 	case "all":
-		filters = make(map[model.FeedState]struct{})
+		blackList = make(map[model.FeedState]struct{})
 	case "":
-		delete(filters, model.StateNormal)
-		delete(filters, model.StateStopped)
-		delete(filters, model.StateFailed)
+		delete(blackList, model.StateNormal)
+		delete(blackList, model.StateStopped)
+		delete(blackList, model.StateFailed)
 	default:
-		delete(filters, model.FeedState(state))
+		delete(blackList, model.FeedState(state))
 	}
 
 	resps := make([]*ChangefeedCommonInfo, 0)
@@ -343,7 +347,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
-		if _, ok := filters[feedState]; ok {
+		if _, ok := blackList[feedState]; ok {
 			continue
 		}
 
@@ -352,11 +356,8 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
-		respInfo := &ChangefeedCommonInfo{
+		resp := &ChangefeedCommonInfo{
 			ID: changefeedID,
-		}
-		resp := ChangefeedResp{
-			FeedState: string(feedState),
 		}
 		if cf != nil {
 			resp.RunningError = cf.info.Error
@@ -368,8 +369,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			tm := oracle.GetTimeFromTS(status.CheckpointTs)
 			resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 		}
-		respInfo.Summary = resp
-		resps = append(resps, respInfo)
+		resps = append(resps, resp)
 	}
 	writeData(w, resps)
 }
