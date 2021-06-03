@@ -377,8 +377,8 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					operation.Done = true
 					return nil
 				})
-				// TODO: check if the goroutines created by table pipeline is actually exited. (call tablepipeline.Wait())
 				table.Cancel()
+				table.Wait()
 				delete(p.tables, tableID)
 				log.Debug("Operation done signal received",
 					cdcContext.ZapFieldChangefeed(ctx),
@@ -546,8 +546,9 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 			continue
 		}
 		tablePipeline.Cancel()
+		tablePipeline.Wait()
 		delete(p.tables, tableID)
-		log.Warn("the table was forcibly deleted, this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
+		log.Warn("the table was forcibly deleted", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
 	}
 	return nil
 }
@@ -643,6 +644,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.Cancel()
+			table.Wait()
 			delete(p.tables, tableID)
 		} else {
 			log.Warn("Ignore existing table", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
@@ -755,6 +757,7 @@ func (p *processor) doGCSchemaStorage() error {
 func (p *processor) Close() error {
 	for _, tbl := range p.tables {
 		tbl.Cancel()
+		tbl.Wait()
 	}
 	p.cancel()
 	p.wg.Wait()
