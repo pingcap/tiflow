@@ -554,7 +554,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 				case "pd", "tz", "changefeed-id", "no-confirm":
 					// do nothing
 				case "start-ts":
-					log.Warn("updating start-ts is not supported. If you would like to restart the changefeed from another start-ts, " +
+					cmd.Print("[WARN] updating start-ts is not supported. If you would like to restart the changefeed from another start-ts, " +
 						"please remove and recreate the changefeed")
 				case "sort-dir":
 					if sortDir != "" {
