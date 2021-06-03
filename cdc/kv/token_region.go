@@ -105,7 +105,7 @@ func (r *sizedRegionRouter) Acquire(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]++
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(r.metrics.table, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.table, r.metrics.changefeed)
 	}
 	r.metrics.tokens[id].Inc()
 }
@@ -115,7 +115,7 @@ func (r *sizedRegionRouter) Release(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]--
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(r.metrics.table, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.table, r.metrics.changefeed)
 	}
 	r.metrics.tokens[id].Dec()
 }
@@ -131,6 +131,11 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 			r.lock.Lock()
 			for id, buf := range r.buffer {
 				available := r.sizeLimit - r.tokens[id]
+				// the tokens used could be more then size limit, since we have
+				// a sized channel as level1 cache
+				if available <= 0 {
+					continue
+				}
 				if available > len(buf) {
 					available = len(buf)
 				}
