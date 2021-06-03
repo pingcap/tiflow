@@ -158,7 +158,7 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 					r.Acquire(store)
 					atomic.AddUint64(&received, 1)
 					r.Release(store)
-					if atomic.LoadUint64(&received) == uint64(limit*4) {
+					if atomic.LoadUint64(&received) == uint64(limit*10) {
 						cancel()
 					}
 				}
