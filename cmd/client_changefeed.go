@@ -551,8 +551,17 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SyncPointEnabled = syncPointEnabled
 				case "sync-interval":
 					info.SyncPointInterval = syncPointInterval
-				case "pd", "tz", "start-ts", "changefeed-id", "no-confirm":
+				case "pd", "tz", "changefeed-id", "no-confirm":
 					// do nothing
+				case "start-ts":
+					log.Warn("updating start-ts is not supported. If you would like to restart the changefeed from another start-ts, " +
+						"please remove and recreate the changefeed")
+				case "sort-dir":
+					if sortDir != "" {
+						cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. " +
+							"Please use `cdc server --sort-dir` if possible. ")
+						info.SortDir = sortDir
+					}
 				default:
 					// use this default branch to prevent new added parameter is not added
 					log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))

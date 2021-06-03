@@ -125,6 +125,23 @@ EOF
         exit 1
     fi
 
+    has_warn=$(run_cdc_cli changefeed update --start-ts=1234 --no-confirm --changefeed-id $uuid | grep 'updating start-ts is not supported')
+    if [[ $has_warn != 0 ]]; then
+        echo "[$(date)] <<<<< expected warning when trying to update start-ts >>>>>"
+        exit 1
+    fi
+
+    has_deprecated=$(run_cdc_cli changefeed update --sort-dir="/test" --no-confirm --changefeed-id $uuid | grep 'deprecated')
+    if [[ $has_warn != 0 ]]; then
+        echo "[$(date)] <<<<< expected deprecation warning when trying to update sort-dir >>>>>"
+        exit 1
+    fi
+    changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
+    if [[ ! $changefeed_info == *"\"sort-dir\": \"/test\""* ]]; then
+        echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+        exit 1
+    fi
+
     # Resume changefeed
     run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
