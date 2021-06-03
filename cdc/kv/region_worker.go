@@ -443,14 +443,16 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 	preprocess := func(event *regionStatefulEvent, ok bool) (
 		exitEventHandler bool,
 		skipEvent bool,
-		err error,
 	) {
 		// event == nil means the region worker should exit and re-establish
 		// all existing regions.
 		if !ok || event == nil {
 			log.Info("region worker closed by error")
 			exitEventHandler = true
-			err = w.evictAllRegions(ctx)
+			err := w.evictAllRegions(ctx)
+			if err != nil {
+				log.Warn("region worker evict all regions error", zap.Error(err))
+			}
 			return
 		}
 		if event.state.isStopped() {
@@ -472,9 +474,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		exitEventHandler, skipEvent, err := preprocess(event, ok)
+		exitEventHandler, skipEvent := preprocess(event, ok)
 		if exitEventHandler {
-			return err
+			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
 		if skipEvent {
 			continue
@@ -500,9 +502,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				exitEventHandler, skipEvent, err := preprocess(event, ok)
+				exitEventHandler, skipEvent := preprocess(event, ok)
 				if exitEventHandler {
-					return err
+					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 				}
 				if skipEvent {
 					continue
@@ -607,7 +609,13 @@ func (w *regionWorker) run(ctx context.Context) error {
 	wg.Go(func() error {
 		return w.collectWorkpoolError(ctx)
 	})
-	return wg.Wait()
+	err := wg.Wait()
+	// ErrRegionWorkerExit means the region worker exits normally, but we don't
+	// need to terminate the other goroutines in errgroup
+	if cerror.ErrRegionWorkerExit.Equal(err) {
+		return nil
+	}
+	return err
 }
 
 func (w *regionWorker) handleEventEntry(
