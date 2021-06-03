@@ -88,7 +88,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 	cmds := []*cobra.Command{
 		{
 			Use:   "pause",
-			Short: "Pause a replicaiton task (changefeed)",
+			Short: "Pause a replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
 				job := model.AdminJob{
@@ -100,7 +100,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 		},
 		{
 			Use:   "resume",
-			Short: "Resume a paused replicaiton task (changefeed)",
+			Short: "Resume a paused replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
 				job := model.AdminJob{
@@ -115,7 +115,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 		},
 		{
 			Use:   "remove",
-			Short: "Remove a replicaiton task (changefeed)",
+			Short: "Remove a replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
 				job := model.AdminJob{
@@ -293,7 +293,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 	}
 	if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 {
 		if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0) {
-			return nil, errors.New("invaild cyclic config, please make sure using " +
+			return nil, errors.New("invalid cyclic config, please make sure using " +
 				"nonzero replica ID and specify filter replica IDs")
 		}
 		filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
@@ -318,7 +318,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		protocol := sinkURIParsed.Query().Get("protocol")
 		for _, fp := range forceEnableOldValueProtocols {
 			if protocol == fp {
-				log.Warn("Attemping to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
 				cfg.EnableOldValue = true
 				break
 			}
@@ -343,7 +343,8 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 	switch sortEngine {
 	case model.SortUnified, model.SortInMemory, model.SortInFile:
 	default:
-		return nil, errors.Errorf("Creating chengfeed with an invalid sort engine(%s), `%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
+		return nil, errors.Errorf("Creating changefeed with an invalid sort engine(%s), "+
+			"`%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
 	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
@@ -594,7 +595,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					return err
 				}
 				if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-					cmd.Printf("No upadte to changefeed.\n")
+					cmd.Printf("No update to changefeed.\n")
 					return nil
 				}
 			}
@@ -678,7 +679,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 func newCreateChangefeedCyclicCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "cyclic",
-		Short: "(Expremental) Utility about cyclic replication",
+		Short: "(Experimental) Utility about cyclic replication",
 	}
 	command.AddCommand(
 		&cobra.Command{
