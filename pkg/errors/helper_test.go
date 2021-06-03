@@ -53,3 +53,11 @@ func (s *helperSuite) TestWrapError(c *check.C) {
 		}
 	}
 }
+
+func (s *helperSuite) TestWrapErrorEqual(c *check.C) {
+	err := WrapError(ErrCaptureSuicide, ErrEtcdIgnore)
+	c.Assert(ErrCaptureSuicide.Equal(err), check.IsFalse)
+	c.Assert(ErrCaptureSuicide.Equal(errors.Cause(err)), check.IsFalse)
+	c.Assert(ErrEtcdIgnore.Equal(err), check.IsTrue)
+	c.Assert(ErrEtcdIgnore.Equal(errors.Cause(err)), check.IsTrue)
+}

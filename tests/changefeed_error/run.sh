@@ -7,7 +7,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
-MAX_RETRIES=10
+MAX_RETRIES=20
 
 function check_changefeed_mark_error() {
     endpoints=$1

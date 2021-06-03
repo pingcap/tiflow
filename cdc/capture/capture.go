@@ -162,16 +162,15 @@ func (c *Capture) run(stdCtx context.Context) error {
 	wg.Add(2)
 	var ownerErr, processorErr error
 	go func() {
-		defer log.Info("the owner routine has exited", zap.Error(ownerErr))
 		defer wg.Done()
 		defer c.AsyncClose()
 		// when the campaignOwner returns an error, it means that the the owner throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the owner tick)
 		// so we should also stop the processor and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
+		log.Info("the owner routine has exited", zap.Error(ownerErr))
 	}()
 	go func() {
-		defer log.Info("the processor routine has exited", zap.Error(processorErr))
 		defer wg.Done()
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
@@ -180,6 +179,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
+		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	wg.Wait()
 	if ownerErr != nil {
@@ -267,11 +267,11 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 		switch {
 		case cerror.ErrEtcdSessionDone.Equal(err),
 			cerror.ErrLeaseExpired.Equal(err):
-			return cerror.WrapError(cerror.ErrCaptureSuicide, err)
+			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
-			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
+			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 		if lease.TTL == int64(-1) {
 			log.Warn("session is disconnected", zap.Error(err))
