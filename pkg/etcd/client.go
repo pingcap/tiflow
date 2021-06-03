@@ -15,10 +15,13 @@ package etcd
 
 import (
 	"context"
+<<<<<<< HEAD
 
 	"github.com/cenkalti/backoff"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"google.golang.org/grpc/codes"
+=======
+>>>>>>> replace retry usage with new retry pkg, partial done
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

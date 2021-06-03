@@ -692,6 +692,10 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		return nil
 	})
 	var tableName string
+<<<<<<< HEAD
+=======
+
+>>>>>>> replace retry usage with new retry pkg, partial done
 	err := retry.Do(ctx, func() error {
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
 			tableName = name.QuoteString()

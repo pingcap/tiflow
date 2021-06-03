@@ -47,6 +47,7 @@ func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	}
 }
 
+<<<<<<< HEAD
 // RFCCode returns a RFCCode from an error
 func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	type rfcCoder interface {
@@ -62,6 +63,8 @@ func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	return "", false
 }
 
+=======
+>>>>>>> replace retry usage with new retry pkg, partial done
 // IsRetryableError check the error is safe or worth to retry
 func IsRetryableError(err error) bool {
 	switch errors.Cause(err) {
