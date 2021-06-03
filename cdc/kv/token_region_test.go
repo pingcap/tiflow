@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -35,8 +35,7 @@ func (s *tokenRegionSuite) TestRouter(c *check.C) {
 	defer testleak.AfterTest(c)()
 	store := "store-1"
 	limit := 10
-	metric := prometheus.NewGauge(prometheus.GaugeOpts{})
-	r := NewSizedRegionRouter(limit, metric)
+	r := NewSizedRegionRouter(context.Background(), limit)
 	for i := 0; i < limit; i++ {
 		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
@@ -46,7 +45,7 @@ func (s *tokenRegionSuite) TestRouter(c *check.C) {
 		select {
 		case sri := <-r.Chan():
 			c.Assert(sri.ts, check.Equals, uint64(i))
-			r.UseToken(store)
+			r.Acquire(store)
 			regions = append(regions, sri)
 		default:
 			c.Error("expect region info from router")
@@ -54,7 +53,7 @@ func (s *tokenRegionSuite) TestRouter(c *check.C) {
 	}
 	c.Assert(r.tokens[store], check.Equals, limit)
 	for range regions {
-		r.RevokeToken(store)
+		r.Release(store)
 	}
 	c.Assert(r.tokens[store], check.Equals, 0)
 }
@@ -75,8 +74,7 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 
 	store := "store-1"
 	limit := 20
-	metric := prometheus.NewGauge(prometheus.GaugeOpts{})
-	r := NewSizedRegionRouter(limit, metric)
+	r := NewSizedRegionRouter(context.Background(), limit)
 	for i := 0; i < limit*2; i++ {
 		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
@@ -84,7 +82,7 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 	for i := 0; i < regionRouterChanSize; i++ {
 		<-r.Chan()
 		atomic.AddUint64(&received, 1)
-		r.UseToken(store)
+		r.Acquire(store)
 	}
 
 	wg, ctx := errgroup.WithContext(ctx)
@@ -94,7 +92,7 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 
 	wg.Go(func() error {
 		for i := 0; i < regionRouterChanSize; i++ {
-			r.RevokeToken(store)
+			r.Release(store)
 		}
 		return nil
 	})
@@ -105,9 +103,9 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-r.Chan():
-				r.UseToken(store)
+				r.Acquire(store)
 				atomic.AddUint64(&received, 1)
-				r.RevokeToken(store)
+				r.Release(store)
 				funcDoSth()
 				if atomic.LoadUint64(&received) == uint64(limit*4) {
 					cancel()
@@ -123,4 +121,60 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 	err := wg.Wait()
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	c.Assert(r.tokens[store], check.Equals, 0)
+}
+
+func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	storeN := 10
+	stores := make([]string, 0, storeN)
+	for i := 0; i < storeN; i++ {
+		stores = append(stores, fmt.Sprintf("store-%d", i))
+	}
+	limit := 20
+	r := NewSizedRegionRouter(context.Background(), limit)
+
+	for _, store := range stores {
+		for j := 0; j < limit*5; j++ {
+			r.AddRegion(singleRegionInfo{ts: uint64(j), rpcCtx: &tikv.RPCContext{Addr: store}})
+		}
+	}
+	received := uint64(0)
+	wg, ctx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		return r.Run(ctx)
+	})
+
+	for _, store := range stores {
+		wg.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-r.Chan():
+					r.Acquire(store)
+					atomic.AddUint64(&received, 1)
+					r.Release(store)
+					if atomic.LoadUint64(&received) == uint64(limit*4) {
+						cancel()
+					}
+				}
+			}
+		})
+	}
+
+	for _, store := range stores {
+		for i := 0; i < limit*5; i++ {
+			r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+		}
+	}
+
+	err := wg.Wait()
+	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	for _, store := range stores {
+		c.Assert(r.tokens[store], check.Equals, 0)
+	}
 }

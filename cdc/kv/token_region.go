@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -36,31 +37,47 @@ type LimitRegionRouter interface {
 	Chan() <-chan singleRegionInfo
 	// AddRegion adds an singleRegionInfo to buffer, this function is thread-safe
 	AddRegion(task singleRegionInfo)
-	// UseToken uses one token
-	UseToken(id string)
-	// RevokeToken gives back one token, this function is thread-safe
-	RevokeToken(id string)
+	// Acquire acquires one token
+	Acquire(id string)
+	// Release gives back one token, this function is thread-safe
+	Release(id string)
 	// Run runs in background and does some logic work
 	Run(ctx context.Context) error
 }
 
+type srrMetrics struct {
+	changefeed string
+	table      string
+	tokens     map[string]prometheus.Gauge
+}
+
+func newSrrMetrics(ctx context.Context) *srrMetrics {
+	changefeed := util.ChangefeedIDFromCtx(ctx)
+	_, table := util.TableIDFromCtx(ctx)
+	return &srrMetrics{
+		changefeed: changefeed,
+		table:      table,
+		tokens:     make(map[string]prometheus.Gauge),
+	}
+}
+
 type sizedRegionRouter struct {
-	buffer          map[string][]singleRegionInfo
-	output          chan singleRegionInfo
-	lock            sync.Mutex
-	metricTokenSize prometheus.Gauge
-	tokens          map[string]int
-	sizeLimit       int
+	buffer    map[string][]singleRegionInfo
+	output    chan singleRegionInfo
+	lock      sync.Mutex
+	metrics   *srrMetrics
+	tokens    map[string]int
+	sizeLimit int
 }
 
 // NewSizedRegionRouter creates a new sizedRegionRouter
-func NewSizedRegionRouter(sizeLimit int, metric prometheus.Gauge) *sizedRegionRouter {
+func NewSizedRegionRouter(ctx context.Context, sizeLimit int) *sizedRegionRouter {
 	return &sizedRegionRouter{
-		buffer:          make(map[string][]singleRegionInfo),
-		output:          make(chan singleRegionInfo, regionRouterChanSize),
-		sizeLimit:       sizeLimit,
-		tokens:          make(map[string]int),
-		metricTokenSize: metric,
+		buffer:    make(map[string][]singleRegionInfo),
+		output:    make(chan singleRegionInfo, regionRouterChanSize),
+		sizeLimit: sizeLimit,
+		tokens:    make(map[string]int),
+		metrics:   newSrrMetrics(ctx),
 	}
 }
 
@@ -83,18 +100,24 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 	r.lock.Unlock()
 }
 
-func (r *sizedRegionRouter) UseToken(id string) {
+func (r *sizedRegionRouter) Acquire(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.tokens[id]++
-	r.metricTokenSize.Inc()
+	if _, ok := r.metrics.tokens[id]; !ok {
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(r.metrics.table, r.metrics.changefeed)
+	}
+	r.metrics.tokens[id].Inc()
 }
 
-func (r *sizedRegionRouter) RevokeToken(id string) {
+func (r *sizedRegionRouter) Release(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.tokens[id]--
-	r.metricTokenSize.Dec()
+	if _, ok := r.metrics.tokens[id]; !ok {
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(r.metrics.table, r.metrics.changefeed)
+	}
+	r.metrics.tokens[id].Dec()
 }
 
 func (r *sizedRegionRouter) Run(ctx context.Context) error {

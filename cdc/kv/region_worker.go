@@ -644,7 +644,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 			w.notifyEvTimeUpdate(regionID, true /* isDelete */)
 			state.initialized = true
-			w.session.regionRouter.RevokeToken(state.sri.rpcCtx.Addr)
+			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)

@@ -571,15 +571,13 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
-	changefeed := util.ChangefeedIDFromCtx(ctx)
-	regionTokenGauge := clientRegionTokenSize.WithLabelValues(id, changefeed)
 	return &eventFeedSession{
 		client:            client,
 		regionCache:       regionCache,
 		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(regionScanLimitPerTable, regionTokenGauge),
+		regionRouter:      NewSizedRegionRouter(ctx, regionScanLimitPerTable),
 		regionCh:          make(chan singleRegionInfo, 16),
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),
@@ -736,7 +734,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if revokeToken {
-		s.regionRouter.RevokeToken(errorInfo.rpcCtx.Addr)
+		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
 	}
 	select {
 	case s.errCh <- errorInfo:
@@ -914,7 +912,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				return errors.Trace(err)
 			}
 		} else {
-			s.regionRouter.UseToken(rpcCtx.Addr)
+			s.regionRouter.Acquire(rpcCtx.Addr)
 		}
 	}
 }
@@ -1570,7 +1568,7 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 						metricPullEventInitializedCounter.Inc()
 						initialized = true
-						s.regionRouter.RevokeToken(storeAddr)
+						s.regionRouter.Release(storeAddr)
 						cachedEvents := matcher.matchCachedRow()
 						for _, cachedEvent := range cachedEvents {
 							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
