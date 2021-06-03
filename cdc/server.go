@@ -165,14 +165,13 @@ func (s *Server) Run(ctx context.Context) error {
 	if config.NewReplicaImpl {
 		s.captureV2 = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
 		return s.run(ctx)
-	} else {
-		// When a capture suicided, restart it
-		for {
-			if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
-				return err
-			}
-			log.Info("server recovered", zap.String("capture-id", s.capture.info.ID))
+	}
+	// When a capture suicided, restart it
+	for {
+		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
+			return err
 		}
+		log.Info("server recovered", zap.String("capture-id", s.capture.info.ID))
 	}
 }
 

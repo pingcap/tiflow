@@ -77,6 +77,11 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if config.NewReplicaImpl {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 		err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 			owner.AsyncStop()
 			return nil
@@ -121,6 +126,11 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
+	}
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -173,6 +183,11 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 			return
 		}
 	}
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
+	}
 
 	err := req.ParseForm()
 	if err != nil {
@@ -193,7 +208,7 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 	} else {
 		s.owner.TriggerRebalance(changefeedID)
 	}
-	handleOwnerResp(w, nil)
+	handleOwnerResp(w, err)
 }
 
 func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
@@ -208,6 +223,11 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
+	}
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -242,7 +262,7 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 	} else {
 		s.owner.ManualSchedule(changefeedID, to, tableID)
 	}
-	handleOwnerResp(w, nil)
+	handleOwnerResp(w, err)
 }
 
 func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {
@@ -257,6 +277,11 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
+	}
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
