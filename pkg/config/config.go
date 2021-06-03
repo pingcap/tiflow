@@ -364,15 +364,15 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func GetDataDirAvailableSpace(conf *ServerConfig) (result int32, err error) {
-	if conf.DataDir == "" {
+func (c *ServerConfig) GetDataDirAvailableSpace() (result int32, err error) {
+	if c.DataDir == "" {
 		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not specified")
 	}
-	if err := util.IsDirAndWritable(conf.DataDir); err != nil {
+	if err := util.IsValidDataDir(c.DataDir); err != nil {
 		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not a directory or not be able to write")
 	}
 
-	available, err := util.GetDiskAvailableSpace(conf.DataDir)
+	available, err := util.GetDiskAvailableSpace(c.DataDir)
 	if err != nil {
 		return 0, cerror.ErrInvalidServerOption.GenWithStack("try to get the available space of data-dir failed")
 	}

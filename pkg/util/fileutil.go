@@ -44,6 +44,20 @@ func IsDirWritable(dir string) error {
 	return cerror.WrapError(cerror.ErrCheckDirWritable, os.Remove(f))
 }
 
+// IsValidDataDir check if the dir is writable and readable by cdc server
+func IsValidDataDir(dir string) error {
+	f := filepath.Join(dir, ".writable.test")
+	if err := ioutil.WriteFile(f, []byte(""), 0o600); err != nil {
+		return cerror.WrapError(cerror.ErrCheckDirWritable, err)
+	}
+
+	if _, err := ioutil.ReadFile(f); err != nil {
+		return cerror.WrapError(cerror.ErrCheckDirReadable, err)
+	}
+
+	return cerror.WrapError(cerror.ErrCheckDirValid, os.Remove(f))
+}
+
 // GetDiskAvailableSpace return the available space of the specified dir
 // the caller should guarantee that dir is a valid directory
 func GetDiskAvailableSpace(dir string) (int32, error) {
