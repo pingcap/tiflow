@@ -114,18 +114,26 @@ func (c *Capture) reset() error {
 // Run runs the capture
 func (c *Capture) Run(ctx context.Context) error {
 	defer log.Info("the capture routine has exited")
+	rl := rate.NewLimiter(0.05, 2)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
 		}
-		err := c.reset()
+		ctx, cancel := context.WithCancel(ctx)
+		c.cancel = cancel
+		err := rl.Wait(ctx)
+		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
+			return errors.Trace(err)
+		}
+		err = c.reset()
 		if err != nil {
 			return errors.Trace(err)
 		}
-		ctx, cancel := context.WithCancel(ctx)
-		c.cancel = cancel
 		err = c.run(ctx)
 		// if capture suicided, reset the capture and run again.
 		// if the canceled error throw, there are two possible scenarios:
