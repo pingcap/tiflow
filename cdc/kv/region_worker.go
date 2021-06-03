@@ -249,6 +249,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 }
 
 func (w *regionWorker) eventHandler(ctx context.Context) error {
+<<<<<<< HEAD
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricEventSize := eventSize.WithLabelValues(captureAddr)
@@ -272,10 +273,63 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			if !ok || event == nil {
 				log.Info("region worker closed by error")
 				return w.evictAllRegions(ctx)
+=======
+	preprocess := func(event *regionStatefulEvent, ok bool) (
+		exitEventHandler bool,
+		skipEvent bool,
+	) {
+		// event == nil means the region worker should exit and re-establish
+		// all existing regions.
+		if !ok || event == nil {
+			log.Info("region worker closed by error")
+			exitEventHandler = true
+			err := w.evictAllRegions(ctx)
+			if err != nil {
+				log.Warn("region worker evict all regions error", zap.Error(err))
+			}
+			return
+		}
+		if event.state.isStopped() {
+			skipEvent = true
+		}
+		return
+	}
+	pollEvent := func() (event *regionStatefulEvent, ok bool, err error) {
+		select {
+		case <-ctx.Done():
+			err = errors.Trace(ctx.Err())
+		case err = <-w.errorCh:
+		case event, ok = <-w.inputCh:
+		}
+		return
+	}
+	for {
+		event, ok, err := pollEvent()
+		if err != nil {
+			return err
+		}
+		exitEventHandler, skipEvent := preprocess(event, ok)
+		if exitEventHandler {
+			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+		}
+		if skipEvent {
+			continue
+		}
+		// We measure whether the current worker is busy based on the input
+		// channel size. If the buffered event count is larger than the high
+		// watermark, we send events to worker pool to increase processing
+		// throughput. Otherwise we process event in local region worker to
+		// ensure low processing latency.
+		if len(w.inputCh) < regionWorkerHighWatermark {
+			err = w.processEvent(ctx, event)
+			if err != nil {
+				return err
+>>>>>>> 730de16c (kv/client: fix region worker exited error (#1903))
 			}
 			if event.state.isStopped() {
 				continue
 			}
+<<<<<<< HEAD
 			event.state.lock.Lock()
 			if event.changeEvent != nil {
 				metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
@@ -306,6 +360,24 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 					if err = w.handleResolvedTs(ctx, x.ResolvedTs, event.state, metricSendEventResolvedCounter); err != nil {
 						err = w.handleSingleRegionError(ctx, err, event.state)
 					}
+=======
+			// TODO: add events in batch
+			for len(w.inputCh) >= regionWorkerLowWatermark {
+				event, ok, err = pollEvent()
+				if err != nil {
+					return err
+				}
+				exitEventHandler, skipEvent := preprocess(event, ok)
+				if exitEventHandler {
+					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+				}
+				if skipEvent {
+					continue
+				}
+				err = w.handles[int(event.regionID)%w.concurrent].AddEvent(ctx, event)
+				if err != nil {
+					return err
+>>>>>>> 730de16c (kv/client: fix region worker exited error (#1903))
 				}
 			}
 
@@ -330,7 +402,20 @@ func (w *regionWorker) run(ctx context.Context) error {
 	wg.Go(func() error {
 		return w.eventHandler(ctx)
 	})
+<<<<<<< HEAD
 	return wg.Wait()
+=======
+	wg.Go(func() error {
+		return w.collectWorkpoolError(ctx)
+	})
+	err := wg.Wait()
+	// ErrRegionWorkerExit means the region worker exits normally, but we don't
+	// need to terminate the other goroutines in errgroup
+	if cerror.ErrRegionWorkerExit.Equal(err) {
+		return nil
+	}
+	return err
+>>>>>>> 730de16c (kv/client: fix region worker exited error (#1903))
 }
 
 func (w *regionWorker) handleEventEntry(
