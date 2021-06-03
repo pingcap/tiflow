@@ -149,6 +149,7 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 	})
 
 	for _, store := range stores {
+		store := store
 		wg.Go(func() error {
 			for {
 				select {
