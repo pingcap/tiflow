@@ -279,7 +279,7 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 		}
 		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
-			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
 		}
 		if lease.TTL == int64(-1) {
 			log.Warn("session is disconnected", zap.Error(err))

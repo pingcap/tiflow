@@ -160,14 +160,14 @@ func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 
 func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
-	if err := p.handleErrorCh(ctx); err != nil {
-		return nil, errors.Trace(err)
-	}
 	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	if skip := p.checkPosition(); skip {
 		return p.changefeed, nil
+	}
+	if err := p.handleErrorCh(ctx); err != nil {
+		return nil, errors.Trace(err)
 	}
 	if err := p.lazyInit(ctx); err != nil {
 		return nil, errors.Trace(err)
