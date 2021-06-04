@@ -278,6 +278,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			return
 		}
 	}
+
 	if s.captureV2 == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)

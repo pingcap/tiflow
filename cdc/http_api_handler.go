@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	// APIOpVarChangefeeds is the key of list option in HTTP API
-	APIOpVarChangefeeds = "state"
+	// apiOpVarChangefeeds is the key of list option in HTTP API
+	apiOpVarChangefeeds = "state"
 )
 
 // JSONTime used to wrap time into json format
@@ -51,7 +51,7 @@ type httpError struct {
 // ChangefeedCommonInfo holds some common usage information of a changefeed and use by RESTful API only.
 type ChangefeedCommonInfo struct {
 	ID             string              `json:"id"`
-	FeedState      string              `json:"state"`
+	FeedState      model.FeedState     `json:"state"`
 	CheckpointTSO  uint64              `json:"checkpoint-tso"`
 	CheckpointTime JSONTime            `json:"checkpoint-time"`
 	RunningError   *model.RunningError `json:"error"`
@@ -68,65 +68,58 @@ func (s *Server) handleChangefeeds(w http.ResponseWriter, req *http.Request) {
 		s.handleChangefeedsList(w, req)
 		return
 	}
+	// Only the get method is allowed at this stage,
+	// if it is not the get method, an error will be returned directly
+	writeErrorJSON(w, http.StatusBadRequest, *cerror.ErrSupportGetOnly)
 }
 
 // handleChangefeedsList will only received request with Get method from dispatcher.
 func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request) {
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner == nil {
-		writeErrorJSON(w, http.StatusBadRequest, *cerror.ErrNotOwner)
-		return
-	}
-
 	err := req.ParseForm()
 	if err != nil {
 		writeInternalServerErrorJSON(w, cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
+	state := req.Form.Get(apiOpVarChangefeeds)
 
-	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
+	statuses, err := s.etcdClient.GetAllChangeFeedStatus(req.Context())
 	if err != nil {
 		writeInternalServerErrorJSON(w, err)
 		return
 	}
-	changefeedIDs := make(map[string]struct{}, len(statuses))
 
+	changefeedIDs := make(map[string]struct{}, len(statuses))
 	for cid := range statuses {
 		changefeedIDs[cid] = struct{}{}
 	}
 
-	state := req.Form.Get(APIOpVarChangefeeds)
-
 	resps := make([]*ChangefeedCommonInfo, 0)
 	for changefeedID := range changefeedIDs {
-		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
+		cfInfo, err := s.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
-		if !httputil.IsFilter(state, feedState) {
+		if !httputil.IsFilter(state, cfInfo.State) {
 			continue
 		}
-		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+		cfStatus, _, err := s.etcdClient.GetChangeFeedStatus(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
 		resp := &ChangefeedCommonInfo{
-			ID:        changefeedID,
-			FeedState: string(feedState),
+			ID: changefeedID,
 		}
 
-		if cf != nil {
-			resp.RunningError = cf.info.Error
-		} else if feedInfo != nil {
-			resp.RunningError = feedInfo.Error
+		if cfInfo != nil {
+			resp.FeedState = cfInfo.State
+			resp.RunningError = cfInfo.Error
 		}
 
-		if status != nil {
-			resp.CheckpointTSO = status.CheckpointTs
-			tm := oracle.GetTimeFromTS(status.CheckpointTs)
+		if cfStatus != nil {
+			resp.CheckpointTSO = cfStatus.CheckpointTs
+			tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
 			resp.CheckpointTime = JSONTime(tm)
 		}
 		resps = append(resps, resp)

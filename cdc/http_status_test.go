@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -75,7 +74,6 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	testHandleRebalance(c)
 	testHandleMoveTable(c)
 	testHandleChangefeedQuery(c)
-	testHandleChangefeeds(c)
 	testHandleFailpoint(c)
 }
 
@@ -116,20 +114,6 @@ func testHandleChangefeedQuery(c *check.C) {
 	uri := fmt.Sprintf("http://%s/capture/owner/changefeed/query", advertiseAddr4Test)
 	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHandleChangefeeds(c *check.C) {
-	uri := fmt.Sprintf("http://%s/api/v1/changefeeds", advertiseAddr4Test)
-	resp, err := http.Get(uri)
-	c.Assert(err, check.IsNil)
-	data, err := ioutil.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
-	httpErr := httpError{}
-	err = json.Unmarshal(data, &httpErr)
-	c.Assert(err, check.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
-	c.Assert(httpErr.Message, check.Equals, cerror.ErrNotOwner.GetMsg())
 }
 
 func testHTTPPostOnly(c *check.C, uri string) {
