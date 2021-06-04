@@ -129,7 +129,7 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	storeN := 10
+	storeN := 5
 	stores := make([]string, 0, storeN)
 	for i := 0; i < storeN; i++ {
 		stores = append(stores, fmt.Sprintf("store-%d", i))
@@ -138,7 +138,7 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 	r := NewSizedRegionRouter(context.Background(), limit)
 
 	for _, store := range stores {
-		for j := 0; j < limit*5; j++ {
+		for j := 0; j < limit*2; j++ {
 			r.AddRegion(singleRegionInfo{ts: uint64(j), rpcCtx: &tikv.RPCContext{Addr: store}})
 		}
 	}
@@ -159,7 +159,7 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 					r.Acquire(store)
 					atomic.AddUint64(&received, 1)
 					r.Release(store)
-					if atomic.LoadUint64(&received) == uint64(limit*10) {
+					if atomic.LoadUint64(&received) == uint64(limit*4*storeN) {
 						cancel()
 					}
 				}
@@ -168,7 +168,7 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 	}
 
 	for _, store := range stores {
-		for i := 0; i < limit*5; i++ {
+		for i := 0; i < limit*2; i++ {
 			r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 		}
 	}
