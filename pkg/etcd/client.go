@@ -39,8 +39,10 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
-	maxTries            = 8
 )
+
+// set to var instead of const for mocking the value to speedup test
+var maxTries int64 = 8
 
 // Client is a simple wrapper that adds retry to etcd RPC
 type Client struct {
