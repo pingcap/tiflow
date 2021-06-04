@@ -163,6 +163,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Sorter.MaxMemoryPressure = serverConfig.Sorter.MaxMemoryPressure
 		case "sorter-max-memory-consumption":
 			conf.Sorter.MaxMemoryConsumption = serverConfig.Sorter.MaxMemoryConsumption
+		case "sort-dir":
+			conf.Sorter.SortDir = serverConfig.Sorter.SortDir
 		case "ca":
 			conf.Security.CAPath = serverConfig.Security.CAPath
 		case "cert":
@@ -171,7 +173,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.KeyPath = serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
-		case "pd", "config", "sort-dir":
+		case "pd", "config":
 			// do nothing
 		default:
 			log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
@@ -204,8 +206,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	}
 
 	if serverConfig.Sorter.SortDir != "/tmp/cdc_sort" {
-		cmd.Printf("[WARN] --data-dir is specified, and sorter files will be located" +
-			"at {data-dir}/tmp/cdc_sort\n")
+		log.Warn(fmt.Sprintf("--data-dir is specified, sorter files will be located"+
+			"at %s\n", conf.Sorter.SortDir))
 	}
 
 	return conf, nil

@@ -37,6 +37,8 @@ const (
 	NewReplicaImpl = true
 	// DataDirWarnThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	DataDirWarnThreshold = 200
+	// defaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
+	defaultSortDir = "/tmp/cdc_sort"
 )
 
 func init() {
@@ -169,7 +171,7 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryPressure:      80,
 		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
 		NumWorkerPoolGoroutine: 16,
-		SortDir:                "/tmp/cdc_sort",
+		SortDir:                defaultSortDir,
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
@@ -246,7 +248,7 @@ func (c *ServerConfig) Clone() *ServerConfig {
 // InitDataDir can be used to put any path related to data-dir,
 // at the moment, only for sort-dir
 func (c *ServerConfig) InitDataDir() {
-	c.Sorter.SortDir = filepath.Join(c.DataDir, c.Sorter.SortDir)
+	c.Sorter.SortDir = filepath.Join(c.DataDir, defaultSortDir)
 }
 
 // ValidateAndAdjust validates and adjusts the server configuration

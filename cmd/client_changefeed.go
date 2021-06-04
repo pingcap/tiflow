@@ -40,12 +40,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// Use the empty string as the default to let the server local setting override the changefeed setting.
-	// TODO remove this when we change the changefeed `sort-dir` to no-op, which it currently is NOT.
-	defaultSortDir = ""
-)
-
 var forceEnableOldValueProtocols = []string{
 	"canal",
 	"maxwell",
@@ -250,7 +244,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if sinkURI == "" {
-			return nil, errors.New("Creating chengfeed without a sink-uri")
+			return nil, errors.New("Creating changefeed without a sink-uri")
 		}
 		if startTs == 0 {
 			ts, logical, err := pdCli.GetTS(ctx)
@@ -361,10 +355,10 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 	}
 
 	if sortDir != "" {
-		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. " +
-			"Please use `cdc server --data-dir` instead if possible. " +
-			"The sort-dir here will be no-op, and the sorter file will be" +
-			"located at {data-dir}/tmp/cdc_sort\n")
+		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. "+
+			"Please use `cdc server --data-dir` instead if possible. "+
+			"The sort-dir here will be no-op, and the sorter file will be"+
+			"located at %s\n", config.GetGlobalServerConfig().Sorter.SortDir)
 	}
 
 	if info.Engine == model.SortInFile {
@@ -440,14 +434,14 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
-	command.PersistentFlags().StringVar(&sortDir, "sort-dir", defaultSortDir, "directory used for data sort")
+	command.PersistentFlags().StringVar(&sortDir, "sort-dir", "", "directory used for data sort")
 	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
 	command.PersistentFlags().BoolVar(&syncPointEnabled, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
 	command.PersistentFlags().DurationVar(&syncPointInterval, "sync-interval", 10*time.Minute, "(Expremental) Set the interval for syncpoint in replication(default 10min)")
-	command.PersistentFlags().MarkHidden("sort-dir") //nolint:errcheck
+	_ = command.PersistentFlags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
 func newCreateChangefeedCommand() *cobra.Command {
