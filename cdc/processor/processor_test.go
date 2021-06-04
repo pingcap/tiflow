@@ -104,7 +104,7 @@ func (m *mockTablePipeline) Cancel() {
 }
 
 func (m *mockTablePipeline) Wait() {
-	panic("not implemented") // TODO: Implement
+	// do nothing
 }
 
 func (s *processorSuite) TestCheckTablesNum(c *check.C) {
