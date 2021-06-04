@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/ratelimit"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -204,6 +205,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			"table":      tableName,
 		})
 
+		rateLimiter := ratelimit.New(100000)
+
 		nextSorterID := 0
 		for {
 			// tentative value 1280000
@@ -219,6 +222,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			case <-subctx.Done():
 				return subctx.Err()
 			case event := <-s.inputCh:
+				rateLimiter.Take()
+
 				if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
 					// broadcast resolved events
 					for _, sorter := range heapSorters {
