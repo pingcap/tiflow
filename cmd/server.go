@@ -193,6 +193,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		}
 	}
 
+	conf.InitDataDir()
+
 	available, err := conf.GetDataDirAvailableSpace()
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -176,6 +176,7 @@ var defaultServerConfig = &ServerConfig{
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+		RegionScanLimit:  40,
 	},
 }
 
@@ -242,9 +243,9 @@ func (c *ServerConfig) Clone() *ServerConfig {
 	return clone
 }
 
-// this can be used to put any path related to data-dir,
+// InitDataDir can be used to put any path related to data-dir,
 // at the moment, only for sort-dir
-func (c *ServerConfig) initDataDir() {
+func (c *ServerConfig) InitDataDir() {
 	c.Sorter.SortDir = filepath.Join(c.DataDir, c.Sorter.SortDir)
 }
 
@@ -317,7 +318,15 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
 	}
 
-	c.initDataDir()
+	if c.KVClient == nil {
+		c.KVClient = defaultServerConfig.KVClient
+	}
+	if c.KVClient.WorkerConcurrent <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
+	if c.KVClient.RegionScanLimit <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
 
 	return nil
 }
@@ -364,6 +373,7 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// GetDataDirAvailableSpace validate the specified data-dir, and return the available space
 func (c *ServerConfig) GetDataDirAvailableSpace() (result int32, err error) {
 	if c.DataDir == "" {
 		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not specified")
