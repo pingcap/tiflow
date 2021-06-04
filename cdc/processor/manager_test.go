@@ -88,7 +88,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
-			Tables: map[int64]*model.TableReplicaInfo{},
+			Tables: map[int64]*model.TableReplicaInfo{1: {}},
 		}, true, nil
 	})
 	s.tester.MustApplyPatches()
@@ -139,7 +139,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
-			Tables: map[int64]*model.TableReplicaInfo{},
+			Tables: map[int64]*model.TableReplicaInfo{1: {}},
 		}, true, nil
 	})
 	s.tester.MustApplyPatches()
@@ -193,7 +193,7 @@ func (s *managerSuite) TestClose(c *check.C) {
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
-			Tables: map[int64]*model.TableReplicaInfo{},
+			Tables: map[int64]*model.TableReplicaInfo{1: {}},
 		}, true, nil
 	})
 	s.tester.MustApplyPatches()
