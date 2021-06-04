@@ -44,6 +44,8 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--data-dir=/tidb-data"}), check.IsNil)
 	cfg, err := loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.ErrorMatches, "*data-dir is not a directory or not be able to write*")
+	c.Assert(cfg, check.IsNil)
 
 	defcfg := config.GetDefaultServerConfig()
 	c.Assert(defcfg.ValidateAndAdjust(), check.IsNil)
