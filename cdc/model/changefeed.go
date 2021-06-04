@@ -60,8 +60,13 @@ const (
 
 	// errorHistoryThreshold represents failure upper limit in time window.
 	// Before a changefeed is initialized, check the the failure count of this
+<<<<<<< HEAD
 	// changefeed, if it is less than errorHistoryThreshold, then initialize it.
 	errorHistoryThreshold = 5
+=======
+	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
+	ErrorHistoryThreshold = 3
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed

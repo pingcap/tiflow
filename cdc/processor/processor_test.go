@@ -166,7 +166,7 @@ func (m *mockTablePipeline) Cancel() {
 }
 
 func (m *mockTablePipeline) Wait() {
-	panic("not implemented") // TODO: Implement
+	// do nothing
 }
 
 type mockSchemaStorage struct {
@@ -306,6 +306,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	})
 
 	// clear finished operations
+<<<<<<< HEAD
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
@@ -315,6 +316,9 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 		},
 		Operation: nil,
 	})
+=======
+	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 
 	// remove table, in processing
 	p.changefeed.TaskStatus.RemoveTable(66, 120, false)
@@ -474,6 +478,7 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(table3.canceled, check.IsTrue)
 
 	// clear finished operations
+<<<<<<< HEAD
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	applyPatches(c, p.changefeed)
@@ -486,6 +491,9 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 		Operation: nil,
 	})
 	c.Assert(p.tables, check.HasLen, 3)
+=======
+	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 
 	// remove table, in processing
 	p.changefeed.TaskStatus.RemoveTable(1, 120, false)
@@ -575,7 +583,7 @@ func (s *processorSuite) TestProcessorError(c *check.C) {
 	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
-			Code:    "CDC:ErrProcessorUnknown",
+			Code:    "CDC:ErrSinkURIInvalid",
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 		},
 	})
@@ -654,10 +662,14 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	c.Assert(p.changefeed.Workload, check.DeepEquals, model.TaskWorkload{1: {Workload: 1}, 2: {Workload: 1}})
 
 	c.Assert(p.Close(), check.IsNil)
+<<<<<<< HEAD
 	applyPatches(c, p.changefeed)
 	c.Assert(p.changefeed.TaskPosition, check.IsNil)
 	c.Assert(p.changefeed.TaskStatus, check.IsNil)
 	c.Assert(p.changefeed.Workload, check.IsNil)
+=======
+	tester.MustApplyPatches()
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
 
@@ -681,6 +693,7 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	applyPatches(c, p.changefeed)
 
 	c.Assert(p.Close(), check.IsNil)
+<<<<<<< HEAD
 	applyPatches(c, p.changefeed)
 	c.Assert(p.changefeed.TaskPosition, check.DeepEquals, &model.TaskPosition{
 		Error: &model.RunningError{
@@ -691,6 +704,14 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	})
 	c.Assert(p.changefeed.TaskStatus, check.IsNil)
 	c.Assert(p.changefeed.Workload, check.IsNil)
+=======
+	tester.MustApplyPatches()
+	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].Error, check.DeepEquals, &model.RunningError{
+		Addr:    "127.0.0.1:0000",
+		Code:    "CDC:ErrSinkURIInvalid",
+		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+	})
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
 }
@@ -736,4 +757,19 @@ func (s *processorSuite) TestPositionDeleted(c *check.C) {
 		CheckPointTs: 30,
 		ResolvedTs:   30,
 	})
+}
+
+func cleanUpFinishedOpOperation(state *model.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
+	state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		if status == nil || status.Operation == nil {
+			return status, false, nil
+		}
+		for tableID, opt := range status.Operation {
+			if opt.Done && opt.Status == model.OperFinished {
+				delete(status.Operation, tableID)
+			}
+		}
+		return status, true, nil
+	})
+	tester.MustApplyPatches()
 }

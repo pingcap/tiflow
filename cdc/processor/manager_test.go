@@ -70,6 +70,7 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 	c.Assert(m.processors, check.HasLen, 0)
 
 	// an active changefeed
+<<<<<<< HEAD
 	state.Changefeeds["test-changefeed"].Info = &model.ChangeFeedInfo{
 		SinkURI:    "blackhole://",
 		CreateTime: time.Now(),
@@ -82,6 +83,28 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 		Tables: map[int64]*model.TableReplicaInfo{},
 	}
 	_, err = m.Tick(ctx, state)
+=======
+	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI:    "blackhole://",
+			CreateTime: time.Now(),
+			StartTs:    0,
+			TargetTs:   math.MaxUint64,
+			Config:     config.GetDefaultReplicaConfig(),
+		}, true, nil
+	})
+	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		return &model.TaskStatus{
+			Tables: map[int64]*model.TableReplicaInfo{1: {}},
+		}, true, nil
+	})
+	s.tester.MustApplyPatches()
+	_, err = s.manager.Tick(ctx, s.state)
+	s.tester.MustApplyPatches()
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 1)
 
@@ -107,6 +130,7 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// an active changefeed
+<<<<<<< HEAD
 	state.Changefeeds["test-changefeed"] = newChangeFeedState("test-changefeed", state.CaptureID)
 	state.Changefeeds["test-changefeed"].Info = &model.ChangeFeedInfo{
 		SinkURI:    "blackhole://",
@@ -120,6 +144,28 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 		Tables: map[int64]*model.TableReplicaInfo{},
 	}
 	_, err = m.Tick(ctx, state)
+=======
+	s.state.Changefeeds["test-changefeed"] = model.NewChangefeedReactorState("test-changefeed")
+	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI:    "blackhole://",
+			CreateTime: time.Now(),
+			StartTs:    0,
+			TargetTs:   math.MaxUint64,
+			Config:     config.GetDefaultReplicaConfig(),
+		}, true, nil
+	})
+	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		return &model.TaskStatus{
+			Tables: map[int64]*model.TableReplicaInfo{1: {}},
+		}, true, nil
+	})
+	s.tester.MustApplyPatches()
+	_, err = s.manager.Tick(ctx, s.state)
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 1)
 	done := make(chan struct{})
@@ -156,6 +202,7 @@ func (s *managerSuite) TestClose(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// an active changefeed
+<<<<<<< HEAD
 	state.Changefeeds["test-changefeed"] = newChangeFeedState("test-changefeed", state.CaptureID)
 	state.Changefeeds["test-changefeed"].Info = &model.ChangeFeedInfo{
 		SinkURI:    "blackhole://",
@@ -169,6 +216,28 @@ func (s *managerSuite) TestClose(c *check.C) {
 		Tables: map[int64]*model.TableReplicaInfo{},
 	}
 	_, err = m.Tick(ctx, state)
+=======
+	s.state.Changefeeds["test-changefeed"] = model.NewChangefeedReactorState("test-changefeed")
+	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI:    "blackhole://",
+			CreateTime: time.Now(),
+			StartTs:    0,
+			TargetTs:   math.MaxUint64,
+			Config:     config.GetDefaultReplicaConfig(),
+		}, true, nil
+	})
+	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		return &model.TaskStatus{
+			Tables: map[int64]*model.TableReplicaInfo{1: {}},
+		}, true, nil
+	})
+	s.tester.MustApplyPatches()
+	_, err = s.manager.Tick(ctx, s.state)
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	c.Assert(err, check.IsNil)
 	c.Assert(m.processors, check.HasLen, 1)
 
