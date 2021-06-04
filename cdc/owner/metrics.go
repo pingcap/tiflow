@@ -46,6 +46,13 @@ var (
 		}, []string{"changefeed", "capture", "type"})
 )
 
+const (
+	// total tables that have been dispatched to a single processor
+	maintainTableTypeTotal string = "total"
+	// tables that are dispatched to a processor and have not been finished yet
+	maintainTableTypeWip string = "wip"
+)
+
 // InitMetrics registers all metrics used in owner
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedCheckpointTsGauge)
