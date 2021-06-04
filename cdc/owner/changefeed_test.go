@@ -271,9 +271,11 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
 	}
-
-	c.Assert(mockAsyncSink.syncPointHis[0], check.Equals, ctx.ChangefeedVars().Info.StartTs-1)
-	c.Assert(mockAsyncSink.syncPointHis[len(mockAsyncSink.syncPointHis)-1], check.Equals, state.Status.CheckpointTs)
+	for i := 1; i < len(mockAsyncSink.syncPointHis); i++ {
+		// check the time interval between adjacent sync points is less or equal than one second
+		c.Assert(mockAsyncSink.syncPointHis[i]-mockAsyncSink.syncPointHis[i-1], check.LessEqual, uint64(1000<<18))
+	}
+	c.Assert(len(mockAsyncSink.syncPointHis), check.GreaterEqual, 5)
 }
 
 func (s *changefeedSuite) TestFinished(c *check.C) {

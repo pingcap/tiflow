@@ -104,7 +104,7 @@ func (m *mockTablePipeline) Cancel() {
 }
 
 func (m *mockTablePipeline) Wait() {
-	panic("not implemented") // TODO: Implement
+	// do nothing
 }
 
 func (s *processorSuite) TestCheckTablesNum(c *check.C) {
@@ -225,15 +225,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	})
 
 	// clear finished operations
-	_, err = p.Tick(ctx, p.changefeed)
-	c.Assert(err, check.IsNil)
-	tester.MustApplyPatches()
-	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			66: {StartTs: 60},
-		},
-		Operation: nil,
-	})
+	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
 
 	// remove table, in processing
 	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
@@ -392,18 +384,7 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(table3.canceled, check.IsTrue)
 
 	// clear finished operations
-	_, err = p.Tick(ctx, p.changefeed)
-	c.Assert(err, check.IsNil)
-	tester.MustApplyPatches()
-	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			1: {StartTs: 60},
-			2: {StartTs: 50},
-			4: {StartTs: 30},
-		},
-		Operation: nil,
-	})
-	c.Assert(p.tables, check.HasLen, 3)
+	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
 
 	// remove table, in processing
 	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
@@ -501,7 +482,7 @@ func (s *processorSuite) TestProcessorError(c *check.C) {
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID], check.DeepEquals, &model.TaskPosition{
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
-			Code:    "CDC:ErrProcessorUnknown",
+			Code:    "CDC:ErrSinkURIInvalid",
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 		},
 	})
@@ -596,9 +577,6 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 
 	c.Assert(p.Close(), check.IsNil)
 	tester.MustApplyPatches()
-	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID], check.IsNil)
-	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.IsNil)
-	c.Assert(p.changefeed.Workloads[p.captureInfo.ID], check.IsNil)
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
 
@@ -629,11 +607,9 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	tester.MustApplyPatches()
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].Error, check.DeepEquals, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
-		Code:    "CDC:ErrProcessorUnknown",
+		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
 	})
-	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.IsNil)
-	c.Assert(p.changefeed.Workloads[p.captureInfo.ID], check.IsNil)
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
 }
@@ -684,4 +660,19 @@ func (s *processorSuite) TestPositionDeleted(c *check.C) {
 		CheckPointTs: 30,
 		ResolvedTs:   30,
 	})
+}
+
+func cleanUpFinishedOpOperation(state *model.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
+	state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		if status == nil || status.Operation == nil {
+			return status, false, nil
+		}
+		for tableID, opt := range status.Operation {
+			if opt.Done && opt.Status == model.OperFinished {
+				delete(status.Operation, tableID)
+			}
+		}
+		return status, true, nil
+	})
+	tester.MustApplyPatches()
 }
