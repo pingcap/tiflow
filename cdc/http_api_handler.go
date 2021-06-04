@@ -86,11 +86,12 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	}
 
 	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
-	changefeedIDs := make(map[string]struct{}, len(statuses))
 	if err != nil {
 		writeInternalServerErrorJSON(w, err)
 		return
 	}
+	changefeedIDs := make(map[string]struct{}, len(statuses))
+
 	for cid := range statuses {
 		changefeedIDs[cid] = struct{}{}
 	}
@@ -118,10 +119,8 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 		}
 
 		if cf != nil {
-			// httpErr := httpError{cf.info.Error.Message, errors.RFCErrorCode(cf.info.Error.Code)}
 			resp.RunningError = cf.info.Error
 		} else if feedInfo != nil {
-			// httpErr := httpError{feedInfo.Error.Message, errors.RFCErrorCode(feedInfo.Error.Code)}
 			resp.RunningError = feedInfo.Error
 		}
 
