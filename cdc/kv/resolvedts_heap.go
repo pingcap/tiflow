@@ -28,6 +28,10 @@ func newResolvedTsItem(ts uint64) tsItem {
 	return tsItem{resolvedTs: ts, eventTime: time.Now()}
 }
 
+func newResolvedTsEvItem(ts uint64) tsItem {
+	return tsItem{sortByEvTime: true, resolvedTs: ts, eventTime: time.Now()}
+}
+
 func newEventTimeItem() tsItem {
 	return tsItem{sortByEvTime: true, eventTime: time.Now()}
 }

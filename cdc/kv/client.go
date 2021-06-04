@@ -1512,7 +1512,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			if sinceLastEvent > reconnectInterval {
+			if sinceLastEvent > reconnectInterval && initialized {
 				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
 				return lastResolvedTs, errReconnect
 			}
@@ -1523,7 +1523,7 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
-			if sinceLastResolvedTs > resolveLockInterval && initialized {
+			if sinceLastResolvedTs > resolveLockInterval && sinceLastEvent > resolveLockInterval && initialized {
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),

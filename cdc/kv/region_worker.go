@@ -334,9 +334,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()
-				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.ts.resolvedTs))
+				sinceLastEvent := time.Since(item.ts.eventTime)
 				// region does not reach resolve lock boundary, put it back
-				if sinceLastResolvedTs < resolveLockInterval {
+				if sinceLastEvent < resolveLockInterval {
 					w.rtsManager.Upsert(item)
 					break
 				}
@@ -373,6 +373,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					}
 				}
 				rts.ts.resolvedTs = lastResolvedTs
+				rts.ts.eventTime = time.Now()
 				w.rtsManager.Upsert(rts)
 			}
 		}
@@ -644,7 +645,7 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
 			select {
-			case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(state.sri.ts)}:
+			case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsEvItem(state.sri.ts)}:
 			default:
 				// rtsUpdateCh block often means too many regions are suffering
 				// lock resolve, the kv client status is not very healthy.
@@ -757,7 +758,7 @@ func (w *regionWorker) handleResolvedTs(
 	// Send resolved ts update in non blocking way, since we can re-query real
 	// resolved ts from region state even if resolved ts update is discarded.
 	select {
-	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)}:
+	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsEvItem(resolvedTs)}:
 	default:
 	}
 
