@@ -100,7 +100,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
 				continue
 			}
-			// the processor should start after one table added to this processor at least
+			// the processor should start after at least one table has been added to this capture
 			taskStatus := changefeedState.TaskStatuses[captureID]
 			if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
 				continue
