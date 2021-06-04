@@ -100,12 +100,6 @@ type status struct {
 	IsOwner bool   `json:"is_owner"`
 }
 
-// err of cdc http api
-type httpError struct {
-	Message string              `json:"error"`
-	Code    errors.RFCErrorCode `json:"errorCode"`
-}
-
 func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
 	resp, err := cli.Client.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
@@ -159,30 +153,11 @@ func writeInternalServerError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusInternalServerError, err)
 }
 
-func writeInternalServerErrorJSON(w http.ResponseWriter, err error) {
-	writeErrorJSON(w, http.StatusInternalServerError, *cerror.ErrInternalServerError.Wrap(err))
-}
-
 func writeError(w http.ResponseWriter, statusCode int, err error) {
 	w.WriteHeader(statusCode)
 	_, err = w.Write([]byte(err.Error()))
 	if err != nil {
 		log.Error("write error", zap.Error(err))
-	}
-}
-
-func writeErrorJSON(w http.ResponseWriter, statusCode int, cerr errors.Error) {
-	httpErr := httpError{Code: cerr.RFCCode(), Message: cerr.GetMsg()}
-	jsonStr, err := json.MarshalIndent(httpErr, "", " ")
-	if err != nil {
-		log.Error("invalid json data", zap.Reflect("data", err), zap.Error(err))
-		return
-	}
-	w.WriteHeader(statusCode)
-	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(jsonStr)
-	if err != nil {
-		log.Error("fail to write data", zap.Error(err))
 	}
 }
 

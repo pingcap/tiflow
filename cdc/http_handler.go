@@ -16,17 +16,14 @@ package cdc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -42,8 +39,6 @@ const (
 	APIOpVarTargetCaptureID = "target-cp-id"
 	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table-id"
-	// APIOpVarChangefeeds is the key of list option in HTTP API
-	APIOpVarChangefeeds = "state"
 	// APIOpForceRemoveChangefeed is used when remove a changefeed
 	APIOpForceRemoveChangefeed = "force-remove"
 )
@@ -51,24 +46,6 @@ const (
 type commonResp struct {
 	Status  bool   `json:"status"`
 	Message string `json:"message"`
-}
-
-// JSONTime used to wrap time into json format
-type JSONTime time.Time
-
-// MarshalJSON use to specify the time format
-func (t JSONTime) MarshalJSON() ([]byte, error) {
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05.000"))
-	return []byte(stamp), nil
-}
-
-// ChangefeedCommonInfo holds some common usage information of a changefeed and use by RESTful API only.
-type ChangefeedCommonInfo struct {
-	ID             string              `json:"id"`
-	FeedState      string              `json:"state"`
-	CheckpointTSO  uint64              `json:"checkpoint-tso"`
-	CheckpointTime JSONTime            `json:"checkpoint-time"`
-	RunningError   *model.RunningError `json:"error"`
 }
 
 // ChangefeedResp holds the most common usage information for a changefeed
@@ -283,77 +260,6 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	writeData(w, resp)
 }
 
-// handleChangefeeds dispatch the request to the specified handleFunc according to the request method.
-func (s *Server) handleChangefeeds(w http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodGet {
-		s.handleChangefeedsList(w, req)
-		return
-	}
-}
-
-// handleChangefeedsList will only received request with Get method from dispatcher.
-func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request) {
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner == nil {
-		writeErrorJSON(w, http.StatusOK, *cerror.ErrNotOwner)
-		return
-	}
-
-	err := req.ParseForm()
-	if err != nil {
-		writeInternalServerErrorJSON(w, cerror.WrapError(cerror.ErrInternalServerError, err))
-		return
-	}
-
-	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
-	changefeedIDs := make(map[string]struct{}, len(statuses))
-	if err != nil {
-		writeInternalServerErrorJSON(w, err)
-		return
-	}
-	for cid := range statuses {
-		changefeedIDs[cid] = struct{}{}
-	}
-
-	state := req.Form.Get(APIOpVarChangefeeds)
-
-	resps := make([]*ChangefeedCommonInfo, 0)
-	for changefeedID := range changefeedIDs {
-		cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
-		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-			writeInternalServerErrorJSON(w, err)
-			return
-		}
-		if !httputil.IsFilter(state, feedState) {
-			continue
-		}
-		feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
-		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-			writeInternalServerErrorJSON(w, err)
-			return
-		}
-		resp := &ChangefeedCommonInfo{
-			ID:        changefeedID,
-			FeedState: string(feedState),
-		}
-
-		if cf != nil {
-			resp.RunningError = cf.info.Error
-		} else if feedInfo != nil {
-			resp.RunningError = feedInfo.Error
-		}
-
-		if status != nil {
-			resp.CheckpointTSO = status.CheckpointTs
-			tm := oracle.GetTimeFromTS(status.CheckpointTs)
-			resp.CheckpointTime = JSONTime(tm)
-		}
-		resps = append(resps, resp)
-	}
-	writeData(w, resps)
-}
-
 func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	var level string
 	data, err := ioutil.ReadAll(r.Body)
@@ -378,9 +284,4 @@ func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	log.Warn("log level changed", zap.String("level", level))
 
 	writeData(w, struct{}{})
-}
-
-// handleHealth check if is this server is health
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
 }

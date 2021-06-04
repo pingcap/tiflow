@@ -127,7 +127,7 @@ func testHandleChangefeeds(c *check.C) {
 	json.Unmarshal(data, &httpErr)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
-	c.Assert(httpErr.Error, check.Equals, concurrency.ErrElectionNotLeader.Error())
+	c.Assert(httpErr.Message, check.Equals, cerror.ErrNotOwner.GetMsg())
 }
 
 func testHTTPPostOnly(c *check.C, uri string) {
