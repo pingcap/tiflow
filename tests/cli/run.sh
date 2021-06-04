@@ -136,11 +136,6 @@ EOF
         echo "[$(date)] <<<<< expected deprecation warning when trying to update sort-dir >>>>>"
         exit 1
     fi
-    changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
-    if [[ ! $changefeed_info == *"\"sort-dir\": \"/test\""* ]]; then
-        echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-        exit 1
-    fi
 
     # Resume changefeed
     run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
