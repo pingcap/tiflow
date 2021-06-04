@@ -69,7 +69,7 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().Int64Var(&serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	cmd.Flags().StringVar(&serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
-	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "Set the dir to store CDC generated data")
+	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "Set the dir to store CDC generated data (required)")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
 
@@ -84,6 +84,9 @@ func initServerCmd(cmd *cobra.Command) {
 
 	addSecurityFlags(cmd.Flags(), true /* isServer */)
 	cmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
+
+	_ = cmd.MarkFlagRequired("data-dir")   //nolint:errcheck
+	_ = cmd.Flags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
@@ -203,11 +206,6 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	}
 	if available < config.DataDirWarnThreshold {
 		log.Warn(fmt.Sprintf("the available space of data-dir is %dGB, please make sure more than 200GB available for the disk", available))
-	}
-
-	if serverConfig.Sorter.SortDir != "/tmp/cdc_sort" {
-		log.Warn(fmt.Sprintf("--data-dir is specified, sorter files will be located"+
-			"at %s\n", conf.Sorter.SortDir))
 	}
 
 	return conf, nil

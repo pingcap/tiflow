@@ -42,10 +42,8 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	// test default flag values
 	cmd := new(cobra.Command)
 	initServerCmd(cmd)
-	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
+	c.Assert(cmd.ParseFlags([]string{"--data-dir=/tidb-data"}), check.IsNil)
 	cfg, err := loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.ErrorMatches, "*data-dir is not specified*")
-	c.Assert(cfg, check.IsNil)
 
 	defcfg := config.GetDefaultServerConfig()
 	c.Assert(defcfg.ValidateAndAdjust(), check.IsNil)
@@ -69,11 +67,11 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--PD="}), check.ErrorMatches, ".*unknown flag: --PD.*")
-	_, err = loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.ErrorMatches, "*data-dir is not specified*")
 
 	// test data-dir
 	dataDir := c.MkDir()
+	cmd = new(cobra.Command)
+	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--data-dir=" + dataDir}), check.IsNil)
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)

@@ -377,9 +377,6 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 
 // GetDataDirAvailableSpace validate the specified data-dir, and return the available space
 func (c *ServerConfig) GetDataDirAvailableSpace() (result int32, err error) {
-	if c.DataDir == "" {
-		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not specified")
-	}
 	if err := util.IsValidDataDir(c.DataDir); err != nil {
 		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not a directory or not be able to write")
 	}
