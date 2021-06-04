@@ -45,7 +45,7 @@ var (
 	// other components in TiCDC, including worker pool task chan size, mounter
 	// chan size etc.
 	// TODO: unified channel buffer mechanism
-	regionWorkerInputChanSize = 128000
+	regionWorkerInputChanSize = 12800
 	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
 	regionWorkerHighWatermark = int(float64(regionWorkerInputChanSize) * 0.7)
 )
@@ -601,9 +601,9 @@ func (w *regionWorker) run(ctx context.Context) error {
 	wg.Go(func() error {
 		return w.checkErrorReconnect(w.resolveLock(ctx))
 	})
-	wg.Go(func() error {
-		return w.checkErrorReconnect(w.checkUnInitRegions(ctx))
-	})
+	// wg.Go(func() error {
+	// 	return w.checkErrorReconnect(w.checkUnInitRegions(ctx))
+	// })
 	wg.Go(func() error {
 		return w.eventHandler(ctx)
 	})
@@ -651,7 +651,7 @@ func (w *regionWorker) handleEventEntry(
 				// lock resolve, the kv client status is not very healthy.
 				log.Warn("region is not upsert into rts manager", zap.Uint64("region-id", regionID))
 			}
-			w.notifyEvTimeUpdate(regionID, true /* isDelete */)
+			// w.notifyEvTimeUpdate(regionID, true /* isDelete */)
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()

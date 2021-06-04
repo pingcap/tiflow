@@ -990,7 +990,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	}()
 
 	ts := state.sri.ts
-	maxTs, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span,
+	maxTs, initialized, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span,
 		state.sri.ts, state.sri.rpcCtx.Addr, receiver)
 	log.Debug("singleEventFeed quit")
 
@@ -1052,11 +1052,10 @@ func (s *eventFeedSession) partialRegionFeed(
 		}
 	}
 
-	revokeToken := !state.initialized
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, revokeToken)
+	}, !initialized)
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -1425,7 +1424,7 @@ func (s *eventFeedSession) singleEventFeed(
 	startTs uint64,
 	storeAddr string,
 	receiverCh <-chan *regionEvent,
-) (uint64, error) {
+) (lastResolvedTs uint64, initialized bool, err error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricEventSize := eventSize.WithLabelValues(captureAddr)
@@ -1438,14 +1437,12 @@ func (s *eventFeedSession) singleEventFeed(
 	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
-	initialized := false
-
 	matcher := newMatcher()
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
 	defer advanceCheckTicker.Stop()
 	lastReceivedEventTime := time.Now()
 	startFeedTime := time.Now()
-	lastResolvedTs := startTs
+	lastResolvedTs = startTs
 	handleResolvedTs := func(resolvedTs uint64) error {
 		if !initialized {
 			return nil
@@ -1486,7 +1483,8 @@ func (s *eventFeedSession) singleEventFeed(
 		},
 	}:
 	case <-ctx.Done():
-		return lastResolvedTs, errors.Trace(ctx.Err())
+		err = errors.Trace(ctx.Err())
+		return
 	}
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
@@ -1498,7 +1496,7 @@ func (s *eventFeedSession) singleEventFeed(
 		var ok bool
 		select {
 		case <-ctx.Done():
-			return lastResolvedTs, ctx.Err()
+			err = errors.Trace(ctx.Err())
 		case <-advanceCheckTicker.C:
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
@@ -1514,7 +1512,7 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			if sinceLastEvent > reconnectInterval && initialized {
 				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
-				return lastResolvedTs, errReconnect
+				return lastResolvedTs, initialized, errReconnect
 			}
 			version, err := s.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
@@ -1541,8 +1539,10 @@ func (s *eventFeedSession) singleEventFeed(
 
 		if !ok || event == nil {
 			log.Debug("singleEventFeed closed by error")
-			return lastResolvedTs, cerror.ErrEventFeedAborted.GenWithStackByArgs()
+			err = cerror.ErrEventFeedAborted.GenWithStackByArgs()
+			return
 		}
+		var revent *model.RegionFeedEvent
 		lastReceivedEventTime = time.Now()
 		if event.changeEvent != nil {
 			metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
@@ -1570,22 +1570,23 @@ func (s *eventFeedSession) singleEventFeed(
 						s.regionRouter.Release(storeAddr)
 						cachedEvents := matcher.matchCachedRow()
 						for _, cachedEvent := range cachedEvents {
-							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
+							revent, err = assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
-								return lastResolvedTs, errors.Trace(err)
+								return
 							}
 							select {
 							case s.eventCh <- revent:
 								metricSendEventCommitCounter.Inc()
 							case <-ctx.Done():
-								return lastResolvedTs, errors.Trace(ctx.Err())
+								err = errors.Trace(ctx.Err())
+								return
 							}
 						}
 					case cdcpb.Event_COMMITTED:
 						metricPullEventCommittedCounter.Inc()
-						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						revent, err = assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
-							return lastResolvedTs, errors.Trace(err)
+							return
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
@@ -1594,13 +1595,15 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
-							return lastResolvedTs, errUnreachable
+							err = errUnreachable
+							return
 						}
 						select {
 						case s.eventCh <- revent:
 							metricSendEventCommittedCounter.Inc()
 						case <-ctx.Done():
-							return lastResolvedTs, errors.Trace(ctx.Err())
+							err = errors.Trace(ctx.Err())
+							return
 						}
 					case cdcpb.Event_PREWRITE:
 						metricPullEventPrewriteCounter.Inc()
@@ -1613,7 +1616,8 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
-							return lastResolvedTs, errUnreachable
+							err = errUnreachable
+							return
 						}
 						ok := matcher.matchRow(entry)
 						if !ok {
@@ -1621,19 +1625,21 @@ func (s *eventFeedSession) singleEventFeed(
 								matcher.cacheCommitRow(entry)
 								continue
 							}
-							return lastResolvedTs, cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+							err = cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+							return
 						}
 
-						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						revent, err = assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
-							return lastResolvedTs, errors.Trace(err)
+							return
 						}
 
 						select {
 						case s.eventCh <- revent:
 							metricSendEventCommitCounter.Inc()
 						case <-ctx.Done():
-							return lastResolvedTs, errors.Trace(ctx.Err())
+							err = errors.Trace(ctx.Err())
+							return
 						}
 					case cdcpb.Event_ROLLBACK:
 						metricPullEventRollbackCounter.Inc()
@@ -1643,17 +1649,18 @@ func (s *eventFeedSession) singleEventFeed(
 			case *cdcpb.Event_Admin_:
 				log.Info("receive admin event", zap.Stringer("event", event.changeEvent))
 			case *cdcpb.Event_Error:
-				return lastResolvedTs, cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+				err = cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+				return
 			case *cdcpb.Event_ResolvedTs:
-				if err := handleResolvedTs(x.ResolvedTs); err != nil {
-					return lastResolvedTs, errors.Trace(err)
+				if err = handleResolvedTs(x.ResolvedTs); err != nil {
+					return
 				}
 			}
 		}
 
 		if event.resolvedTs != nil {
-			if err := handleResolvedTs(event.resolvedTs.Ts); err != nil {
-				return lastResolvedTs, errors.Trace(err)
+			if err = handleResolvedTs(event.resolvedTs.Ts); err != nil {
+				return
 			}
 		}
 	}
