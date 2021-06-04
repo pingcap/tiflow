@@ -124,7 +124,8 @@ func testHandleChangefeeds(c *check.C) {
 	c.Assert(err, check.IsNil)
 	data, err := ioutil.ReadAll(resp.Body)
 	httpErr := httpError{}
-	json.Unmarshal(data, &httpErr)
+	err = json.Unmarshal(data, &httpErr)
+	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
 	c.Assert(httpErr.Message, check.Equals, cerror.ErrNotOwner.GetMsg())
