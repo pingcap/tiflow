@@ -363,6 +363,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	case <-finishedCh:
 	}
 
+	UnifiedSorterCleanUp()
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
 	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite", "return(true)")
