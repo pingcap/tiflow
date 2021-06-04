@@ -171,7 +171,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.KeyPath = serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
-		case "pd", "config":
+		case "pd", "config", "sort-dir":
 			// do nothing
 		default:
 			log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
