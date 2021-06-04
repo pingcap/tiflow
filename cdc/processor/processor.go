@@ -525,7 +525,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 		if opt != nil && opt[tableID] != nil {
 			continue
 		}
-		log.Info("start to listen the table immediately", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+		log.Info("start to listen to the table immediately", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 		if replicaInfo.StartTs < p.changefeed.Status.CheckpointTs {
 			replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
 		}
