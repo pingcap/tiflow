@@ -35,11 +35,12 @@ function run() {
     run_sql "CREATE table processor_resolved_ts_fallback.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # wait table t1 is processed by cdc server
     ensure 10 "cdc cli processor list|jq '.|length'|grep -E '^1$'"
+    check_table_exists "processor_resolved_ts_fallback.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
     export GO_FAILPOINTS=''
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "2" --addr "127.0.0.1:8302" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     run_sql "CREATE table processor_resolved_ts_fallback.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE table processor_resolved_ts_fallback.t3(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    check_table_exists "processor_resolved_ts_fallback.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists "processor_resolved_ts_fallback.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists "processor_resolved_ts_fallback.t3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     ensure 10 "cdc cli processor list|jq '.|length'|grep -E '^2$'"
