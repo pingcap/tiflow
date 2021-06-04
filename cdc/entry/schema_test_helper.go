@@ -22,7 +22,6 @@ import (
 	timeta "github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/testkit"
 )
 
@@ -36,7 +35,7 @@ type SchemaTestHelper struct {
 
 // NewSchemaTestHelper creates a SchemaTestHelper
 func NewSchemaTestHelper(c *check.C) *SchemaTestHelper {
-	store, err := mockstore.NewMockStore()
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, check.IsNil)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
@@ -71,9 +70,11 @@ func (s *SchemaTestHelper) Storage() kv.Storage {
 
 // GetCurrentMeta return the current meta snapshot
 func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta {
-	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := s.storage.CurrentVersion()
 	s.c.Assert(err, check.IsNil)
-	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
+	snap, err := s.storage.GetSnapshot(ver)
+	s.c.Assert(err, check.IsNil)
+	return timeta.NewSnapshotMeta(snap)
 }
 
 // Close closes the helper

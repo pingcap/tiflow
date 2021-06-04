@@ -541,6 +541,11 @@ error = '''
 owner sort dir
 '''
 
+["CDC:ErrOwnerUnknown"]
+error = '''
+owner running unknown error
+'''
+
 ["CDC:ErrPDBatchLoadRegions"]
 error = '''
 pd batch load regions failed
