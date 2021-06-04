@@ -16,12 +16,11 @@ package sorter
 import (
 	"context"
 	"math"
+	_ "net/http/pprof"
 	"os"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"go.uber.org/zap/zapcore"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
@@ -31,8 +30,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
-	_ "net/http/pprof"
 )
 
 const (
@@ -76,7 +75,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	err = testSorter(ctx, c, sorter, 10000, true)
 	c.Assert(err, check.ErrorMatches, ".*context cancel.*")
