@@ -123,6 +123,7 @@ func testHandleChangefeeds(c *check.C) {
 	resp, err := http.Get(uri)
 	c.Assert(err, check.IsNil)
 	data, err := ioutil.ReadAll(resp.Body)
+	c.Assert(err, check.IsNil)
 	httpErr := httpError{}
 	err = json.Unmarshal(data, &httpErr)
 	c.Assert(err, check.IsNil)
