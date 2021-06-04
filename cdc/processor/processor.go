@@ -652,15 +652,15 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 		}
 	}
 
- 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
- 	if replicaInfo.StartTs < globalCheckpointTs {
- 		log.Warn("addTable: startTs < checkpoint",
- 			cdcContext.ZapFieldChangefeed(ctx),
- 			zap.Int64("tableID", tableID),
- 			zap.Uint64("checkpoint", globalCheckpointTs),
- 			zap.Uint64("startTs", replicaInfo.StartTs))
- 	}
+	if replicaInfo.StartTs < globalCheckpointTs {
+		log.Warn("addTable: startTs < checkpoint",
+			cdcContext.ZapFieldChangefeed(ctx),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpoint", globalCheckpointTs),
+			zap.Uint64("startTs", replicaInfo.StartTs))
+	}
 	table, err := p.createTablePipeline(ctx, tableID, replicaInfo)
 	if err != nil {
 		return errors.Trace(err)
