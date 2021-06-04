@@ -167,7 +167,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
 		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
 
-		ret := newMemoryBackEnd()
+		ret := newMemoryBackEnd(&msgPackGenSerde{})
 		return ret, nil
 	}
 

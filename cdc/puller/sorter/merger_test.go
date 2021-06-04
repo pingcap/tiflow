@@ -39,7 +39,7 @@ type mockFlushTaskBuilder struct {
 var backEndCounterForTest int64
 
 func newMockFlushTaskBuilder() *mockFlushTaskBuilder {
-	backEnd := newMemoryBackEnd()
+	backEnd := newMemoryBackEnd(&msgPackGenSerde{})
 	atomic.AddInt64(&backEndCounterForTest, 1)
 
 	task := &flushTask{

@@ -16,6 +16,8 @@ package sorter
 import (
 	"sync/atomic"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -23,13 +25,17 @@ import (
 )
 
 type memoryBackEnd struct {
-	events        []*model.PolymorphicEvent
+	events        [][]byte
 	estimatedSize int64
 	borrowed      int32
+
+	serde serializerDeserializer
 }
 
-func newMemoryBackEnd() *memoryBackEnd {
-	return &memoryBackEnd{}
+func newMemoryBackEnd(serde serializerDeserializer) *memoryBackEnd {
+	return &memoryBackEnd{
+		serde: serde,
+	}
 }
 
 func (m *memoryBackEnd) reader() (backEndReader, error) {
@@ -80,9 +86,19 @@ func (r *memoryBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 		return nil, nil
 	}
 
-	ret := r.backEnd.events[r.readIndex]
+	eventBytes := r.backEnd.events[r.readIndex]
+	// sets the slice in the array to nil to facilitate GC.
+	r.backEnd.events[r.readIndex] = nil
 	r.readIndex++
-	return ret, nil
+
+	event := new(model.PolymorphicEvent)
+	// Unmarshals the bytes stored in memory into a PolymorphicEvent
+	_, err := r.backEnd.serde.unmarshal(event, eventBytes)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return event, nil
 }
 
 func (r *memoryBackEndReader) resetAndClose() error {
@@ -106,9 +122,16 @@ type memoryBackEndWriter struct {
 }
 
 func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
-	w.backEnd.events = append(w.backEnd.events, event)
+	var err error
+	singleEventBuf := make([]byte, 0, 128)
+	singleEventBuf, err = w.backEnd.serde.marshal(event, singleEventBuf)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	w.backEnd.events = append(w.backEnd.events, singleEventBuf)
 	// 8 * 5 is for the 5 fields in PolymorphicEvent, each of which is thought of as a 64-bit pointer
-	w.bytesWritten += 8*5 + event.RawKV.ApproximateSize()
+	w.bytesWritten += int64(len(singleEventBuf))
 
 	failpoint.Inject("sorterDebug", func() {
 		if event.CRTs < w.maxTs {
