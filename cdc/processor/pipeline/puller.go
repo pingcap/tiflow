@@ -77,8 +77,14 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	enableOldValue := ctx.Vars().Config.EnableOldValue
 	ctxC, cancel := stdContext.WithCancel(ctx.StdContext())
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
+<<<<<<< HEAD
 	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
+=======
+	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
+	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, globalConfig.Security, ctx.GlobalVars().KVStorage,
+		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, config.EnableOldValue)
+>>>>>>> f7ab5ba4 (kv/client: add incremental scan region count limit (#1899))
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil

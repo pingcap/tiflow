@@ -162,6 +162,14 @@ var defaultServerConfig = &ServerConfig{
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+<<<<<<< HEAD
+=======
+	KVClient: &KVClientConfig{
+		WorkerConcurrent: 8,
+		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+		RegionScanLimit:  40,
+	},
+>>>>>>> f7ab5ba4 (kv/client: add incremental scan region count limit (#1899))
 }
 
 // ServerConfig represents a config for server
@@ -293,6 +301,16 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.PerTableMemoryQuota < 6*1024*1024 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+	}
+
+	if c.KVClient == nil {
+		c.KVClient = defaultServerConfig.KVClient
+	}
+	if c.KVClient.WorkerConcurrent <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
+	if c.KVClient.RegionScanLimit <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
 	}
 
 	return nil
