@@ -371,6 +371,10 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite")
 	}()
 
+	// recreate the sorter
+	sorter, err = NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
+
 	finishedCh = make(chan struct{})
 	go func() {
 		err := testSorter(ctx, c, sorter, 10000, true)
