@@ -72,10 +72,8 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}
 
 	return &ddlPullerImpl{
-		puller: plr,
-		// the puller will listen to change events from `startTs` (including `startTs`)
-		// `startTs - 1` is a valid resolvedTS, which means that all transactions before `startTs - 1` have been received (or don't need to be received)
-		resolvedTS: startTs - 1,
+		puller:     plr,
+		resolvedTS: startTs,
 		filter:     f,
 		cancel:     func() {},
 	}, nil

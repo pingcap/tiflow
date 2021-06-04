@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1237,6 +1239,13 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
 	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
+	// a hack way to check the goroutine count of region worker is 1
+	buf := make([]byte, 1<<20)
+	stacklen := runtime.Stack(buf, true)
+	stack := string(buf[:stacklen])
+	c.Assert(strings.Count(stack, "resolveLock"), check.Equals, 1)
+	c.Assert(strings.Count(stack, "collectWorkpoolError"), check.Equals, 1)
+
 	cancel()
 }
 
@@ -1348,7 +1357,6 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	for _, expectedEv := range expected {
 		select {
 		case event := <-eventCh:
-			log.Info("receive event", zap.Reflect("event", event), zap.Reflect("expected", expectedEv))
 			c.Assert(event, check.DeepEquals, expectedEv)
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
@@ -1520,7 +1528,7 @@ ReceiveLoop:
 	}
 }
 
-// TestStreamSendWithErrorNormal mainly tests the scenario that the `Recv` call
+// TestStreamRecvWithErrorNormal mainly tests the scenario that the `Recv` call
 // of a gPRC stream in kv client meets a **logical related** error, and kv client
 // logs the error and re-establish new request.
 func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
@@ -1538,7 +1546,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 }
 
-// TestStreamSendWithErrorIOEOF mainly tests the scenario that the `Recv` call
+// TestStreamRecvWithErrorIOEOF mainly tests the scenario that the `Recv` call
 // of a gPRC stream in kv client meets error io.EOF, and kv client logs the error
 // and re-establish new request
 func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
@@ -2449,7 +2457,7 @@ func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	c.Assert(sri.span.String(), check.Equals, "[61, 63)")
 	c.Assert(sri2.ts, check.Equals, uint64(2000))
 	c.Assert(sri2.span.String(), check.Equals, "[61, 62)")
-	c.Assert(sri2.rpcCtx, check.IsNil)
+	c.Assert(sri2.rpcCtx, check.DeepEquals, &tikv.RPCContext{})
 }
 
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally

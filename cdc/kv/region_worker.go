@@ -260,10 +260,11 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		}
 	})
 
+	revokeToken := !state.initialized
 	return w.session.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	})
+	}, revokeToken)
 }
 
 func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
@@ -442,14 +443,16 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 	preprocess := func(event *regionStatefulEvent, ok bool) (
 		exitEventHandler bool,
 		skipEvent bool,
-		err error,
 	) {
 		// event == nil means the region worker should exit and re-establish
 		// all existing regions.
 		if !ok || event == nil {
 			log.Info("region worker closed by error")
 			exitEventHandler = true
-			err = w.evictAllRegions(ctx)
+			err := w.evictAllRegions(ctx)
+			if err != nil {
+				log.Warn("region worker evict all regions error", zap.Error(err))
+			}
 			return
 		}
 		if event.state.isStopped() {
@@ -471,9 +474,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		exitEventHandler, skipEvent, err := preprocess(event, ok)
+		exitEventHandler, skipEvent := preprocess(event, ok)
 		if exitEventHandler {
-			return err
+			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
 		if skipEvent {
 			continue
@@ -499,9 +502,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				exitEventHandler, skipEvent, err := preprocess(event, ok)
+				exitEventHandler, skipEvent := preprocess(event, ok)
 				if exitEventHandler {
-					return err
+					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 				}
 				if skipEvent {
 					continue
@@ -606,7 +609,13 @@ func (w *regionWorker) run(ctx context.Context) error {
 	wg.Go(func() error {
 		return w.collectWorkpoolError(ctx)
 	})
-	return wg.Wait()
+	err := wg.Wait()
+	// ErrRegionWorkerExit means the region worker exits normally, but we don't
+	// need to terminate the other goroutines in errgroup
+	if cerror.ErrRegionWorkerExit.Equal(err) {
+		return nil
+	}
+	return err
 }
 
 func (w *regionWorker) handleEventEntry(
@@ -628,7 +637,7 @@ func (w *regionWorker) handleEventEntry(
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
-				log.Warn("The time cost of initializing is too mush",
+				log.Warn("The time cost of initializing is too much",
 					zap.Duration("timeCost", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
@@ -643,6 +652,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 			w.notifyEvTimeUpdate(regionID, true /* isDelete */)
 			state.initialized = true
+			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)
@@ -778,13 +788,14 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			if state.lastResolvedTs > singleRegionInfo.ts {
 				singleRegionInfo.ts = state.lastResolvedTs
 			}
+			revokeToken := !state.initialized
 			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
 				err: &rpcCtxUnavailableErr{
 					verID: singleRegionInfo.verID,
 				},
-			})
+			}, revokeToken)
 			return err == nil
 		})
 	}
