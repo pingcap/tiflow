@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
@@ -136,7 +135,7 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 
 	for i := 0; i < totalAccountNumber; i++ {
 		_, err := cli.Put(ctx, fmt.Sprintf("%s%d", bankTestPrefix, i), "0")
-		c.Check(err, check.IsNil)
+		c.Assert(err, check.IsNil)
 	}
 
 	for i := 0; i < workerNumber; i++ {
@@ -148,12 +147,12 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 				worker, err := NewEtcdWorker(cli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
 				}, &bankReactorState{c: c, index: i, account: make([]int, totalAccountNumber)})
-				c.Check(err, check.IsNil)
+				c.Assert(err, check.IsNil)
 				err = worker.Run(ctx, nil, 100*time.Millisecond)
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}
-				c.Check(errors.Cause(err), check.Equals, context.DeadlineExceeded)
+				c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 				return
 			}
 		}()
