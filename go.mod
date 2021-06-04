@@ -49,7 +49,13 @@ require (
 	github.com/tinylib/msgp v1.1.2
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
+<<<<<<< HEAD
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
+=======
+	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
+	go.etcd.io/bbolt v1.3.4 // indirect
+	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
+>>>>>>> 8983126c (sink/kafka: add sasl scram support for kafka sink (#1789))
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
 	golang.org/x/mod v0.4.1 // indirect
