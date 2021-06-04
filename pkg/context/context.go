@@ -185,7 +185,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
 			ID: "changefeed-id-test",
 			Info: &model.ChangeFeedInfo{
-				StartTs: oracle.GoTimeToTS(time.Now()),
+				StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 				Config:  config.GetDefaultReplicaConfig(),
 			},
 		})

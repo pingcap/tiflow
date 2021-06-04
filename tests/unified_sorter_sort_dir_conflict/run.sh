@@ -9,15 +9,15 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 MAX_RETRIES=20
 
-function check_changefeed_mark_stopped_regex() {
+function check_changefeed_mark_error_regex() {
     endpoints=$1
     changefeedid=$2
     error_msg=$3
     info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
     echo "$info"
     state=$(echo $info|jq -r '.state')
-    if [[ ! "$state" == "stopped" ]]; then
-        echo "changefeed state $state does not equal to stopped"
+    if [[ ! "$state" == "error" ]]; then
+        echo "changefeed state $state does not equal to error"
         exit 1
     fi
     message=$(echo $info|jq -r '.error.message')
@@ -27,7 +27,7 @@ function check_changefeed_mark_stopped_regex() {
     fi
 }
 
-export -f check_changefeed_mark_stopped_regex
+export -f check_changefeed_mark_error_regex
 
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -62,7 +62,7 @@ function prepare() {
     # starts the first second server instance. It should fail, and bring down the changefeed
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix 2 --sort-dir /tmp/cdc_sort_1
 
-    ensure $MAX_RETRIES check_changefeed_mark_stopped_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*ErrConflictingFileLocks.*"
+    ensure $MAX_RETRIES check_changefeed_mark_error_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*ErrConflictingFileLocks.*"
     kill $capture_pid
     sleep 10 # wait for re-election in case of the owner having been killed
     run_cdc_cli changefeed resume -c ${changefeedid}

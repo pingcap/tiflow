@@ -339,7 +339,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
+		nextSyncPointTs := oracle.ComposeTS(oracle.GetPhysical(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval)), 0)
 		if err := c.sink.SinkSyncpoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
