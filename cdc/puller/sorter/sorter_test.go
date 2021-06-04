@@ -339,7 +339,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
