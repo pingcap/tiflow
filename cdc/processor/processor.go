@@ -126,8 +126,8 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 	p.metricProcessorErrorCounter.Inc()
 	// record error information in etcd
 	var code string
-	if terror, ok := err.(*errors.Error); ok {
-		code = string(terror.RFCCode())
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}
@@ -152,12 +152,24 @@ func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestra
 
 func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState orchestrator.ReactorState, err error) {
 	p.changefeed = state
+<<<<<<< HEAD
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if p.changefeed.TaskStatus.AdminJobType.IsStopState() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
+=======
+	if !p.checkChangefeedNormal() {
+		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
+	}
+	if skip := p.checkPosition(); skip {
+		return p.changefeed, nil
+	}
+	if err := p.handleErrorCh(ctx); err != nil {
+		return nil, errors.Trace(err)
+	}
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	if err := p.lazyInit(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -183,6 +195,17 @@ func (p *processor) tick(ctx context.Context, state *changefeedState) (nextState
 		return nil, errors.Trace(err)
 	}
 	return p.changefeed, nil
+}
+
+// checkChangefeedNormal checks if the changefeed is runnable.
+func (p *processor) checkChangefeedNormal() bool {
+	// check the state in this tick, make sure that the admin job type of the changefeed is not stopped
+	if p.changefeed.Info.AdminJobType.IsStopState() || p.changefeed.Status.AdminJobType.IsStopState() {
+		return false
+	}
+	// add a patch to check the changefeed is runnable when applying the patches in the etcd worker.
+	p.changefeed.CheckChangefeedNormal()
+	return true
 }
 
 // checkPosition create a new task position, and put it into the etcd state.
@@ -276,6 +299,7 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+<<<<<<< HEAD
 	p.sinkManager = sink.NewManager(ctx, s, errCh, checkpointTs)
 
 	// Clean up possible residual error states
@@ -289,6 +313,11 @@ func (p *processor) lazyInitImpl(ctx context.Context) error {
 	log.Info("run processor",
 		zap.String("capture-id", p.captureInfo.ID), util.ZapFieldCapture(ctx),
 		zap.String("changefeed-id", p.changefeed.ID))
+=======
+	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
+	p.initialized = true
+	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	return nil
 }
 
@@ -337,6 +366,7 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			return status, nil
 		})
 	}
+<<<<<<< HEAD
 	// TODO: 👇👇 remove this six lines after the new owner is implemented, applied operation should be removed by owner
 	if !p.changefeed.TaskStatus.SomeOperationsUnapplied() && len(p.changefeed.TaskStatus.Operation) != 0 {
 		p.changefeed.PatchTaskStatus(func(status *model.TaskStatus) (*model.TaskStatus, error) {
@@ -350,6 +380,10 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 	}
 	// 👆👆 remove this six lines
 	for tableID, opt := range p.changefeed.TaskStatus.Operation {
+=======
+	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
+	for tableID, opt := range taskStatus.Operation {
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 		if opt.TableApplied() {
 			continue
 		}
@@ -387,8 +421,8 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 					operation.Done = true
 					return nil
 				})
-				// TODO: check if the goroutines created by table pipeline is actually exited. (call tablepipeline.Wait())
 				table.Cancel()
+				table.Wait()
 				delete(p.tables, tableID)
 				log.Debug("Operation done signal received",
 					util.ZapFieldChangefeed(ctx),
@@ -404,9 +438,6 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
 				}
-				if p.changefeed.Info.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
-				}
 				if replicaInfo.StartTs != opt.BoundaryTs {
 					log.Warn("the startTs and BoundaryTs of add table operation should be always equaled", zap.Any("replicaInfo", replicaInfo))
 				}
@@ -421,8 +452,18 @@ func (p *processor) handleTableOperation(ctx context.Context) error {
 			case model.OperProcessed:
 				table, exist := p.tables[tableID]
 				if !exist {
+<<<<<<< HEAD
 					log.Panic("table which was added is not found",
 						util.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+=======
+					log.Warn("table which was added is not found",
+						cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+					patchOperation(tableID, func(operation *model.TableOperation) error {
+						operation.Status = model.OperDispatched
+						return nil
+					})
+					continue
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 				}
 				localResolvedTs := p.changefeed.TaskPosition.ResolvedTs
 				globalResolvedTs := p.changefeed.Status.ResolvedTs
@@ -529,8 +570,14 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 		if opt != nil && opt[tableID] != nil {
 			continue
 		}
+<<<<<<< HEAD
 		if !p.firstTick {
 			log.Warn("the table should be listen but not, already listen the table again, please report a bug", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+=======
+		log.Info("start to listen to the table immediately", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+		if replicaInfo.StartTs < p.changefeed.Status.CheckpointTs {
+			replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 		}
 		err := p.addTable(ctx, tableID, replicaInfo)
 		if err != nil {
@@ -549,8 +596,13 @@ func (p *processor) checkTablesNum(ctx context.Context) error {
 			continue
 		}
 		tablePipeline.Cancel()
+		tablePipeline.Wait()
 		delete(p.tables, tableID)
+<<<<<<< HEAD
 		log.Warn("the table was forcibly deleted, this should not happen, please report a bug", zap.Int64("tableID", tableID), zap.Any("taskStatus", p.changefeed.TaskStatus))
+=======
+		log.Warn("the table was forcibly deleted", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	}
 	return nil
 }
@@ -631,6 +683,7 @@ func (p *processor) addTable(ctx context.Context, tableID model.TableID, replica
 		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			table.Cancel()
+			table.Wait()
 			delete(p.tables, tableID)
 		} else {
 			log.Warn("Ignore existing table", util.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
@@ -670,6 +723,7 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 		p.sendError(err)
 		return nil
 	})
+<<<<<<< HEAD
 
 	kvStorage, err := util.KVStorageFromCtx(ctx)
 	if err != nil {
@@ -677,16 +731,48 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 	}
 	var tableName string
 	err = retry.Run(time.Millisecond*5, 3, func() error {
+=======
+	var tableName *model.TableName
+	retry.Run(time.Millisecond*5, 3, func() error { //nolint:errcheck
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = name.QuoteString()
+			tableName = &name
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	})
-	if err != nil {
-		log.Warn("get table name for metric", zap.Error(err))
-		tableName = strconv.Itoa(int(tableID))
+	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
+		// Retry to find mark table ID
+		var markTableID model.TableID
+		err := retry.Run(50*time.Millisecond, 20, func() error {
+			if tableName == nil {
+				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
+				if !exist {
+					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s)", tableID)
+				}
+				tableName = &name
+			}
+			markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchameName, markTableTableName)
+			if !exist {
+				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
+			}
+			markTableID = tableInfo.ID
+			return nil
+		})
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		replicaInfo.MarkTableID = markTableID
 	}
+	var tableNameStr string
+	if tableName == nil {
+		log.Warn("failed to get table name for metric")
+		tableNameStr = strconv.Itoa(int(tableID))
+	} else {
+		tableNameStr = tableName.QuoteString()
+	}
+
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 
 	table := tablepipeline.NewTablePipeline(
@@ -699,7 +785,7 @@ func (p *processor) createTablePipelineImpl(ctx context.Context, tableID model.T
 		p.changefeed.Info.Engine,
 		p.changefeed.Info.SortDir,
 		tableID,
-		tableName,
+		tableNameStr,
 		replicaInfo,
 		sink,
 		p.changefeed.Info.GetTargetTs(),
@@ -739,11 +825,13 @@ func (p *processor) Close() error {
 	log.Info("stop processor", zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeed.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
+		tbl.Wait()
 	}
 	p.cancel()
 	p.wg.Wait()
 	// mark tables share the same context with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
+<<<<<<< HEAD
 	p.changefeed.PatchTaskPosition(func(position *model.TaskPosition) (*model.TaskPosition, error) {
 		if position == nil {
 			return nil, nil
@@ -766,6 +854,14 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeed.ID, p.captureInfo.AdvertiseAddr)
+=======
+	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+>>>>>>> c534be22 (new_owner: switch on the new owner (#1927))
 	if p.sinkManager != nil {
 		return p.sinkManager.Close()
 	}
