@@ -125,14 +125,14 @@ EOF
         exit 1
     fi
 
-    has_warn=$(run_cdc_cli changefeed update --start-ts 1234 --no-confirm --changefeed-id $uuid 2>&1 | grep 'updating start-ts is not supported')
-    if [[ $has_warn != 0 ]]; then
+    run_cdc_cli changefeed update --start-ts 1234 --no-confirm --changefeed-id $uuid 2>&1 | grep 'updating start-ts is not supported'
+    if [[ $? != 0 ]]; then
         echo "[$(date)] <<<<< expected warning when trying to update start-ts >>>>>"
         exit 1
     fi
 
-    has_deprecated=$(run_cdc_cli changefeed update --sort-dir "/test" --no-confirm --changefeed-id $uuid 2>&1 | grep 'deprecated')
-    if [[ $has_warn != 0 ]]; then
+    run_cdc_cli changefeed update --sort-dir "/test" --no-confirm --changefeed-id $uuid 2>&1 | grep 'deprecated'
+    if [[ $? != 0 ]]; then
         echo "[$(date)] <<<<< expected deprecation warning when trying to update sort-dir >>>>>"
         exit 1
     fi
