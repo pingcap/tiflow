@@ -128,8 +128,8 @@ EOF
     # Resume changefeed
     run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-    if [[ $jobtype != 2 ]]; then
-        echo "[$(date)] <<<<< unexpect admin job type! expect 2 got ${jobtype} >>>>>"
+    if [[ $jobtype != 0 ]]; then
+        echo "[$(date)] <<<<< unexpect admin job type! expect 0 got ${jobtype} >>>>>"
         exit 1
     fi
     check_changefeed_state $uuid "normal"
