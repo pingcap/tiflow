@@ -193,10 +193,13 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	return p.changefeed, nil
 }
 
+// checkChangefeedNormal checks if the changefeed is runnable.
 func (p *processor) checkChangefeedNormal() bool {
+	// check the state in this tick, make sure that the admin job type of the changefeed is not stopped
 	if p.changefeed.Info.AdminJobType.IsStopState() || p.changefeed.Status.AdminJobType.IsStopState() {
 		return false
 	}
+	// add a patch to check the changefeed is runnable when applying the patches in the etcd worker.
 	p.changefeed.CheckChangefeedNormal()
 	return true
 }

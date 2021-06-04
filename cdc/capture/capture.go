@@ -104,6 +104,7 @@ func (c *Capture) reset() error {
 // Run runs the capture
 func (c *Capture) Run(ctx context.Context) error {
 	defer log.Info("the capture routine has exited")
+	// Limit the frequency of reset capture to avoid frequent recreating of resources
 	rl := rate.NewLimiter(0.05, 2)
 	for {
 		select {
@@ -204,6 +205,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	failpoint.Inject("ownerFlushIntervalInject", func(val failpoint.Value) {
 		ownerFlushInterval = time.Millisecond * time.Duration(val.(int))
 	})
+	// Limit the frequency of elections to avoid putting too much pressure on the etcd server
 	rl := rate.NewLimiter(0.05, 2)
 	for {
 		select {
