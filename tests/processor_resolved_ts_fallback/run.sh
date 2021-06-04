@@ -35,6 +35,7 @@ function run() {
     run_sql "CREATE table processor_resolved_ts_fallback.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # wait table t1 is processed by cdc server
     ensure 10 "cdc cli processor list|jq '.|length'|grep -E '^1$'"
+    # check the t1 is replicated to downstream to make sure the t1 is dispatched to cdc1
     check_table_exists "processor_resolved_ts_fallback.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     export GO_FAILPOINTS=''
