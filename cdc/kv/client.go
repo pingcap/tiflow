@@ -1519,6 +1519,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),
+					zap.Duration("lastEvent", sinceLastEvent),
 					zap.Uint64("resolvedTs", lastResolvedTs))
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 				err = s.lockResolver.Resolve(ctx, regionID, maxVersion)

@@ -300,8 +300,12 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						return errReconnect
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.getRegionSpan()),
-						zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("resolvedTs", lastResolvedTs))
+						zap.Uint64("regionID", rts.regionID),
+						zap.Stringer("span", state.getRegionSpan()),
+						zap.Duration("duration", sinceLastResolvedTs),
+						zap.Duration("lastEvent", sinceLastEvent),
+						zap.Uint64("resolvedTs", lastResolvedTs),
+					)
 					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
