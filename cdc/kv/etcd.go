@@ -16,6 +16,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -162,9 +163,10 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]int64) error {
 	for _, lease := range leases {
 		_, err := c.Client.Revoke(ctx, clientv3.LeaseID(lease))
-		if err != nil {
-			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		if err == nil && rpctypes.ErrGRPCLeaseNotFound == errors.Cause(err) {
+			continue
 		}
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	return nil
 }
