@@ -177,12 +177,6 @@ func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
 }
 
-func (s *regionFeedState) isInitialized() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.initialized
-}
-
 func (s *regionFeedState) getLastResolvedTs() uint64 {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
