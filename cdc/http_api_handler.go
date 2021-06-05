@@ -44,8 +44,7 @@ func (t JSONTime) MarshalJSON() ([]byte, error) {
 
 // err of cdc http api
 type httpError struct {
-	Message string              `json:"error"`
-	Code    errors.RFCErrorCode `json:"errorCode"`
+	Error string `json:"error"`
 }
 
 // ChangefeedCommonInfo holds some common usage information of a changefeed and use by RESTful API only.
@@ -132,7 +131,7 @@ func writeInternalServerErrorJSON(w http.ResponseWriter, err error) {
 }
 
 func writeErrorJSON(w http.ResponseWriter, statusCode int, cerr errors.Error) {
-	httpErr := httpError{Code: cerr.RFCCode(), Message: cerr.GetMsg()}
+	httpErr := httpError{Error: cerr.Error()}
 	jsonStr, err := json.MarshalIndent(httpErr, "", " ")
 	if err != nil {
 		log.Error("invalid json data", zap.Reflect("data", err), zap.Error(err))
