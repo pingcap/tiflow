@@ -54,8 +54,8 @@ const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
 
-	maxWorkerPoolSize  = 64
-	maxResolvedPerLoop = 64
+	maxWorkerPoolSize      = 64
+	maxResolvedLockPerLoop = 64
 )
 
 // regionStateManager provides the get/put way like a sync.Map, and it is divided
@@ -274,7 +274,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					break
 				}
 				expired = append(expired, item)
-				if len(expired) >= maxResolvedPerLoop {
+				if len(expired) >= maxResolvedLockPerLoop {
 					break
 				}
 			}
@@ -309,7 +309,6 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					}
 				}
 				rts.ts.resolvedTs = lastResolvedTs
-				rts.ts.eventTime = time.Now()
 				w.rtsManager.Upsert(rts)
 			}
 		}
