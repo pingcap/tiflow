@@ -46,7 +46,7 @@ func NewClient(credential *security.Credential) (*Client, error) {
 }
 
 // IsFilter return true if the given feedState matches the whiteList.
-func IsFilter(whiteList string, feedState model.FeedState) bool {
+func IsFiltered(whiteList string, feedState model.FeedState) bool {
 	if whiteList == "all" {
 		return true
 	}
