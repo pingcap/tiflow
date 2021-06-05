@@ -267,9 +267,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()
-				sinceLastEvent := time.Since(item.ts.eventTime)
+				sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(item.ts.resolvedTs))
 				// region does not reach resolve lock boundary, put it back
-				if sinceLastEvent < resolveLockInterval {
+				if sinceLastResolvedTs < resolveLockInterval {
 					w.rtsManager.Upsert(item)
 					break
 				}
