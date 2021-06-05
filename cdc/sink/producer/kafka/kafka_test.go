@@ -285,6 +285,22 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	}
 	_, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
+
+	saslConfig := NewKafkaConfig()
+	saslConfig.Version = "2.6.0"
+	saslConfig.ClientID = "test-sasl-scram"
+	saslConfig.SaslScram = &security.SaslScram{
+		SaslUser:      "user",
+		SaslPassword:  "password",
+		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
+	}
+
+	cfg, err := newSaramaConfigImpl(ctx, saslConfig)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
+	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
+	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
