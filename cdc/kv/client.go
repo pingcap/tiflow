@@ -59,9 +59,9 @@ const (
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 	// TODO find optimal values and test extensively before releasing
 	// The old values cause the gRPC stream to stall for some unknown reason.
-	grpcInitialWindowSize     = 1 << 28 // 256 MB The value for initial window size on a stream
-	grpcInitialConnWindowSize = 1 << 29 // 512 MB The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
+	grpcInitialWindowSize     = 1 << 26 // 64 MB The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
+	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
 	grpcConnCount             = 10
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
@@ -74,7 +74,7 @@ const (
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
-var reconnectInterval = 15 * time.Minute
+var reconnectInterval = 60 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream

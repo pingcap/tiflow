@@ -601,9 +601,6 @@ func (w *regionWorker) run(ctx context.Context) error {
 	wg.Go(func() error {
 		return w.checkErrorReconnect(w.resolveLock(ctx))
 	})
-	// wg.Go(func() error {
-	// 	return w.checkErrorReconnect(w.checkUnInitRegions(ctx))
-	// })
 	wg.Go(func() error {
 		return w.eventHandler(ctx)
 	})

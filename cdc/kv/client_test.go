@@ -2940,7 +2940,8 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 // TestKVClientForceReconnect2 tests force reconnect gRPC stream can work, this
 // test mocks the reconnectInterval tool, and simulate un-initialized regions
 // can be reconnected.
-func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
+// This test is disabled now because check un-initialized regions is disabled
+func (s *etcdSuite) testKVClientForceReconnect2(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
