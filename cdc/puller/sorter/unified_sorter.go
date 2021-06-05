@@ -33,8 +33,12 @@ import (
 const (
 	inputChSize       = 128
 	outputChSize      = 128
-	heapCollectChSize = 128    // this should be not be too small, to guarantee IO concurrency
-	maxOpenHeapNum    = 128000 // maximum number of pending sorted runs of events
+	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
+	// maxOpenHeapNum is the maximum number of allowed pending chunks in memory OR on-disk.
+	// This constant is a worst case upper limit, and setting a large number DOES NOT imply actually
+	// allocating these resources. This constant is PER TABLE.
+	// TODO refactor this out
+	maxOpenHeapNum = 1280000
 )
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
