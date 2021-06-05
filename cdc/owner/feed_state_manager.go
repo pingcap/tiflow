@@ -42,9 +42,6 @@ func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
 			m.cleanUpInfos()
 		}
 	}()
-	if m.state.Status == nil {
-		return
-	}
 	if m.handleAdminJob() {
 		// `handleAdminJob` returns true means that some admin jobs are pending
 		// skip to the next tick until all the admin jobs is handled
