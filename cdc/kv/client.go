@@ -1515,7 +1515,7 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
-			if sinceLastResolvedTs > resolveLockInterval && sinceLastEvent > resolveLockInterval && initialized {
+			if sinceLastResolvedTs > resolveLockInterval && initialized {
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),

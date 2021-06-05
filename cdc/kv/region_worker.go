@@ -54,7 +54,8 @@ const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
 
-	maxWorkerPoolSize = 64
+	maxWorkerPoolSize  = 64
+	maxResolvedPerLoop = 64
 )
 
 // regionStateManager provides the get/put way like a sync.Map, and it is divided
@@ -273,6 +274,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					break
 				}
 				expired = append(expired, item)
+				if len(expired) >= maxResolvedPerLoop {
+					break
+				}
 			}
 			if len(expired) == 0 {
 				continue
@@ -574,7 +578,7 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
 			select {
-			case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsEvItem(state.sri.ts)}:
+			case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(state.sri.ts)}:
 			default:
 				// rtsUpdateCh block often means too many regions are suffering
 				// lock resolve, the kv client status is not very healthy.
@@ -686,7 +690,7 @@ func (w *regionWorker) handleResolvedTs(
 	// Send resolved ts update in non blocking way, since we can re-query real
 	// resolved ts from region state even if resolved ts update is discarded.
 	select {
-	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsEvItem(resolvedTs)}:
+	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)}:
 	default:
 	}
 
