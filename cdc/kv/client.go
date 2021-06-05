@@ -1491,6 +1491,7 @@ func (s *eventFeedSession) singleEventFeed(
 		select {
 		case <-ctx.Done():
 			err = errors.Trace(ctx.Err())
+			return
 		case <-advanceCheckTicker.C:
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
@@ -1506,7 +1507,8 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			if sinceLastEvent > reconnectInterval && initialized {
 				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
-				return lastResolvedTs, initialized, errReconnect
+				err = errReconnect
+				return
 			}
 			version, err := s.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
