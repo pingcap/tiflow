@@ -99,7 +99,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 			writeInternalServerErrorJSON(w, err)
 			return
 		}
-		if !httputil.IsFilter(state, cfInfo.State) {
+		if !httputil.IsFiltered(state, cfInfo.State) {
 			continue
 		}
 		cfStatus, _, err := s.etcdClient.GetChangeFeedStatus(req.Context(), changefeedID)
