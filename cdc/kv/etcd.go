@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -31,6 +33,7 @@ import (
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 const (
@@ -162,9 +165,13 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]int64) error {
 	for _, lease := range leases {
 		_, err := c.Client.Revoke(ctx, clientv3.LeaseID(lease))
-		if err != nil {
-			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		if err == nil {
+			continue
+		} else if etcdErr := err.(rpctypes.EtcdError); etcdErr.Code() == codes.NotFound {
+			// it means the etcd lease is already expired or revoked
+			continue
 		}
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	return nil
 }
