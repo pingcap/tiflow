@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	fileBufferSize       = 1 * 1024 * 1024 // 1MB
+	fileBufferSize       = 32 * 1024 // 32KB
 	fileMagic            = 0x12345678
 	numFileEntriesOffset = 4
 	blockMagic           = 0xbeefbeef
