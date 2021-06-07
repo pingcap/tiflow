@@ -262,7 +262,7 @@ func (s *ChangefeedReactorState) GetPatches() []orchestrator.DataPatch {
 func (s *ChangefeedReactorState) CheckChangefeedNormal() {
 	s.skipPatchesInThisTick = false
 	s.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
-		if info.AdminJobType.IsStopState() {
+		if info == nil || info.AdminJobType.IsStopState() {
 			s.skipPatchesInThisTick = true
 			return info, false, cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 		}
