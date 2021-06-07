@@ -2903,6 +2903,7 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 	s.testKVClientForceReconnect(c)
 }
 
+<<<<<<< HEAD
 // TestKVClientForceReconnect2 tests force reconnect gRPC stream can work, this
 // test mocks the reconnectInterval tool, and simulate un-initialized regions
 // can be reconnected.
@@ -3085,6 +3086,8 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 	cancel()
 }
 
+=======
+>>>>>>> 6687c95d (kv/client: refine region reconnect and resolve lock strategy (#1949))
 // TestConcurrentProcessRangeRequest when region range request channel is full,
 // the kv client can process it correctly without deadlock. This is more likely
 // to happen when region split and merge frequently and large stale requests exist.

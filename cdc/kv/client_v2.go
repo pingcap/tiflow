@@ -178,7 +178,11 @@ func (s *eventFeedSession) receiveFromStreamV2(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
+<<<<<<< HEAD
 			})
+=======
+			}, true /* revokeToken */)
+>>>>>>> 6687c95d (kv/client: refine region reconnect and resolve lock strategy (#1949))
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
