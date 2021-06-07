@@ -45,7 +45,7 @@ var (
 	// other components in TiCDC, including worker pool task chan size, mounter
 	// chan size etc.
 	// TODO: unified channel buffer mechanism
-	regionWorkerInputChanSize = 128000
+	regionWorkerInputChanSize = 12800
 	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
 	regionWorkerHighWatermark = int(float64(regionWorkerInputChanSize) * 0.7)
 )
@@ -54,7 +54,8 @@ const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
 
-	maxWorkerPoolSize = 64
+	maxWorkerPoolSize      = 64
+	maxResolvedLockPerLoop = 64
 )
 
 // regionStateManager provides the get/put way like a sync.Map, and it is divided
@@ -148,12 +149,6 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
-	// evTimeManager maintains the time that last event is received of each
-	// uninitialized region, note the regionTsManager is not thread safe, so we
-	// use a single routine to handle evTimeUpdate and evTimeManager
-	evTimeManager  *regionTsManager
-	evTimeUpdateCh chan *evTimeUpdate
-
 	enableOldValue bool
 	storeAddr      string
 }
@@ -168,9 +163,7 @@ func newRegionWorker(s *eventFeedSession, limiter *rate.Limiter, addr string) *r
 		errorCh:        make(chan error, 1),
 		statesManager:  newRegionStateManager(-1),
 		rtsManager:     newRegionTsManager(),
-		evTimeManager:  newRegionTsManager(),
 		rtsUpdateCh:    make(chan *regionTsInfo, 1024),
-		evTimeUpdateCh: make(chan *evTimeUpdate, 1024),
 		enableOldValue: s.enableOldValue,
 		storeAddr:      addr,
 		concurrent:     cfg.WorkerConcurrent,
@@ -194,23 +187,6 @@ func (w *regionWorker) initMetrics(ctx context.Context) {
 	metrics.metricSendEventCommittedCounter = sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
 	w.metrics = metrics
-}
-
-type evTimeUpdate struct {
-	info     *regionTsInfo
-	isDelete bool
-}
-
-// notifyEvTimeUpdate trys to send a evTimeUpdate to evTimeUpdateCh in region worker
-// to upsert or delete the last received event time for a region
-func (w *regionWorker) notifyEvTimeUpdate(regionID uint64, isDelete bool) {
-	select {
-	case w.evTimeUpdateCh <- &evTimeUpdate{
-		info:     &regionTsInfo{regionID: regionID, ts: newEventTimeItem()},
-		isDelete: isDelete,
-	}:
-	default:
-	}
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
@@ -267,49 +243,6 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	}, revokeToken)
 }
 
-func (w *regionWorker) checkUnInitRegions(ctx context.Context) error {
-	checkInterval := time.Minute
-
-	failpoint.Inject("kvClientCheckUnInitRegionInterval", func(val failpoint.Value) {
-		checkInterval = time.Duration(val.(int)) * time.Second
-	})
-
-	ticker := time.NewTicker(checkInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case update := <-w.evTimeUpdateCh:
-			if update.isDelete {
-				w.evTimeManager.Remove(update.info.regionID)
-			} else {
-				w.evTimeManager.Upsert(update.info)
-			}
-		case <-ticker.C:
-			for w.evTimeManager.Len() > 0 {
-				item := w.evTimeManager.Pop()
-				sinceLastEvent := time.Since(item.ts.eventTime)
-				if sinceLastEvent < reconnectInterval {
-					w.evTimeManager.Upsert(item)
-					break
-				}
-				state, ok := w.getRegionState(item.regionID)
-				if !ok || state.isStopped() || state.isInitialized() {
-					// check state is deleted, stopped, or initialized, if
-					// so just ignore this region, and don't need to push the
-					// eventTimeItem back to heap.
-					continue
-				}
-				log.Warn("kv client reconnect triggered",
-					zap.Duration("duration", sinceLastEvent), zap.Uint64("region", item.regionID))
-				return errReconnect
-			}
-		}
-	}
-}
-
 func (w *regionWorker) resolveLock(ctx context.Context) error {
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
@@ -341,6 +274,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					break
 				}
 				expired = append(expired, item)
+				if len(expired) >= maxResolvedLockPerLoop {
+					break
+				}
 			}
 			if len(expired) == 0 {
 				continue
@@ -364,8 +300,12 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						return errReconnect
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.Uint64("regionID", rts.regionID), zap.Stringer("span", state.getRegionSpan()),
-						zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("resolvedTs", lastResolvedTs))
+						zap.Uint64("regionID", rts.regionID),
+						zap.Stringer("span", state.getRegionSpan()),
+						zap.Duration("duration", sinceLastResolvedTs),
+						zap.Duration("lastEvent", sinceLastEvent),
+						zap.Uint64("resolvedTs", lastResolvedTs),
+					)
 					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
@@ -601,9 +541,6 @@ func (w *regionWorker) run(ctx context.Context) error {
 		return w.checkErrorReconnect(w.resolveLock(ctx))
 	})
 	wg.Go(func() error {
-		return w.checkErrorReconnect(w.checkUnInitRegions(ctx))
-	})
-	wg.Go(func() error {
 		return w.eventHandler(ctx)
 	})
 	wg.Go(func() error {
@@ -650,7 +587,6 @@ func (w *regionWorker) handleEventEntry(
 				// lock resolve, the kv client status is not very healthy.
 				log.Warn("region is not upsert into rts manager", zap.Uint64("region-id", regionID))
 			}
-			w.notifyEvTimeUpdate(regionID, true /* isDelete */)
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
