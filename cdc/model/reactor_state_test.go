@@ -652,6 +652,8 @@ func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
 	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	state.CheckChangefeedNormal()
+	stateTester.MustApplyPatches()
 	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
 		return &ChangeFeedInfo{SinkURI: "123", AdminJobType: AdminNone, Config: &config.ReplicaConfig{}}, true, nil
 	})
