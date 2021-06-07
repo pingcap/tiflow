@@ -54,12 +54,14 @@ import (
 )
 
 const (
-	dialTimeout               = 10 * time.Second
-	maxRetry                  = 100
-	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms)
-	grpcInitialWindowSize     = 1 << 27 // 128 MB The value for initial window size on a stream
+	dialTimeout           = 10 * time.Second
+	maxRetry              = 100
+	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
+	// TODO find optimal values and test extensively before releasing
+	// The old values cause the gRPC stream to stall for some unknown reason.
+	grpcInitialWindowSize     = 1 << 26 // 64 MB The value for initial window size on a stream
 	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
+	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
 	grpcConnCount             = 2
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
@@ -72,7 +74,7 @@ const (
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
-var reconnectInterval = 15 * time.Minute
+var reconnectInterval = 60 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
@@ -173,12 +175,6 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
-}
-
-func (s *regionFeedState) isInitialized() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.initialized
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
@@ -1485,7 +1481,7 @@ func (s *eventFeedSession) singleEventFeed(
 		var ok bool
 		select {
 		case <-ctx.Done():
-			err = errors.Trace(err)
+			err = errors.Trace(ctx.Err())
 			return
 		case <-advanceCheckTicker.C:
 			if time.Since(startFeedTime) < resolveLockInterval {
@@ -1500,7 +1496,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			if sinceLastEvent > reconnectInterval {
+			if sinceLastEvent > reconnectInterval && initialized {
 				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
 				err = errReconnect
 				return
@@ -1516,6 +1512,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),
+					zap.Duration("lastEvent", sinceLastEvent),
 					zap.Uint64("resolvedTs", lastResolvedTs))
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 				err = s.lockResolver.Resolve(ctx, regionID, maxVersion)
@@ -1563,14 +1560,13 @@ func (s *eventFeedSession) singleEventFeed(
 						for _, cachedEvent := range cachedEvents {
 							revent, err = assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
-								err = errors.Trace(err)
 								return
 							}
 							select {
 							case s.eventCh <- revent:
 								metricSendEventCommitCounter.Inc()
 							case <-ctx.Done():
-								err = errors.Trace(err)
+								err = errors.Trace(ctx.Err())
 								return
 							}
 						}
