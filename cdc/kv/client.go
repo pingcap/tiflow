@@ -59,9 +59,9 @@ const (
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 	// TODO find optimal values and test extensively before releasing
 	// The old values cause the gRPC stream to stall for some unknown reason.
-	grpcInitialWindowSize     = 1 << 28 // 256 MB The value for initial window size on a stream
-	grpcInitialConnWindowSize = 1 << 29 // 512 MB The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
+	grpcInitialWindowSize     = 1 << 26 // 64 MB The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
+	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
 	grpcConnCount             = 2
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
@@ -74,7 +74,7 @@ const (
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
-var reconnectInterval = 15 * time.Minute
+var reconnectInterval = 60 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
@@ -175,12 +175,6 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
-}
-
-func (s *regionFeedState) isInitialized() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.initialized
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
@@ -990,7 +984,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	}()
 
 	ts := state.sri.ts
-	maxTs, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span,
+	maxTs, initialized, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span,
 		state.sri.ts, state.sri.rpcCtx.Addr, receiver)
 	log.Debug("singleEventFeed quit")
 
@@ -1052,11 +1046,10 @@ func (s *eventFeedSession) partialRegionFeed(
 		}
 	}
 
-	revokeToken := !state.initialized
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}, revokeToken)
+	}, !initialized)
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -1425,7 +1418,7 @@ func (s *eventFeedSession) singleEventFeed(
 	startTs uint64,
 	storeAddr string,
 	receiverCh <-chan *regionEvent,
-) (uint64, error) {
+) (lastResolvedTs uint64, initialized bool, err error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricEventSize := eventSize.WithLabelValues(captureAddr)
@@ -1438,14 +1431,12 @@ func (s *eventFeedSession) singleEventFeed(
 	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
-	initialized := false
-
 	matcher := newMatcher()
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
 	defer advanceCheckTicker.Stop()
 	lastReceivedEventTime := time.Now()
 	startFeedTime := time.Now()
-	lastResolvedTs := startTs
+	lastResolvedTs = startTs
 	handleResolvedTs := func(resolvedTs uint64) error {
 		if !initialized {
 			return nil
@@ -1486,7 +1477,8 @@ func (s *eventFeedSession) singleEventFeed(
 		},
 	}:
 	case <-ctx.Done():
-		return lastResolvedTs, errors.Trace(ctx.Err())
+		err = errors.Trace(ctx.Err())
+		return
 	}
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
@@ -1498,7 +1490,8 @@ func (s *eventFeedSession) singleEventFeed(
 		var ok bool
 		select {
 		case <-ctx.Done():
-			return lastResolvedTs, ctx.Err()
+			err = errors.Trace(ctx.Err())
+			return
 		case <-advanceCheckTicker.C:
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
@@ -1512,9 +1505,10 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			if sinceLastEvent > reconnectInterval {
+			if sinceLastEvent > reconnectInterval && initialized {
 				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
-				return lastResolvedTs, errReconnect
+				err = errReconnect
+				return
 			}
 			version, err := s.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
@@ -1527,6 +1521,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),
+					zap.Duration("lastEvent", sinceLastEvent),
 					zap.Uint64("resolvedTs", lastResolvedTs))
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 				err = s.lockResolver.Resolve(ctx, regionID, maxVersion)
@@ -1541,8 +1536,10 @@ func (s *eventFeedSession) singleEventFeed(
 
 		if !ok || event == nil {
 			log.Debug("singleEventFeed closed by error")
-			return lastResolvedTs, cerror.ErrEventFeedAborted.GenWithStackByArgs()
+			err = cerror.ErrEventFeedAborted.GenWithStackByArgs()
+			return
 		}
+		var revent *model.RegionFeedEvent
 		lastReceivedEventTime = time.Now()
 		if event.changeEvent != nil {
 			metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
@@ -1570,22 +1567,23 @@ func (s *eventFeedSession) singleEventFeed(
 						s.regionRouter.Release(storeAddr)
 						cachedEvents := matcher.matchCachedRow()
 						for _, cachedEvent := range cachedEvents {
-							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
+							revent, err = assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
-								return lastResolvedTs, errors.Trace(err)
+								return
 							}
 							select {
 							case s.eventCh <- revent:
 								metricSendEventCommitCounter.Inc()
 							case <-ctx.Done():
-								return lastResolvedTs, errors.Trace(ctx.Err())
+								err = errors.Trace(ctx.Err())
+								return
 							}
 						}
 					case cdcpb.Event_COMMITTED:
 						metricPullEventCommittedCounter.Inc()
-						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						revent, err = assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
-							return lastResolvedTs, errors.Trace(err)
+							return
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
@@ -1594,13 +1592,15 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
-							return lastResolvedTs, errUnreachable
+							err = errUnreachable
+							return
 						}
 						select {
 						case s.eventCh <- revent:
 							metricSendEventCommittedCounter.Inc()
 						case <-ctx.Done():
-							return lastResolvedTs, errors.Trace(ctx.Err())
+							err = errors.Trace(ctx.Err())
+							return
 						}
 					case cdcpb.Event_PREWRITE:
 						metricPullEventPrewriteCounter.Inc()
@@ -1613,7 +1613,8 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
-							return lastResolvedTs, errUnreachable
+							err = errUnreachable
+							return
 						}
 						ok := matcher.matchRow(entry)
 						if !ok {
@@ -1621,19 +1622,21 @@ func (s *eventFeedSession) singleEventFeed(
 								matcher.cacheCommitRow(entry)
 								continue
 							}
-							return lastResolvedTs, cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+							err = cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+							return
 						}
 
-						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						revent, err = assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
-							return lastResolvedTs, errors.Trace(err)
+							return
 						}
 
 						select {
 						case s.eventCh <- revent:
 							metricSendEventCommitCounter.Inc()
 						case <-ctx.Done():
-							return lastResolvedTs, errors.Trace(ctx.Err())
+							err = errors.Trace(ctx.Err())
+							return
 						}
 					case cdcpb.Event_ROLLBACK:
 						metricPullEventRollbackCounter.Inc()
@@ -1643,17 +1646,18 @@ func (s *eventFeedSession) singleEventFeed(
 			case *cdcpb.Event_Admin_:
 				log.Info("receive admin event", zap.Stringer("event", event.changeEvent))
 			case *cdcpb.Event_Error:
-				return lastResolvedTs, cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+				err = cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+				return
 			case *cdcpb.Event_ResolvedTs:
-				if err := handleResolvedTs(x.ResolvedTs); err != nil {
-					return lastResolvedTs, errors.Trace(err)
+				if err = handleResolvedTs(x.ResolvedTs); err != nil {
+					return
 				}
 			}
 		}
 
 		if event.resolvedTs != nil {
-			if err := handleResolvedTs(event.resolvedTs.Ts); err != nil {
-				return lastResolvedTs, errors.Trace(err)
+			if err = handleResolvedTs(event.resolvedTs.Ts); err != nil {
+				return
 			}
 		}
 	}
