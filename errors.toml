@@ -721,6 +721,11 @@ error = '''
 fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
 '''
 
+["CDC:ErrSupportGetOnly"]
+error = '''
+this api supports GET method only
+'''
+
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only

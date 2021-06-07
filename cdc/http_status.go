@@ -54,8 +54,9 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/capture/owner/rebalance_trigger", s.handleRebalanceTrigger)
 	serverMux.HandleFunc("/capture/owner/move_table", s.handleMoveTable)
 	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
-
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
+	serverMux.HandleFunc("/api/v1/changefeeds", s.handleChangefeeds)
+	serverMux.HandleFunc("/api/v1/health", s.handleHealth)
 
 	if util.FailpointBuild {
 		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
@@ -99,7 +100,7 @@ type status struct {
 	IsOwner bool   `json:"is_owner"`
 }
 
-func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
+func (s *Server) writeEtcdInfo(ctx context.Context, cli *kv.CDCEtcdClient, w io.Writer) {
 	resp, err := cli.Client.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
@@ -112,6 +113,12 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.W
 }
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
+	if config.NewReplicaImpl {
+		s.captureV2.WriteDebugInfo(w)
+		fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
+		s.writeEtcdInfo(req.Context(), s.etcdClient, w)
+		return
+	}
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner != nil {
@@ -130,17 +137,23 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	s.writeEtcdInfo(req.Context(), s.capture.etcdClient, w)
+	s.writeEtcdInfo(req.Context(), &s.capture.etcdClient, w)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
 	st := status{
 		Version: version.ReleaseVersion,
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
+	if config.NewReplicaImpl {
+		if s.captureV2 != nil {
+			st.ID = s.captureV2.Info().ID
+			st.IsOwner = s.captureV2.IsOwner()
+		}
+	}
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
 	if s.capture != nil {
 		st.ID = s.capture.info.ID
 	}
