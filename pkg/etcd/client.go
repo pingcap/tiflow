@@ -15,21 +15,17 @@ package etcd
 
 import (
 	"context"
-<<<<<<< HEAD
 
 	"github.com/cenkalti/backoff"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"google.golang.org/grpc/codes"
-=======
->>>>>>> replace retry usage with new retry pkg, partial done
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 // etcd operation names

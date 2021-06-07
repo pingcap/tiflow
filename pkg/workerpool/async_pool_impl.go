@@ -18,7 +18,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -56,11 +55,7 @@ func (p *defaultAsyncPoolImpl) Go(ctx context.Context, f func()) error {
 	}
 
 	err := retry.Do(ctx, func() error {
-		err := errors.Trace(p.doGo(ctx, f))
-		if err != nil && cerrors.ErrAsyncPoolExited.NotEqual(errors.Cause(err)) {
-			return backoff.Permanent(err)
-		}
-		return err
+		return errors.Trace(p.doGo(ctx, f))
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryable))
 	return errors.Trace(err)
 }
