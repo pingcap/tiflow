@@ -16,7 +16,6 @@ package etcd
 import (
 	"context"
 
-	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
@@ -78,7 +77,7 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 			metric.Inc()
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryableError(rpcName)))
 }
 
 // Put delegates request to clientv3.KV.Put
@@ -128,17 +127,27 @@ func (c *Client) Grant(ctx context.Context, ttl int64) (resp *clientv3.LeaseGran
 	return
 }
 
+func isRetryableError(rpcName string) retry.IsRetryable {
+	return func(err error) bool {
+		if !cerrors.IsRetryableError(err) {
+			return false
+		}
+		if rpcName == EtcdRevoke {
+			if etcdErr, ok := err.(rpctypes.EtcdError); ok && etcdErr.Code() == codes.NotFound {
+				// it means the etcd lease is already expired or revoked
+				return false
+			}
+		}
+
+		return true
+	}
+}
+
 // Revoke delegates request to clientv3.Lease.Revoke
 func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv3.LeaseRevokeResponse, err error) {
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.Revoke(ctx, id)
-		if inErr == nil {
-			return nil
-		} else if etcdErr := inErr.(rpctypes.EtcdError); etcdErr.Code() == codes.NotFound {
-			// it means the etcd lease is already expired or revoked
-			return backoff.Permanent(inErr)
-		}
 		return inErr
 	})
 	return
