@@ -540,9 +540,6 @@ type eventFeedSession struct {
 	streams          map[string]cdcpb.ChangeData_EventFeedClient
 	streamsLock      sync.RWMutex
 	streamsCanceller map[string]context.CancelFunc
-
-	workers     map[string]*regionWorker
-	workersLock sync.RWMutex
 }
 
 type rangeRequestTask struct {
@@ -585,7 +582,6 @@ func newEventFeedSession(
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
 		streamsCanceller:  make(map[string]context.CancelFunc),
-		workers:           make(map[string]*regionWorker),
 	}
 }
 
@@ -892,6 +888,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			// `receiveFromStream`, so no need to retry here.
 			_, ok := pendingRegions.take(requestID)
 			if !ok {
+				s.regionRouter.Acquire(rpcCtx.Addr)
 				continue
 			}
 
