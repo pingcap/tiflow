@@ -180,7 +180,7 @@ flushLoop:
 			if checkAllPartitionFlushed() {
 				return nil
 			}
-			return cerror.ErrKafkaFlushUnfished.GenWithStackByArgs()
+			return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
 		case <-k.flushedReceiver.C:
 			if !checkAllPartitionFlushed() {
 				continue flushLoop

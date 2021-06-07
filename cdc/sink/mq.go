@@ -371,7 +371,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 		if partition >= 0 {
 			return k.mqProducer.SendMessage(ctx, message, partition)
 		}
-		return cerror.ErrAsyncBroadcaseNotSupport.GenWithStackByArgs()
+		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
 			err := k.mqProducer.SendMessage(ctx, message, partition)
