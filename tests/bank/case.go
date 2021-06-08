@@ -491,6 +491,7 @@ func run(
 			workload := func(workloadCtx context.Context) error {
 				tx, err := upstreamDB.BeginTx(workloadCtx, nil)
 				if err != nil {
+					log.Error("upstream begin tx failed", zap.Error(err))
 					return errors.Trace(err)
 				}
 
@@ -503,6 +504,7 @@ func run(
 
 				if err := tx.Commit(); err != nil {
 					_ = tx.Rollback()
+					log.Error("upstream tx commit failed", zap.Error(err))
 					return errors.Trace(err)
 				}
 
@@ -510,8 +512,9 @@ func run(
 					tblName := fmt.Sprintf("finishmark%d", atomic.LoadInt64(&counts))
 					ddl := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (foo BIGINT PRIMARY KEY)", tblName)
 					mustExec(ctx, upstreamDB, ddl)
-
 					tblChan <- tblName
+
+					log.Info("upstream create table executed", zap.String("tblName", tblName))
 				}
 				return nil
 			}
@@ -548,9 +551,6 @@ func run(
 					endTs, err := getDDLEndTs(downstreamDB, tblName)
 					if err != nil {
 						log.Fatal("[cdc-bank] get ddl end ts error", zap.Error(err))
-					}
-					if endTs == "" {
-						continue
 					}
 
 					atomic.AddInt64(&valid, 1)
@@ -614,6 +614,7 @@ func getDDLEndTs(db *sql.DB, tableName string) (result string, err error) {
 		}
 		if line.JobType == "create table" && line.TblName == tableName && line.State == "synced" {
 			if line.EndTime == nil {
+				log.Warn("get ddl end time failed", zap.String("tableName", tableName))
 				return "", nil
 			}
 			return *line.EndTime, nil
