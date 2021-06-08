@@ -97,7 +97,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
 
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
-		// simulate sending message to intput channel successfully but flushing
+		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
 		log.Info("failpoint error injected")
 		k.failpointCh <- errors.New("kafka sink injected error")
@@ -380,7 +380,7 @@ func init() {
 }
 
 var (
-	validClienID      *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	validClientID     *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
 	commonInvalidChar *regexp.Regexp = regexp.MustCompile(`[\?:,"]`)
 )
 
@@ -391,7 +391,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
 		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
 	}
-	if !validClienID.MatchString(clientID) {
+	if !validClientID.MatchString(clientID) {
 		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
 	}
 	return
