@@ -1483,7 +1483,7 @@ func (s *eventFeedSession) singleEventFeed(
 		case <-advanceCheckTicker.C:
 			failpoint.Inject("kvClientForceReconnect", func() {
 				log.Warn("kv client reconnect triggered by failpoint")
-				failpoint.Return(lastResolvedTs, errReconnect)
+				failpoint.Return(lastResolvedTs, initialized, errReconnect)
 			})
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
