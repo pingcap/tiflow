@@ -395,7 +395,7 @@ func waitTable(ctx context.Context, db *sql.DB, table string) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Second):
+		case <-time.After(5 * time.Second):
 		}
 	}
 }
@@ -426,6 +426,7 @@ func openDB(ctx context.Context, dsn string) *sql.DB {
 	if err = db.PingContext(ctx); err != nil {
 		log.Panic("ping db failed", zap.String("dsn", dsn), zap.Error(err))
 	}
+	log.Info("open db success", zap.String("dsn", dsn))
 	return db
 }
 
@@ -575,13 +576,13 @@ func run(
 		})
 	}
 
+	_ = g.Wait()
+
 	if tried == 0 {
 		log.Warn("bank test finished, but tries is 0")
 	} else {
 		log.Info("bank test finished", zap.Int64("valid", valid), zap.Int64("tries", tried), zap.Float64("ratio", float64(valid)/float64(tried)))
 	}
-
-	_ = g.Wait()
 }
 
 type dataRow struct {
