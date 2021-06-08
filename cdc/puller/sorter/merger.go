@@ -224,10 +224,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if nextEvent == nil {
-				_, ok := pendingSet.LoadAndDelete(task)
-				if !ok {
-					log.Panic("task not found when deleting")
-				}
+				pendingSet.Delete(task)
 
 				err := task.reader.resetAndClose()
 				if err != nil {
