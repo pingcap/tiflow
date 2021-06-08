@@ -92,10 +92,14 @@ func (t *tablePipelineImpl) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
-	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
-	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
-		log.Panic("unexpect error from send to first node", zap.Error(err))
-	}
+	// TODO restore the old implementation after refactoring Unified Sorter to guarantee non-blocking
+	t.sinkNode.UpdateBarrierTs(ts)
+	/*
+		err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
+		if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
+			log.Panic("unexpect error from send to first node", zap.Error(err))
+		}
+	*/
 }
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.

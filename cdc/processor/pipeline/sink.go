@@ -91,6 +91,12 @@ func newSinkNode(sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowContro
 	}
 }
 
+// UpdateBarrierTs is used as an alternative way to update the barrierTs (AKA the global resolved-ts).
+// TODO remove it after refactoring Unified Sorter to guarantee non-blocking
+func (n *sinkNode) UpdateBarrierTs(barrierTs uint64) {
+	atomic.StoreUint64(&n.barrierTs, barrierTs)
+}
+
 func (n *sinkNode) ResolvedTs() model.Ts   { return atomic.LoadUint64(&n.resolvedTs) }
 func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpointTs) }
 func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
@@ -116,8 +122,10 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 			err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 		}
 	}()
-	if resolvedTs > n.barrierTs {
-		resolvedTs = n.barrierTs
+
+	barrierTs := atomic.LoadUint64(&n.barrierTs)
+	if resolvedTs > barrierTs {
+		resolvedTs = barrierTs
 	}
 	if resolvedTs > n.targetTs {
 		resolvedTs = n.targetTs
@@ -213,7 +221,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			n.targetTs = msg.Command.StoppedTs
 		}
 	case pipeline.MessageTypeBarrier:
-		n.barrierTs = msg.BarrierTs
+		atomic.StoreUint64(&n.barrierTs, msg.BarrierTs)
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return errors.Trace(err)
 		}

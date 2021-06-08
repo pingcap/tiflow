@@ -217,7 +217,12 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
-			for atomic.LoadInt64(&mergerBufLen) > maxOpenHeapNum {
+			blockInputThres := maxOpenHeapNum
+			failpoint.Inject("injectMaxOpenHeapNum", func(val failpoint.Value) {
+				blockInputThres = val.(int)
+			})
+
+			for atomic.LoadInt64(&mergerBufLen) > int64(blockInputThres) {
 				after := time.After(1 * time.Second)
 				select {
 				case <-subctx.Done():
