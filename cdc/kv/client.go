@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -37,8 +38,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
+	tidbkv "github.com/pingcap/tidb/store/tikv/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
@@ -58,10 +59,10 @@ const (
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 	// TODO find optimal values and test extensively before releasing
 	// The old values cause the gRPC stream to stall for some unknown reason.
-	grpcInitialWindowSize     = 1 << 28 // 256 MB The value for initial window size on a stream
-	grpcInitialConnWindowSize = 1 << 29 // 512 MB The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
-	grpcConnCount             = 10
+	grpcInitialWindowSize     = 1 << 26 // 64 MB The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
+	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
+	grpcConnCount             = 2
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
@@ -73,7 +74,7 @@ const (
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
-var reconnectInterval = 15 * time.Minute
+var reconnectInterval = 60 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
@@ -94,6 +95,8 @@ var (
 	metricFeedDuplicateRequestCounter = eventFeedErrorCounter.WithLabelValues("DuplicateRequest")
 	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
+	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
+	metricConnectToStoreErr           = eventFeedErrorCounter.WithLabelValues("ConnectToStore")
 )
 
 var (
@@ -117,9 +120,13 @@ func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan,
 // happens, kv client needs to recover region request from singleRegionInfo
 func (s *singleRegionInfo) partialClone() singleRegionInfo {
 	sri := singleRegionInfo{
-		verID: s.verID,
-		span:  s.span.Clone(),
-		ts:    s.ts,
+		verID:  s.verID,
+		span:   s.span.Clone(),
+		ts:     s.ts,
+		rpcCtx: &tikv.RPCContext{},
+	}
+	if s.rpcCtx != nil {
+		sri.rpcCtx.Addr = s.rpcCtx.Addr
 	}
 	return sri
 }
@@ -168,12 +175,6 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
-}
-
-func (s *regionFeedState) isInitialized() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.initialized
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
@@ -377,7 +378,6 @@ type CDCClient struct {
 // NewCDCClient creates a CDCClient instance
 func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
-	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	var store TiKVStorage
 	if kvStorage != nil {
@@ -486,7 +486,7 @@ func (c *CDCClient) EventFeed(
 	isPullerInit PullerInitialization,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span,
+	s := newEventFeedSession(ctx, c, c.regionCache, c.kvStorage, span,
 		lockResolver, isPullerInit,
 		enableOldValue, ts, eventCh)
 	return s.eventFeed(ctx, ts)
@@ -516,6 +516,9 @@ type eventFeedSession struct {
 
 	// The channel to send the processed events.
 	eventCh chan<- *model.RegionFeedEvent
+	// The token based region router, it controls the uninitialzied regions with
+	// a given size limit.
+	regionRouter LimitRegionRouter
 	// The channel to put the region that will be sent requests.
 	regionCh chan singleRegionInfo
 	// The channel to notify that an error is happening, so that the error will be handled and the affected region
@@ -548,6 +551,7 @@ type rangeRequestTask struct {
 }
 
 func newEventFeedSession(
+	ctx context.Context,
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
 	kvStorage TiKVStorage,
@@ -559,12 +563,14 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	return &eventFeedSession{
 		client:            client,
 		regionCache:       regionCache,
 		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
+		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
 		regionCh:          make(chan singleRegionInfo, 16),
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),
@@ -596,16 +602,27 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	})
 
 	g.Go(func() error {
+		return s.requestRegionToStore(ctx, g)
+	})
+
+	g.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case task := <-s.requestRangeCh:
 				s.rangeChSizeGauge.Dec()
-				err := s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				// divideAndSendEventFeedToRegions could be block for some time,
+				// since it must wait for the region lock available. In order to
+				// consume region range request from `requestRangeCh` as soon as
+				// possible, we create a new goroutine to handle it.
+				// The sequence of region range we process is not matter, the
+				// region lock keeps the region access sequence.
+				// Besides the count or frequency of range request is limitted,
+				// we use ephemeral goroutine instead of permanent gourotine.
+				g.Go(func() error {
+					return s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
+				})
 			}
 		}
 	})
@@ -623,6 +640,10 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				}
 			}
 		}
+	})
+
+	g.Go(func() error {
+		return s.regionRouter.Run(ctx)
 	})
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
@@ -654,7 +675,6 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				s.regionChSizeGauge.Inc()
 			case <-ctx.Done():
 			}
-
 		case regionspan.LockRangeStatusStale:
 			log.Info("request expired",
 				zap.Uint64("regionID", sri.verID.GetID()),
@@ -673,6 +693,25 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	}
 
 	res := s.rangeLock.LockRange(ctx, sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
+	failpoint.Inject("kvClientMockRangeLock", func(val failpoint.Value) {
+		// short sleep to wait region has split
+		time.Sleep(time.Second)
+		s.rangeLock.UnlockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer(), sri.ts)
+		regionNum := val.(int)
+		retryRanges := make([]regionspan.ComparableSpan, 0, regionNum)
+		start := []byte("a")
+		end := []byte("b1001")
+		for i := 0; i < regionNum; i++ {
+			span := regionspan.Span{Start: start, End: end}
+			retryRanges = append(retryRanges, regionspan.ToComparableSpan(span))
+			start = end
+			end = []byte(fmt.Sprintf("b%d", 1002+i))
+		}
+		res = regionspan.LockRangeResult{
+			Status:      regionspan.LockRangeStatusStale,
+			RetryRanges: retryRanges,
+		}
+	})
 
 	if res.Status == regionspan.LockRangeStatusWait {
 		res = res.WaitFn()
@@ -684,9 +723,12 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
 // error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) error {
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
+	if revokeToken {
+		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
+	}
 	select {
 	case s.errCh <- errorInfo:
 		s.errChSizeGauge.Inc()
@@ -702,6 +744,172 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 	return nil
 }
 
+// requestRegionToStore gets singleRegionInfo from regionRouter, which is a token
+// based limitter, sends request to TiKV.
+// If the send request to TiKV returns error, fail the region with sendRequestToStoreErr
+// and kv client will redispatch the region.
+// If initialize gPRC stream with an error, fail the region with connectToStoreErr
+// and kv client will also redispatch the region.
+func (s *eventFeedSession) requestRegionToStore(
+	ctx context.Context,
+	g *errgroup.Group,
+) error {
+	// Stores pending regions info for each stream. After sending a new request, the region info wil be put to the map,
+	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
+	// to pass the region info to the receiver since the region info cannot be inferred from the response from TiKV.
+	storePendingRegions := make(map[string]*syncRegionFeedStateMap)
+
+	var sri singleRegionInfo
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case sri = <-s.regionRouter.Chan():
+		}
+		requestID := allocID()
+
+		extraOp := kvrpcpb.ExtraOp_Noop
+		if s.enableOldValue {
+			extraOp = kvrpcpb.ExtraOp_ReadOldValue
+		}
+
+		rpcCtx := sri.rpcCtx
+		regionID := rpcCtx.Meta.GetId()
+		req := &cdcpb.ChangeDataRequest{
+			Header: &cdcpb.Header{
+				ClusterId:    s.client.clusterID,
+				TicdcVersion: version.ReleaseSemver(),
+			},
+			RegionId:     regionID,
+			RequestId:    requestID,
+			RegionEpoch:  rpcCtx.Meta.RegionEpoch,
+			CheckpointTs: sri.ts,
+			StartKey:     sri.span.Start,
+			EndKey:       sri.span.End,
+			ExtraOp:      extraOp,
+		}
+
+		failpoint.Inject("kvClientPendingRegionDelay", nil)
+
+		// each TiKV store has an independent pendingRegions.
+		var pendingRegions *syncRegionFeedStateMap
+
+		var err error
+		stream, ok := s.getStream(rpcCtx.Addr)
+		if ok {
+			var ok bool
+			pendingRegions, ok = storePendingRegions[rpcCtx.Addr]
+			if !ok {
+				// Should never happen
+				log.Panic("pending regions is not found for store", zap.String("store", rpcCtx.Addr))
+			}
+		} else {
+			// when a new stream is established, always create a new pending
+			// regions map, the old map will be used in old `receiveFromStream`
+			// and won't be deleted until that goroutine exits.
+			pendingRegions = newSyncRegionFeedStateMap()
+			storePendingRegions[rpcCtx.Addr] = pendingRegions
+			storeID := rpcCtx.Peer.GetStoreId()
+			log.Info("creating new stream to store to send request",
+				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Uint64("requestID", requestID),
+				zap.Uint64("storeID", storeID),
+				zap.String("addr", rpcCtx.Addr))
+			streamCtx, streamCancel := context.WithCancel(ctx)
+			_ = streamCancel // to avoid possible context leak warning from govet
+			stream, err = s.client.newStream(streamCtx, rpcCtx.Addr, storeID)
+			if err != nil {
+				// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
+				log.Warn("get grpc stream client failed",
+					zap.Uint64("regionID", sri.verID.GetID()),
+					zap.Uint64("requestID", requestID),
+					zap.Uint64("storeID", storeID),
+					zap.String("error", err.Error()))
+				if cerror.ErrVersionIncompatible.Equal(err) {
+					// It often occurs on rolling update. Sleep 20s to reduce logs.
+					delay := 20 * time.Second
+					failpoint.Inject("kvClientDelayWhenIncompatible", func() {
+						delay = 100 * time.Millisecond
+					})
+					time.Sleep(delay)
+				}
+				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+				s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
+				err = s.onRegionFail(ctx, regionErrorInfo{
+					singleRegionInfo: sri,
+					err:              &connectToStoreErr{},
+				}, false /* revokeToken */)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				continue
+			}
+			s.addStream(rpcCtx.Addr, stream, streamCancel)
+
+			limiter := s.client.getRegionLimiter(regionID)
+			g.Go(func() error {
+				if !s.enableKVClientV2 {
+					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+				}
+				return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+			})
+		}
+
+		state := newRegionFeedState(sri, requestID)
+		pendingRegions.insert(requestID, state)
+
+		logReq := log.Debug
+		if s.isPullerInit.IsInitialized() {
+			logReq = log.Info
+		}
+		logReq("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
+
+		err = stream.Send(req)
+
+		// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
+		// to do extra work here.
+		if err != nil {
+			log.Error("send request to stream failed",
+				zap.String("addr", rpcCtx.Addr),
+				zap.Uint64("storeID", getStoreID(rpcCtx)),
+				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Uint64("requestID", requestID),
+				zap.Error(err))
+			err1 := stream.CloseSend()
+			if err1 != nil {
+				log.Error("failed to close stream", zap.Error(err1))
+			}
+			// Delete the stream from the map so that the next time the store is accessed, the stream will be
+			// re-established.
+			s.deleteStream(rpcCtx.Addr)
+			// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
+			// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
+			// pending regions, the new pending regions that are requested after reconnecting won't be stopped
+			// incorrectly.
+			delete(storePendingRegions, rpcCtx.Addr)
+
+			// Remove the region from pendingRegions. If it's already removed, it should be already retried by
+			// `receiveFromStream`, so no need to retry here.
+			_, ok := pendingRegions.take(requestID)
+			if !ok {
+				continue
+			}
+
+			// Wait for a while and retry sending the request
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+			err = s.onRegionFail(ctx, regionErrorInfo{
+				singleRegionInfo: sri,
+				err:              &sendRequestToStoreErr{},
+			}, false /* revokeToken */)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		} else {
+			s.regionRouter.Acquire(rpcCtx.Addr)
+		}
+	}
+}
+
 // dispatchRequest manages a set of streams and dispatch event feed requests
 // to these streams. Streams to each store will be created on need. After
 // establishing new stream, a goroutine will be spawned to handle events from
@@ -713,12 +921,6 @@ func (s *eventFeedSession) dispatchRequest(
 	ctx context.Context,
 	g *errgroup.Group,
 ) error {
-	// Stores pending regions info for each stream. After sending a new request, the region info wil be put to the map,
-	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
-	// to pass the region info to the receiver since the region info cannot be inferred from the response from TiKV.
-	storePendingRegions := make(map[string]*syncRegionFeedStateMap)
-
-MainLoop:
 	for {
 		// Note that when a region is received from the channel, it's range has been already locked.
 		var sri singleRegionInfo
@@ -731,166 +933,28 @@ MainLoop:
 
 		log.Debug("dispatching region", zap.Uint64("regionID", sri.verID.GetID()))
 
-		// Loop for retrying in case the stream has disconnected.
-		// TODO: Should we break if retries and fails too many times?
-		for {
-			rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
+		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if rpcCtx == nil {
+			// The region info is invalid. Retry the span.
+			log.Info("cannot get rpcCtx, retry span",
+				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Stringer("span", sri.span))
+			err = s.onRegionFail(ctx, regionErrorInfo{
+				singleRegionInfo: sri,
+				err: &rpcCtxUnavailableErr{
+					verID: sri.verID,
+				},
+			}, false /* revokeToken */)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if rpcCtx == nil {
-				// The region info is invalid. Retry the span.
-				log.Info("cannot get rpcCtx, retry span",
-					zap.Uint64("regionID", sri.verID.GetID()),
-					zap.Stringer("span", sri.span))
-				err = s.onRegionFail(ctx, regionErrorInfo{
-					singleRegionInfo: sri,
-					err: &rpcCtxUnavailableErr{
-						verID: sri.verID,
-					},
-				})
-				if err != nil {
-					return errors.Trace(err)
-				}
-				continue MainLoop
-			}
-			sri.rpcCtx = rpcCtx
-
-			requestID := allocID()
-
-			extraOp := kvrpcpb.ExtraOp_Noop
-			if s.enableOldValue {
-				extraOp = kvrpcpb.ExtraOp_ReadOldValue
-			}
-
-			regionID := rpcCtx.Meta.GetId()
-			req := &cdcpb.ChangeDataRequest{
-				Header: &cdcpb.Header{
-					ClusterId:    s.client.clusterID,
-					TicdcVersion: version.ReleaseSemver(),
-				},
-				RegionId:     regionID,
-				RequestId:    requestID,
-				RegionEpoch:  rpcCtx.Meta.RegionEpoch,
-				CheckpointTs: sri.ts,
-				StartKey:     sri.span.Start,
-				EndKey:       sri.span.End,
-				ExtraOp:      extraOp,
-			}
-
-			failpoint.Inject("kvClientPendingRegionDelay", nil)
-
-			// each TiKV store has an independent pendingRegions.
-			var pendingRegions *syncRegionFeedStateMap
-
-			stream, ok := s.getStream(rpcCtx.Addr)
-			if ok {
-				var ok bool
-				pendingRegions, ok = storePendingRegions[rpcCtx.Addr]
-				if !ok {
-					// Should never happen
-					log.Panic("pending regions is not found for store", zap.String("store", rpcCtx.Addr))
-				}
-			} else {
-				// when a new stream is established, always create a new pending
-				// regions map, the old map will be used in old `receiveFromStream`
-				// and won't be deleted until that goroutine exits.
-				pendingRegions = newSyncRegionFeedStateMap()
-				storePendingRegions[rpcCtx.Addr] = pendingRegions
-				storeID := rpcCtx.Peer.GetStoreId()
-				log.Info("creating new stream to store to send request",
-					zap.Uint64("regionID", sri.verID.GetID()),
-					zap.Uint64("requestID", requestID),
-					zap.Uint64("storeID", storeID),
-					zap.String("addr", rpcCtx.Addr))
-				streamCtx, streamCancel := context.WithCancel(ctx)
-				_ = streamCancel // to avoid possible context leak warning from govet
-				stream, err = s.client.newStream(streamCtx, rpcCtx.Addr, storeID)
-				if err != nil {
-					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
-					log.Warn("get grpc stream client failed",
-						zap.Uint64("regionID", sri.verID.GetID()),
-						zap.Uint64("requestID", requestID),
-						zap.Uint64("storeID", storeID),
-						zap.String("error", err.Error()))
-					if cerror.ErrVersionIncompatible.Equal(err) {
-						// It often occurs on rolling update. Sleep 20s to reduce logs.
-						delay := 20 * time.Second
-						failpoint.Inject("kvClientDelayWhenIncompatible", func() {
-							delay = 100 * time.Millisecond
-						})
-						time.Sleep(delay)
-					}
-					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-					s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
-					continue
-				}
-				s.addStream(rpcCtx.Addr, stream, streamCancel)
-
-				limiter := s.client.getRegionLimiter(regionID)
-				g.Go(func() error {
-					if !s.enableKVClientV2 {
-						return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
-					}
-					return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
-				})
-			}
-
-			state := newRegionFeedState(sri, requestID)
-			pendingRegions.insert(requestID, state)
-
-			logReq := log.Debug
-			if s.isPullerInit.IsInitialized() {
-				logReq = log.Info
-			}
-			logReq("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
-
-			err = stream.Send(req)
-
-			// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
-			// to do extra work here.
-			if err != nil {
-
-				log.Error("send request to stream failed",
-					zap.String("addr", rpcCtx.Addr),
-					zap.Uint64("storeID", getStoreID(rpcCtx)),
-					zap.Uint64("regionID", sri.verID.GetID()),
-					zap.Uint64("requestID", requestID),
-					zap.Error(err))
-				err1 := stream.CloseSend()
-				if err1 != nil {
-					log.Error("failed to close stream", zap.Error(err1))
-				}
-				// Delete the stream from the map so that the next time the store is accessed, the stream will be
-				// re-established.
-				s.deleteStream(rpcCtx.Addr)
-				// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
-				// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
-				// pending regions, the new pending regions that are requested after reconnecting won't be stopped
-				// incorrectly.
-				delete(storePendingRegions, rpcCtx.Addr)
-
-				// Remove the region from pendingRegions. If it's already removed, it should be already retried by
-				// `receiveFromStream`, so no need to retry here.
-				_, ok := pendingRegions.take(requestID)
-				if !ok {
-					break
-				}
-
-				// Wait for a while and retry sending the request
-				time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-				// Break if ctx has been canceled.
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
-
-				continue
-			}
-
-			break
+			continue
 		}
+		sri.rpcCtx = rpcCtx
+		s.regionRouter.AddRegion(sri)
 	}
 }
 
@@ -920,7 +984,8 @@ func (s *eventFeedSession) partialRegionFeed(
 	}()
 
 	ts := state.sri.ts
-	maxTs, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span, state.sri.ts, receiver)
+	maxTs, initialized, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span,
+		state.sri.ts, state.sri.rpcCtx.Addr, receiver)
 	log.Debug("singleEventFeed quit")
 
 	if err == nil || errors.Cause(err) == context.Canceled {
@@ -984,7 +1049,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	})
+	}, !initialized)
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -1101,6 +1166,10 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		metricFeedRPCCtxUnavailable.Inc()
 		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts)
 		return nil
+	case *connectToStoreErr:
+		metricConnectToStoreErr.Inc()
+	case *sendRequestToStoreErr:
+		metricStoreSendRequestErr.Inc()
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		if errInfo.rpcCtx.Meta != nil {
@@ -1144,7 +1213,7 @@ func (s *eventFeedSession) receiveFromStream(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			})
+			}, true /* revokeToken */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
@@ -1347,8 +1416,9 @@ func (s *eventFeedSession) singleEventFeed(
 	regionID uint64,
 	span regionspan.ComparableSpan,
 	startTs uint64,
+	storeAddr string,
 	receiverCh <-chan *regionEvent,
-) (uint64, error) {
+) (lastResolvedTs uint64, initialized bool, err error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricEventSize := eventSize.WithLabelValues(captureAddr)
@@ -1361,14 +1431,12 @@ func (s *eventFeedSession) singleEventFeed(
 	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
-	initialized := false
-
 	matcher := newMatcher()
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
 	defer advanceCheckTicker.Stop()
 	lastReceivedEventTime := time.Now()
 	startFeedTime := time.Now()
-	lastResolvedTs := startTs
+	lastResolvedTs = startTs
 	handleResolvedTs := func(resolvedTs uint64) error {
 		if !initialized {
 			return nil
@@ -1409,14 +1477,12 @@ func (s *eventFeedSession) singleEventFeed(
 		},
 	}:
 	case <-ctx.Done():
-		return lastResolvedTs, errors.Trace(ctx.Err())
+		err = errors.Trace(ctx.Err())
+		return
 	}
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
-	})
-	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
-		reconnectInterval = time.Duration(val.(int)) * time.Second
 	})
 
 	for {
@@ -1424,7 +1490,8 @@ func (s *eventFeedSession) singleEventFeed(
 		var ok bool
 		select {
 		case <-ctx.Done():
-			return lastResolvedTs, ctx.Err()
+			err = errors.Trace(ctx.Err())
+			return
 		case <-advanceCheckTicker.C:
 			if time.Since(startFeedTime) < resolveLockInterval {
 				continue
@@ -1438,9 +1505,10 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			if sinceLastEvent > reconnectInterval {
+			if sinceLastEvent > reconnectInterval && initialized {
 				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
-				return lastResolvedTs, errReconnect
+				err = errReconnect
+				return
 			}
 			version, err := s.kvStorage.GetCachedCurrentVersion()
 			if err != nil {
@@ -1453,6 +1521,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),
+					zap.Duration("lastEvent", sinceLastEvent),
 					zap.Uint64("resolvedTs", lastResolvedTs))
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 				err = s.lockResolver.Resolve(ctx, regionID, maxVersion)
@@ -1467,8 +1536,10 @@ func (s *eventFeedSession) singleEventFeed(
 
 		if !ok || event == nil {
 			log.Debug("singleEventFeed closed by error")
-			return lastResolvedTs, cerror.ErrEventFeedAborted.GenWithStackByArgs()
+			err = cerror.ErrEventFeedAborted.GenWithStackByArgs()
+			return
 		}
+		var revent *model.RegionFeedEvent
 		lastReceivedEventTime = time.Now()
 		if event.changeEvent != nil {
 			metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
@@ -1487,30 +1558,32 @@ func (s *eventFeedSession) singleEventFeed(
 					switch entry.Type {
 					case cdcpb.Event_INITIALIZED:
 						if time.Since(startFeedTime) > 20*time.Second {
-							log.Warn("The time cost of initializing is too mush",
+							log.Warn("The time cost of initializing is too much",
 								zap.Duration("timeCost", time.Since(startFeedTime)),
 								zap.Uint64("regionID", regionID))
 						}
 						metricPullEventInitializedCounter.Inc()
 						initialized = true
+						s.regionRouter.Release(storeAddr)
 						cachedEvents := matcher.matchCachedRow()
 						for _, cachedEvent := range cachedEvents {
-							revent, err := assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
+							revent, err = assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
-								return lastResolvedTs, errors.Trace(err)
+								return
 							}
 							select {
 							case s.eventCh <- revent:
 								metricSendEventCommitCounter.Inc()
 							case <-ctx.Done():
-								return lastResolvedTs, errors.Trace(ctx.Err())
+								err = errors.Trace(ctx.Err())
+								return
 							}
 						}
 					case cdcpb.Event_COMMITTED:
 						metricPullEventCommittedCounter.Inc()
-						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						revent, err = assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
-							return lastResolvedTs, errors.Trace(err)
+							return
 						}
 
 						if entry.CommitTs <= lastResolvedTs {
@@ -1519,13 +1592,15 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
-							return lastResolvedTs, errUnreachable
+							err = errUnreachable
+							return
 						}
 						select {
 						case s.eventCh <- revent:
 							metricSendEventCommittedCounter.Inc()
 						case <-ctx.Done():
-							return lastResolvedTs, errors.Trace(ctx.Err())
+							err = errors.Trace(ctx.Err())
+							return
 						}
 					case cdcpb.Event_PREWRITE:
 						metricPullEventPrewriteCounter.Inc()
@@ -1538,7 +1613,8 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("CommitTs", entry.CommitTs),
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
-							return lastResolvedTs, errUnreachable
+							err = errUnreachable
+							return
 						}
 						ok := matcher.matchRow(entry)
 						if !ok {
@@ -1546,19 +1622,21 @@ func (s *eventFeedSession) singleEventFeed(
 								matcher.cacheCommitRow(entry)
 								continue
 							}
-							return lastResolvedTs, cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+							err = cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+							return
 						}
 
-						revent, err := assembleRowEvent(regionID, entry, s.enableOldValue)
+						revent, err = assembleRowEvent(regionID, entry, s.enableOldValue)
 						if err != nil {
-							return lastResolvedTs, errors.Trace(err)
+							return
 						}
 
 						select {
 						case s.eventCh <- revent:
 							metricSendEventCommitCounter.Inc()
 						case <-ctx.Done():
-							return lastResolvedTs, errors.Trace(ctx.Err())
+							err = errors.Trace(ctx.Err())
+							return
 						}
 					case cdcpb.Event_ROLLBACK:
 						metricPullEventRollbackCounter.Inc()
@@ -1568,17 +1646,18 @@ func (s *eventFeedSession) singleEventFeed(
 			case *cdcpb.Event_Admin_:
 				log.Info("receive admin event", zap.Stringer("event", event.changeEvent))
 			case *cdcpb.Event_Error:
-				return lastResolvedTs, cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+				err = cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+				return
 			case *cdcpb.Event_ResolvedTs:
-				if err := handleResolvedTs(x.ResolvedTs); err != nil {
-					return lastResolvedTs, errors.Trace(err)
+				if err = handleResolvedTs(x.ResolvedTs); err != nil {
+					return
 				}
 			}
 		}
 
 		if event.resolvedTs != nil {
-			if err := handleResolvedTs(event.resolvedTs.Ts); err != nil {
-				return lastResolvedTs, errors.Trace(err)
+			if err = handleResolvedTs(event.resolvedTs.Ts); err != nil {
+				return
 			}
 		}
 	}
@@ -1661,6 +1740,14 @@ func (e *rpcCtxUnavailableErr) Error() string {
 	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
 		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
 }
+
+type connectToStoreErr struct{}
+
+func (e *connectToStoreErr) Error() string { return "connect to store error" }
+
+type sendRequestToStoreErr struct{}
+
+func (e *sendRequestToStoreErr) Error() string { return "send request to store error" }
 
 func getStoreID(rpcCtx *tikv.RPCContext) uint64 {
 	if rpcCtx != nil && rpcCtx.Peer != nil {

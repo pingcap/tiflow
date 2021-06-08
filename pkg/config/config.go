@@ -33,6 +33,10 @@ import (
 // new owner should be also switched on after it implemented
 const NewReplicaImpl = true
 
+func init() {
+	StoreGlobalServerConfig(GetDefaultServerConfig())
+}
+
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
 	EnableOldValue:   true,
@@ -154,14 +158,19 @@ var defaultServerConfig = &ServerConfig{
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
-		ChunkSizeLimit:         1024 * 1024 * 1024, // 1GB
-		MaxMemoryPressure:      80,
-		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
+		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
+		MaxMemoryPressure:      30,                      // 30% is safe on machines with memory capacity <= 16GB
+		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                "/tmp/cdc_sort",
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+	KVClient: &KVClientConfig{
+		WorkerConcurrent: 8,
+		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+		RegionScanLimit:  40,
+	},
 }
 
 // ServerConfig represents a config for server
@@ -180,10 +189,10 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
-	Security *SecurityConfig `toml:"security" json:"security"`
-
-	PerTableMemoryQuota uint64 `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	Sorter              *SorterConfig   `toml:"sorter" json:"sorter"`
+	Security            *SecurityConfig `toml:"security" json:"security"`
+	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -293,6 +302,16 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.PerTableMemoryQuota < 6*1024*1024 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+	}
+
+	if c.KVClient == nil {
+		c.KVClient = defaultServerConfig.KVClient
+	}
+	if c.KVClient.WorkerConcurrent <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
+	if c.KVClient.RegionScanLimit <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
 	}
 
 	return nil

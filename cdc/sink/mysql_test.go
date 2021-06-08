@@ -272,6 +272,8 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
 	for _, txn := range txns1 {
 		w.appendTxn(cctx, txn)
 	}
+
+	// simulate notify sink worker to flush existing txns
 	var wg sync.WaitGroup
 	w.appendFinishTxn(&wg)
 	time.Sleep(time.Millisecond * 100)
@@ -280,7 +282,78 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
 		w.appendTxn(cctx, txn)
 	}
 	notifier.Notify()
+
+	// simulate sink shutdown and send closed singal to sink worker
+	w.closedCh <- struct{}{}
+	w.cleanup()
+
+	// the flush notification wait group should be done
 	wg.Wait()
+
+	cancel()
+	c.Assert(errg.Wait(), check.Equals, errExecFailed)
+}
+
+func (s MySQLSinkSuite) TestMySQLSinkWorkerExitCleanup(c *check.C) {
+	defer testleak.AfterTest(c)()
+	txns1 := []*model.SingleTableTxn{
+		{
+			CommitTs: 1,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+		},
+		{
+			CommitTs: 2,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+		},
+	}
+	txns2 := []*model.SingleTableTxn{
+		{
+			CommitTs: 5,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+		},
+	}
+
+	maxTxnRow := 1
+	ctx := context.Background()
+
+	errExecFailed := errors.New("sink worker exec failed")
+	notifier := new(notify.Notifier)
+	cctx, cancel := context.WithCancel(ctx)
+	receiver, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
+		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		receiver,
+		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+			return errExecFailed
+		})
+	errg, cctx := errgroup.WithContext(cctx)
+	errg.Go(func() error {
+		err := w.run(cctx)
+		return err
+	})
+	for _, txn := range txns1 {
+		w.appendTxn(cctx, txn)
+	}
+
+	// sleep to let txns flushed by tick
+	time.Sleep(time.Millisecond * 100)
+
+	// simulate more txns are sent to txnCh after the sink worker run has exited
+	for _, txn := range txns2 {
+		w.appendTxn(cctx, txn)
+	}
+	var wg sync.WaitGroup
+	w.appendFinishTxn(&wg)
+	notifier.Notify()
+
+	// simulate sink shutdown and send closed singal to sink worker
+	w.closedCh <- struct{}{}
+	w.cleanup()
+
+	// the flush notification wait group should be done
+	wg.Wait()
+
 	cancel()
 	c.Assert(errg.Wait(), check.Equals, errExecFailed)
 }
@@ -714,29 +787,6 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 			"readTimeout=2m",
 			"writeTimeout=2m",
 			"allow_auto_random_explicit_insert=1",
-			"explicit_defaults_for_timestamp=ON",
-		}
-		for _, param := range expectedParams {
-			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
-		}
-		c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
-	}
-
-	testDefaultParamsTiDB := func() {
-		db, err := mockTestDBTiDB()
-		c.Assert(err, check.IsNil)
-		defer db.Close()
-
-		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
-		c.Assert(err, check.IsNil)
-		params := defaultParams.Clone()
-		dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
-		c.Assert(err, check.IsNil)
-		expectedParams := []string{
-			"tidb_txn_mode=optimistic",
-			"readTimeout=2m",
-			"writeTimeout=2m",
-			"allow_auto_random_explicit_insert=1",
 		}
 		for _, param := range expectedParams {
 			c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
@@ -782,7 +832,6 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	}
 
 	testDefaultParams()
-	testDefaultParamsTiDB()
 	testTimezoneParam()
 	testTimeoutParams()
 }
@@ -900,34 +949,6 @@ func mockTestDB() (*sql.DB, error) {
 	)
 	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
-	)
-	// Simulate the default value in MySQL5.7 is OFF
-	mock.ExpectQuery("select version\\(\\);").WillReturnRows(
-		sqlmock.NewRows([]string{"version"}).AddRow("5.7.32"),
-	)
-	// Simulate the default value in MySQL5.7 is OFF
-	mock.ExpectQuery("show session variables like 'explicit_defaults_for_timestamp';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("explicit_defaults_for_timestamp", "OFF"),
-	)
-	mock.ExpectClose()
-	return db, nil
-}
-
-func mockTestDBTiDB() (*sql.DB, error) {
-	// mock for test db, which is used querying TiDB session variable
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		return nil, err
-	}
-	columns := []string{"Variable_name", "Value"}
-	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "1"),
-	)
-	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "optimistic"),
-	)
-	mock.ExpectQuery("select version\\(\\);").WillReturnRows(
-		sqlmock.NewRows([]string{"version"}).AddRow("5.7.25-TiDB-v5.0.0"),
 	)
 	mock.ExpectClose()
 	return db, nil

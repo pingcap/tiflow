@@ -339,7 +339,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
@@ -351,7 +351,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 100000, true)
+		err := testSorter(ctx, c, sorter, 10000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()
@@ -363,6 +363,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	case <-finishedCh:
 	}
 
+	UnifiedSorterCleanUp()
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
 	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite", "return(true)")
@@ -371,9 +372,13 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite")
 	}()
 
+	// recreate the sorter
+	sorter, err = NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
+
 	finishedCh = make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 100000, true)
+		err := testSorter(ctx, c, sorter, 10000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected write error.*")
 		close(finishedCh)
 	}()
@@ -426,7 +431,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 100000, true)
+		err := testSorter(ctx, c, sorter, 10000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()

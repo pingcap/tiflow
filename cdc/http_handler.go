@@ -19,10 +19,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/owner"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -73,6 +76,19 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
+	if config.NewReplicaImpl {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+		err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.AsyncStop()
+			return nil
+		})
+		handleOwnerResp(w, err)
+		return
+	}
 	s.ownerLock.RLock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
@@ -103,10 +119,16 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner == nil {
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	}
+	if s.captureV2 == nil {
+		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
@@ -137,7 +159,14 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		Type: model.AdminJobType(typ),
 		Opts: opts,
 	}
-	err = s.owner.EnqueueJob(job)
+	if config.NewReplicaImpl {
+		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.EnqueueJob(job)
+			return nil
+		})
+	} else {
+		err = s.owner.EnqueueJob(job)
+	}
 	handleOwnerResp(w, err)
 }
 
@@ -146,10 +175,16 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner == nil {
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	}
+	if s.captureV2 == nil {
+		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
@@ -165,8 +200,15 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	s.owner.TriggerRebalance(changefeedID)
-	handleOwnerResp(w, nil)
+	if config.NewReplicaImpl {
+		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.TriggerRebalance(changefeedID)
+			return nil
+		})
+	} else {
+		s.owner.TriggerRebalance(changefeedID)
+	}
+	handleOwnerResp(w, err)
 }
 
 func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
@@ -174,10 +216,16 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner == nil {
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	}
+	if s.captureV2 == nil {
+		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
@@ -206,8 +254,15 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid tableID: %s", tableIDStr))
 		return
 	}
-	s.owner.ManualSchedule(changefeedID, to, tableID)
-	handleOwnerResp(w, nil)
+	if config.NewReplicaImpl {
+		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+			owner.ManualSchedule(changefeedID, to, tableID)
+			return nil
+		})
+	} else {
+		s.owner.ManualSchedule(changefeedID, to, tableID)
+	}
+	handleOwnerResp(w, err)
 }
 
 func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {
@@ -215,9 +270,17 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner == nil {
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	}
+
+	if s.captureV2 == nil {
+		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
@@ -233,28 +296,28 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cfInfo, err := s.etcdClient.GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		writeInternalServerError(w, err)
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+	cfStatus, _, err := s.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		writeInternalServerError(w, err)
+		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	resp := &ChangefeedResp{
-		FeedState: string(feedState),
+	resp := &ChangefeedResp{}
+	if cfInfo != nil {
+		resp.FeedState = string(cfInfo.State)
+		resp.RunningError = cfInfo.Error
 	}
-	if cf != nil {
-		resp.RunningError = cf.info.Error
-	} else if feedInfo != nil {
-		resp.RunningError = feedInfo.Error
-	}
-	if status != nil {
-		resp.TSO = status.CheckpointTs
-		tm := oracle.GetTimeFromTS(status.CheckpointTs)
+	if cfStatus != nil {
+		resp.TSO = cfStatus.CheckpointTs
+		tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
 	writeData(w, resp)

@@ -126,13 +126,14 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
+    run_sql "CREATE DATABASE testSync;"
+    run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-    run_sql "CREATE DATABASE testSync;"
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     
-    SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
+    SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sync-point --sync-interval=10s
 
     goSql

@@ -49,7 +49,7 @@ function run() {
     TOPIC_NAME="ticdc-cli-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
-        *) SINK_URI="mysql://root@127.0.0.1:3306/";;
+        *) SINK_URI="mysql://normal:123456@127.0.0.1:3306/";;
     esac
 
     uuid="custom-changefeed-name"
@@ -128,8 +128,8 @@ EOF
     # Resume changefeed
     run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-    if [[ $jobtype != 2 ]]; then
-        echo "[$(date)] <<<<< unexpect admin job type! expect 2 got ${jobtype} >>>>>"
+    if [[ $jobtype != 0 ]]; then
+        echo "[$(date)] <<<<< unexpect admin job type! expect 0 got ${jobtype} >>>>>"
         exit 1
     fi
     check_changefeed_state $uuid "normal"
