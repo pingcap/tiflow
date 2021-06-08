@@ -420,6 +420,7 @@ func openDB(ctx context.Context, dsn string) *sql.DB {
 		log.Panic("open db failed", zap.String("dsn", dsn), zap.Error(err))
 	}
 	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetMaxIdleConns(10)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
