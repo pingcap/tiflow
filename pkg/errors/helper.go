@@ -64,10 +64,13 @@ func RFCCode(err error) (errors.RFCErrorCode, bool) {
 
 // IsRetryableError check the error is safe or worth to retry
 func IsRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	switch errors.Cause(err) {
 	case context.Canceled, context.DeadlineExceeded:
 		return false
 	}
-
 	return true
 }

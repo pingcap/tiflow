@@ -722,14 +722,12 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 	err := retry.Do(ctx, func() error {
 		var err error
 		snap, err = s.getSnapshot(ts)
-		if time.Since(startTime) >= 5*time.Minute && !isRetryable(err) {
+		if time.Since(startTime) >= 5*time.Minute && isRetryable(err) {
 			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
 		}
 		return err
 	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(), retry.WithIsRetryableErr(isRetryable))
-	if !isRetryable(err) {
-		return nil, err
-	}
+
 	return snap, err
 }
 
