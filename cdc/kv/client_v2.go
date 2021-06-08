@@ -176,7 +176,7 @@ func (s *eventFeedSession) receiveFromStreamV2(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			})
+			}, false /* initialized */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
