@@ -866,14 +866,14 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 func (o *Owner) calcResolvedTs(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		if err := cf.calcResolvedTs(ctx); err != nil {
+			log.Error("fail to calculate checkpoint ts, so it will be stopped", zap.String("changefeed", cf.id), zap.String("Error message", err.Error()))
 			// error may cause by sink.EmitCheckpointTs`, just stop the changefeed at the moment
 			// todo: make the method mentioned above more robust.
 			var code string
-			if terror, ok := err.(*errors.Error); ok {
-				code = string(terror.RFCCode())
-			} else {
-				rfcCode, _ := cerror.RFCCode(err)
+			if rfcCode, ok := cerror.RFCCode(err); ok {
 				code = string(rfcCode)
+			} else {
+				code = string(cerror.ErrOwnerUnknown.RFCCode())
 			}
 
 			job := model.AdminJob{
