@@ -1,5 +1,5 @@
 ---
-# network partition between DM-worker and DM-master
+# network partition between cdc pod
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
