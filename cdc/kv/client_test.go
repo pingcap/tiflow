@@ -1444,7 +1444,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 			return nil
 		}
 		return errors.New("message is not sent")
-	}, retry.WithBackoffBaseDelay(200),retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 
