@@ -866,7 +866,29 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 func (o *Owner) calcResolvedTs(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		if err := cf.calcResolvedTs(ctx); err != nil {
-			return errors.Trace(err)
+			// error may cause by sink.EmitCheckpointTs`, just stop the changefeed at the moment
+			// todo: make the method mentioned above more robust.
+			var code string
+			if terror, ok := err.(*errors.Error); ok {
+				code = string(terror.RFCCode())
+			} else {
+				rfcCode, _ := cerror.RFCCode(err)
+				code = string(rfcCode)
+			}
+
+			job := model.AdminJob{
+				CfID: cf.id,
+				Type: model.AdminStop,
+				Error: &model.RunningError{
+					Addr:    util.CaptureAddrFromCtx(ctx),
+					Code:    code,
+					Message: err.Error(),
+				},
+			}
+
+			if err := o.EnqueueJob(job); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 	return nil
@@ -1704,7 +1726,7 @@ func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[
 		log.Warn("changefeed checkpoint is lagging too much, so it will be stopped.", zap.String("changefeed", id), zap.String("Error message", message))
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changfeed is stagnant
+			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changefeed is stagnant
 			Message: message,
 		}
 
