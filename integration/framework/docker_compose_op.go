@@ -54,7 +54,7 @@ func (d *DockerComposeOperator) Setup() {
 // WaitClusterStarted waits the cluster is started and ready
 func (d *DockerComposeOperator) WaitClusterStarted() {
 	if d.HealthChecker != nil {
-		err := retry.Do(context.Background(), d.HealthChecker, retry.WithBackoffBaseDelay(1000), retry.WithMaxTries(120), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+		err := retry.Do(context.Background(), d.HealthChecker, retry.WithBackoffBaseDelay(1000), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(120), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 		if err != nil {
 			log.Fatal("Docker service health check failed after max retries", zap.Error(err))
 		}
@@ -87,7 +87,7 @@ func waitTiDBStarted(dsn string) error {
 			return errors.Trace(err)
 		}
 		return nil
-	}, retry.WithBackoffBaseDelay(1000), retry.WithMaxTries(60), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(1000), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(60), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {

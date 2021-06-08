@@ -502,7 +502,6 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 			}
 			return nil
 		}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(1000))
-
 		if err != nil {
 			b.Error(err)
 		}

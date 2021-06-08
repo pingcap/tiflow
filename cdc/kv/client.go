@@ -55,7 +55,6 @@ import (
 
 const (
 	dialTimeout           = 10 * time.Second
-	maxRetry              = 100
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 	// TODO find optimal values and test extensively before releasing
 	// The old values cause the gRPC stream to stall for some unknown reason.

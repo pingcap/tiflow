@@ -1268,6 +1268,7 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrDatabaseNotExists(c *check.C) {
 	err = sink.Close()
 	c.Assert(err, check.IsNil)
 }
+
 func (s MySQLSinkSuite) TestExecDMLRollbackErrTableNotExists(c *check.C) {
 	defer testleak.AfterTest(c)()
 
@@ -1335,6 +1336,7 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrTableNotExists(c *check.C) {
 	err = sink.Close()
 	c.Assert(err, check.IsNil)
 }
+
 func (s MySQLSinkSuite) TestExecDMLRollbackErrRetryable(c *check.C) {
 	defer testleak.AfterTest(c)()
 
