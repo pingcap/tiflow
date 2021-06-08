@@ -172,10 +172,11 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		}
 	})
 
+	revokeToken := !state.initialized
 	return w.session.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	})
+	}, revokeToken)
 }
 
 func (w *regionWorker) resolveLock(ctx context.Context) error {
@@ -359,12 +360,13 @@ func (w *regionWorker) handleEventEntry(
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
-				log.Warn("The time cost of initializing is too mush",
+				log.Warn("The time cost of initializing is too much",
 					zap.Duration("timeCost", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
 			metricPullEventInitializedCounter.Inc()
 			state.initialized = true
+			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)
@@ -501,13 +503,14 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			if state.lastResolvedTs > singleRegionInfo.ts {
 				singleRegionInfo.ts = state.lastResolvedTs
 			}
+			revokeToken := !state.initialized
 			state.lock.Unlock()
 			err = w.session.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
 				err: &rpcCtxUnavailableErr{
 					verID: singleRegionInfo.verID,
 				},
-			})
+			}, revokeToken)
 			return err == nil
 		})
 	}
