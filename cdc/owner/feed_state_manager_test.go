@@ -96,33 +96,7 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateRemoved)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminRemove)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminRemove)
-
-	// a removed changefeed can not be stop
-	manager.PushAdminJob(&model.AdminJob{
-		CfID: ctx.ChangefeedVars().ID,
-		Type: model.AdminStop,
-	})
-	manager.Tick(state)
-	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateRemoved)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminRemove)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminRemove)
-
-	// force remove a changefeed
-	manager.PushAdminJob(&model.AdminJob{
-		CfID: ctx.ChangefeedVars().ID,
-		Type: model.AdminRemove,
-		Opts: &model.AdminJobOption{ForceRemove: true},
-	})
-	manager.Tick(state)
-	tester.MustApplyPatches()
-	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info, check.IsNil)
-	c.Assert(state.Status, check.IsNil)
+	c.Assert(state.Exist(), check.IsFalse)
 }
 
 func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
@@ -148,9 +122,9 @@ func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateFinished)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminFinish)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminFinish)
+	c.Assert(state.Info.State, check.Equals, model.StateStopped)
+	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
+	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
 }
 
 func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
@@ -188,9 +162,9 @@ func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateFinished)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminFinish)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminFinish)
+	c.Assert(state.Info.State, check.Equals, model.StateStopped)
+	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
+	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
 	c.Assert(state.TaskStatuses, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)
 	c.Assert(state.TaskPositions, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)
 	c.Assert(state.Workloads, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)

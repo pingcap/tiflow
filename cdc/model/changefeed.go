@@ -48,8 +48,8 @@ const (
 	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
-	StateRemoved  FeedState = "removed"
-	StateFinished FeedState = "finished"
+	StateRemoved  FeedState = "removed"  // deprecated, will be removed in the next version
+	StateFinished FeedState = "finished" // deprecated, will be removed in the next version
 )
 
 const (

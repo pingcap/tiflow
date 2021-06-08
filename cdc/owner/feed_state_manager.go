@@ -112,15 +112,14 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.shouldBeRunning = false
 		jobsPending = true
 		m.patchState(model.StateRemoved)
-		if job.Opts != nil && job.Opts.ForceRemove {
-			// remove changefeed info and state
-			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-				return nil, true, nil
-			})
-			m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-				return nil, true, nil
-			})
-		}
+		// remove changefeed info and state
+		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			return nil, true, nil
+		})
+		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			return nil, true, nil
+		})
+
 	case model.AdminResume:
 		switch m.state.Info.State {
 		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
@@ -151,7 +150,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		}
 		m.shouldBeRunning = false
 		jobsPending = true
-		m.patchState(model.StateFinished)
+		m.patchState(model.StateStopped)
 	default:
 		log.Warn("Unknown admin job", zap.Any("adminJob", job), zap.String("changefeed", m.state.ID))
 	}
