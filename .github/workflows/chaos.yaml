@@ -12,11 +12,10 @@ on:
   schedule:
     - cron: '0,30 17-22 * * *' # run at minute 0 and 30 every hour from 01:00 ~ 06:00 UTC+8
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   pre_job:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -30,13 +29,14 @@ jobs:
           paths_ignore: '["**/README.md"]'
           cancel_others: 'true'
           do_not_skip: '["workflow_dispatch", "schedule"]' # only skip pull_request
-  # This workflow contains a single job called "base"
-  base:
+
+  # This workflow contains a single job called "main_job"
+  main_job:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
