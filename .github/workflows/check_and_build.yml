@@ -11,10 +11,29 @@ on:
       - 'release-[0-9].[0-9]*'
 
 jobs:
+  pre_job:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@master
+        with:
+          # All of these options are optional, so you can remove them if you are happy with the defaults
+          # https://github.com/marketplace/actions/skip-duplicate-actions
+          concurrent_skipping: 'never'
+          skip_after_successful_duplicate: 'true'
+          paths_ignore: '["**/README.md"]'
+          cancel_others: 'true'
+          do_not_skip: '["workflow_dispatch", "schedule"]' # only skip pull_request
 
   docker_build:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     name: Docker Build
     runs-on: ubuntu-latest
+
     steps:
 
     - name: Check out code into the Go module directory
@@ -24,6 +43,8 @@ jobs:
       run: docker build .
 
   make_check_build:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     name: Make Check & Build
     runs-on: ${{ matrix.os }}
     strategy:
@@ -53,6 +74,8 @@ jobs:
       run: make build
 
   lint:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     name: Lint
     runs-on: ubuntu-latest
     steps:
