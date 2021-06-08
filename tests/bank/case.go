@@ -419,6 +419,7 @@ func openDB(ctx context.Context, dsn string) *sql.DB {
 	if err != nil {
 		log.Panic("open db failed", zap.String("dsn", dsn), zap.Error(err))
 	}
+	db.SetConnMaxLifetime(30 * time.Minute)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
@@ -431,7 +432,7 @@ func run(
 	ctx context.Context, upstream, downstream string, accounts, tables int,
 	concurrency int, interval int64, testRound int64, cleanupOnly bool,
 ) {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 
 	upstreamDB := openDB(ctx, upstream)
