@@ -1217,7 +1217,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 	reqID1, _ := requestIds.Load(regionID3)
@@ -1305,7 +1305,7 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 			return nil
 		}
 		return errors.New("message is not sent")
-	}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 
@@ -1444,7 +1444,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 			return nil
 		}
 		return errors.New("message is not sent")
-	}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200),retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 
@@ -1461,7 +1461,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 			return nil
 		}
 		return errors.New("message is not sent")
-	}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(\"\")")
@@ -1498,7 +1498,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 			return nil
 		}
 		return errors.New("message is not sent")
-	}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 
@@ -1658,7 +1658,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 			return nil
 		}
 		return errors.Errorf("version generator is not updated in time, call time %d", atomic.LoadInt32(&call))
-	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(20))
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 
 	c.Assert(err, check.IsNil)
 	err = retry.Do(context.Background(), func() error {
@@ -1667,7 +1667,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 	reqID, _ := requestIds.Load(regionID)
@@ -2878,7 +2878,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	}, retry.WithBackoffBaseDelay(300), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(300), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 	requestID, _ := requestIds.Load(regionID3)
@@ -3065,7 +3065,7 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	}, retry.WithBackoffBaseDelay(300), retry.WithMaxTries(10))
+	}, retry.WithBackoffBaseDelay(300), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
 
 	c.Assert(err, check.IsNil)
 	requestID, _ := requestIds.Load(regionID3)
@@ -3211,7 +3211,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(20))
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 
 	c.Assert(err, check.IsNil)
 

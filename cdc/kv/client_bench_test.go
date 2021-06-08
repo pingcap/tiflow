@@ -211,7 +211,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(20))
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 	if err != nil {
 		b.Error(err)
 	}
@@ -299,7 +299,7 @@ func prepareBench(b *testing.B, regionNum int) (
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(20))
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 	if err != nil {
 		b.Error(err)
 	}
@@ -379,7 +379,7 @@ func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
 				return nil
 			}
 			return errors.New("not all events are sent yet")
-		}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			b.Error(err)
 		}
@@ -501,7 +501,7 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 				}
 			}
 			return nil
-		}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(1000))
+		}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(60*1000), retry.WithMaxTries(1000))
 		if err != nil {
 			b.Error(err)
 		}
