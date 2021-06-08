@@ -105,7 +105,7 @@ func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	totalCount := 0
@@ -176,7 +176,7 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	totalCount := 0
@@ -257,7 +257,7 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	totalCount := 0
@@ -337,7 +337,7 @@ func (s *sorterSuite) TestMergerCancel(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	builder := newMockFlushTaskBuilder()
@@ -392,7 +392,7 @@ func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	builder := newMockFlushTaskBuilder()
@@ -455,7 +455,7 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	close(task1.finished)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	wg.Go(func() error {
