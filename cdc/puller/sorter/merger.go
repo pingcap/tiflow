@@ -35,13 +35,7 @@ import (
 )
 
 // TODO refactor this into a struct Merger.
-func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func(), bufLen *int64) error {
-	// TODO remove bufLenPlaceholder when refactoring
-	if bufLen == nil {
-		var bufLenPlaceholder int64
-		bufLen = &bufLenPlaceholder
-	}
-
+func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	_, tableName := util.TableIDFromCtx(ctx)
@@ -85,7 +79,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			_ = printError(task.dealloc())
 		}
 
-		LOOP:
+	LOOP:
 		for {
 			var task *flushTask
 			select {
@@ -136,7 +130,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
-		var err error
+		var loopErr error
 		pendingSet.Range(func(iTask, iCache interface{}) bool {
 			task := iTask.(*flushTask)
 			var cache *model.PolymorphicEvent
@@ -152,33 +146,33 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if cache != nil {
 				event = cache
 			} else {
-				var err error
-
 				select {
 				case <-ctx.Done():
-					err = ctx.Err()
+					loopErr = ctx.Err()
 					// terminates the loop
 					return false
 				case err := <-task.finished:
 					if err != nil {
-						err = errors.Trace(err)
+						loopErr = errors.Trace(err)
 						// terminates the loop
 						return false
 					}
 				}
 
 				if task.reader == nil {
+					var err error
 					task.reader, err = task.GetBackEnd().reader()
 					if err != nil {
-						err = errors.Trace(err)
+						loopErr = errors.Trace(err)
 						// terminates the loop
 						return false
 					}
 				}
 
+				var err error
 				event, err = task.reader.readNext()
 				if err != nil {
-					err = errors.Trace(err)
+					loopErr = errors.Trace(err)
 					// terminates the loop
 					return false
 				}
@@ -204,13 +198,21 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			})
 			return true
 		})
+		if loopErr != nil {
+			return errors.Trace(loopErr)
+		}
 
 		resolvedTicker := time.NewTicker(1 * time.Second)
 		defer resolvedTicker.Stop()
 
 		retire := func(task *flushTask) error {
 			delete(workingSet, task)
-			if cached, ok := pendingSet.Load(task); ok && cached != nil {
+			cached, ok := pendingSet.Load(task)
+			if !ok {
+				log.Panic("task not found in pendingSet")
+			}
+
+			if cached != nil {
 				return nil
 			}
 
@@ -222,7 +224,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if nextEvent == nil {
-				pendingSet.Delete(task)
+				_, ok := pendingSet.LoadAndDelete(task)
+				if !ok {
+					log.Panic("task not found when deleting")
+				}
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -382,7 +387,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
 			}
 		})
-		err = sendResolvedEvent(minResolvedTs)
+		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -445,9 +450,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		if err != nil {
 			if cerrors.ErrOperateOnClosedNotifier.Equal(err) {
 				log.Panic("unexpected error", zap.Error(err))
-			} else {
-				return errors.Trace(err)
 			}
+			return errors.Trace(err)
 		}
 
 		var lastResolvedTs uint64
