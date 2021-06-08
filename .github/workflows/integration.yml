@@ -9,9 +9,30 @@ on:
     branches: [ master ]
 
 jobs:
-  MySQL-integration:
-    runs-on: ubuntu-latest
 
+  pre_job:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@master
+        with:
+          # All of these options are optional, so you can remove them if you are happy with the defaults
+          # https://github.com/marketplace/actions/skip-duplicate-actions
+          concurrent_skipping: 'never'
+          skip_after_successful_duplicate: 'true'
+          paths_ignore: '["**/README.md"]'
+          cancel_others: 'true'
+          do_not_skip: '["workflow_dispatch", "schedule"]' # only skip pull_request
+
+
+  MySQL-integration:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    name: MySQL Integration Test
+    runs-on: ubuntu-latest
     steps:
       - name: Free disk space
         run: |
@@ -65,6 +86,9 @@ jobs:
           $GITHUB_WORKSPACE/scripts/avro-local-test.sh down
 
   OldValue-integration:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    name: OldValue Integration Test
     runs-on: ubuntu-latest
 
     steps:
@@ -120,6 +144,9 @@ jobs:
           $GITHUB_WORKSPACE/scripts/avro-local-test.sh down
 
   CanalJson-integration:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    name: CanalJson Integration Test
     runs-on: ubuntu-latest
 
     steps:
@@ -176,6 +203,9 @@ jobs:
 
 
   Canal-integration:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    name: Canal Integration Test
     runs-on: ubuntu-latest
 
     steps:
@@ -231,6 +261,9 @@ jobs:
           $GITHUB_WORKSPACE/scripts/canal/canal-local-test.sh down
 
   Avro-integration:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    name: Avro Integration Test
     runs-on: ubuntu-latest
 
     steps:
