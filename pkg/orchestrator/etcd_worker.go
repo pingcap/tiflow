@@ -87,7 +87,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 	var (
-		pendingPatches []DataPatch
+		pendingPatches [][]DataPatch
 		exiting        bool
 		sessionDone    <-chan struct{}
 	)
@@ -143,16 +143,13 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 		if len(pendingPatches) > 0 {
 			// Here we have some patches yet to be uploaded to Etcd.
-			err := worker.applyPatches(ctx, pendingPatches, session)
+			pendingPatches, err = worker.applyPatchGroups(ctx, pendingPatches)
 			if err != nil {
 				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
 					continue
 				}
 				return errors.Trace(err)
 			}
-			// If we are here, all patches have been successfully applied to Etcd.
-			// `applyPatches` is all-or-none, so in case of success, we should clear all the pendingPatches.
-			pendingPatches = pendingPatches[:0]
 		} else {
 			if exiting {
 				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick, and all pending patches is applied.
@@ -232,7 +229,19 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 	return ret
 }
 
-func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch, session *concurrency.Session) error {
+func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
+	for len(patchGroups) > 0 {
+		patches := patchGroups[0]
+		err := worker.applyPatches(ctx, patches)
+		if err != nil {
+			return patchGroups, err
+		}
+		patchGroups = patchGroups[1:]
+	}
+	return patchGroups, nil
+}
+
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch) error {
 	state := worker.cloneRawState()
 	changedSet := make(map[util.EtcdKey]struct{})
 	for _, patch := range patches {

@@ -106,7 +106,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*model.GlobalReactorState)
 	o.updateMetrics(state)
-	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	err = o.gcManager.updateGCSafePoint(ctx, state)
 	if err != nil {
 		return nil, errors.Trace(err)

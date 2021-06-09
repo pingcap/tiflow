@@ -31,7 +31,7 @@ type GlobalReactorState struct {
 	Owner          map[string]struct{}
 	Captures       map[CaptureID]*CaptureInfo
 	Changefeeds    map[ChangeFeedID]*ChangefeedReactorState
-	pendingPatches []orchestrator.DataPatch
+	pendingPatches [][]orchestrator.DataPatch
 }
 
 // NewGlobalState creates a new global state
@@ -90,7 +90,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			return errors.Trace(err)
 		}
 		if value == nil && !changefeedState.Exist() {
-			s.pendingPatches = append(s.pendingPatches, changefeedState.GetPatches()...)
+			s.pendingPatches = append(s.pendingPatches, changefeedState.getPatches())
 			delete(s.Changefeeds, k.ChangefeedID)
 		}
 	default:
@@ -100,36 +100,13 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 }
 
 // GetPatches implements the ReactorState interface
-func (s *GlobalReactorState) GetPatches() []orchestrator.DataPatch {
+func (s *GlobalReactorState) GetPatches() [][]orchestrator.DataPatch {
 	pendingPatches := s.pendingPatches
 	for _, changefeedState := range s.Changefeeds {
-		pendingPatches = append(pendingPatches, changefeedState.GetPatches()...)
+		pendingPatches = append(pendingPatches, changefeedState.getPatches())
 	}
 	s.pendingPatches = nil
 	return pendingPatches
-}
-
-// CheckCaptureAlive checks if the capture is alive, if the capture offline,
-// the etcd worker will exit and throw the ErrLeaseExpired error.
-func (s *GlobalReactorState) CheckCaptureAlive(captureID CaptureID) {
-	k := etcd.CDCKey{
-		Tp:        etcd.CDCKeyTypeCapture,
-		CaptureID: captureID,
-	}
-	key := k.String()
-	patch := &orchestrator.SingleDataPatch{
-		Key: util.NewEtcdKey(key),
-		Func: func(v []byte) ([]byte, bool, error) {
-			// If v is empty, it means that the key-value pair of capture info is not exist.
-			// The key-value pair of capture info is written with lease,
-			// so if the capture info is not exist, the lease is expired
-			if len(v) == 0 {
-				return v, false, cerrors.ErrLeaseExpired.GenWithStackByArgs()
-			}
-			return v, false, nil
-		},
-	}
-	s.pendingPatches = append(s.pendingPatches, patch)
 }
 
 // ChangefeedReactorState represents a changefeed state which stores all key-value pairs of a changefeed in ETCD
@@ -250,10 +227,37 @@ func (s *ChangefeedReactorState) Active(captureID CaptureID) bool {
 }
 
 // GetPatches implements the ReactorState interface
-func (s *ChangefeedReactorState) GetPatches() []orchestrator.DataPatch {
+func (s *ChangefeedReactorState) GetPatches() [][]orchestrator.DataPatch {
+	return [][]orchestrator.DataPatch{s.getPatches()}
+}
+
+func (s *ChangefeedReactorState) getPatches() []orchestrator.DataPatch {
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
 	return pendingPatches
+}
+
+// CheckCaptureAlive checks if the capture is alive, if the capture offline,
+// the etcd worker will exit and throw the ErrLeaseExpired error.
+func (s *ChangefeedReactorState) CheckCaptureAlive(captureID CaptureID) {
+	k := etcd.CDCKey{
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureID,
+	}
+	key := k.String()
+	patch := &orchestrator.SingleDataPatch{
+		Key: util.NewEtcdKey(key),
+		Func: func(v []byte) ([]byte, bool, error) {
+			// If v is empty, it means that the key-value pair of capture info is not exist.
+			// The key-value pair of capture info is written with lease,
+			// so if the capture info is not exist, the lease is expired
+			if len(v) == 0 {
+				return v, false, cerrors.ErrLeaseExpired.GenWithStackByArgs()
+			}
+			return v, false, nil
+		},
+	}
+	s.pendingPatches = append(s.pendingPatches, patch)
 }
 
 // CheckChangefeedNormal checks if the changefeed state is runable,

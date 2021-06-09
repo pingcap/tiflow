@@ -101,6 +101,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		c.errCh <- errors.Trace(err)
 		return nil
 	})
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := c.tick(ctx, state, captures); err != nil {
 		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string

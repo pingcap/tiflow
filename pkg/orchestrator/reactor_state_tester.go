@@ -60,7 +60,17 @@ func (t *ReactorStateTester) Update(key string, value []byte) error {
 
 // ApplyPatches calls the GetPatches method on the ReactorState and apply the changes to the mocked kv-store.
 func (t *ReactorStateTester) ApplyPatches() error {
-	patches := t.state.GetPatches()
+	patchGroups := t.state.GetPatches()
+	for _, patches := range patchGroups {
+		err := t.applyPatches(patches)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *ReactorStateTester) applyPatches(patches []DataPatch) error {
 RetryLoop:
 	for {
 		tmpKVEntries := make(map[util.EtcdKey][]byte)
