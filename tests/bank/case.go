@@ -473,6 +473,7 @@ func run(
 	mustExec(ctx, upstreamDB, `CREATE TABLE IF NOT EXISTS finishmark (foo BIGINT PRIMARY KEY)`)
 	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
 	if err := waitTable(waitCtx, downstreamDB, "finishmark"); err != nil {
+		waitCancel()
 		log.Panic("wait for prepare table failed", zap.Error(err))
 	}
 	waitCancel()
