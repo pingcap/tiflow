@@ -477,3 +477,78 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	mergerCleanUp(inChan)
 	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
 }
+
+// TestMergerOutputBlocked simulates a situation where the output channel is blocked for
+// a significant period of time.
+func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
+	defer testleak.AfterTest(c)()
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	if err != nil {
+		log.Panic("Could not enable failpoint", zap.Error(err))
+	}
+
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*25)
+	defer cancel()
+	wg, ctx := errgroup.WithContext(ctx)
+	// use unbuffered channel to make sure that the input has been processed
+	inChan := make(chan *flushTask)
+	// make a small channel to test blocking
+	outChan := make(chan *model.PolymorphicEvent, 1)
+
+	wg.Go(func() error {
+		return runMerger(ctx, 1, inChan, outChan, func() {})
+	})
+
+	totalCount := 0
+	builder := newMockFlushTaskBuilder()
+	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
+	totalCount += builder.totalCount
+	builder = newMockFlushTaskBuilder()
+	task2 := builder.generateRowChanges(100002, 200000, 2048).addResolved(200001).build()
+	totalCount += builder.totalCount
+	builder = newMockFlushTaskBuilder()
+	task3 := builder.generateRowChanges(200002, 300000, 2048).addResolved(300001).build()
+	totalCount += builder.totalCount
+
+	wg.Go(func() error {
+		inChan <- task1
+		close(task1.finished)
+		inChan <- task2
+		close(task2.finished)
+		inChan <- task3
+		close(task3.finished)
+
+		return nil
+	})
+
+	wg.Go(func() error {
+		time.Sleep(10 * time.Second)
+		count := 0
+		lastTs := uint64(0)
+		lastResolved := uint64(0)
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case event := <-outChan:
+				switch event.RawKV.OpType {
+				case model.OpTypePut:
+					count++
+					c.Assert(event.CRTs, check.GreaterEqual, lastTs)
+					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					lastTs = event.CRTs
+				case model.OpTypeResolved:
+					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					lastResolved = event.CRTs
+				}
+				if lastResolved >= 300001 {
+					c.Assert(count, check.Equals, totalCount)
+					cancel()
+					return nil
+				}
+			}
+		}
+	})
+	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
+	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
+}

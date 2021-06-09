@@ -130,7 +130,16 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
+		// loopErr is used to return an error out of the closure taken by `pendingSet.Range`.
 		var loopErr error
+		// NOTE 1: We can block the closure passed to `pendingSet.Range` WITHOUT worrying about
+		// deadlocks because the closure is NOT called with any lock acquired in the implementation
+		// of Sync.Map.
+		// NOTE 2: It is safe to used `Range` to iterate through the pendingSet, in spite of NOT having
+		// a snapshot consistency because (1) pendingSet is updated first before minResolvedTs is updated,
+		// which guarantees that useful new flushTasks are not missed, and (2) by design, once minResolvedTs is updated,
+		// new flushTasks will satisfy `task.tsLowerBound > minResolvedTs`, and such flushTasks are ignored in
+		// the closure.
 		pendingSet.Range(func(iTask, iCache interface{}) bool {
 			task := iTask.(*flushTask)
 			var cache *model.PolymorphicEvent
