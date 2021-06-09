@@ -864,7 +864,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
 func (o *Owner) calcResolvedTs(ctx context.Context) error {
-	for _, cf := range o.changeFeeds {
+	for id, cf := range o.changeFeeds {
 		if err := cf.calcResolvedTs(ctx); err != nil {
 			log.Error("fail to calculate checkpoint ts, so it will be stopped", zap.String("changefeed", cf.id), zap.Error(err))
 			// error may cause by sink.EmitCheckpointTs`, just stop the changefeed at the moment
@@ -877,7 +877,7 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 			}
 
 			job := model.AdminJob{
-				CfID: cf.id,
+				CfID: id,
 				Type: model.AdminStop,
 				Error: &model.RunningError{
 					Addr:    util.CaptureAddrFromCtx(ctx),
