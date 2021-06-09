@@ -196,6 +196,8 @@ func (s *ownerSuite) TestOwnerCalcResolvedTs(c *check.C) {
 	err = mockOwner.handleAdminJob(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
+
+	s.TearDownTest(c)
 }
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
