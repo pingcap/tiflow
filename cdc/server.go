@@ -292,6 +292,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 			return err
 		}
 		s.capture = capture
+		s.etcdClient = &capture.etcdClient
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

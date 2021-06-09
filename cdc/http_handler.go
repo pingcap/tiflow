@@ -126,11 +126,12 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
-	}
-	if s.captureV2 == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
@@ -182,11 +183,12 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
-	}
-	if s.captureV2 == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
@@ -223,11 +225,12 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
-	}
-	if s.captureV2 == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
@@ -277,11 +280,12 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
-	}
-	if s.captureV2 == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
