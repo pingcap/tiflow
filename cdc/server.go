@@ -235,6 +235,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
+<<<<<<< HEAD
 	conf := config.GetGlobalServerConfig()
 
 	opts := &captureOpts{
@@ -244,6 +245,19 @@ func (s *Server) run(ctx context.Context) (err error) {
 	capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, conf.Security, conf.AdvertiseAddr, opts)
 	if err != nil {
 		return err
+=======
+	if !config.NewReplicaImpl {
+		kvStorage, err := util.KVStorageFromCtx(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
+		if err != nil {
+			return err
+		}
+		s.capture = capture
+		s.etcdClient = &capture.etcdClient
+>>>>>>> 50a837b2 (owner: fix some nil panic when switch off the new owner (#2004))
 	}
 	s.capture = capture
 	ctx, cancel := context.WithCancel(ctx)
