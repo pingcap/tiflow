@@ -382,17 +382,17 @@ func mustExec(ctx context.Context, db *sql.DB, query string) {
 	}
 }
 
-func waitTable(ctx context.Context, db *sql.DB, table string) {
+func waitTable(ctx context.Context, db *sql.DB, table string) error {
 	for {
 		if isTableExist(ctx, db, table) {
-			log.Info("wait table sucess", zap.String("table", table))
-			return
+			log.Info("wait table success", zap.String("table", table))
+			return nil
 		}
 		log.Info("wait table", zap.String("table", table))
 		select {
 		case <-ctx.Done():
-			log.Error("wait table failed due to timeout", zap.String("table", table))
-			return
+			log.Error("wait table failed due to timeout", zap.String("table", table), zap.Error(ctx.Err()))
+			return ctx.Err()
 		case <-time.After(1 * time.Second):
 		}
 	}
@@ -472,7 +472,9 @@ func run(
 	// all previous DDL and DML are replicated too.
 	mustExec(ctx, upstreamDB, `CREATE TABLE IF NOT EXISTS finishmark (foo BIGINT PRIMARY KEY)`)
 	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
-	waitTable(waitCtx, downstreamDB, "finishmark")
+	if err := waitTable(waitCtx, downstreamDB, "finishmark"); err != nil {
+		log.Panic("wait for prepare table failed", zap.Error(err))
+	}
 	waitCancel()
 	log.Info("all tables synced")
 
@@ -540,7 +542,11 @@ func run(
 				case tblName := <-tblChan:
 					log.Info("downstream start with for table", zap.String("tblName", tblName))
 					waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
-					waitTable(waitCtx, downstreamDB, tblName)
+					if err := waitTable(waitCtx, downstreamDB, tblName); err != nil {
+						log.Error("wait for table failed", zap.String("tableName", tblName), zap.Error(err))
+						waitCancel()
+						continue
+					}
 					waitCancel()
 					log.Info("ddl synced", zap.String("table", tblName))
 
