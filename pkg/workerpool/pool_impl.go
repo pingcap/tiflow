@@ -260,7 +260,7 @@ type worker struct {
 
 func newWorker() *worker {
 	return &worker{
-		taskCh:         make(chan *task, 128000),
+		taskCh:         make(chan *task, 128),
 		handles:        make(map[*defaultEventHandle]struct{}),
 		handleCancelCh: make(chan struct{}), // this channel must be unbuffered, i.e. blocking
 	}

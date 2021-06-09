@@ -45,7 +45,7 @@ var (
 	// other components in TiCDC, including worker pool task chan size, mounter
 	// chan size etc.
 	// TODO: unified channel buffer mechanism
-	regionWorkerInputChanSize = 12800
+	regionWorkerInputChanSize = 128
 	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
 	regionWorkerHighWatermark = int(float64(regionWorkerInputChanSize) * 0.7)
 )
