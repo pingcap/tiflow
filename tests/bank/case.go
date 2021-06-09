@@ -615,5 +615,6 @@ func getDDLEndTs(db *sql.DB, tableName string) (result string, err error) {
 			return *line.EndTime, nil
 		}
 	}
-	return "", errors.New(fmt.Sprintf("cannot find in ddl history, tableName: %s", tableName))
+	log.Error("cannot find in ddl history", zap.String("tableName", tableName))
+	return "", nil
 }
