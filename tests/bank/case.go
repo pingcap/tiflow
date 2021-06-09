@@ -140,12 +140,13 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 }
 
 func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
-	if _, err := db.ExecContext(ctx, fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)); err != nil {
-		log.Error("sequenceTest set tidb_snapshot failed", zap.String("endTs", endTs))
+	query := fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		log.Error("sequenceTest set tidb_snapshot failed", zap.String("query", query), zap.Error(err))
 		return errors.Trace(err)
 	}
 
-	query := fmt.Sprintf("SELECT sequence FROM accounts_seq%d ORDER BY sequence", tableID)
+	query = fmt.Sprintf("SELECT sequence FROM accounts_seq%d ORDER BY sequence", tableID)
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		log.Warn("select sequence err", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
@@ -384,14 +385,15 @@ func mustExec(ctx context.Context, db *sql.DB, query string) {
 func waitTable(ctx context.Context, db *sql.DB, table string) {
 	for {
 		if isTableExist(ctx, db, table) {
+			log.Info("wait table sucess", zap.String("table", table))
 			return
 		}
 		log.Info("wait table", zap.String("table", table))
 		select {
 		case <-ctx.Done():
-			log.Error("wait table failed due to timeout")
+			log.Error("wait table failed due to timeout", zap.String("table", table))
 			return
-		case <-time.After(5 * time.Second):
+		case <-time.After(1 * time.Second):
 		}
 	}
 }
@@ -536,6 +538,7 @@ func run(
 				case <-ctx.Done():
 					return ctx.Err()
 				case tblName := <-tblChan:
+					log.Info("downstream start with for table", zap.String("tblName", tblName))
 					waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
 					waitTable(waitCtx, downstreamDB, tblName)
 					waitCancel()
@@ -551,13 +554,13 @@ func run(
 					atomic.AddInt64(&valid, 1)
 
 					for _, test := range tests {
-						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*10)
+						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*20)
 						if err := test.verify(verifyCtx, upstreamDB, accounts, tableID, upstream, ""); err != nil {
 							log.Panic("upstream verify failed", zap.Error(err))
 						}
 						verifyCancel()
 
-						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*10)
+						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*20)
 						if err := test.verify(verifyCtx, downstreamDB, accounts, tableID, downstream, endTs); err != nil {
 							log.Panic("downstream verify failed", zap.Error(err))
 						}
@@ -590,31 +593,51 @@ type dataRow struct {
 	TblID       int64
 	RowCount    int64
 	StartTime   string
-	EndTime     *string
+	EndTime     string
 	State       string
 }
 
 func getDDLEndTs(db *sql.DB, tableName string) (result string, err error) {
-	rows, err := db.Query("admin show ddl jobs")
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
+	query := fmt.Sprintf("admin show ddl jobs where TABLE_NAME = '%s'", tableName)
+	row := db.QueryRow(query)
+
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("get ddl end ts panic, recovered", zap.Reflect("r", r))
+		}
+	}()
 
 	var line dataRow
-	for rows.Next() {
-		if err := rows.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
-			&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
+	if err := row.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
+		&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
+		if err != sql.ErrNoRows {
+			log.Error("get ddl end ts failed", zap.String("query", query), zap.Error(err))
 			return "", err
 		}
-		if line.JobType == "create table" && line.TblName == tableName && line.State == "synced" {
-			if line.EndTime == nil {
-				log.Warn("get ddl end time failed", zap.String("tableName", tableName))
-				return "", nil
-			}
-			return *line.EndTime, nil
-		}
+		log.Error("get ddl end ts no row", zap.String("query", query), zap.Error(err))
+		return "", nil
 	}
-	log.Error("cannot find in ddl history", zap.String("tableName", tableName))
-	return "", nil
+	return line.EndTime, nil
+	// rows, err := db.Query("admin show ddl jobs")
+	// if err != nil {
+	// 	return "", err
+	// }
+	// defer rows.Close()
+	//
+	// var line dataRow
+	// for rows.Next() {
+	// 	if err := rows.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
+	// 		&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
+	// 		return "", err
+	// 	}
+	// 	if line.JobType == "create table" && line.TblName == tableName && line.State == "synced" {
+	// 		if line.EndTime == nil {
+	// 			log.Warn("get ddl end time failed", zap.String("tableName", tableName))
+	// 			return "", nil
+	// 		}
+	// 		return *line.EndTime, nil
+	// 	}
+	// }
+	// log.Error("cannot find in ddl history", zap.String("tableName", tableName))
+	// return "", nil
 }
