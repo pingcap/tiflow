@@ -444,7 +444,8 @@ func run(
 	downstreamDB := openDB(ctx, downstream)
 	defer downstreamDB.Close()
 
-	tests := []testcase{&sequenceTest{}, &bankTest{}}
+	tests := []testcase{&bankTest{}}
+	// tests := []testcase{&sequenceTest{}, &bankTest{}}
 
 	if cleanupOnly {
 		for tableID := 0; tableID < tables; tableID++ {
