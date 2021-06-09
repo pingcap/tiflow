@@ -489,15 +489,15 @@ func run(
 		tableID := id
 		// Workload
 		g.Go(func() error {
-			workload := func(workloadCtx context.Context) error {
-				tx, err := upstreamDB.BeginTx(workloadCtx, nil)
+			workload := func() error {
+				tx, err := upstreamDB.Begin()
 				if err != nil {
 					log.Error("upstream begin tx failed", zap.Error(err))
 					return errors.Trace(err)
 				}
 
 				for _, test := range tests {
-					if err := test.workload(workloadCtx, tx, accounts, tableID); err != nil {
+					if err := test.workload(context.Background(), tx, accounts, tableID); err != nil {
 						_ = tx.Rollback()
 						return errors.Trace(err)
 					}
@@ -525,12 +525,10 @@ func run(
 				case <-ctx.Done():
 					return ctx.Err()
 				default:
-					ctx1, cancel1 := context.WithTimeout(ctx, time.Second*10)
-					err := workload(ctx1)
+					err := workload()
 					if err != nil && errors.Cause(err) != context.Canceled {
 						log.Warn("workload failed", zap.Error(err))
 					}
-					cancel1()
 				}
 			}
 		})
