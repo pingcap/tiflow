@@ -108,6 +108,8 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	state := rawState.(*model.GlobalReactorState)
 	o.updateMetrics(state)
 	if !o.clusterVersionConsistent(state.Captures) {
+		// sleep one second to avoid to print too much log
+		time.Sleep(1 * time.Second)
 		return state, nil
 	}
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
@@ -251,8 +253,6 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 	for _, capture := range captures {
 		if myVersion != capture.Version {
 			log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("my-version", myVersion))
-			// sleep one second to avoid to print too much log
-			time.Sleep(1 * time.Second)
 			return false
 		}
 	}
