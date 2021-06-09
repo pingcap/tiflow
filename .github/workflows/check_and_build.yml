@@ -23,10 +23,10 @@ jobs:
           # All of these options are optional, so you can remove them if you are happy with the defaults
           # https://github.com/marketplace/actions/skip-duplicate-actions
           concurrent_skipping: 'never'
-          skip_after_successful_duplicate: 'true'
+          skip_after_successful_duplicate: 'true'          # skip if an already finished duplicate run can be found.
           paths_ignore: '["**/README.md"]'
-          cancel_others: 'true'
-          do_not_skip: '["workflow_dispatch", "schedule"]' # only skip pull_request
+          cancel_others: 'false'
+          do_not_skip: '["pull_request", "schedule"]'
 
   docker_build:
     needs: pre_job
