@@ -226,7 +226,7 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
-	ownershipCounter.Add(float64(now.Sub(o.lastTickTime) / time.Second))
+	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
 	ownerMaintainTableNumGauge.Reset()
