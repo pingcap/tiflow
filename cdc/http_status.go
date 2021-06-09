@@ -150,6 +150,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 			st.ID = s.captureV2.Info().ID
 			st.IsOwner = s.captureV2.IsOwner()
 		}
+		writeData(w, st)
+		return
 	}
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
