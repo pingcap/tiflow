@@ -258,6 +258,12 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 	s.TearDownTest(c)
 }
 
+// Test whether the owner can tolerate sink caused error, it won't be killed.
+// also set the specific changefeed to stop, so that it's checkpoint ts won't advance
+func (s *ownerSuite) TestOwnerCalcResolvedTs(c *check.C) {
+
+}
+
 // Test whether the owner handles the stagnant task correctly, so that it can't block the update of gcSafePoint.
 // If a changefeed is put into the stop queue due to stagnation, it can no longer affect the update of gcSafePoint.
 // So we just need to test whether the stagnant changefeed is put into the stop queue.
