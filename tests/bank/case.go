@@ -389,6 +389,7 @@ func waitTable(ctx context.Context, db *sql.DB, table string) {
 		log.Info("wait table", zap.String("table", table))
 		select {
 		case <-ctx.Done():
+			log.Error("wait table failed due to timeout")
 			return
 		case <-time.After(5 * time.Second):
 		}
@@ -468,7 +469,7 @@ func run(
 	// DDL is a strong sync point in TiCDC. Once finishmark table is replicated to downstream
 	// all previous DDL and DML are replicated too.
 	mustExec(ctx, upstreamDB, `CREATE TABLE IF NOT EXISTS finishmark (foo BIGINT PRIMARY KEY)`)
-	waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Minute)
+	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
 	waitTable(waitCtx, downstreamDB, "finishmark")
 	waitCancel()
 	log.Info("all tables synced")
@@ -535,7 +536,7 @@ func run(
 				case <-ctx.Done():
 					return ctx.Err()
 				case tblName := <-tblChan:
-					waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Minute)
+					waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
 					waitTable(waitCtx, downstreamDB, tblName)
 					waitCancel()
 					log.Info("ddl synced", zap.String("table", tblName))
