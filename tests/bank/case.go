@@ -91,15 +91,10 @@ func (*sequenceTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tab
 	const sequenceRowID = 0
 
 	getCounterSeq := fmt.Sprintf("SELECT counter, sequence FROM accounts_seq%d WHERE id = %d FOR UPDATE", tableID, sequenceRowID)
-	rows, err := tx.QueryContext(ctx, getCounterSeq)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer rows.Close()
 
 	var counter, maxSeq int
-	rows.Next()
-	if err = rows.Scan(&counter, &maxSeq); err != nil {
+	row := tx.QueryRowContext(ctx, getCounterSeq)
+	if err := row.Scan(&counter, &maxSeq); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -117,8 +112,8 @@ func (*sequenceTest) workload(ctx context.Context, tx *sql.Tx, accounts int, tab
   		startts = @@tidb_current_ts
 	WHERE id IN (%d, %d)`, tableID, counter, maxSeq+1, sequenceRowID, next)
 
-	_, err = tx.ExecContext(ctx, addSeqCounter)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, addSeqCounter); err != nil {
+		log.Error("sequenceTest workload exec failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 	return nil
@@ -444,8 +439,7 @@ func run(
 	downstreamDB := openDB(ctx, downstream)
 	defer downstreamDB.Close()
 
-	tests := []testcase{&bankTest{}}
-	// tests := []testcase{&sequenceTest{}, &bankTest{}}
+	tests := []testcase{&sequenceTest{}, &bankTest{}}
 
 	if cleanupOnly {
 		for tableID := 0; tableID < tables; tableID++ {
