@@ -70,7 +70,7 @@ const (
 	regionScheduleReload = false
 
 	// defines the scan region limit for each table
-	regionScanLimitPerTable = 40
+	regionScanLimitPerTable = 6
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
