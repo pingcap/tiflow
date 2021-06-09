@@ -103,12 +103,28 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
+<<<<<<< HEAD
 
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
+=======
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+>>>>>>> 50a837b2 (owner: fix some nil panic when switch off the new owner (#2004))
 	}
 
 	err := req.ParseForm()
@@ -146,12 +162,28 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
+<<<<<<< HEAD
 
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
+=======
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+>>>>>>> 50a837b2 (owner: fix some nil panic when switch off the new owner (#2004))
 	}
 
 	err := req.ParseForm()
@@ -174,12 +206,28 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
+<<<<<<< HEAD
 
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
+=======
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+>>>>>>> 50a837b2 (owner: fix some nil panic when switch off the new owner (#2004))
 	}
 
 	err := req.ParseForm()
@@ -215,11 +263,27 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
+<<<<<<< HEAD
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
+=======
+	if !config.NewReplicaImpl {
+		s.ownerLock.RLock()
+		defer s.ownerLock.RUnlock()
+		if s.owner == nil {
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+>>>>>>> 50a837b2 (owner: fix some nil panic when switch off the new owner (#2004))
 	}
 
 	err := req.ParseForm()

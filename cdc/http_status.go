@@ -141,6 +141,19 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
+<<<<<<< HEAD
+=======
+	if config.NewReplicaImpl {
+		if s.captureV2 != nil {
+			st.ID = s.captureV2.Info().ID
+			st.IsOwner = s.captureV2.IsOwner()
+		}
+		writeData(w, st)
+		return
+	}
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
+>>>>>>> 50a837b2 (owner: fix some nil panic when switch off the new owner (#2004))
 	if s.capture != nil {
 		st.ID = s.capture.info.ID
 	}
