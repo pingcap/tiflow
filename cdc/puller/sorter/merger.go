@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -36,13 +35,7 @@ import (
 )
 
 // TODO refactor this into a struct Merger.
-func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func(), bufLen *int64) error {
-	// TODO remove bufLenPlaceholder when refactoring
-	if bufLen == nil {
-		var bufLenPlaceholder int64
-		bufLen = &bufLenPlaceholder
-	}
-
+func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	_, tableName := util.TableIDFromCtx(ctx)
@@ -58,13 +51,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
-	taskBuf := newTaskBuffer(bufLen)
 	var workingSet map[*flushTask]struct{}
-	pendingSet := make(map[*flushTask]*model.PolymorphicEvent)
+	pendingSet := &sync.Map{}
 
 	defer func() {
-		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
-		taskBuf.setClosed()
+		log.Info("Unified Sorter: merger exiting, cleaning up resources")
 		// cancel pending async IO operations.
 		onExit()
 		cleanUpTask := func(task *flushTask) {
@@ -88,29 +79,30 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			_ = printError(task.dealloc())
 		}
 
+	LOOP:
 		for {
-			task, err := taskBuf.get(ctx)
-			if err != nil {
-				_ = printError(err)
-				break
+			var task *flushTask
+			select {
+			case task = <-in:
+			default:
+				break LOOP
 			}
 
 			if task == nil {
-				log.Debug("Merger exiting, taskBuf is exhausted")
+				log.Debug("Merger exiting, in-channel is exhausted")
 				break
 			}
 
 			cleanUpTask(task)
 		}
 
-		for task := range pendingSet {
-			cleanUpTask(task)
-		}
+		pendingSet.Range(func(task, _ interface{}) bool {
+			cleanUpTask(task.(*flushTask))
+			return true
+		})
 		for task := range workingSet {
 			cleanUpTask(task)
 		}
-
-		taskBuf.close()
 	}()
 
 	lastOutputTs := uint64(0)
@@ -133,41 +125,65 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		}
 	}
 
-	onMinResolvedTsUpdate := func() error {
+	onMinResolvedTsUpdate := func(minResolvedTs /* note the shadowing */ uint64) error {
 		metricSorterMergerStartTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
-		for task, cache := range pendingSet {
+		// loopErr is used to return an error out of the closure taken by `pendingSet.Range`.
+		var loopErr error
+		// NOTE 1: We can block the closure passed to `pendingSet.Range` WITHOUT worrying about
+		// deadlocks because the closure is NOT called with any lock acquired in the implementation
+		// of Sync.Map.
+		// NOTE 2: It is safe to used `Range` to iterate through the pendingSet, in spite of NOT having
+		// a snapshot consistency because (1) pendingSet is updated first before minResolvedTs is updated,
+		// which guarantees that useful new flushTasks are not missed, and (2) by design, once minResolvedTs is updated,
+		// new flushTasks will satisfy `task.tsLowerBound > minResolvedTs`, and such flushTasks are ignored in
+		// the closure.
+		pendingSet.Range(func(iTask, iCache interface{}) bool {
+			task := iTask.(*flushTask)
+			var cache *model.PolymorphicEvent
+			if iCache != nil {
+				cache = iCache.(*model.PolymorphicEvent)
+			}
+
 			if task.tsLowerBound > minResolvedTs {
 				// the condition above implies that for any event in task.backend, CRTs > minResolvedTs.
-				continue
+				return true
 			}
 			var event *model.PolymorphicEvent
 			if cache != nil {
 				event = cache
 			} else {
-				var err error
-
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					loopErr = ctx.Err()
+					// terminates the loop
+					return false
 				case err := <-task.finished:
 					if err != nil {
-						return errors.Trace(err)
+						loopErr = errors.Trace(err)
+						// terminates the loop
+						return false
 					}
 				}
 
 				if task.reader == nil {
+					var err error
 					task.reader, err = task.GetBackEnd().reader()
 					if err != nil {
-						return errors.Trace(err)
+						loopErr = errors.Trace(err)
+						// terminates the loop
+						return false
 					}
 				}
 
+				var err error
 				event, err = task.reader.readNext()
 				if err != nil {
-					return errors.Trace(err)
+					loopErr = errors.Trace(err)
+					// terminates the loop
+					return false
 				}
 
 				if event == nil {
@@ -177,17 +193,22 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if event.CRTs > minResolvedTs {
-				pendingSet[task] = event
-				continue
+				pendingSet.Store(task, event)
+				// continues the loop
+				return true
 			}
 
-			pendingSet[task] = nil
+			pendingSet.Store(task, nil)
 			workingSet[task] = struct{}{}
 
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
 				data:  task,
 			})
+			return true
+		})
+		if loopErr != nil {
+			return errors.Trace(loopErr)
 		}
 
 		resolvedTicker := time.NewTicker(1 * time.Second)
@@ -195,9 +216,15 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		retire := func(task *flushTask) error {
 			delete(workingSet, task)
-			if pendingSet[task] != nil {
+			cached, ok := pendingSet.Load(task)
+			if !ok {
+				log.Panic("task not found in pendingSet")
+			}
+
+			if cached != nil {
 				return nil
 			}
+
 			nextEvent, err := task.reader.readNext()
 			if err != nil {
 				_ = task.reader.resetAndClose() // prevents fd leak
@@ -206,7 +233,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if nextEvent == nil {
-				delete(pendingSet, task)
+				pendingSet.Delete(task)
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -219,7 +246,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					return errors.Trace(err)
 				}
 			} else {
-				pendingSet[task] = nextEvent
+				pendingSet.Store(task, nextEvent)
 				if nextEvent.CRTs < minResolvedTs {
 					log.Panic("remaining event CRTs too small",
 						zap.Uint64("next-ts", nextEvent.CRTs),
@@ -309,7 +336,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if event == nil {
 				// EOF
 				delete(workingSet, task)
-				delete(pendingSet, task)
+				pendingSet.Delete(task)
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -328,7 +355,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.RawKV.OpType == model.OpTypeResolved) {
 				// we have processed all events from this task that need to be processed in this merge
 				if event.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
-					pendingSet[task] = event
+					pendingSet.Store(task, event)
 				}
 				err := retire(task)
 				if err != nil {
@@ -379,10 +406,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		return nil
 	}
 
-	resolveTicker := time.NewTicker(1 * time.Second)
-	defer resolveTicker.Stop()
-
+	resolvedTsNotifier := &notify.Notifier{}
+	defer resolvedTsNotifier.Close()
 	errg, ctx := errgroup.WithContext(ctx)
+
 	errg.Go(func() error {
 		for {
 			var task *flushTask
@@ -400,33 +427,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				return nil
 			}
 
-			taskBuf.put(task)
-		}
-	})
-
-	errg.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-			task, err := taskBuf.get(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			if task == nil {
-				tableID, tableName := util.TableIDFromCtx(ctx)
-				log.Debug("Merger buffer exhausted and is closed, exiting",
-					zap.Int64("table-id", tableID),
-					zap.String("table-name", tableName),
-					zap.Uint64("max-output", minResolvedTs))
-				return nil
-			}
-
 			if !task.isEmpty {
-				pendingSet[task] = nil
+				pendingSet.Store(task, nil)
 			} // otherwise it is an empty flush
 
 			if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
@@ -441,10 +443,41 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if minTemp > minResolvedTs {
-				minResolvedTs = minTemp
-				err := onMinResolvedTsUpdate()
-				if err != nil {
-					return errors.Trace(err)
+				atomic.StoreUint64(&minResolvedTs, minTemp)
+				resolvedTsNotifier.Notify()
+			}
+		}
+	})
+
+	errg.Go(func() error {
+		resolvedTsReceiver, err := resolvedTsNotifier.NewReceiver(time.Second * 1)
+		if err != nil {
+			if cerrors.ErrOperateOnClosedNotifier.Equal(err) {
+				// This won't happen unless `resolvedTsNotifier` has been closed, which is
+				// impossible at this point.
+				log.Panic("unexpected error", zap.Error(err))
+			}
+			return errors.Trace(err)
+		}
+
+		defer resolvedTsReceiver.Stop()
+
+		var lastResolvedTs uint64
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-resolvedTsReceiver.C:
+				curResolvedTs := atomic.LoadUint64(&minResolvedTs)
+				if curResolvedTs > lastResolvedTs {
+					err := onMinResolvedTsUpdate(curResolvedTs)
+					if err != nil {
+						return errors.Trace(err)
+					}
+				} else if curResolvedTs < lastResolvedTs {
+					log.Panic("resolved-ts regressed in sorter",
+						zap.Uint64("cur-resolved-ts", curResolvedTs),
+						zap.Uint64("last-resolved-ts", lastResolvedTs))
 				}
 			}
 		}
@@ -477,95 +510,7 @@ func printError(err error) error {
 		!strings.Contains(err.Error(), "context deadline exceeded") &&
 		cerrors.ErrAsyncIOCancelled.NotEqual(errors.Cause(err)) {
 
-		log.Warn("Unified Sorter: Error detected", zap.Error(err))
+		log.Warn("Unified Sorter: Error detected", zap.Error(err), zap.Stack("stack"))
 	}
 	return err
-}
-
-// taskBuffer is used to store pending flushTasks.
-// The design purpose is to reduce the backpressure caused by a congested output chan of the merger,
-// so that heapSorter does not block.
-type taskBuffer struct {
-	mu    sync.Mutex // mu only protects queue
-	queue deque.Deque
-
-	notifier notify.Notifier
-	len      *int64
-	isClosed int32
-}
-
-func newTaskBuffer(len *int64) *taskBuffer {
-	return &taskBuffer{
-		queue:    deque.NewDeque(),
-		notifier: notify.Notifier{},
-		len:      len,
-	}
-}
-
-func (b *taskBuffer) put(task *flushTask) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.queue.PushBack(task)
-	prevCount := atomic.AddInt64(b.len, 1)
-
-	if prevCount == 1 {
-		b.notifier.Notify()
-	}
-}
-
-func (b *taskBuffer) get(ctx context.Context) (*flushTask, error) {
-	if atomic.LoadInt32(&b.isClosed) == 1 && atomic.LoadInt64(b.len) == 0 {
-		return nil, nil
-	}
-
-	if atomic.LoadInt64(b.len) == 0 {
-		recv, err := b.notifier.NewReceiver(time.Millisecond * 50)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		defer recv.Stop()
-
-		startTime := time.Now()
-		for atomic.LoadInt64(b.len) == 0 {
-			select {
-			case <-ctx.Done():
-				return nil, errors.Trace(ctx.Err())
-			case <-recv.C:
-				// Note that there can be spurious wake-ups
-			}
-
-			if atomic.LoadInt32(&b.isClosed) == 1 && atomic.LoadInt64(b.len) == 0 {
-				return nil, nil
-			}
-
-			if time.Since(startTime) > time.Second*5 {
-				log.Debug("taskBuffer reading blocked for too long", zap.Duration("duration", time.Since(startTime)))
-			}
-		}
-	}
-
-	postCount := atomic.AddInt64(b.len, -1)
-	if postCount < 0 {
-		log.Panic("taskBuffer: len < 0, report a bug", zap.Int64("len", postCount))
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	ret := b.queue.PopFront()
-	if ret == nil {
-		log.Panic("taskBuffer: PopFront() returned nil, report a bug")
-	}
-
-	return ret.(*flushTask), nil
-}
-
-func (b *taskBuffer) setClosed() {
-	atomic.SwapInt32(&b.isClosed, 1)
-}
-
-// Only call this when the taskBuffer is NEVER going to be accessed again.
-func (b *taskBuffer) close() {
-	b.notifier.Close()
 }
