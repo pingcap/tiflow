@@ -153,6 +153,7 @@ func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	gcManager := newGCManager()
+	gcManager.isTiCDCBlockGC = true
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
@@ -161,4 +162,8 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 
 	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
+
+	gcManager.isTiCDCBlockGC = false
+	gcManager.lastSafePointTs = 20
+	err = gcManager.CheckStaleCheckpointTs(ctx, 10)
 }

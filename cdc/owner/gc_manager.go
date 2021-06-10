@@ -43,6 +43,7 @@ type gcManager struct {
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
+	isTiCDCBlockGC    bool
 
 	pdPhysicalTimeCache time.Time
 	lastUpdatedPdTime   time.Time
@@ -99,6 +100,9 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	if actual > minCheckpointTs {
 		log.Warn("update gc safe point failed, the gc safe point is larger than checkpointTs", zap.Uint64("actual", actual), zap.Uint64("checkpointTs", minCheckpointTs))
 	}
+	// if the min checkpoint ts is equal to the current gc safe point,
+	// it means that the service gc safe point set by TiCDC is the min service gc safe point
+	m.isTiCDCBlockGC = actual == minCheckpointTs
 	m.lastSafePointTs = actual
 	m.lastSucceededTime = time.Now()
 	return nil
@@ -122,8 +126,15 @@ func (m *gcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if checkpointTs < m.lastSafePointTs || pdTime.Sub(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(m.gcTTL)*time.Second {
-		return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
+	if m.isTiCDCBlockGC {
+		if pdTime.Sub(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(m.gcTTL)*time.Second {
+			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
+		}
+	} else {
+		// if `isTiCDCBlockGC` is false, it means there is another service gc ttl less than the min checkpoint ts.
+		if checkpointTs < m.lastSafePointTs {
+			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
+		}
 	}
 	return nil
 }
