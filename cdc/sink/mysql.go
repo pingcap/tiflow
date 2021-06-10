@@ -108,6 +108,7 @@ type mysqlSink struct {
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	if len(rows) > 0 {
 		resolvedTs := rows[0].CommitTs - 1
+		atomic.StoreUint64(&s.resolvedTs, resolvedTs)
 		for _, worker := range s.workers {
 			for {
 				workerCheckpointTs := atomic.LoadUint64(&worker.checkpointTs)
