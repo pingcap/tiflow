@@ -197,6 +197,10 @@ func (s *ownerSuite) TestOwnerCalcResolvedTs(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
 
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+
 	s.TearDownTest(c)
 }
 
