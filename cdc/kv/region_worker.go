@@ -34,6 +34,21 @@ import (
 	"golang.org/x/time/rate"
 )
 
+<<<<<<< HEAD
+=======
+var (
+	regionWorkerPool workerpool.WorkerPool
+	workerPoolOnce   sync.Once
+	// The magic number here is keep the same with some magic numbers in some
+	// other components in TiCDC, including worker pool task chan size, mounter
+	// chan size etc.
+	// TODO: unified channel buffer mechanism
+	regionWorkerInputChanSize = 128
+	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
+	regionWorkerHighWatermark = int(float64(regionWorkerInputChanSize) * 0.7)
+)
+
+>>>>>>> ef9f56e7 (*: reduce memory consumption by reducing channel sizes (#1999))
 const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
