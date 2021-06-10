@@ -58,4 +58,16 @@ enable-old-value = false
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsFalse)
 	c.Assert(info.Engine, check.Equals, model.SortInMemory)
+
+	sortDir = "/tidb/data"
+	pdCli = &mockPDClient{}
+	disableGCSafePointCheck = true
+	info, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
+	c.Assert(err, check.NotNil)
+	info, err = verifyChangefeedParameters(ctx, cmd, true, nil, nil)
+	c.Assert(err, check.NotNil)
+
+	sortDir = ""
+	info, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
+	c.Assert(err, check.IsNil)
 }
