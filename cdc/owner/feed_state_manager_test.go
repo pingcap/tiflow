@@ -122,9 +122,9 @@ func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateStopped)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
+	c.Assert(state.Info.State, check.Equals, model.StateFinished)
+	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminFinish)
+	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminFinish)
 }
 
 func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
@@ -162,9 +162,9 @@ func (s *feedStateManagerSuite) TestCleanUpInfos(c *check.C) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateStopped)
-	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
-	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
+	c.Assert(state.Info.State, check.Equals, model.StateFinished)
+	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminFinish)
+	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminFinish)
 	c.Assert(state.TaskStatuses, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)
 	c.Assert(state.TaskPositions, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)
 	c.Assert(state.Workloads, check.Not(check.HasKey), ctx.GlobalVars().CaptureInfo.ID)

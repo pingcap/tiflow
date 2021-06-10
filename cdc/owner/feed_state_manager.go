@@ -150,7 +150,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		}
 		m.shouldBeRunning = false
 		jobsPending = true
-		m.patchState(model.StateStopped)
+		m.patchState(model.StateFinished)
 	default:
 		log.Warn("Unknown admin job", zap.Any("adminJob", job), zap.String("changefeed", m.state.ID))
 	}
