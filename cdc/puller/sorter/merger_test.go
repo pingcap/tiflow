@@ -483,9 +483,8 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
-	if err != nil {
-		log.Panic("Could not enable failpoint", zap.Error(err))
-	}
+	c.Assert(err, check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug") //nolint:errcheck
 
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*25)
 	defer cancel()
