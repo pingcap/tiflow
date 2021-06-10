@@ -54,6 +54,7 @@ func (t *ReactorStateTester) UpdateKeys(updatedKeys map[string][]byte) error {
 
 // ApplyPatches calls the GetPatches method on the ReactorState and apply the changes to the mocked kv-store.
 func (t *ReactorStateTester) ApplyPatches() error {
+<<<<<<< HEAD
 	patches := t.state.GetPatches()
 	mergedPatches := mergePatch(patches)
 
@@ -70,6 +71,24 @@ func (t *ReactorStateTester) ApplyPatches() error {
 		}
 		if cerrors.ErrEtcdIgnore.Equal(errors.Cause(err)) {
 			continue
+=======
+	patchGroups := t.state.GetPatches()
+	for _, patches := range patchGroups {
+		err := t.applyPatches(patches)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *ReactorStateTester) applyPatches(patches []DataPatch) error {
+RetryLoop:
+	for {
+		tmpKVEntries := make(map[util.EtcdKey][]byte)
+		for k, v := range t.kvEntries {
+			tmpKVEntries[util.NewEtcdKey(k)] = []byte(v)
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 		}
 		if err != nil {
 			return errors.Trace(err)

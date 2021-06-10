@@ -187,10 +187,14 @@ func (s *simpleReactorState) Update(key util.EtcdKey, value []byte, isInit bool)
 	return nil
 }
 
+<<<<<<< HEAD
 func (s *simpleReactorState) GetPatches() []*DataPatch {
+=======
+func (s *simpleReactorState) GetPatches() [][]DataPatch {
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 	ret := s.patches
 	s.patches = nil
-	return ret
+	return [][]DataPatch{ret}
 }
 
 func setUpTest(c *check.C) (func() *etcd.Client, func()) {
@@ -289,8 +293,13 @@ func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	return nil
 }
 
+<<<<<<< HEAD
 func (s *intReactorState) GetPatches() []*DataPatch {
 	return []*DataPatch{}
+=======
+func (s *intReactorState) GetPatches() [][]DataPatch {
+	return [][]DataPatch{}
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 }
 
 type linearizabilityReactor struct {
@@ -374,10 +383,14 @@ func (s *commonReactorState) AppendPatch(key util.EtcdKey, fun PatchFunc) {
 	})
 }
 
+<<<<<<< HEAD
 func (s *commonReactorState) GetPatches() []*DataPatch {
+=======
+func (s *commonReactorState) GetPatches() [][]DataPatch {
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
-	return pendingPatches
+	return [][]DataPatch{pendingPatches}
 }
 
 type finishedReactor struct {

@@ -227,6 +227,10 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	return nil
 }
 
+<<<<<<< HEAD
 func (s *cdcReactorState) GetPatches() []*orchestrator.DataPatch {
+=======
+func (s *cdcReactorState) GetPatches() [][]orchestrator.DataPatch {
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 	return nil
 }
