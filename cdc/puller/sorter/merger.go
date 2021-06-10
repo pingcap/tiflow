@@ -451,14 +451,16 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 	errg.Go(func() error {
 		resolvedTsReceiver, err := resolvedTsNotifier.NewReceiver(time.Second * 1)
-		defer resolvedTsReceiver.Stop()
-
 		if err != nil {
 			if cerrors.ErrOperateOnClosedNotifier.Equal(err) {
+				// This won't happen unless `resolvedTsNotifier` has been closed, which is
+				// impossible at this point.
 				log.Panic("unexpected error", zap.Error(err))
 			}
 			return errors.Trace(err)
 		}
+
+		defer resolvedTsReceiver.Stop()
 
 		var lastResolvedTs uint64
 		for {
