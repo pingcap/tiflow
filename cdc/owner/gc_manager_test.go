@@ -166,4 +166,5 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
 	err = gcManager.CheckStaleCheckpointTs(ctx, 10)
+	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 }
