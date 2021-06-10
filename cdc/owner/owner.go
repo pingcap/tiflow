@@ -108,7 +108,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	state := rawState.(*model.GlobalReactorState)
 	o.updateMetrics(state)
 	if !o.clusterVersionConsistent(state.Captures) {
-		// sleep one second to avoid to print too much log
+		// sleep one second to avoid printing too much log
 		time.Sleep(1 * time.Second)
 		return state, nil
 	}
