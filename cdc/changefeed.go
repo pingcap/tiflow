@@ -939,7 +939,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		// so we can't emit checkpoint to sink
 		if c.ddlState != model.ChangeFeedWaitToExecDDL {
 			failpoint.Inject("InjectEmitCheckpointTsError", func() {
-				failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
+				failpoint.Return(cerror.ErrEmitCheckpointTsFailed.GenWithStackByArgs())
 			})
 			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
 			if err != nil {
