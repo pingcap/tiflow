@@ -382,22 +382,6 @@ func mustExec(ctx context.Context, db *sql.DB, query string) {
 	}
 }
 
-func waitTable(ctx context.Context, db *sql.DB, table string) error {
-	for {
-		if isTableExist(ctx, db, table) {
-			log.Info("wait table success", zap.String("table", table))
-			return nil
-		}
-		log.Info("wait table", zap.String("table", table))
-		select {
-		case <-ctx.Done():
-			log.Error("wait table failed due to timeout", zap.String("table", table), zap.Error(ctx.Err()))
-			return ctx.Err()
-		case <-time.After(1 * time.Second):
-		}
-	}
-}
-
 func isTableExist(ctx context.Context, db *sql.DB, table string) bool {
 	// if table is not exist, return true directly
 	query := fmt.Sprintf("SHOW TABLES LIKE '%s'", table)
@@ -430,8 +414,8 @@ func openDB(ctx context.Context, dsn string) *sql.DB {
 }
 
 func run(
-	ctx context.Context, upstream, downstream string, accounts, tables int,
-	concurrency int, interval int64, testRound int64, cleanupOnly bool,
+	ctx context.Context, upstream, downstream string, accounts, tables, concurrency int,
+	interval, testRound int64, cleanupOnly bool,
 ) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
@@ -472,18 +456,19 @@ func run(
 	// all previous DDL and DML are replicated too.
 	mustExec(ctx, upstreamDB, `CREATE TABLE IF NOT EXISTS finishmark (foo BIGINT PRIMARY KEY)`)
 	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
-	if err := waitTable(waitCtx, downstreamDB, "finishmark"); err != nil {
-		waitCancel()
-		log.Panic("wait for prepare table failed", zap.Error(err))
-	}
+	endTs, err := getDownStreamSyncedEndTs(waitCtx, downstreamDB, "finishmark")
 	waitCancel()
-	log.Info("all tables synced")
+	if err != nil {
+		log.Panic("wait for table finishmark failed", zap.Error(err))
+	}
+	log.Info("all tables synced", zap.String("endTs", endTs))
 
 	var (
-		counts, round int64 = 0, 0
-		g                   = new(errgroup.Group)
-		tblChan             = make(chan string, 1)
-		valid, tried  int64 = 0, 0
+		counts       int64 = 0
+		g                  = new(errgroup.Group)
+		tblChan            = make(chan string, 1)
+		doneCh             = make(chan struct{}, 1)
+		valid, tried int64 = 0, 0
 	)
 
 	for id := 0; id < tables; id++ {
@@ -510,8 +495,9 @@ func run(
 					return errors.Trace(err)
 				}
 
-				if atomic.AddInt64(&counts, 1)%interval == 0 {
-					tblName := fmt.Sprintf("finishmark%d", atomic.LoadInt64(&counts))
+				curr := atomic.AddInt64(&counts, 1)
+				if curr%interval == 0 {
+					tblName := fmt.Sprintf("finishmark%d", curr)
 					ddl := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (foo BIGINT PRIMARY KEY)", tblName)
 					mustExec(ctx, upstreamDB, ddl)
 					tblChan <- tblName
@@ -530,8 +516,16 @@ func run(
 					if err != nil && errors.Cause(err) != context.Canceled {
 						log.Warn("workload failed", zap.Error(err))
 					}
+
+					curr := atomic.LoadInt64(&counts)
+					if curr >= testRound {
+						log.Info("one upstream workload finished", zap.Int64("round", curr))
+						doneCh <- struct{}{}
+						return nil
+					}
 				}
 			}
+
 		})
 
 		// Verify
@@ -541,23 +535,21 @@ func run(
 				case <-ctx.Done():
 					return ctx.Err()
 				case tblName := <-tblChan:
-					log.Info("downstream start with for table", zap.String("tblName", tblName))
+					log.Info("downstream start wait for table", zap.String("tblName", tblName))
 					waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
-					if err := waitTable(waitCtx, downstreamDB, tblName); err != nil {
-						log.Error("wait for table failed", zap.String("tableName", tblName), zap.Error(err))
-						waitCancel()
-						continue
-					}
+					endTs, err := getDownStreamSyncedEndTs(waitCtx, downstreamDB, tblName)
 					waitCancel()
 					log.Info("ddl synced", zap.String("table", tblName))
-
-					atomic.AddInt64(&tried, 1)
-
-					endTs, err := getDDLEndTs(downstreamDB, tblName)
 					if err != nil {
 						log.Fatal("[cdc-bank] get ddl end ts error", zap.Error(err))
 					}
 
+					atomic.AddInt64(&tried, 1)
+					log.Info("downstream sync success", zap.String("endTs", endTs))
+
+					if endTs == "" {
+						continue
+					}
 					atomic.AddInt64(&valid, 1)
 
 					for _, test := range tests {
@@ -573,9 +565,9 @@ func run(
 						}
 						verifyCancel()
 					}
-				}
-				if atomic.AddInt64(&round, 1) == testRound {
-					cancel()
+				case <-doneCh:
+					log.Info("one downstream exit due to receive done")
+					return nil
 				}
 			}
 		})
@@ -600,51 +592,41 @@ type dataRow struct {
 	TblID       int64
 	RowCount    int64
 	StartTime   string
-	EndTime     string
+	EndTime     *string
 	State       string
 }
 
-func getDDLEndTs(db *sql.DB, tableName string) (result string, err error) {
-	query := fmt.Sprintf("admin show ddl jobs where TABLE_NAME = '%s'", tableName)
-	row := db.QueryRow(query)
-
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error("get ddl end ts panic, recovered", zap.Reflect("r", r))
+func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tableName string) (result string, err error) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Error("get downstream sync end ts failed due to timeout", zap.String("table", tableName), zap.Error(ctx.Err()))
+			return "", ctx.Err()
+		case <-time.After(2 * time.Second):
+			result, ok := tryGetEndTs(db, tableName)
+			if ok {
+				return result, nil
+			}
 		}
-	}()
+	}
+}
+
+func tryGetEndTs(db *sql.DB, tableName string) (result string, ok bool) {
+	query := fmt.Sprintf("admin show ddl jobs where table_name = '%s'", tableName)
+	log.Info("try get end ts", zap.String("query", query))
 
 	var line dataRow
+	row := db.QueryRow(query)
 	if err := row.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
 		&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
 		if err != sql.ErrNoRows {
-			log.Error("get ddl end ts failed", zap.String("query", query), zap.Error(err))
-			return "", err
+			log.Info("rows scan failed", zap.Error(err))
 		}
-		log.Error("get ddl end ts no row", zap.String("query", query), zap.Error(err))
-		return "", nil
+		return "", false
 	}
-	return line.EndTime, nil
-	// rows, err := db.Query("admin show ddl jobs")
-	// if err != nil {
-	// 	return "", err
-	// }
-	// defer rows.Close()
-	//
-	// var line dataRow
-	// for rows.Next() {
-	// 	if err := rows.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
-	// 		&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
-	// 		return "", err
-	// 	}
-	// 	if line.JobType == "create table" && line.TblName == tableName && line.State == "synced" {
-	// 		if line.EndTime == nil {
-	// 			log.Warn("get ddl end time failed", zap.String("tableName", tableName))
-	// 			return "", nil
-	// 		}
-	// 		return *line.EndTime, nil
-	// 	}
-	// }
-	// log.Error("cannot find in ddl history", zap.String("tableName", tableName))
-	// return "", nil
+
+	if line.EndTime == nil {
+		return "", true
+	}
+	return *line.EndTime, true
 }

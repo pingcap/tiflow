@@ -53,7 +53,7 @@ func main() {
 	var (
 		upstream, downstream          string
 		accounts, tables, concurrency int
-		testRound, interval           int64
+		interval, testRound           int64
 		cleanupOnly                   bool
 	)
 	cmd := &cobra.Command{
@@ -69,7 +69,7 @@ func main() {
 	cmd.PersistentFlags().StringVarP(&upstream, "upstream", "u", "", "Upstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVarP(&downstream, "downstream", "d", "", "Downstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().Int64Var(&interval, "interval", 1000, "Interval of verify tables")
-	cmd.PersistentFlags().Int64Var(&testRound, "test-round", 10000, "Total around of verify tables")
+	cmd.PersistentFlags().Int64Var(&testRound, "test-round", 50000, "Total around of upstream updates")
 	cmd.PersistentFlags().IntVar(&tables, "tables", 5, "The number of tables for db")
 	cmd.PersistentFlags().IntVar(&accounts, "accounts", 100, "The number of Accounts for each table")
 	cmd.PersistentFlags().IntVar(&concurrency, "concurrency", 10, "concurrency of transaction for each table")
