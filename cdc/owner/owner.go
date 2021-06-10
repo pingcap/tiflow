@@ -258,7 +258,7 @@ func (o *Owner) handleJobs() {
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeDebugInfo:
-			panic("unimplemented") // TODO
+			// TODO: implement this function
 		}
 		close(job.done)
 	}
