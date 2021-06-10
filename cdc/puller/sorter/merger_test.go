@@ -18,8 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -107,7 +105,7 @@ func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	totalCount := 0
@@ -178,7 +176,7 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	totalCount := 0
@@ -259,7 +257,7 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	totalCount := 0
@@ -339,7 +337,7 @@ func (s *sorterSuite) TestMergerCancel(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	builder := newMockFlushTaskBuilder()
@@ -394,7 +392,7 @@ func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	builder := newMockFlushTaskBuilder()
@@ -457,7 +455,7 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	close(task1.finished)
 
 	wg.Go(func() error {
-		return runMerger(ctx, 1, inChan, outChan, func() {}, nil)
+		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
 	wg.Go(func() error {
@@ -480,115 +478,76 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
 }
 
-// TestTaskBufferBasic tests the basic functionality of TaskBuffer
-func (s *sorterSuite) TestTaskBufferBasic(c *check.C) {
+// TestMergerOutputBlocked simulates a situation where the output channel is blocked for
+// a significant period of time.
+func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug") //nolint:errcheck
 
-	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*25)
 	defer cancel()
-	errg, ctx := errgroup.WithContext(ctx)
-	var bufLen int64
-	taskBuf := newTaskBuffer(&bufLen)
+	wg, ctx := errgroup.WithContext(ctx)
+	// use unbuffered channel to make sure that the input has been processed
+	inChan := make(chan *flushTask)
+	// make a small channel to test blocking
+	outChan := make(chan *model.PolymorphicEvent, 1)
 
-	// run producer
-	errg.Go(func() error {
-		for i := 0; i < 10000; i++ {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			default:
-			}
+	wg.Go(func() error {
+		return runMerger(ctx, 1, inChan, outChan, func() {})
+	})
 
-			var dummyTask flushTask
-			taskBuf.put(&dummyTask)
-		}
+	totalCount := 0
+	builder := newMockFlushTaskBuilder()
+	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
+	totalCount += builder.totalCount
+	builder = newMockFlushTaskBuilder()
+	task2 := builder.generateRowChanges(100002, 200000, 2048).addResolved(200001).build()
+	totalCount += builder.totalCount
+	builder = newMockFlushTaskBuilder()
+	task3 := builder.generateRowChanges(200002, 300000, 2048).addResolved(300001).build()
+	totalCount += builder.totalCount
 
-		taskBuf.setClosed()
+	wg.Go(func() error {
+		inChan <- task1
+		close(task1.finished)
+		inChan <- task2
+		close(task2.finished)
+		inChan <- task3
+		close(task3.finished)
+
 		return nil
 	})
 
-	// run consumer
-	errg.Go(func() error {
-		for i := 0; i < 10001; i++ {
+	wg.Go(func() error {
+		time.Sleep(10 * time.Second)
+		count := 0
+		lastTs := uint64(0)
+		lastResolved := uint64(0)
+		for {
 			select {
 			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			default:
-			}
-
-			task, err := taskBuf.get(ctx)
-			c.Assert(err, check.IsNil)
-
-			if i == 10000 {
-				c.Assert(task, check.IsNil)
-				taskBuf.close()
-				return nil
-			}
-
-			c.Assert(task, check.NotNil)
-		}
-		c.Fail() // unreachable
-		return nil
-	})
-
-	c.Assert(errg.Wait(), check.IsNil)
-	c.Assert(bufLen, check.Equals, int64(0))
-}
-
-// TestTaskBufferBasic tests the situation where the taskBuffer's consumer is
-// first starved and then exit due to taskBuf shutdown.
-func (s *sorterSuite) TestTaskBufferStarveAndClose(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
-	defer cancel()
-	errg, ctx := errgroup.WithContext(ctx)
-	var bufLen int64
-	taskBuf := newTaskBuffer(&bufLen)
-
-	// run producer
-	errg.Go(func() error {
-		for i := 0; i < 1000; i++ {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			default:
-			}
-
-			var dummyTask flushTask
-			taskBuf.put(&dummyTask)
-		}
-
-		// starve the consumer
-		time.Sleep(3 * time.Second)
-		taskBuf.setClosed()
-		return nil
-	})
-
-	// run consumer
-	errg.Go(func() error {
-		for i := 0; i < 1001; i++ {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			default:
-			}
-
-			task, err := taskBuf.get(ctx)
-			if i < 1000 {
-				c.Assert(task, check.NotNil)
-				c.Assert(err, check.IsNil)
-			} else {
-				c.Assert(task, check.IsNil)
-				c.Assert(err, check.IsNil)
-				taskBuf.close()
-				return nil
+				return ctx.Err()
+			case event := <-outChan:
+				switch event.RawKV.OpType {
+				case model.OpTypePut:
+					count++
+					c.Assert(event.CRTs, check.GreaterEqual, lastTs)
+					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					lastTs = event.CRTs
+				case model.OpTypeResolved:
+					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					lastResolved = event.CRTs
+				}
+				if lastResolved >= 300001 {
+					c.Assert(count, check.Equals, totalCount)
+					cancel()
+					return nil
+				}
 			}
 		}
-		c.Fail() // unreachable
-		return nil
 	})
-
-	c.Assert(errg.Wait(), check.IsNil)
-	c.Assert(bufLen, check.Equals, int64(0))
+	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
+	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
 }
