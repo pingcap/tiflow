@@ -11,7 +11,7 @@ error = '''
 stop processor by admin command
 '''
 
-["CDC:ErrAsyncBroadcaseNotSupport"]
+["CDC:ErrAsyncBroadcastNotSupport"]
 error = '''
 Async broadcasts not supported
 '''
@@ -154,6 +154,11 @@ decode failed: %s
 ["CDC:ErrDecodeRowToDatum"]
 error = '''
 decode row data to datum failed
+'''
+
+["CDC:ErrEmitCheckpointTsFailed"]
+error = '''
+emit checkpoint ts failed
 '''
 
 ["CDC:ErrEncodeFailed"]
@@ -361,7 +366,7 @@ error = '''
 kafka async send message failed
 '''
 
-["CDC:ErrKafkaFlushUnfished"]
+["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
 '''
@@ -596,7 +601,7 @@ error = '''
 resolve locks failed
 '''
 
-["CDC:ErrS3SinkInitialzie"]
+["CDC:ErrS3SinkInitialize"]
 error = '''
 new s3 sink
 '''
