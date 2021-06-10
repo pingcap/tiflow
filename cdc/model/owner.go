@@ -44,7 +44,7 @@ const (
 	AdminStop
 	AdminResume
 	AdminRemove
-	AdminFinish // deprecated, will be removed in the next version
+	AdminFinish
 )
 
 // String implements fmt.Stringer interface.
