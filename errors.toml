@@ -156,6 +156,11 @@ error = '''
 decode row data to datum failed
 '''
 
+["CDC:ErrEmitCheckpointTsFailed"]
+error = '''
+emit checkpoint ts failed
+'''
+
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
