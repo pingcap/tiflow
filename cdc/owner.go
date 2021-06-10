@@ -1417,12 +1417,12 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	err = o.calcResolvedTs(ctx)
+	err = o.handleAdminJob(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = o.handleAdminJob(ctx)
+	err = o.calcResolvedTs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
