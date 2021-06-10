@@ -466,7 +466,7 @@ func run(
 	var (
 		counts       int64 = 0
 		g                  = new(errgroup.Group)
-		tblChan            = make(chan string, 1)
+		tblChan            = make(chan string, tables)
 		doneCh             = make(chan struct{}, 1)
 		valid, tried int64 = 0, 0
 	)
