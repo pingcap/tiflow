@@ -78,8 +78,14 @@ func NewManager(pdCli pd.Client, credential *security.Credential, captureInfo *m
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
+<<<<<<< HEAD
 func (m *Manager) Tick(ctx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	globalState := state.(*globalState)
+=======
+func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	ctx := stdCtx.(cdcContext.Context)
+	globalState := state.(*model.GlobalReactorState)
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}

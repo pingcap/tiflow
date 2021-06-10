@@ -88,7 +88,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix())
 	var (
+<<<<<<< HEAD
 		pendingPatches []*DataPatch
+=======
+		pendingPatches [][]DataPatch
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 		exiting        bool
 		sessionDone    <-chan struct{}
 	)
@@ -144,16 +148,17 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 		if len(pendingPatches) > 0 {
 			// Here we have some patches yet to be uploaded to Etcd.
+<<<<<<< HEAD
 			err := worker.applyPatches(ctx, pendingPatches)
+=======
+			pendingPatches, err = worker.applyPatchGroups(ctx, pendingPatches)
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 			if err != nil {
 				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
 					continue
 				}
 				return errors.Trace(err)
 			}
-			// If we are here, all patches have been successfully applied to Etcd.
-			// `applyPatches` is all-or-none, so in case of success, we should clear all the pendingPatches.
-			pendingPatches = pendingPatches[:0]
 		} else {
 			if exiting {
 				// If exiting is true here, it means that the reactor returned `ErrReactorFinished` last tick, and all pending patches is applied.
@@ -251,6 +256,7 @@ func mergePatch(patches []*DataPatch) []*DataPatch {
 	return result
 }
 
+<<<<<<< HEAD
 func etcdValueEqual(left, right []byte) bool {
 	if len(left) == 0 && len(right) == 0 {
 		return (left == nil && right == nil) || (left != nil && right != nil)
@@ -263,6 +269,23 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []*DataPatch
 	cmps := make([]clientv3.Cmp, 0, len(patches))
 	ops := make([]clientv3.Op, 0, len(patches))
 
+=======
+func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
+	for len(patchGroups) > 0 {
+		patches := patchGroups[0]
+		err := worker.applyPatches(ctx, patches)
+		if err != nil {
+			return patchGroups, err
+		}
+		patchGroups = patchGroups[1:]
+	}
+	return patchGroups, nil
+}
+
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch) error {
+	state := worker.cloneRawState()
+	changedSet := make(map[util.EtcdKey]struct{})
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 	for _, patch := range patches {
 		old, ok := worker.rawState[patch.Key]
 

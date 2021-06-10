@@ -113,7 +113,17 @@ func newProcessor(
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
+<<<<<<< HEAD
 func (p *processor) Tick(ctx context.Context, state *changefeedState) (orchestrator.ReactorState, error) {
+=======
+func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	p.changefeed = state
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID:   state.ID,
+		Info: state.Info,
+	})
+>>>>>>> 674a8e14 (owner: fix etcd error too many operations in txn request (#1988))
 	_, err := p.tick(ctx, state)
 	p.firstTick = false
 	if err == nil {
