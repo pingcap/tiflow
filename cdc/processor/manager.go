@@ -79,7 +79,6 @@ func NewManager4Test(
 func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*model.GlobalReactorState)
-	globalState.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
@@ -98,6 +97,11 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		processor, exist := m.processors[changefeedID]
 		if !exist {
 			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
+				continue
+			}
+			// the processor should start after at least one table has been added to this capture
+			taskStatus := changefeedState.TaskStatuses[captureID]
+			if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
 				continue
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
@@ -146,7 +150,7 @@ func (m *Manager) WriteDebugInfo(w io.Writer) {
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		fmt.Fprintf(w, "failed to print debug info\n")
+		fmt.Fprintf(w, "failed to print debug info for processor\n")
 	}
 }
 

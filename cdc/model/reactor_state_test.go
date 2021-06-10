@@ -32,7 +32,7 @@ var _ = check.Suite(&stateSuite{})
 
 func (s *stateSuite) TestCheckCaptureAlive(c *check.C) {
 	defer testleak.AfterTest(c)()
-	state := NewGlobalState().(*GlobalReactorState)
+	state := NewChangefeedReactorState("test")
 	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	c.Assert(stateTester.ApplyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
@@ -652,6 +652,8 @@ func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
 	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	state.CheckChangefeedNormal()
+	stateTester.MustApplyPatches()
 	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
 		return &ChangeFeedInfo{SinkURI: "123", AdminJobType: AdminNone, Config: &config.ReplicaConfig{}}, true, nil
 	})

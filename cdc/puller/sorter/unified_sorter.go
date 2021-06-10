@@ -17,8 +17,6 @@ import (
 	"context"
 	"os"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -28,6 +26,12 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
+)
+
+const (
+	inputChSize       = 128
+	outputChSize      = 128
+	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
 )
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
@@ -102,8 +106,8 @@ func NewUnifiedSorter(
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:  make(chan *model.PolymorphicEvent, 128),
-		outputCh: make(chan *model.PolymorphicEvent, 128),
+		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
+		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
 		pool:     pool,
 		metricsInfo: &metricsInfo{
@@ -145,7 +149,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
 	errg, subctx := errgroup.WithContext(ctx)
-	heapSorterCollectCh := make(chan *flushTask, 4096)
+	heapSorterCollectCh := make(chan *flushTask, heapCollectChSize)
 	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
 	defer mergerCleanUp(heapSorterCollectCh)
 
@@ -188,9 +192,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
-	var mergerBufLen int64
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, &mergerBufLen))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
 	})
 
 	errg.Go(func() error {
@@ -206,15 +209,6 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
-			// tentative value 1280000
-			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
-				after := time.After(1 * time.Second)
-				select {
-				case <-subctx.Done():
-					return subctx.Err()
-				case <-after:
-				}
-			}
 			select {
 			case <-subctx.Done():
 				return subctx.Err()

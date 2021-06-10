@@ -117,6 +117,7 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *mo
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
+	tester.MustUpdate("/tidb/cdc/capture/"+ctx.GlobalVars().CaptureInfo.ID, []byte(`{"id":"`+ctx.GlobalVars().CaptureInfo.ID+`","address":"127.0.0.1:8300"}`))
 	tester.MustApplyPatches()
 	captures := map[model.CaptureID]*model.CaptureInfo{ctx.GlobalVars().CaptureInfo.ID: ctx.GlobalVars().CaptureInfo}
 	return cf, state, captures, tester
@@ -271,9 +272,11 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
 	}
-
-	c.Assert(mockAsyncSink.syncPointHis[0], check.Equals, ctx.ChangefeedVars().Info.StartTs-1)
-	c.Assert(mockAsyncSink.syncPointHis[len(mockAsyncSink.syncPointHis)-1], check.Equals, state.Status.CheckpointTs)
+	for i := 1; i < len(mockAsyncSink.syncPointHis); i++ {
+		// check the time interval between adjacent sync points is less or equal than one second
+		c.Assert(mockAsyncSink.syncPointHis[i]-mockAsyncSink.syncPointHis[i-1], check.LessEqual, uint64(1000<<18))
+	}
+	c.Assert(len(mockAsyncSink.syncPointHis), check.GreaterEqual, 5)
 }
 
 func (s *changefeedSuite) TestFinished(c *check.C) {

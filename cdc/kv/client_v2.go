@@ -115,12 +115,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		return nil
 	}
 
-	// TODO: If a region doesn't receive any event from TiKV, this region
-	// can't be reconnected since the region state is not initialized.
-	if !state.isInitialized() {
-		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
-	}
-
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -192,7 +186,7 @@ func (s *eventFeedSession) receiveFromStreamV2(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			}, false /* initialized */)
+			}, true /* revokeToken */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
