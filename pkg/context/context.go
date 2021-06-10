@@ -18,6 +18,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/version"
+
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -179,6 +181,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 		CaptureInfo: &model.CaptureInfo{
 			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
+			Version:       version.ReleaseVersion,
 		},
 	})
 	if withChangefeedVars {
