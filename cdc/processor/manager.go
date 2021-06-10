@@ -79,7 +79,6 @@ func NewManager4Test(
 func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*model.GlobalReactorState)
-	globalState.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}

@@ -112,7 +112,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		time.Sleep(1 * time.Second)
 		return state, nil
 	}
-	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	err = o.gcManager.updateGCSafePoint(ctx, state)
 	if err != nil {
 		return nil, errors.Trace(err)
