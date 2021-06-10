@@ -106,7 +106,6 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*model.GlobalReactorState)
 	o.updateMetrics(state)
-	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	err = o.gcManager.updateGCSafePoint(ctx, state)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -226,7 +225,7 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
-	ownershipCounter.Add(float64(now.Sub(o.lastTickTime) / time.Second))
+	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
 	ownerMaintainTableNumGauge.Reset()
@@ -259,7 +258,7 @@ func (o *Owner) handleJobs() {
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeDebugInfo:
-			panic("unimplemented") // TODO
+			// TODO: implement this function
 		}
 		close(job.done)
 	}
