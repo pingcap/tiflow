@@ -28,6 +28,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/version"
 	"go.uber.org/zap"
 )
 
@@ -106,6 +107,11 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*model.GlobalReactorState)
 	o.updateMetrics(state)
+	if !o.clusterVersionConsistent(state.Captures) {
+		// sleep one second to avoid printing too much log
+		time.Sleep(1 * time.Second)
+		return state, nil
+	}
 	err = o.gcManager.updateGCSafePoint(ctx, state)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -239,6 +245,17 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
 		}
 	}
+}
+
+func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
+	myVersion := version.ReleaseVersion
+	for _, capture := range captures {
+		if myVersion != capture.Version {
+			log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("my-version", myVersion))
+			return false
+		}
+	}
+	return true
 }
 
 func (o *Owner) handleJobs() {
