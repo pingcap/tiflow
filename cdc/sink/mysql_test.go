@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/davecgh/go-spew/spew"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -1193,6 +1195,31 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 		}
 		return nil
 	})
+	c.Assert(err, check.IsNil)
+
+	// Simulates Resolved-Ts regression
+	rows = []*model.RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+		},
+	}
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sink/MySQLFlushRowChangedEventAsyncDelay", "pause")
+	c.Assert(err, check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/MySQLFlushRowChangedEventAsyncDelay") //nolint:errcheck
+
+	err = sink.EmitRowChangedEvents(ctx, rows...)
+	c.Assert(err, check.IsNil)
+	ts, err := sink.FlushRowChangedEvents(ctx, uint64(4))
+	c.Assert(err, check.IsNil)
+	c.Assert(ts, check.Less, uint64(2))
+	err = failpoint.Disable("github.com/pingcap/ticdc/cdc/sink/MySQLFlushRowChangedEventAsyncDelay")
 	c.Assert(err, check.IsNil)
 
 	err = sink.Close()

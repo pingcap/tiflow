@@ -106,6 +106,18 @@ type mysqlSink struct {
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	if len(rows) > 0 {
+		resolvedTs := rows[0].CommitTs - 1
+		for _, worker := range s.workers {
+			for {
+				workerCheckpointTs := atomic.LoadUint64(&worker.checkpointTs)
+				if workerCheckpointTs <= resolvedTs || atomic.CompareAndSwapUint64(&worker.checkpointTs, workerCheckpointTs, resolvedTs) {
+					break
+				}
+			}
+		}
+	}
+
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
 	return nil
@@ -145,6 +157,8 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			return
 		case <-receiver.C:
 		}
+		failpoint.Inject("MySQLFlushRowChangedEventAsyncDelay", func() {})
+
 		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
 		if len(resolvedTxnsMap) == 0 {
