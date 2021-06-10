@@ -37,8 +37,7 @@ if [ "$SINK_TYPE" != "kafka" ]; then
     set -euxo pipefail
 
     GO111MODULE=on go run bank.go case.go -u "root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/bank" \
-        -d "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/bank"
-        --test-round=20000\
+        -d "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/bank" --test-round=20000
 
     cleanup_process $CDC_BINARY
     echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
