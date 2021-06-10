@@ -17,8 +17,6 @@ import (
 	"context"
 	"os"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 
@@ -31,6 +29,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+<<<<<<< HEAD
+=======
+const (
+	inputChSize       = 128
+	outputChSize      = 128
+	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
+)
+
+>>>>>>> e9f799b8 (*: fix deadlock in new processor (#1987))
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
 	inputCh     chan *model.PolymorphicEvent
@@ -189,9 +196,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
-	var mergerBufLen int64
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, &mergerBufLen))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
 	})
 
 	errg.Go(func() error {
@@ -207,6 +213,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
+<<<<<<< HEAD
 			// tentative value 1280000
 			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
 				after := time.After(1 * time.Second)
@@ -216,6 +223,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				case <-after:
 				}
 			}
+=======
+>>>>>>> e9f799b8 (*: fix deadlock in new processor (#1987))
 			select {
 			case <-subctx.Done():
 				return subctx.Err()
