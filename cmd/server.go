@@ -208,6 +208,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		}
 	}
 
+	// todo: this need to be move to when server created, set sort-dir by check changefeed info
 	conf.InitDataDir()
 
 	available, err := conf.GetDataDirAvailableSpace()

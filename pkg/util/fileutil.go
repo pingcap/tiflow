@@ -58,14 +58,29 @@ func IsValidDataDir(dir string) error {
 	return cerror.WrapError(cerror.ErrCheckDirValid, os.Remove(f))
 }
 
-// GetDiskAvailableSpace return the available space of the specified dir
-// the caller should guarantee that dir is a valid directory
-func GetDiskAvailableSpace(dir string) (int32, error) {
+// DiskInfo present the disk amount information, in bytes
+type DiskInfo struct {
+	All   uint64
+	Used  uint64
+	Free  uint64
+	Avail uint64
+
+	AvailPercent float32
+}
+
+func GetDiskInfo(dir string) (*DiskInfo, error) {
 	fs := syscall.Statfs_t{}
 	if err := syscall.Statfs(dir, &fs); err != nil {
-		return 0, cerror.WrapError(cerror.ErrGetDiskAvailableSpace, err)
+		return nil, err
 	}
 
-	available := fs.Bavail * uint64(fs.Bsize)
-	return int32(available / 1024 / 1024 / 1024), nil
+	info := &DiskInfo{
+		All:   fs.Blocks * uint64(fs.Bsize),
+		Avail: fs.Bavail * uint64(fs.Bsize),
+		Free:  fs.Bfree * uint64(fs.Bsize),
+	}
+	info.Used = info.All - info.Free
+	info.AvailPercent = float32(info.Avail) / float32(info.All) * 100
+
+	return info, nil
 }

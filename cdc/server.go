@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,9 @@ import (
 
 const (
 	ownerRunInterval = time.Millisecond * 500
+	defaultDataDir   = "/tmp/cdc_data"
+	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is byte
+	dataDirThreshold = 500 * 1024 * 1024 * 1024
 )
 
 // Server is the capture server
@@ -137,6 +141,11 @@ func (s *Server) Run(ctx context.Context) error {
 		etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
 		s.etcdClient = &etcdClient
 	}
+
+	if err := s.initDataDir(ctx); err != nil {
+		return err
+	}
+
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
@@ -349,4 +358,62 @@ func (s *Server) Close() {
 		}
 		s.statusServer = nil
 	}
+}
+
+func (s *Server) initDataDir(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	if conf.DataDir != "" {
+		return nil
+	}
+
+	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var candidates []string
+	for id := range allStatus {
+		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if info.SortDir != "" {
+			candidates = append(candidates, info.SortDir)
+		}
+	}
+
+	conf.DataDir = defaultDataDir
+	if best, ok := findBestDataDir(candidates); ok {
+		conf.DataDir = best
+	}
+	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
+	config.StoreGlobalServerConfig(conf)
+
+	return nil
+}
+
+// try to find the best data dir by rules
+// at the moment, only consider available disk space
+func findBestDataDir(dirs []string) (result string, ok bool) {
+	var low uint64 = 0
+	for _, dir := range dirs {
+		if err := util.IsValidDataDir(dir); err != nil {
+			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
+			continue
+		}
+		info, err := util.GetDiskInfo(dir)
+		if err != nil {
+			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
+			continue
+		}
+		if info.Avail < dataDirThreshold {
+			continue
+		}
+		if info.Avail > low {
+			result = dir
+			low = info.Avail
+			ok = true
+		}
+	}
+	return result, ok
 }

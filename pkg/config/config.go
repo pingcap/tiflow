@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -35,10 +34,8 @@ const (
 	// NewReplicaImpl is true if we using new processor
 	// new owner should be also switched on after it implemented
 	NewReplicaImpl = true
-	// DataDirWarnThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
-	DataDirWarnThreshold = 200
-	// defaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
-	defaultSortDir = "/tmp/cdc_sort"
+	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
+	DefaultSortDir = "/tmp/sorter"
 )
 
 func init() {
@@ -171,7 +168,7 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryPressure:      30,                      // 30% is safe on machines with memory capacity <= 16GB
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
-		SortDir:                defaultSortDir,
+		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
@@ -243,12 +240,6 @@ func (c *ServerConfig) Clone() *ServerConfig {
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	return clone
-}
-
-// InitDataDir can be used to put any path related to data-dir,
-// at the moment, only for sort-dir
-func (c *ServerConfig) InitDataDir() {
-	c.Sorter.SortDir = filepath.Join(c.DataDir, defaultSortDir)
 }
 
 // ValidateAndAdjust validates and adjusts the server configuration
