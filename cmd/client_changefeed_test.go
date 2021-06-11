@@ -64,10 +64,10 @@ enable-old-value = false
 	disableGCSafePointCheck = true
 	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
 	c.Assert(err.Error(), check.Matches, `*Creating changefeed with a sort-dir, it's invalid*`)
-	info, err = verifyChangefeedParameters(ctx, cmd, true, nil, nil)
+	_, err = verifyChangefeedParameters(ctx, cmd, true, nil, nil)
 	c.Assert(err, check.NotNil)
 
 	sortDir = ""
-	info, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
+	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
 	c.Assert(err, check.IsNil)
 }

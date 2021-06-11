@@ -67,6 +67,7 @@ type DiskInfo struct {
 	AvailPercentage float32
 }
 
+// GetDiskInfo return the disk space information of the given directory.
 func GetDiskInfo(dir string) (*DiskInfo, error) {
 	fs := syscall.Statfs_t{}
 	if err := syscall.Statfs(dir, &fs); err != nil {
