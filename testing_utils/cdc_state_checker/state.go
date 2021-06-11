@@ -227,6 +227,6 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	return nil
 }
 
-func (s *cdcReactorState) GetPatches() []orchestrator.DataPatch {
+func (s *cdcReactorState) GetPatches() [][]orchestrator.DataPatch {
 	return nil
 }
