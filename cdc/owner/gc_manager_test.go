@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/pingcap/check"
@@ -56,9 +57,9 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	state := model.NewGlobalState().(*model.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
-	// no changefeed, the gc safe point should not be updated
+	// no changefeed, the gc safe point should be max uint64
 	mockPDClient.updateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		c.Errorf("should not update gc safe point")
+		c.Assert(safePoint, check.Equals, uint64(math.MaxUint64))
 		return 0, nil
 	}
 	err := gcManager.updateGCSafePoint(ctx, state)
