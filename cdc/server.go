@@ -50,7 +50,8 @@ const (
 	ownerRunInterval = time.Millisecond * 500
 	defaultDataDir   = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is byte
-	dataDirThreshold = 500 * 1024 * 1024 * 1024
+	gb               = 1024 * 1024 * 1024
+	dataDirThreshold = 500 * gb
 )
 
 // Server is the capture server
@@ -238,7 +239,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			}
 			err2 := s.capture.Resign(ctx)
 			if err2 != nil {
-				// if regisn owner failed, return error to let capture exits
+				// if resign owner failed, return error to let capture exits
 				return errors.Annotatef(err2, "resign owner failed, capture: %s", captureID)
 			}
 			log.Warn("run owner failed", zap.Error(err))
@@ -362,30 +363,39 @@ func (s *Server) Close() {
 
 func (s *Server) initDataDir(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
-	if conf.DataDir != "" {
-		return nil
+	if conf.DataDir == "" {
+		allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		var candidates []string
+		for id := range allStatus {
+			info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if info.SortDir != "" {
+				candidates = append(candidates, info.SortDir)
+			}
+		}
+
+		conf.DataDir = defaultDataDir
+		if best, ok := findBestDataDir(candidates); ok {
+			conf.DataDir = best
+		}
 	}
 
-	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	diskInfo, err := util.GetDiskInfo(conf.DataDir)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	var candidates []string
-	for id := range allStatus {
-		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if info.SortDir != "" {
-			candidates = append(candidates, info.SortDir)
-		}
+	if diskInfo.Avail < dataDirThreshold {
+		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommand disk for data-dir at least have %dGB available space",
+			conf.DataDir, diskInfo.Avail/gb, dataDirThreshold/gb))
 	}
 
-	conf.DataDir = defaultDataDir
-	if best, ok := findBestDataDir(candidates); ok {
-		conf.DataDir = best
-	}
 	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
 	config.StoreGlobalServerConfig(conf)
 

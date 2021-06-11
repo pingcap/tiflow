@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/config/outdated"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -284,6 +283,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.Sorter == nil {
 		c.Sorter = defaultServerConfig.Sorter
 	}
+	c.Sorter.SortDir = DefaultSortDir
 
 	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
@@ -364,18 +364,4 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 	}
 	*d = TomlDuration(stdDuration)
 	return nil
-}
-
-// GetDataDirAvailableSpace validate the specified data-dir, and return the available space
-func (c *ServerConfig) GetDataDirAvailableSpace() (result int32, err error) {
-	if err := util.IsValidDataDir(c.DataDir); err != nil {
-		return 0, cerror.ErrInvalidServerOption.GenWithStack("data-dir is not a directory or not be able to write")
-	}
-
-	available, err := util.GetDiskAvailableSpace(c.DataDir)
-	if err != nil {
-		return 0, cerror.ErrInvalidServerOption.GenWithStack("try to get the available space of data-dir failed")
-	}
-
-	return available, nil
 }

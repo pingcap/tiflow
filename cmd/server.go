@@ -15,7 +15,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -70,7 +69,7 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().Int64Var(&serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	cmd.Flags().StringVar(&serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
-	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "Set the dir to store CDC generated data (required)")
+	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "Set the dir to store CDC generated data")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
 
@@ -86,7 +85,6 @@ func initServerCmd(cmd *cobra.Command) {
 	addSecurityFlags(cmd.Flags(), true /* isServer */)
 	cmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
 
-	_ = cmd.MarkFlagRequired("data-dir")   //nolint:errcheck
 	_ = cmd.Flags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
@@ -177,7 +175,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		case "sorter-max-memory-consumption":
 			conf.Sorter.MaxMemoryConsumption = serverConfig.Sorter.MaxMemoryConsumption
 		case "sort-dir":
-			conf.Sorter.SortDir = serverConfig.Sorter.SortDir
+			// user specified sorter dir not work
+			conf.Sorter.SortDir = config.DefaultSortDir
 		case "ca":
 			conf.Security.CAPath = serverConfig.Security.CAPath
 		case "cert":
@@ -206,17 +205,6 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		} else if strings.Index(ep, "http://") != 0 {
 			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
 		}
-	}
-
-	// todo: this need to be move to when server created, set sort-dir by check changefeed info
-	conf.InitDataDir()
-
-	available, err := conf.GetDataDirAvailableSpace()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if available < config.DataDirWarnThreshold {
-		log.Warn(fmt.Sprintf("the available space of data-dir is %dGB, please make sure more than 200GB available for the disk", available))
 	}
 
 	return conf, nil
