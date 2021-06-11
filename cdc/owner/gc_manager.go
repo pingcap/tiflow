@@ -79,9 +79,6 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 			minCheckpointTs = checkpointTs
 		}
 	}
-	if minCheckpointTs == math.MaxUint64 {
-		return nil
-	}
 	m.lastUpdatedTime = time.Now()
 
 	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
