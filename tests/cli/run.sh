@@ -136,11 +136,7 @@ EOF
 
     # Remove changefeed
     run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
-    changefeed_query=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep ErrChangeFeedNotExists | wc -l)
-    if [[ changefeed_query == "0" ]]; then
-        echo "[$(date)] <<<<< unexpect changefeed, this changefeed should not exists >>>>>"
-        exit 1
-    fi
+    check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 0
 
     set +e
     # Make sure changefeed can not be created if a removed changefeed with the same name exists
