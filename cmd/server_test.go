@@ -38,6 +38,7 @@ func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
 }
 
 func (s *serverSuite) TestDataDirServerConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cmd := new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
