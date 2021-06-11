@@ -60,12 +60,11 @@ func IsValidDataDir(dir string) error {
 
 // DiskInfo present the disk amount information, in bytes
 type DiskInfo struct {
-	All   uint64
-	Used  uint64
-	Free  uint64
-	Avail uint64
-
-	AvailPercent float32
+	All             uint64
+	Used            uint64
+	Free            uint64
+	Avail           uint64
+	AvailPercentage float32
 }
 
 func GetDiskInfo(dir string) (*DiskInfo, error) {
@@ -80,7 +79,7 @@ func GetDiskInfo(dir string) (*DiskInfo, error) {
 		Free:  fs.Bfree * uint64(fs.Bsize),
 	}
 	info.Used = info.All - info.Free
-	info.AvailPercent = float32(info.Avail) / float32(info.All) * 100
+	info.AvailPercentage = float32(info.Avail) / float32(info.All) * 100
 
 	return info, nil
 }

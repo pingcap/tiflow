@@ -317,6 +317,15 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 			log.Panic("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", state.maxResolved))
 		}
 
+		conf := config.GetGlobalServerConfig()
+		diskInfo, err := util.GetDiskInfo(conf.DataDir)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if diskInfo.AvailPercentage < 10 {
+			return errors.Errorf("disk is almost full, disk info: %+v", diskInfo)
+		}
+
 		// 5 * 8 is for the 5 fields in PolymorphicEvent
 		state.heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
 		needFlush := state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit) ||
