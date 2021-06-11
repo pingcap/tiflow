@@ -193,7 +193,7 @@ func (s *spanFrontierSuite) TestSpanFrontierFallback(c *check.C) {
 
 	// [A, B) [B, C) [C, D) [D, E)
 	// 20     10     10     20
-	// [B, C) does not forward, because of merge into [A, B) immediately
+	// [B, C) does not forward, because of merge into [A, C) immediately
 	f.Forward(spCD, 20)
 	c.Assert(f.Frontier(), check.Equals, uint64(20))
 	// the frontier stoes [A, B) and [B, C) but they are not correct exactly
