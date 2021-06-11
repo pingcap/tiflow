@@ -6901,7 +6901,7 @@
         "multi": false,
         "name": "tidb_cluster",
         "options": [],
-        "query": "label_values(ticdc_processor_resolved_ts, tidb_cluster)",
+        "query": "label_values(go_goroutines, tidb_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
