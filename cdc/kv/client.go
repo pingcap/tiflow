@@ -941,6 +941,8 @@ func (s *eventFeedSession) dispatchRequest(
 		//    receives the first kv event from TiKV, the region could split or
 		//    merge in advance, which should cause the change of resolved ts
 		//    distribution in puller, so this resolved ts event is needed.
+		// After this resolved ts event is sent, we don't need to send one more
+		// resolved ts event when the region starts to work.
 		resolvedEv := &model.RegionFeedEvent{
 			RegionID: sri.verID.GetID(),
 			Resolved: &model.ResolvedSpan{
