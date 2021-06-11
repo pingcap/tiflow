@@ -121,7 +121,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 
-	// In TiCDC logic, resovled ts event will always notify the flush loop. Here we
+	// In TiCDC logic, resolved ts event will always notify the flush loop. Here we
 	// trigger the flushedNotifier periodically to prevent the flush loop block.
 	var wg sync.WaitGroup
 	wg.Add(1)
