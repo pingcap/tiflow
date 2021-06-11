@@ -119,11 +119,11 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 }
 
 func (m *gcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
-	pdTime, err := m.currentTimeFromPDCached(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if m.isTiCDCBlockGC {
+		pdTime, err := m.currentTimeFromPDCached(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		if pdTime.Sub(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(m.gcTTL)*time.Second {
 			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
 		}
