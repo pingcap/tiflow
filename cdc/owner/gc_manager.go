@@ -128,7 +128,7 @@ func (m *gcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs 
 			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
 		}
 	} else {
-		// if `isTiCDCBlockGC` is false, it means there is another service gc ttl less than the min checkpoint ts.
+		// if `isTiCDCBlockGC` is false, it means there is another service gc point less than the min checkpoint ts.
 		if checkpointTs < m.lastSafePointTs {
 			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
 		}
