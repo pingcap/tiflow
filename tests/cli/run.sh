@@ -136,8 +136,8 @@ EOF
 
     # Remove changefeed
     run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
-    changefeed_query=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-    if [[ changefeed_query != "" ]]; then
+    changefeed_query=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep ErrChangeFeedNotExists | wc -l)
+    if [[ changefeed_query != "0" ]]; then
         echo "[$(date)] <<<<< unexpect changefeed, this changefeed should not exists >>>>>"
         exit 1
     fi
