@@ -83,8 +83,8 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&serverConfig.Sorter.SortDir, "sort-dir", defaultServerConfig.Sorter.SortDir, "sorter's temporary file directory")
 
 	addSecurityFlags(cmd.Flags(), true /* isServer */)
-	cmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
 
+	cmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
 	_ = cmd.Flags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
@@ -174,9 +174,6 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Sorter.MaxMemoryPressure = serverConfig.Sorter.MaxMemoryPressure
 		case "sorter-max-memory-consumption":
 			conf.Sorter.MaxMemoryConsumption = serverConfig.Sorter.MaxMemoryConsumption
-		case "sort-dir":
-			// user specified sorter dir not work
-			conf.Sorter.SortDir = config.DefaultSortDir
 		case "ca":
 			conf.Security.CAPath = serverConfig.Security.CAPath
 		case "cert":
@@ -185,6 +182,9 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.KeyPath = serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
+		case "sort-dir":
+			// user specified sorter dir not work
+			conf.Sorter.SortDir = config.DefaultSortDir
 		case "pd", "config":
 			// do nothing
 		default:

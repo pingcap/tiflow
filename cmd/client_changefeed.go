@@ -268,6 +268,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		return nil, errors.Trace(err)
 	}
 	cfg := config.GetDefaultReplicaConfig()
+
 	sortEngineFlag := cmd.Flag("sort-engine")
 	if cdcClusterVer == version.TiCDCClusterVersion4_0 {
 		cfg.EnableOldValue = false
@@ -355,10 +356,9 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 
 	// user is not allowed to set sort-dir at changefeed level
 	if sortDir != "" {
-		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. "+
-			"Please use `cdc server --data-dir` instead if possible. "+
-			"The sort-dir here will be no-op, and the sorter file will be"+
-			"located at %s\n", config.GetGlobalServerConfig().Sorter.SortDir)
+		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. " +
+			"Please use `cdc server --sort-dir` if possible. " +
+			"The sort-dir here will be no-op\n")
 		return nil, errors.New("Creating changefeed with a sort-dir, it's invalid")
 	}
 

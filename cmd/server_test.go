@@ -73,6 +73,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 
 	defcfg := config.GetDefaultServerConfig()
 	c.Assert(defcfg.ValidateAndAdjust(), check.IsNil)
+	c.Assert(cfg, check.DeepEquals, defcfg)
 	c.Assert(serverPdAddr, check.Equals, "http://127.0.0.1:2379")
 
 	// test empty PD address
@@ -81,6 +82,8 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	c.Assert(cmd.ParseFlags([]string{"--pd="}), check.IsNil)
 	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.ErrorMatches, ".*empty PD address.*")
+	_, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
 
 	// test invalid PD address
 	cmd = new(cobra.Command)
