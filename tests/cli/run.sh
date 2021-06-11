@@ -137,7 +137,7 @@ EOF
     # Remove changefeed
     run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
     changefeed_query=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep ErrChangeFeedNotExists | wc -l)
-    if [[ changefeed_query != "0" ]]; then
+    if [[ changefeed_query == "0" ]]; then
         echo "[$(date)] <<<<< unexpect changefeed, this changefeed should not exists >>>>>"
         exit 1
     fi
