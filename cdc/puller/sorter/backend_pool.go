@@ -41,6 +41,7 @@ const (
 	backgroundJobInterval      = time.Second * 15
 	sortDirLockFileName        = "ticdc_lock"
 	sortDirDataFileMagicPrefix = "sort"
+	dataDirAvailLowThreshold   = 10
 )
 
 var (
@@ -202,6 +203,15 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		zap.String("filename", fname),
 		zap.Int64("table-id", tableID),
 		zap.String("table-name", tableName))
+
+	conf := config.GetGlobalServerConfig()
+	diskInfo, err := util.GetDiskInfo(conf.DataDir)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
+		return nil, errors.Errorf("disk is almost full, disk info: %+v", diskInfo)
+	}
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
