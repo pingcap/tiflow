@@ -125,7 +125,7 @@ func (m *gcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs 
 			return errors.Trace(err)
 		}
 		if pdTime.Sub(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(m.gcTTL)*time.Second {
-			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
+			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, ctx.ChangefeedVars().ID)
 		}
 	} else {
 		// if `isTiCDCBlockGC` is false, it means there is another service gc point less than the min checkpoint ts.
