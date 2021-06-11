@@ -37,6 +37,9 @@ type blackHoleSink struct {
 }
 
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	for _, row := range rows {
+		log.Debug("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
+	}
 	rowsCount := len(rows)
 	atomic.AddUint64(&b.accumulated, uint64(rowsCount))
 	b.statistics.AddRowsCount(rowsCount)
