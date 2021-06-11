@@ -1489,18 +1489,6 @@ func (s *eventFeedSession) singleEventFeed(
 		return nil
 	}
 
-	select {
-	case s.eventCh <- &model.RegionFeedEvent{
-		RegionID: regionID,
-		Resolved: &model.ResolvedSpan{
-			Span:       span,
-			ResolvedTs: startTs,
-		},
-	}:
-	case <-ctx.Done():
-		err = errors.Trace(ctx.Err())
-		return
-	}
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
