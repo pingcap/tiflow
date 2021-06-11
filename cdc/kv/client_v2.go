@@ -184,9 +184,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 				return
 			}
 		}
-		s.workersLock.Lock()
-		delete(s.workers, addr)
-		s.workersLock.Unlock()
 	}()
 
 	captureAddr := util.CaptureAddrFromCtx(ctx)
@@ -196,9 +193,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, limiter, addr)
-	s.workersLock.Lock()
-	s.workers[addr] = worker
-	s.workersLock.Unlock()
 
 	failpoint.Inject("kvClientReconnectInterval", func(val failpoint.Value) {
 		reconnectInterval = time.Duration(val.(int)) * time.Second
