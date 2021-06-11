@@ -136,12 +136,11 @@ EOF
 
     # Remove changefeed
     run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
-    jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-    if [[ $jobtype != 3 ]]; then
-        echo "[$(date)] <<<<< unexpect admin job type! expect 3 got ${jobtype} >>>>>"
+    changefeed_query=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    if [[ changefeed_query != "" ]]; then
+        echo "[$(date)] <<<<< unexpect changefeed, this changefeed should not exists >>>>>"
         exit 1
     fi
-    check_changefeed_state $uuid "removed"
 
     set +e
     # Make sure changefeed can not be created if a removed changefeed with the same name exists
