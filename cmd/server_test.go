@@ -37,15 +37,38 @@ func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
 	c.Assert(cfg.TiKVClient.MaxBatchSize, check.Equals, uint(0))
 }
 
+func (s *serverSuite) TestDataDirServerConfig(c *check.C) {
+	cmd := new(cobra.Command)
+	initServerCmd(cmd)
+	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
+	cfg, err := loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	// data dir default to ""
+	c.Assert(cfg.DataDir, check.Equals, "")
+	c.Assert(cfg.Sorter.SortDir, check.Equals, filepath.Join("", "/tmp/sorter"))
+
+	dataDir := c.MkDir()
+	cmd = new(cobra.Command)
+	initServerCmd(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--data-dir=" + dataDir}), check.IsNil)
+	cfg, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	c.Assert(cfg.DataDir, check.Equals, dataDir)
+	// sorter-dir is not set yet
+	c.Assert(cfg.Sorter.SortDir, check.Equals, "/tmp/sorter")
+}
+
 func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	// test default flag values
 	cmd := new(cobra.Command)
 	initServerCmd(cmd)
-	c.Assert(cmd.ParseFlags([]string{"--data-dir=/tidb-data"}), check.IsNil)
+	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
 	cfg, err := loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.ErrorMatches, "*data-dir is not a directory or not be able to write*")
-	c.Assert(cfg, check.IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
 
 	defcfg := config.GetDefaultServerConfig()
 	c.Assert(defcfg.ValidateAndAdjust(), check.IsNil)
@@ -70,19 +93,8 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--PD="}), check.ErrorMatches, ".*unknown flag: --PD.*")
 
-	// test data-dir
-	dataDir := c.MkDir()
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
-	c.Assert(cmd.ParseFlags([]string{"--data-dir=" + dataDir}), check.IsNil)
-	cfg, err = loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.IsNil)
-
-	c.Assert(cfg.DataDir, check.Equals, dataDir)
-	c.Assert(cfg.Sorter.SortDir, check.Equals, filepath.Join(dataDir, "tmp/cdc_sort"))
-
 	// test flags without config file
-	dataDir = c.MkDir()
+	dataDir := c.MkDir()
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{
@@ -124,7 +136,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
-			SortDir:                filepath.Join(dataDir, config.DefaultSortDir),
+			SortDir:                config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -189,7 +201,7 @@ sort-dir = "/tmp/just_a_test"
 			MaxMemoryPressure:      3,
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                filepath.Join(dataDir, config.DefaultSortDir),
+			SortDir:                config.DefaultSortDir,
 		},
 		Security:            &config.SecurityConfig{},
 		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
@@ -246,7 +258,7 @@ cert-allowed-cn = ["dd","ee"]
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                filepath.Join(dataDir, config.DefaultSortDir),
+			SortDir:                config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
