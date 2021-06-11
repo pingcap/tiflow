@@ -71,6 +71,13 @@ const (
 
 	// defines the scan region limit for each table
 	regionScanLimitPerTable = 40
+
+	// defaultRegionChanSize is the default channel size for region channel, including
+	// range request, region request and region error.
+	// Note the producer of region error channel, and the consumer of range request
+	// channel work in an asynchronous way, the larger channel can decrease the
+	// frequency of creating new goroutine.
+	defaultRegionChanSize = 128
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -546,9 +553,6 @@ type eventFeedSession struct {
 	streams          map[string]cdcpb.ChangeData_EventFeedClient
 	streamsLock      sync.RWMutex
 	streamsCanceller map[string]context.CancelFunc
-
-	workers     map[string]*regionWorker
-	workersLock sync.RWMutex
 }
 
 type rangeRequestTask struct {
@@ -575,10 +579,10 @@ func newEventFeedSession(
 		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, regionScanLimitPerTable),
-		regionCh:          make(chan singleRegionInfo, 16),
-		errCh:             make(chan regionErrorInfo, 16),
-		requestRangeCh:    make(chan rangeRequestTask, 16),
+		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
+		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
+		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
+		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
 		enableKVClientV2:  enableKVClientV2,
@@ -590,7 +594,6 @@ func newEventFeedSession(
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
 		streamsCanceller:  make(map[string]context.CancelFunc),
-		workers:           make(map[string]*regionWorker),
 	}
 }
 
@@ -897,6 +900,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			// `receiveFromStream`, so no need to retry here.
 			_, ok := pendingRegions.take(requestID)
 			if !ok {
+				// since this pending region has been removed, the token has been
+				// released in advance, re-add one token here.
+				s.regionRouter.Acquire(rpcCtx.Addr)
 				continue
 			}
 
