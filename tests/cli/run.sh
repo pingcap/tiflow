@@ -138,18 +138,6 @@ EOF
     run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
     check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 0
 
-    set +e
-    # Make sure changefeed can not be created if a removed changefeed with the same name exists
-    create_log=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1)
-    set -e
-    exists=$(echo $create_log | grep -oE 'already exists')
-    if [[ -z $exists ]]; then
-        echo "[$(date)] <<<<< unexpect output got ${create_log} >>>>>"
-        exit 1
-    fi
-
-    # force remove the changefeed, and re create a new one with the same name
-    run_cdc_cli changefeed --changefeed-id $uuid remove --force && sleep 3
     run_cdc_cli changefeed create --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid" && sleep 3
     check_changefeed_state $uuid "normal"
 
