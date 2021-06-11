@@ -50,8 +50,7 @@ const (
 	ownerRunInterval = time.Millisecond * 500
 	defaultDataDir   = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is byte
-	gb               = 1024 * 1024 * 1024
-	dataDirThreshold = 500 * gb
+	dataDirThreshold = 500
 )
 
 // Server is the capture server
@@ -375,13 +374,18 @@ func (s *Server) initDataDir(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if info.SortDir != "" {
+			if !strings.HasSuffix(info.SortDir, config.DefaultSortDir) {
 				candidates = append(candidates, info.SortDir)
 			}
 		}
 
-		conf.DataDir = defaultDataDir
-		if best, ok := findBestDataDir(candidates); ok {
+		if len(candidates) == 0 {
+			conf.DataDir = defaultDataDir
+		} else {
+			best, err := findBestDataDir(candidates)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			conf.DataDir = best
 		}
 	}
@@ -393,7 +397,7 @@ func (s *Server) initDataDir(ctx context.Context) error {
 
 	if diskInfo.Avail < dataDirThreshold {
 		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommand disk for data-dir at least have %dGB available space",
-			conf.DataDir, diskInfo.Avail/gb, dataDirThreshold/gb))
+			conf.DataDir, diskInfo.Avail, dataDirThreshold))
 	}
 
 	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
@@ -404,8 +408,11 @@ func (s *Server) initDataDir(ctx context.Context) error {
 
 // try to find the best data dir by rules
 // at the moment, only consider available disk space
-func findBestDataDir(dirs []string) (result string, ok bool) {
-	var low uint64 = 0
+func findBestDataDir(dirs []string) (result string, err error) {
+	var (
+		low  uint64 = 0
+		find        = false
+	)
 	for _, dir := range dirs {
 		if err := util.IsValidDataDir(dir); err != nil {
 			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
@@ -417,13 +424,20 @@ func findBestDataDir(dirs []string) (result string, ok bool) {
 			continue
 		}
 		if info.Avail < dataDirThreshold {
+			log.Warn("try to get disk info failed, available space ")
 			continue
 		}
 		if info.Avail > low {
 			result = dir
 			low = info.Avail
-			ok = true
+			find = true
 		}
 	}
-	return result, ok
+
+	if !find {
+		log.Error("try to find directory for data-dir failed", zap.Strings("candidates", dirs))
+		return "", errors.Errorf("data-dir is not set, can not find a valid directory")
+	}
+
+	return result, nil
 }

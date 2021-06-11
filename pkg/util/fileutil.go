@@ -20,7 +20,13 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+)
+
+const (
+	gb                       = 1024 * 1024 * 1024
+	dataDirAvailLowThreshold = 10 // percentage
 )
 
 // IsDirAndWritable checks a given path is directory and writable
@@ -67,7 +73,7 @@ type DiskInfo struct {
 	AvailPercentage float32
 }
 
-// GetDiskInfo return the disk space information of the given directory.
+// GetDiskInfo return the disk space information of the given directory, in GB
 func GetDiskInfo(dir string) (*DiskInfo, error) {
 	fs := syscall.Statfs_t{}
 	if err := syscall.Statfs(dir, &fs); err != nil {
@@ -75,12 +81,26 @@ func GetDiskInfo(dir string) (*DiskInfo, error) {
 	}
 
 	info := &DiskInfo{
-		All:   fs.Blocks * uint64(fs.Bsize),
-		Avail: fs.Bavail * uint64(fs.Bsize),
-		Free:  fs.Bfree * uint64(fs.Bsize),
+		All:   fs.Blocks * uint64(fs.Bsize) / gb,
+		Avail: fs.Bavail * uint64(fs.Bsize) / gb,
+		Free:  fs.Bfree * uint64(fs.Bsize) / gb,
 	}
 	info.Used = info.All - info.Free
 	info.AvailPercentage = float32(info.Avail) / float32(info.All) * 100
 
 	return info, nil
+}
+
+// CheckDataDirSatisfied check if the data-dir meet the requirement during server running.
+func CheckDataDirSatisfied() error {
+	conf := config.GetGlobalServerConfig()
+	diskInfo, err := GetDiskInfo(conf.DataDir)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
+		return errors.Errorf("disk is almost full, disk info: %+v", diskInfo)
+	}
+
+	return nil
 }
