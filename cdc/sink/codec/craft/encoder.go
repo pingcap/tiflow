@@ -218,7 +218,7 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 	return nil
 }
 
-// MessageEncoder
+// MessageEncoder is encoder for message
 type MessageEncoder struct {
 	bits           []byte
 	sizeTables     [][]uint64
