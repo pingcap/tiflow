@@ -286,7 +286,6 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) 
 	}
 	if size, group := newColumnGroup(allocator, columnGroupTypeOld, ev.PreColumns); group != nil {
 		groups[idx] = group
-		idx += 1
 		estimatedSize += size
 	}
 	return estimatedSize, rowChangedEvent(groups)
