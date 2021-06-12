@@ -20,6 +20,7 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
@@ -99,6 +100,9 @@ func CheckDataDirSatisfied() error {
 		return errors.Trace(err)
 	}
 	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
+		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
+			failpoint.Return(nil)
+		})
 		return errors.Errorf("disk is almost full, disk info: %+v", diskInfo)
 	}
 
