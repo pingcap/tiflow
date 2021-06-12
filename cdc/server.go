@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -374,6 +375,7 @@ func (s *Server) initDataDir(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+
 			if !strings.HasSuffix(info.SortDir, config.DefaultSortDir) {
 				candidates = append(candidates, info.SortDir)
 			}
@@ -390,7 +392,10 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		}
 	}
 
-	log.Debug("try get disk info", zap.String("data-dir", conf.DataDir))
+	err := os.MkdirAll(conf.DataDir, 0o755)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	diskInfo, err := util.GetDiskInfo(conf.DataDir)
 	if err != nil {
 		return errors.Trace(err)
