@@ -419,9 +419,13 @@ func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
 	result := make([]*model.RowChangedEvent, 0, 4)
 	for _, message := range codecPB1EncodedRowChanges {
 		key := &benchmark.Key{}
-		key.Unmarshal(message.Key)
+		if err := key.Unmarshal(message.Key); err != nil {
+			panic(err)
+		}
 		value := &benchmark.RowChanged{}
-		value.Unmarshal(message.Value)
+		if err := value.Unmarshal(message.Value); err != nil {
+			panic(err)
+		}
 		ev := &model.RowChangedEvent{}
 		ev.PreColumns = codecDecodeRowChangedPB1(value.OldValue)
 		ev.Columns = codecDecodeRowChangedPB1(value.NewValue)
@@ -465,9 +469,13 @@ func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
 	result := make([]*model.RowChangedEvent, 0, 4)
 	for _, message := range codecPB2EncodedRowChanges {
 		keys := &benchmark.KeysColumnar{}
-		keys.Unmarshal(message.Key)
+		if err := keys.Unmarshal(message.Key); err != nil {
+			panic(err)
+		}
 		values := &benchmark.RowChangedColumnar{}
-		values.Unmarshal(message.Value)
+		if err := values.Unmarshal(message.Value); err != nil {
+			panic(err)
+		}
 
 		for i, ts := range keys.Ts {
 			ev := &model.RowChangedEvent{}
