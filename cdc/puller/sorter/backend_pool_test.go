@@ -116,7 +116,7 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
-	err = os.Mkdir(sortDir, 0o311)
+	err = os.MkdirAll(sortDir, 0o311)
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetGlobalServerConfig()

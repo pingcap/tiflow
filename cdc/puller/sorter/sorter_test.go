@@ -23,6 +23,8 @@ import (
 
 	"go.uber.org/zap/zapcore"
 
+	_ "net/http/pprof"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -32,7 +34,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	_ "net/http/pprof"
 )
 
 const (
