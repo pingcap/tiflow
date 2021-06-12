@@ -929,6 +929,29 @@ func (s *eventFeedSession) dispatchRequest(
 
 		log.Debug("dispatching region", zap.Uint64("regionID", sri.verID.GetID()))
 
+		// Send a resolved ts to event channel first, for two reasons:
+		// 1. Since we have locked the region range, and have maintained correct
+		//    checkpoint ts for the range, it is safe to report the resolved ts
+		//    to puller at this moment.
+		// 2. Before the kv client gets region rpcCtx, sends request to TiKV and
+		//    receives the first kv event from TiKV, the region could split or
+		//    merge in advance, which should cause the change of resolved ts
+		//    distribution in puller, so this resolved ts event is needed.
+		// After this resolved ts event is sent, we don't need to send one more
+		// resolved ts event when the region starts to work.
+		resolvedEv := &model.RegionFeedEvent{
+			RegionID: sri.verID.GetID(),
+			Resolved: &model.ResolvedSpan{
+				Span:       sri.span,
+				ResolvedTs: sri.ts,
+			},
+		}
+		select {
+		case s.eventCh <- resolvedEv:
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
+
 		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
 		if err != nil {
 			return errors.Trace(err)
@@ -1465,18 +1488,6 @@ func (s *eventFeedSession) singleEventFeed(
 		return nil
 	}
 
-	select {
-	case s.eventCh <- &model.RegionFeedEvent{
-		RegionID: regionID,
-		Resolved: &model.ResolvedSpan{
-			Span:       span,
-			ResolvedTs: startTs,
-		},
-	}:
-	case <-ctx.Done():
-		err = errors.Trace(ctx.Err())
-		return
-	}
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
