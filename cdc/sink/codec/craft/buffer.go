@@ -13,7 +13,7 @@
 
 package craft
 
-/// Utility functions for buffer allocation
+// Utility functions for buffer allocation
 func newBufferSize(oldSize int) int {
 	var newSize int
 	if oldSize > 128 {
@@ -363,7 +363,7 @@ func newRowChangedEventSliceAllocator(batchSize int) *rowChangedEventSliceAlloca
 	return &rowChangedEventSliceAllocator{buffer: make([]rowChangedEvent, batchSize)}
 }
 
-// allocator for different slice types
+// SliceAllocator for different slice types
 type SliceAllocator struct {
 	intAllocator             *intSliceAllocator
 	int64Allocator           *int64SliceAllocator
@@ -376,6 +376,7 @@ type SliceAllocator struct {
 	rowChangedEventAllocator *rowChangedEventSliceAllocator
 }
 
+// NewSliceAllocator creates a new slice allocator with given batch allocation size.
 func NewSliceAllocator(batchSize int) *SliceAllocator {
 	return &SliceAllocator{
 		intAllocator:             newIntSliceAllocator(batchSize),

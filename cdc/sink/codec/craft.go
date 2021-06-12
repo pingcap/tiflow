@@ -134,6 +134,7 @@ func NewCraftEventBatchEncoder() EventBatchEncoder {
 	return NewCraftEventBatchEncoderWithAllocator(craft.NewSliceAllocator(64))
 }
 
+// NewCraftEventBatchEncoderWithAllocator creates a new CraftEventBatchEncoder with given allocator.
 func NewCraftEventBatchEncoderWithAllocator(allocator *craft.SliceAllocator) EventBatchEncoder {
 	return &CraftEventBatchEncoder{
 		allocator:        allocator,
@@ -242,6 +243,7 @@ func NewCraftEventBatchDecoder(bits []byte) (EventBatchDecoder, error) {
 	return NewCraftEventBatchDecoderWithAllocator(bits, craft.NewSliceAllocator(64))
 }
 
+// NewCraftEventBatchDecoderWithAllocator creates a new CraftEventBatchDecoder with given allocator.
 func NewCraftEventBatchDecoderWithAllocator(bits []byte, allocator *craft.SliceAllocator) (EventBatchDecoder, error) {
 	decoder, err := craft.NewMessageDecoder(bits, allocator)
 	if err != nil {

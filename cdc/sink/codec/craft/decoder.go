@@ -142,7 +142,7 @@ func decodeString(bits []byte) ([]byte, string, error) {
 	return bits, "", errors.Trace(err)
 }
 
-/// Chunk decoders
+// Chunk decoders
 func decodeStringChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, []string, error) {
 	larray := allocator.intSlice(size)
 	newBits := bits
@@ -313,7 +313,7 @@ func decodeSizeTables(bits []byte, allocator *SliceAllocator) (int, [][]uint64, 
 	return tableSize, result, nil
 }
 
-/// TiDB types decoder
+// DecodeTiDBType decodes TiDB types.
 func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{}, error) {
 	if bits == nil {
 		return nil, nil
@@ -355,7 +355,7 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 	return nil, nil
 }
 
-// Message decoder
+// MessageDecoder decoder
 type MessageDecoder struct {
 	bits          []byte
 	sizeTables    [][]uint64
@@ -363,6 +363,7 @@ type MessageDecoder struct {
 	allocator     *SliceAllocator
 }
 
+// NewMessageDecoder create a new message decode with bits and allocator
 func NewMessageDecoder(bits []byte, allocator *SliceAllocator) (*MessageDecoder, error) {
 	bits, version, err := decodeUvarint(bits)
 	if err != nil {
@@ -383,6 +384,7 @@ func NewMessageDecoder(bits []byte, allocator *SliceAllocator) (*MessageDecoder,
 	}, nil
 }
 
+// Headers decode headers of message
 func (d *MessageDecoder) Headers() (*Headers, error) {
 	var pairs, headersSize int
 	var err error
@@ -409,6 +411,7 @@ func (d *MessageDecoder) bodyBits(index int) []byte {
 	return d.bits[start:int(d.bodySizeTable[index])]
 }
 
+// DDLEvent decode a DDL event
 func (d *MessageDecoder) DDLEvent(index int) (pmodel.ActionType, string, error) {
 	bits, ty, err := decodeUvarint(d.bodyBits(index))
 	if err != nil {
@@ -418,6 +421,7 @@ func (d *MessageDecoder) DDLEvent(index int) (pmodel.ActionType, string, error) 
 	return pmodel.ActionType(ty), query, err
 }
 
+// RowChangedEvent decode a row changeded event
 func (d *MessageDecoder) RowChangedEvent(index int) (preColumns, columns *columnGroup, err error) {
 	bits := d.bodyBits(index)
 	columnGroupSizeTable := d.sizeTables[columnGroupSizeTableStartIndex+index]
