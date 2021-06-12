@@ -82,8 +82,6 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	c.Assert(cmd.ParseFlags([]string{"--pd="}), check.IsNil)
 	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.ErrorMatches, ".*empty PD address.*")
-	_, err = loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.IsNil)
 
 	// test invalid PD address
 	cmd = new(cobra.Command)
@@ -96,6 +94,8 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--PD="}), check.ErrorMatches, ".*unknown flag: --PD.*")
+	_, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
 
 	// test flags without config file
 	dataDir := c.MkDir()
