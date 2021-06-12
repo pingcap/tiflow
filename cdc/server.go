@@ -390,6 +390,7 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		}
 	}
 
+	log.Debug("try get disk info", zap.String("data-dir", conf.DataDir))
 	diskInfo, err := util.GetDiskInfo(conf.DataDir)
 	if err != nil {
 		return errors.Trace(err)
