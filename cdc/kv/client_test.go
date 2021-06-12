@@ -360,6 +360,8 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	c.Assert(err, check.IsNil)
 	ch2 <- makeEvent(ts.Ver)
 	var event *model.RegionFeedEvent
+	// consume the first resolved ts event, which is sent before region starts
+	<-eventCh
 	select {
 	case event = <-eventCh:
 	case <-time.After(time.Second):
@@ -594,12 +596,6 @@ consumePreResolvedTs:
 	waitRequestID(c, baseAllocatedID+5)
 	initialized := mockInitializedEvent(3 /* regionID */, currentRequestID())
 	ch2 <- initialized
-	select {
-	case event = <-eventCh:
-	case <-time.After(time.Second):
-		c.Fatalf("recving message takes too long")
-	}
-	c.Assert(event, check.NotNil)
 
 	makeEvent := func(ts uint64) *cdcpb.ChangeDataEvent {
 		return &cdcpb.ChangeDataEvent{
@@ -1232,8 +1228,13 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 40)
+>>>>>>> 1c3653e2 (kv/client: send resovled ts in advance when region is locked (#2038))
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
@@ -1282,13 +1283,6 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 		{
 			Resolved: &model.ResolvedSpan{
 				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-				ResolvedTs: 100,
-			},
-			RegionID: regionID,
-		},
-		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 				ResolvedTs: 120,
 			},
 			RegionID: regionID,
@@ -1302,15 +1296,25 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 		},
 	}
 
-	for _, expectedEv := range expected {
+	events := make([]*model.RegionFeedEvent, 0, 2)
+eventLoop:
+	for {
 		select {
+<<<<<<< HEAD
 		case event := <-eventCh:
 			log.Info("receive event", zap.Reflect("event", event), zap.Reflect("expected", expectedEv))
 			c.Assert(event, check.DeepEquals, expectedEv)
+=======
+		case ev := <-eventCh:
+			if ev.Resolved.ResolvedTs != uint64(100) {
+				events = append(events, ev)
+			}
+>>>>>>> 1c3653e2 (kv/client: send resovled ts in advance when region is locked (#2038))
 		case <-time.After(time.Second):
-			c.Errorf("expected event %v not received", expectedEv)
+			break eventLoop
 		}
 	}
+	c.Assert(events, check.DeepEquals, expected)
 	cancel()
 }
 
@@ -2850,36 +2854,25 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	}}
 	ch2 <- resolved
 
-	expected := []*model.RegionFeedEvent{
-		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-				ResolvedTs: 100,
-			},
-			RegionID: regionID3,
+	expected := &model.RegionFeedEvent{
+		Resolved: &model.ResolvedSpan{
+			Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			ResolvedTs: 135,
 		},
-		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-				ResolvedTs: 100,
-			},
-			RegionID: regionID3,
-		},
-		{
-			Resolved: &model.ResolvedSpan{
-				Span:       regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-				ResolvedTs: 135,
-			},
-			RegionID: regionID3,
-		},
+		RegionID: regionID3,
 	}
 
-	for _, expectedEv := range expected {
+eventLoop:
+	for {
 		select {
-		case event := <-eventCh:
-			c.Assert(event, check.DeepEquals, expectedEv)
+		case ev := <-eventCh:
+			if ev.Resolved != nil && ev.Resolved.ResolvedTs == uint64(100) {
+				continue
+			}
+			c.Assert(ev, check.DeepEquals, expected)
+			break eventLoop
 		case <-time.After(time.Second):
-			c.Errorf("expected event %v not received", expectedEv)
+			c.Errorf("expected event %v not received", expected)
 		}
 	}
 
@@ -2957,8 +2950,13 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	eventCh := make(chan *model.RegionFeedEvent, 100)
+>>>>>>> 1c3653e2 (kv/client: send resovled ts in advance when region is locked (#2038))
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
@@ -3075,8 +3073,17 @@ func (s *etcdSuite) TestKVClientForceReconnect2(c *check.C) {
 
 	for _, expectedEv := range expected {
 		select {
+<<<<<<< HEAD
 		case event := <-eventCh:
 			c.Assert(event, check.DeepEquals, expectedEv)
+=======
+		case <-eventCh:
+			resolvedCount++
+			log.Info("receive resolved count", zap.Int("count", resolvedCount))
+			if resolvedCount == regionNum*2 {
+				break checkEvent
+			}
+>>>>>>> 1c3653e2 (kv/client: send resovled ts in advance when region is locked (#2038))
 		case <-time.After(time.Second):
 			c.Errorf("expected event %v not received", expectedEv)
 		}

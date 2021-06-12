@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -87,6 +86,7 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 		state.start()
 		worker.setRegionState(event.RegionId, state)
+<<<<<<< HEAD
 		// TODO: If a region doesn't receive any event from TiKV, this region
 		// can't be reconnected since the region state is not initialized.
 		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
@@ -103,6 +103,8 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 			},
 		}:
 		}
+=======
+>>>>>>> 1c3653e2 (kv/client: send resovled ts in advance when region is locked (#2038))
 	} else if state.isStopped() {
 		log.Warn("drop event due to region feed stopped",
 			zap.Uint64("regionID", event.RegionId),
