@@ -11,7 +11,7 @@ error = '''
 stop processor by admin command
 '''
 
-["CDC:ErrAsyncBroadcaseNotSupport"]
+["CDC:ErrAsyncBroadcastNotSupport"]
 error = '''
 Async broadcasts not supported
 '''
@@ -156,6 +156,11 @@ error = '''
 decode row data to datum failed
 '''
 
+["CDC:ErrEmitCheckpointTsFailed"]
+error = '''
+emit checkpoint ts failed
+'''
+
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -254,6 +259,11 @@ flow controller is aborted
 ["CDC:ErrFlowControllerEventLargerThanQuota"]
 error = '''
 event is larger than the total memory quota, size: %d, quota: %d
+'''
+
+["CDC:ErrGCTTLExceeded"]
+error = '''
+the checkpoint-ts(%d) lag of the changefeed(%s) %d has exceeded the GC TTL
 '''
 
 ["CDC:ErrGRPCDialFailed"]
@@ -361,7 +371,7 @@ error = '''
 kafka async send message failed
 '''
 
-["CDC:ErrKafkaFlushUnfished"]
+["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
 '''
@@ -621,7 +631,7 @@ error = '''
 resolve locks failed
 '''
 
-["CDC:ErrS3SinkInitialzie"]
+["CDC:ErrS3SinkInitialize"]
 error = '''
 new s3 sink
 '''
@@ -768,7 +778,7 @@ unified sorter backend is terminating
 
 ["CDC:ErrUnifiedSorterIOError"]
 error = '''
-unified sorter IO error
+unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s
 '''
 
 ["CDC:ErrUnknownKVEventType"]

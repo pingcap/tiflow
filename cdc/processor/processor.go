@@ -119,6 +119,7 @@ func newProcessor4Test(ctx cdcContext.Context,
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	p.changefeed = state
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   state.ID,
 		Info: state.Info,
