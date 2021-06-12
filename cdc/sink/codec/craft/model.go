@@ -22,7 +22,7 @@ const (
 	// Version1 represents the version of craft format
 	Version1 uint64 = 1
 
-	// default buffer size
+	// DefaultBufferCapacity is default buffer size
 	DefaultBufferCapacity = 1024
 
 	// Column group types
@@ -35,7 +35,7 @@ const (
 	columnGroupSizeTableStartIndex = 2
 )
 
-/// Headers in columnar layout
+// Headers in columnar layout
 type Headers struct {
 	ts        []uint64
 	ty        []uint64
@@ -47,6 +47,7 @@ type Headers struct {
 	count int
 }
 
+// Count returns number of headers
 func (h *Headers) Count() int {
 	return h.count
 }
@@ -87,18 +88,22 @@ func (h *Headers) reset() {
 	h.count = 0
 }
 
+// GetType returns type of event at given index
 func (h *Headers) GetType(index int) model.MqMessageType {
 	return model.MqMessageType(h.ty[index])
 }
 
+// GetTs returns timestamp of event at given index
 func (h *Headers) GetTs(index int) uint64 {
 	return h.ts[index]
 }
 
+// GetPartition returns partition of event at given index
 func (h *Headers) GetPartition(index int) int64 {
 	return h.partition[index]
 }
 
+// GetSchema returns schema of event at given index
 func (h *Headers) GetSchema(index int) string {
 	if h.schema[index] != nil {
 		return *h.schema[index]
@@ -106,6 +111,7 @@ func (h *Headers) GetSchema(index int) string {
 	return ""
 }
 
+// GetTable returns table of event at given index
 func (h *Headers) GetTable(index int) string {
 	if h.table[index] != nil {
 		return *h.table[index]
@@ -166,6 +172,7 @@ func (g *columnGroup) encode(bits []byte) []byte {
 	return bits
 }
 
+// ToModel converts column group into model
 func (g *columnGroup) ToModel() ([]*model.Column, error) {
 	columns := make([]*model.Column, len(g.names))
 	for i, name := range g.names {
@@ -258,7 +265,7 @@ func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column)
 	return estimatedSize, nil
 }
 
-/// Row changed message is basically an array of column groups
+// Row changed message is basically an array of column groups
 type rowChangedEvent = []*columnGroup
 
 func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) (int, rowChangedEvent) {
@@ -285,7 +292,7 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) 
 	return estimatedSize, rowChangedEvent(groups)
 }
 
-/// A buffer to save row changed events in batch
+// RowChangedEventBuffer is a buffer to save row changed events in batch
 type RowChangedEventBuffer struct {
 	headers *Headers
 
@@ -296,6 +303,7 @@ type RowChangedEventBuffer struct {
 	allocator *SliceAllocator
 }
 
+// NewRowChangedEventBuffer creates new row changed event buffer with given allocator
 func NewRowChangedEventBuffer(allocator *SliceAllocator) *RowChangedEventBuffer {
 	return &RowChangedEventBuffer{
 		headers:   &Headers{},
@@ -303,12 +311,14 @@ func NewRowChangedEventBuffer(allocator *SliceAllocator) *RowChangedEventBuffer 
 	}
 }
 
+// Encode row changed event buffer into bits
 func (b *RowChangedEventBuffer) Encode() []byte {
 	bits := NewMessageEncoder(b.allocator).encodeHeaders(b.headers).encodeRowChangeEvents(b.events[:b.eventsCount]).Encode()
 	b.Reset()
 	return bits
 }
 
+// AppendRowChangedEvent append a new event to buffer
 func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent) (rows, size int) {
 	var partition int64 = -1
 	if ev.Table.IsPartition {
@@ -342,16 +352,19 @@ func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent)
 	return b.eventsCount, b.estimatedSize
 }
 
+// Reset buffer
 func (b *RowChangedEventBuffer) Reset() {
 	b.headers.reset()
 	b.eventsCount = 0
 	b.estimatedSize = 0
 }
 
+// Size of buffer
 func (b *RowChangedEventBuffer) Size() int {
 	return b.estimatedSize
 }
 
+// GetHeaders returns headers of buffer
 func (b *RowChangedEventBuffer) GetHeaders() *Headers {
 	return b.headers
 }

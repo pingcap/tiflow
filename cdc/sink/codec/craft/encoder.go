@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-/// create byte slice from string without copying
+// create byte slice from string without copying
 func unsafeStringToBytes(s string) []byte {
 	return *(*[]byte)(unsafe.Pointer(
 		&struct {
@@ -32,7 +32,7 @@ func unsafeStringToBytes(s string) []byte {
 	))
 }
 
-/// Primitive type encoders
+// Primitive type encoders
 func encodeFloat64(bits []byte, data float64) []byte {
 	v := math.Float64bits(data)
 	return append(bits, byte(v), byte(v>>8), byte(v>>16), byte(v>>24), byte(v>>32), byte(v>>40), byte(v>>48), byte(v>>56))
@@ -180,7 +180,7 @@ func encodeSizeTables(bits []byte, tables [][]uint64) []byte {
 	return bits
 }
 
-/// TiDB types encoder
+// EncodeTiDBType encodes TiDB types
 func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagType, value interface{}) []byte {
 	if value == nil {
 		return nil
@@ -218,7 +218,7 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 	return nil
 }
 
-/// Message encoder
+// MessageEncoder
 type MessageEncoder struct {
 	bits           []byte
 	sizeTables     [][]uint64
@@ -229,6 +229,7 @@ type MessageEncoder struct {
 	allocator *SliceAllocator
 }
 
+// NewMessageEncoder creates a new encoder with given allocator
 func NewMessageEncoder(allocator *SliceAllocator) *MessageEncoder {
 	return &MessageEncoder{
 		bits:      encodeUvarint(make([]byte, 0, DefaultBufferCapacity), Version1),
@@ -263,6 +264,7 @@ func (e *MessageEncoder) encodeHeaders(headers *Headers) *MessageEncoder {
 	return e
 }
 
+// Encode message into bits
 func (e *MessageEncoder) Encode() []byte {
 	return encodeSizeTables(e.bits, e.sizeTables)
 }
@@ -283,6 +285,7 @@ func (e *MessageEncoder) encodeRowChangeEvents(events []rowChangedEvent) *Messag
 	return e
 }
 
+// NewResolvedEventEncoder creates a new encoder with given allocator and timestsamp
 func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncoder {
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ts),
@@ -295,6 +298,7 @@ func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncod
 	}).encodeBodySize()
 }
 
+// NewDDLEventEncoder creates a new encoder with given allocator and timestsamp
 func NewDDLEventEncoder(allocator *SliceAllocator, ev *model.DDLEvent) *MessageEncoder {
 	ty := uint64(ev.Type)
 	query := ev.Query
