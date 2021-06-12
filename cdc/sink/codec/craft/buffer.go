@@ -34,6 +34,7 @@ type intSliceAllocator struct {
 	offset int
 }
 
+//nolint:unused
 func (b *intSliceAllocator) realloc(old []int, newSize int) []int {
 	n := b.alloc(newSize)
 	copy(n, old)
@@ -54,6 +55,7 @@ func (b *intSliceAllocator) alloc(size int) []int {
 	return result
 }
 
+//nolint:unused
 func (b *intSliceAllocator) one(x int) []int {
 	r := b.alloc(1)
 	r[0] = x
@@ -142,6 +144,7 @@ type stringSliceAllocator struct {
 	offset int
 }
 
+//nolint:unused
 func (b *stringSliceAllocator) realloc(old []string, newSize int) []string {
 	n := b.alloc(newSize)
 	copy(n, old)
@@ -162,6 +165,7 @@ func (b *stringSliceAllocator) alloc(size int) []string {
 	return result
 }
 
+//nolint:unused
 func (b *stringSliceAllocator) one(x string) []string {
 	r := b.alloc(1)
 	r[0] = x
@@ -214,6 +218,7 @@ type byteSliceAllocator struct {
 	offset int
 }
 
+//nolint:unused
 func (b *byteSliceAllocator) realloc(old []byte, newSize int) []byte {
 	n := b.alloc(newSize)
 	copy(n, old)
@@ -234,6 +239,7 @@ func (b *byteSliceAllocator) alloc(size int) []byte {
 	return result
 }
 
+//nolint:unused
 func (b *byteSliceAllocator) one(x byte) []byte {
 	r := b.alloc(1)
 	r[0] = x
@@ -250,6 +256,7 @@ type bytesSliceAllocator struct {
 	offset int
 }
 
+//nolint:unused
 func (b *bytesSliceAllocator) realloc(old [][]byte, newSize int) [][]byte {
 	n := b.alloc(newSize)
 	copy(n, old)
@@ -270,6 +277,7 @@ func (b *bytesSliceAllocator) alloc(size int) [][]byte {
 	return result
 }
 
+//nolint:unused
 func (b *bytesSliceAllocator) one(x []byte) [][]byte {
 	r := b.alloc(1)
 	r[0] = x
@@ -286,6 +294,7 @@ type columnGroupSliceAllocator struct {
 	offset int
 }
 
+//nolint:unused
 func (b *columnGroupSliceAllocator) realloc(old []*columnGroup, newSize int) []*columnGroup {
 	n := b.alloc(newSize)
 	copy(n, old)
@@ -306,6 +315,7 @@ func (b *columnGroupSliceAllocator) alloc(size int) []*columnGroup {
 	return result
 }
 
+//nolint:unused
 func (b *columnGroupSliceAllocator) one(x *columnGroup) []*columnGroup {
 	r := b.alloc(1)
 	r[0] = x
@@ -342,6 +352,7 @@ func (b *rowChangedEventSliceAllocator) alloc(size int) []rowChangedEvent {
 	return result
 }
 
+//nolint:unused
 func (b *rowChangedEventSliceAllocator) one(x rowChangedEvent) []rowChangedEvent {
 	r := b.alloc(1)
 	r[0] = x
@@ -383,10 +394,12 @@ func (b *SliceAllocator) intSlice(size int) []int {
 	return b.intAllocator.alloc(size)
 }
 
+//nolint:unused
 func (b *SliceAllocator) oneIntSlice(x int) []int {
 	return b.intAllocator.one(x)
 }
 
+//nolint:unused
 func (b *SliceAllocator) resizeIntSlice(old []int, newSize int) []int {
 	return b.intAllocator.realloc(old, newSize)
 }
@@ -419,10 +432,12 @@ func (b *SliceAllocator) stringSlice(size int) []string {
 	return b.stringAllocator.alloc(size)
 }
 
+//nolint:unused
 func (b *SliceAllocator) oneStringSlice(x string) []string {
 	return b.stringAllocator.one(x)
 }
 
+//nolint:unused
 func (b *SliceAllocator) resizeStringSlice(old []string, newSize int) []string {
 	return b.stringAllocator.realloc(old, newSize)
 }
@@ -443,10 +458,12 @@ func (b *SliceAllocator) byteSlice(size int) []byte {
 	return b.byteAllocator.alloc(size)
 }
 
+//nolint:unused
 func (b *SliceAllocator) oneByteSlice(x byte) []byte {
 	return b.byteAllocator.one(x)
 }
 
+//nolint:unused
 func (b *SliceAllocator) resizeByteSlice(old []byte, newSize int) []byte {
 	return b.byteAllocator.realloc(old, newSize)
 }
@@ -455,10 +472,12 @@ func (b *SliceAllocator) bytesSlice(size int) [][]byte {
 	return b.bytesAllocator.alloc(size)
 }
 
+//nolint:unused
 func (b *SliceAllocator) oneBytesSlice(x []byte) [][]byte {
 	return b.bytesAllocator.one(x)
 }
 
+//nolint:unused
 func (b *SliceAllocator) resizeBytesSlice(old [][]byte, newSize int) [][]byte {
 	return b.bytesAllocator.realloc(old, newSize)
 }
@@ -467,18 +486,22 @@ func (b *SliceAllocator) columnGroupSlice(size int) []*columnGroup {
 	return b.columnGroupAllocator.alloc(size)
 }
 
+//nolint:unused
 func (b *SliceAllocator) oneColumnGroupSlice(x *columnGroup) []*columnGroup {
 	return b.columnGroupAllocator.one(x)
 }
 
+//nolint:unused
 func (b *SliceAllocator) resizeColumnGroupSlice(old []*columnGroup, newSize int) []*columnGroup {
 	return b.columnGroupAllocator.realloc(old, newSize)
 }
 
+//nolint:unused
 func (b *SliceAllocator) rowChangedEventSlice(size int) []rowChangedEvent {
 	return b.rowChangedEventAllocator.alloc(size)
 }
 
+//nolint:unused
 func (b *SliceAllocator) oneRowChangedEventSlice(x rowChangedEvent) []rowChangedEvent {
 	return b.rowChangedEventAllocator.one(x)
 }
