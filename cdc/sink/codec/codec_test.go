@@ -246,7 +246,7 @@ func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*MQMes
 }
 
 func codecEncodeRowChangedPB2ToMessage(events []*model.RowChangedEvent) []*MQMessage {
-	return []*MQMessage{&MQMessage{
+	return []*MQMessage{{
 		Key:   codecEncodeKeysPB2(events),
 		Value: codecEncodeRowChangedPB2(events),
 	}}
