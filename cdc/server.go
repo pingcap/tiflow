@@ -361,37 +361,53 @@ func (s *Server) Close() {
 	}
 }
 
-func (s *Server) initDataDir(ctx context.Context) error {
+func (s *Server) setUpDataDir(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
-	if conf.DataDir == "" {
-		allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	if conf.DataDir != "" {
+		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
+		config.StoreGlobalServerConfig(conf)
+
+		return nil
+	}
+
+	// data-dir will be decide by exist changefeed for backward compatibility
+	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(allStatus) == 0 {
+		conf.DataDir = defaultDataDir
+		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
+		config.StoreGlobalServerConfig(conf)
+
+		return nil
+	}
+
+	candidates := make([]string, 0, len(allStatus))
+	for id := range allStatus {
+		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		var candidates []string
-		for id := range allStatus {
-			info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			if !strings.HasSuffix(info.SortDir, config.DefaultSortDir) {
-				candidates = append(candidates, info.SortDir)
-			}
-		}
-
-		if len(candidates) == 0 {
-			conf.DataDir = defaultDataDir
-		} else {
-			best, err := findBestDataDir(candidates)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			conf.DataDir = best
-		}
+		candidates = append(candidates, info.SortDir)
 	}
 
+	best, err := findBestDataDir(candidates)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	conf.DataDir = best
+	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
+	config.StoreGlobalServerConfig(conf)
+
+	return nil
+}
+
+func (s *Server) initDataDir(ctx context.Context) error {
+	if err := s.setUpDataDir(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	conf := config.GetGlobalServerConfig()
 	err := os.MkdirAll(conf.DataDir, 0o755)
 	if err != nil {
 		return errors.Trace(err)
@@ -402,12 +418,9 @@ func (s *Server) initDataDir(ctx context.Context) error {
 	}
 
 	if diskInfo.Avail < dataDirThreshold {
-		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommand disk for data-dir at least have %dGB available space",
-			conf.DataDir, diskInfo.Avail, dataDirThreshold))
+		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommand disk for data-dir "+
+			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
 	}
-
-	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
-	config.StoreGlobalServerConfig(conf)
 
 	return nil
 }
@@ -416,11 +429,13 @@ func (s *Server) initDataDir(ctx context.Context) error {
 // at the moment, only consider available disk space
 func findBestDataDir(dirs []string) (result string, err error) {
 	var (
-		low  uint64 = 0
-		find        = false
+		low        uint64 = 0
+		find              = false
+		candidates        = getDataDirCandidates(dirs)
 	)
-	for _, dir := range dirs {
-		if err := util.IsValidDataDir(dir); err != nil {
+
+	for dir := range candidates {
+		if err := util.IsDirReadWritable(dir); err != nil {
 			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
 			continue
 		}
@@ -430,7 +445,7 @@ func findBestDataDir(dirs []string) (result string, err error) {
 			continue
 		}
 		if info.Avail < dataDirThreshold {
-			log.Warn("try to get disk info failed, available space ")
+			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Uint64("available", info.Avail))
 			continue
 		}
 		if info.Avail > low {
@@ -446,4 +461,17 @@ func findBestDataDir(dirs []string) (result string, err error) {
 	}
 
 	return result, nil
+}
+
+func getDataDirCandidates(dirs []string) (result map[string]struct{}) {
+	result = make(map[string]struct{})
+	for _, dir := range dirs {
+		if strings.HasSuffix(dir, config.DefaultSortDir) {
+			t := strings.TrimSuffix(dir, config.DefaultSortDir)
+			result[t] = struct{}{}
+		} else {
+			result[dir] = struct{}{}
+		}
+	}
+	return result
 }

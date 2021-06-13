@@ -115,7 +115,7 @@ var (
 	ErrCheckDirWritable          = errors.Normalize("check dir writable failed", errors.RFCCodeText("CDC:ErrCheckDirWritable"))
 	ErrCheckDirReadable          = errors.Normalize("check dir readable failed", errors.RFCCodeText("CDC:ErrCheckDirReadable"))
 	ErrCheckDirValid             = errors.Normalize("check dir valid failed", errors.RFCCodeText("CDC:ErrCheckDirValid"))
-	ErrGetDiskAvailableSpace     = errors.Normalize("get dir available space failed", errors.RFCCodeText("CDC:ErrGetDiskAvailableSpace"))
+	ErrGetDiskInfo               = errors.Normalize("get dir disk info failed", errors.RFCCodeText("CDC:ErrGetDiskInfo"))
 	ErrLoadTimezone              = errors.Normalize("load timezone", errors.RFCCodeText("CDC:ErrLoadTimezone"))
 	ErrURLFormatInvalid          = errors.Normalize("url format is invalid", errors.RFCCodeText("CDC:ErrURLFormatInvalid"))
 	ErrIntersectNoOverlap        = errors.Normalize("span doesn't overlap: %+v vs %+v", errors.RFCCodeText("CDC:ErrIntersectNoOverlap"))

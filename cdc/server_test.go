@@ -102,3 +102,24 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	config.StoreGlobalServerConfig(conf)
 	cancel()
 }
+
+func (s *serverSuite) TestGetDataDirCandidates(c *check.C) {
+	expected := map[string]string{
+		"/":                        "/",
+		"/tmp/sorter":              "/",
+		"/tmp/cdc_data/tmp/sorter": "/tmp/cdc_data",
+		"/tmp/cdc_sorter":          "/",
+		"/tmp/cdc/sorter":          "/tmp",
+	}
+
+	inputs := make([]string, 0, len(expected))
+	for k := range expected {
+		inputs = append(inputs, k)
+	}
+
+	result := getDataDirCandidates(inputs)
+	for _, v := range expected {
+		_, ok := result[v]
+		c.Assert(ok, check.Equals, true)
+	}
+}
