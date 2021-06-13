@@ -43,7 +43,7 @@ var (
 		},
 	}}, {{
 		CommitTs: 424316553934667777,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Table:    &model.TableName{Schema: "a", Table: "c"},
 		Columns: []*model.Column{
 			{Name: "varchar1", Type: mysql.TypeVarchar, Value: []byte("varchar")},
 			{Name: "string1", Type: mysql.TypeString, Value: []byte("string")},
@@ -56,7 +56,7 @@ var (
 		},
 	}, {
 		CommitTs: 424316554327097345,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Table:    &model.TableName{Schema: "a", Table: "d"},
 		Columns: []*model.Column{
 			{Name: "varchar2", Type: mysql.TypeVarchar, Value: []byte("varchar")},
 			{Name: "string2", Type: mysql.TypeString, Value: []byte("string")},
@@ -69,7 +69,7 @@ var (
 		},
 	}, {
 		CommitTs: 424316554746789889,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Table:    &model.TableName{Schema: "a", Table: "e"},
 		Columns: []*model.Column{
 			{Name: "varchar3", Type: mysql.TypeVarchar, Value: []byte("varchar")},
 			{Name: "string3", Type: mysql.TypeString, Value: []byte("string")},
@@ -82,7 +82,7 @@ var (
 		},
 	}, {
 		CommitTs: 424316555073945601,
-		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
+		Table:    &model.TableName{Schema: "a", Table: "f", TableID: 6, IsPartition: true},
 		Columns: []*model.Column{
 			{Name: "varchar4", Type: mysql.TypeVarchar, Value: []byte("varchar")},
 			{Name: "string4", Type: mysql.TypeString, Value: []byte("string")},

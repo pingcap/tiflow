@@ -357,10 +357,10 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 
 // MessageDecoder decoder
 type MessageDecoder struct {
-	bits          []byte
-	sizeTables    [][]uint64
-	bodySizeTable []uint64
-	allocator     *SliceAllocator
+	bits            []byte
+	sizeTables      [][]uint64
+	bodyOffsetTable []int
+	allocator       *SliceAllocator
 }
 
 // NewMessageDecoder create a new message decode with bits and allocator
@@ -376,11 +376,21 @@ func NewMessageDecoder(bits []byte, allocator *SliceAllocator) (*MessageDecoder,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	bodySizeTable := sizeTables[bodySizeTableIndex]
+	// build body offset table from size of each body
+	// offset table has number of bodies plus 1 elements
+	bodyOffsetTable := make([]int, len(bodySizeTable)+1)
+	start := 0
+	for i, size := range bodySizeTable {
+		bodyOffsetTable[i] = start
+		start += int(size)
+	}
+	bodyOffsetTable[len(bodySizeTable)] = start
 	return &MessageDecoder{
-		bits:          bits[:len(bits)-sizeTablesSize],
-		sizeTables:    sizeTables,
-		bodySizeTable: sizeTables[bodySizeTableIndex],
-		allocator:     allocator,
+		bits:            bits[:len(bits)-sizeTablesSize],
+		sizeTables:      sizeTables,
+		bodyOffsetTable: bodyOffsetTable,
+		allocator:       allocator,
 	}, nil
 }
 
@@ -404,11 +414,7 @@ func (d *MessageDecoder) Headers() (*Headers, error) {
 }
 
 func (d *MessageDecoder) bodyBits(index int) []byte {
-	start := 0
-	if index > 0 {
-		start = int(d.bodySizeTable[index-1])
-	}
-	return d.bits[start:int(d.bodySizeTable[index])]
+	return d.bits[d.bodyOffsetTable[index]:d.bodyOffsetTable[index+1]]
 }
 
 // DDLEvent decode a DDL event
