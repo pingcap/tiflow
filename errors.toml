@@ -286,9 +286,9 @@ error = '''
 get stores from pd failed
 '''
 
-["CDC:ErrGetDiskAvailableSpace"]
+["CDC:ErrGetDiskInfo"]
 error = '''
-get dir available space failed
+get dir disk info failed
 '''
 
 ["CDC:ErrGetRegionFailed"]
