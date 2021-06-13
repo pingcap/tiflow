@@ -131,6 +131,12 @@ func formatColumnVal(c column) column {
 			if err != nil {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
+		} else if f, ok := c.Value.(float64); ok {
+			if c.Flag.IsUnsigned() {
+				c.Value = uint64(f)
+			} else {
+				c.Value = int64(f)
+			}
 		}
 	case mysql.TypeBit:
 		if s, ok := c.Value.(json.Number); ok {
