@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
@@ -51,21 +52,21 @@ func IsDirWritable(dir string) error {
 	return cerror.WrapError(cerror.ErrCheckDirWritable, os.Remove(f))
 }
 
-// IsValidDataDir check if the dir is writable and readable by cdc server
-func IsValidDataDir(dir string) error {
-	f := filepath.Join(dir, ".writable.test")
+// IsDirReadWritable check if the dir is writable and readable by cdc server
+func IsDirReadWritable(dir string) error {
+	f := filepath.Join(dir, "file.test")
 	if err := ioutil.WriteFile(f, []byte(""), 0o600); err != nil {
-		return cerror.WrapError(cerror.ErrCheckDirWritable, err)
+		return cerror.WrapError(cerror.ErrCheckDirValid, err)
 	}
 
 	if _, err := ioutil.ReadFile(f); err != nil {
-		return cerror.WrapError(cerror.ErrCheckDirReadable, err)
+		return cerror.WrapError(cerror.ErrCheckDirValid, err)
 	}
 
 	return cerror.WrapError(cerror.ErrCheckDirValid, os.Remove(f))
 }
 
-// DiskInfo present the disk amount information, in bytes
+// DiskInfo present the disk amount information, in gb
 type DiskInfo struct {
 	All             uint64
 	Used            uint64
@@ -74,11 +75,17 @@ type DiskInfo struct {
 	AvailPercentage float32
 }
 
-// GetDiskInfo return the disk space information of the given directory, in GB
+// GetDiskInfo return the disk space information of the given directory
+// the caller should guarantee that dir exist
 func GetDiskInfo(dir string) (*DiskInfo, error) {
+	f := filepath.Join(dir, "file.test")
+	if err := ioutil.WriteFile(f, []byte(""), 0o600); err != nil {
+		return nil, cerror.WrapError(cerror.ErrGetDiskInfo, err)
+	}
+
 	fs := syscall.Statfs_t{}
 	if err := syscall.Statfs(dir, &fs); err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrGetDiskInfo, err)
 	}
 
 	info := &DiskInfo{
@@ -92,7 +99,8 @@ func GetDiskInfo(dir string) (*DiskInfo, error) {
 	return info, nil
 }
 
-// CheckDataDirSatisfied check if the data-dir meet the requirement during server running.
+// CheckDataDirSatisfied check if the data-dir meet the requirement during server running
+// the caller should guarantee that dir exist
 func CheckDataDirSatisfied() error {
 	conf := config.GetGlobalServerConfig()
 	diskInfo, err := GetDiskInfo(conf.DataDir)
@@ -101,6 +109,7 @@ func CheckDataDirSatisfied() error {
 	}
 	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
 		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
+			log.Info("inject check data dir satisfied error")
 			failpoint.Return(nil)
 		})
 		return errors.Errorf("disk is almost full, disk info: %+v", diskInfo)

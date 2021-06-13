@@ -21,6 +21,8 @@ import (
 	"runtime"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -61,4 +63,42 @@ func (s *fileUtilSuite) TestIsDirAndWritable(c *check.C) {
 
 	err = IsDirAndWritable(dir)
 	c.Assert(err, check.IsNil)
+}
+
+func (s *fileUtilSuite) TestIsDirReadWritable(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	dir := c.MkDir()
+	err := IsDirReadWritable(dir)
+	c.Assert(err, check.IsNil)
+
+	path := filepath.Join(dir, "/foo")
+	err = IsDirReadWritable(path)
+	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
+}
+
+func (s *fileUtilSuite) TestGetDiskInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	dir := c.MkDir()
+	info, err := GetDiskInfo(dir)
+	c.Assert(err, check.IsNil)
+	c.Assert(info, check.NotNil)
+
+	dir = filepath.Join(dir, "/tmp/sorter")
+	info, err = GetDiskInfo(dir)
+	c.Assert(info, check.IsNil)
+	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
+}
+
+func (s *fileUtilSuite) TestCheckDataDirSatisfied(c *check.C) {
+	dir := c.MkDir()
+	conf := config.GetGlobalServerConfig()
+	conf.DataDir = dir
+	config.StoreGlobalServerConfig(conf)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	err := CheckDataDirSatisfied()
+	c.Assert(err, check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
 }
