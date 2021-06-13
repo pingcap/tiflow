@@ -122,14 +122,14 @@ func formatColumnVal(c column) column {
 		}
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
 		if s, ok := c.Value.(json.Number); ok {
-			intNum, err := s.Int64()
+			var err error
+			if c.Flag.IsUnsigned() {
+				c.Value, err = strconv.ParseUint(s.String(), 10, 64)
+			} else {
+				c.Value, err = strconv.ParseInt(s.String(), 10, 64)
+			}
 			if err != nil {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
-			}
-			if c.Flag.IsUnsigned() {
-				c.Value = uint64(intNum)
-			} else {
-				c.Value = intNum
 			}
 		}
 	case mysql.TypeBit:
