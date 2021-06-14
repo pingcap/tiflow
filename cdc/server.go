@@ -386,7 +386,7 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 			candidates = append(candidates, info.SortDir)
 		}
 	}
-	if len(candidates) != 0 {
+	if len(candidates) == 0 {
 		conf.DataDir = defaultDataDir
 		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
 		config.StoreGlobalServerConfig(conf)
