@@ -375,13 +375,6 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if len(allStatus) == 0 {
-		conf.DataDir = defaultDataDir
-		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
-		config.StoreGlobalServerConfig(conf)
-
-		return nil
-	}
 
 	candidates := make([]string, 0, len(allStatus))
 	for id := range allStatus {
@@ -389,17 +382,26 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		candidates = append(candidates, info.SortDir)
+		if info.SortDir != "" {
+			candidates = append(candidates, info.SortDir)
+		}
+	}
+	if len(candidates) != 0 {
+		conf.DataDir = defaultDataDir
+		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
+		config.StoreGlobalServerConfig(conf)
+
+		return nil
 	}
 
 	best, err := findBestDataDir(candidates)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	conf.DataDir = best
 	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
 	config.StoreGlobalServerConfig(conf)
-
 	return nil
 }
 
@@ -468,9 +470,12 @@ func getDataDirCandidates(dirs []string) (result map[string]struct{}) {
 	for _, dir := range dirs {
 		if strings.HasSuffix(dir, config.DefaultSortDir) {
 			t := strings.TrimSuffix(dir, config.DefaultSortDir)
+			if t == "" {
+				t = "/"
+			}
 			result[t] = struct{}{}
 		} else {
-			result[dir] = struct{}{}
+			result["/"] = struct{}{}
 		}
 	}
 	return result

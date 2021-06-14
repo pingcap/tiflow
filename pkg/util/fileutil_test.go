@@ -92,6 +92,7 @@ func (s *fileUtilSuite) TestGetDiskInfo(c *check.C) {
 }
 
 func (s *fileUtilSuite) TestCheckDataDirSatisfied(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = dir
