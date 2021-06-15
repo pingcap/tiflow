@@ -102,7 +102,13 @@ func GetDiskInfo(dir string) (*DiskInfo, error) {
 	info.Used = info.All - info.Free
 	info.AvailPercentage = float32(info.Avail) / float32(info.All) * 100
 
-	return info, cerror.WrapError(cerror.ErrGetDiskInfo, os.Remove(f))
+	if err := os.Remove(f); err != nil {
+		if os.IsNotExist(err) {
+			return info, cerror.WrapError(cerror.ErrGetDiskInfo, err)
+		}
+	}
+
+	return info, nil
 }
 
 // CheckDataDirSatisfied check if the data-dir meet the requirement during server running
