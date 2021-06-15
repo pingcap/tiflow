@@ -103,7 +103,7 @@ func GetDiskInfo(dir string) (*DiskInfo, error) {
 	info.AvailPercentage = float32(info.Avail) / float32(info.All) * 100
 
 	if err := os.Remove(f); err != nil {
-		if os.IsNotExist(err) {
+		if !os.IsNotExist(err) {
 			return info, cerror.WrapError(cerror.ErrGetDiskInfo, err)
 		}
 	}
