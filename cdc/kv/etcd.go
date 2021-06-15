@@ -291,9 +291,6 @@ func (c CDCEtcdClient) GetCaptureLeases(ctx context.Context) (map[string]int64, 
 
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
 func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
-	if err := model.ValidateChangefeedID(changeFeedID); err != nil {
-		return err
-	}
 	infoKey := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	jobKey := GetEtcdKeyJob(changeFeedID)
 	value, err := info.Marshal()
