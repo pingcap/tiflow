@@ -14,6 +14,7 @@
 package util
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -75,6 +76,11 @@ type DiskInfo struct {
 	AvailPercentage float32
 }
 
+func (d *DiskInfo) String() string {
+	return fmt.Sprintf("{All: %+vGB; Used: %+vGB; Free: %+vGB; Available: %+vGB; Available Percentage: %+v%%}",
+		d.All, d.Used, d.Free, d.Avail, d.AvailPercentage)
+}
+
 // GetDiskInfo return the disk space information of the given directory
 // the caller should guarantee that dir exist
 func GetDiskInfo(dir string) (*DiskInfo, error) {
@@ -96,7 +102,7 @@ func GetDiskInfo(dir string) (*DiskInfo, error) {
 	info.Used = info.All - info.Free
 	info.AvailPercentage = float32(info.Avail) / float32(info.All) * 100
 
-	return info, nil
+	return info, cerror.WrapError(cerror.ErrGetDiskInfo, os.Remove(f))
 }
 
 // CheckDataDirSatisfied check if the data-dir meet the requirement during server running
@@ -113,7 +119,7 @@ func CheckDataDirSatisfied() error {
 			failpoint.Return(nil)
 		})
 		return errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
-			"have 10%% available space, and at least 500GB is better. disk info: %+v", diskInfo)
+			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo)
 	}
 
 	return nil
