@@ -1136,6 +1136,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
+	defer cancel()
 
 	server1Stopped := make(chan struct{})
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
