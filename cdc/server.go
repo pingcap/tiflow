@@ -386,20 +386,13 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 			candidates = append(candidates, info.SortDir)
 		}
 	}
-	if len(candidates) == 0 {
-		conf.DataDir = defaultDataDir
-		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
-		config.StoreGlobalServerConfig(conf)
 
-		return nil
+	conf.DataDir = defaultDataDir
+	best, ok := findBestDataDir(candidates)
+	if ok {
+		conf.DataDir = best
 	}
 
-	best, err := findBestDataDir(candidates)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	conf.DataDir = best
 	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
 	config.StoreGlobalServerConfig(conf)
 	return nil
@@ -429,10 +422,9 @@ func (s *Server) initDataDir(ctx context.Context) error {
 
 // try to find the best data dir by rules
 // at the moment, only consider available disk space
-func findBestDataDir(dirs []string) (result string, err error) {
+func findBestDataDir(dirs []string) (result string, ok bool) {
 	var (
 		low        uint64 = 0
-		find              = false
 		candidates        = getDataDirCandidates(dirs)
 	)
 
@@ -449,16 +441,15 @@ func findBestDataDir(dirs []string) (result string, err error) {
 		if info.Avail > low {
 			result = dir
 			low = info.Avail
-			find = true
+			ok = true
 		}
 	}
 
-	if !find {
-		log.Error("try to find directory for data-dir failed", zap.Strings("candidates", dirs))
-		return "", errors.Errorf("data-dir is not set, can not find a valid directory")
+	if !ok {
+		log.Warn("try to find directory for data-dir failed", zap.Strings("candidates", dirs))
 	}
 
-	return result, nil
+	return result, ok
 }
 
 func getDataDirCandidates(dirs []string) (result map[string]struct{}) {
