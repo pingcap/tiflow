@@ -22,7 +22,7 @@ log_level=debug
 restart=
 failpoint=$GO_FAILPOINTS
 config_path=
-sort_dir=
+#sort_dir=
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -70,10 +70,10 @@ while [[ ${1} ]]; do
             config_path="--config ${2}"
             shift
             ;;
-        --sort-dir)
-            sort_dir=${2}
-            shift
-            ;;
+#        --sort-dir)
+#            sort_dir=${2}
+#            shift
+#            ;;
         *)
             echo "Unknown parameter: ${1}" >&2
             exit 1
@@ -85,9 +85,9 @@ while [[ ${1} ]]; do
     fi
 done
 
-if [ -z "$sort_dir" ]; then
-    sort_dir=${workdir}/cdc-sort${logsuffix}
-fi
+#if [ -z "$sort_dir" ]; then
+#    sort_dir=${workdir}/cdc-sort${logsuffix}
+#fi
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
@@ -101,7 +101,7 @@ if [[ "$restart" == "true" ]]; then
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
-        --sort-dir $sort_dir \
+#        --sort-dir $sort_dir \
         $config_path \
         $tls \
         $certcn \
@@ -117,7 +117,7 @@ else
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
-    --sort-dir $sort_dir \
+#    --sort-dir $sort_dir \
     $config_path \
     $tls \
     $certcn \
