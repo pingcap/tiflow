@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/pingcap/check"
@@ -56,9 +57,9 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	state := model.NewGlobalState().(*model.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
-	// no changefeed, the gc safe point should not be updated
+	// no changefeed, the gc safe point should be max uint64
 	mockPDClient.updateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		c.Errorf("should not update gc safe point")
+		c.Assert(safePoint, check.Equals, uint64(math.MaxUint64))
 		return 0, nil
 	}
 	err := gcManager.updateGCSafePoint(ctx, state)
@@ -153,12 +154,18 @@ func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	gcManager := newGCManager()
+	gcManager.isTiCDCBlockGC = true
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
 	err := gcManager.CheckStaleCheckpointTs(ctx, 10)
-	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
+	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 
 	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
+
+	gcManager.isTiCDCBlockGC = false
+	gcManager.lastSafePointTs = 20
+	err = gcManager.CheckStaleCheckpointTs(ctx, 10)
+	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 }
