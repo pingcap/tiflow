@@ -107,6 +107,12 @@ type mysqlSink struct {
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	if len(rows) > 0 {
+		// This is a workaround to support commit-ts regressions in RowChangedEvents.
+		// Such regressions, if left unsupported, would result in possible data losses if the capture crashes
+		// during table migrations.
+		// This fix, however, requires that `FlushRowChangedEvents` is called with a level-triggering convention, i.e., it
+		// must be called continuously and repeatedly with the latest global resolved-ts.
+
 		resolvedTs := rows[0].CommitTs - 1
 		for {
 			oldResolvedTs := atomic.LoadUint64(&s.resolvedTs)
