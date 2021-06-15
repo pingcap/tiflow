@@ -16,7 +16,6 @@ package codec
 import (
 	"bytes"
 	"compress/zlib"
-	"fmt"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -164,8 +163,8 @@ func (s *codecTestSuite) encodeRowCase(c *check.C, encoder EventBatchEncoder, ev
 
 func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
 	defer testleak.AfterTest(c)()
-	fmt.Println("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
-	fmt.Println("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
+	c.Logf("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
+	c.Logf("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
 	for i, cs := range codecRowCases {
 		if len(cs) == 0 {
 			continue
@@ -180,7 +179,7 @@ func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
 		jsonOriginal, jsonCompressed := s.checkCompressedSize(jsonMessages)
 		protobuf1Original, protobuf1Compressed := s.checkCompressedSize(protobuf1Messages)
 		protobuf2Original, protobuf2Compressed := s.checkCompressedSize(protobuf2Messages)
-		fmt.Printf("| case %d | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ |\n", i,
+		c.Logf("| case %d | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ |\n", i,
 			craftOriginal, jsonOriginal, 100*jsonOriginal/craftOriginal-100,
 			protobuf1Original, 100*protobuf1Original/craftOriginal-100,
 			protobuf2Original, 100*protobuf2Original/craftOriginal-100,
