@@ -162,20 +162,20 @@ func newListChangefeedCommand() *cobra.Command {
 			}
 			cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
 			for id := range changefeedIDs {
-				commonInfo := &changefeedCommonInfo{ID: id}
+				cfci := &changefeedCommonInfo{ID: id}
 				resp, err := applyOwnerChangefeedQuery(ctx, id, getCredential())
 				if err != nil {
 					// if no capture is available, the query will fail, just add a warning here
 					log.Warn("query changefeed info failed", zap.String("error", err.Error()))
 				} else {
-					summary := &cdc.ChangefeedResp{}
-					err = json.Unmarshal([]byte(resp), summary)
+					info := &cdc.ChangefeedResp{}
+					err = json.Unmarshal([]byte(resp), info)
 					if err != nil {
 						return err
 					}
-					commonInfo.Summary = summary
+					cfci.Summary = info
 				}
-				cfs = append(cfs, commonInfo)
+				cfs = append(cfs, cfci)
 			}
 			return jsonPrint(cmd, cfs)
 		},
