@@ -111,15 +111,15 @@ func CheckDataDirSatisfied() error {
 	conf := config.GetGlobalServerConfig()
 	diskInfo, err := GetDiskInfo(conf.DataDir)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrCheckDataDirSatisfied, err)
 	}
 	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
 		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
 			log.Info("inject check data dir satisfied error")
 			failpoint.Return(nil)
 		})
-		return errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
-			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo)
+		return cerror.WrapError(cerror.ErrCheckDataDirSatisfied, errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
+			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo))
 	}
 
 	return nil
