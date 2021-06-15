@@ -47,6 +47,8 @@ func encodeVarint(bits []byte, data int64) []byte {
 }
 
 func encodeUvarint(bits []byte, data uint64) []byte {
+	// Encode uint64 in varint format that is used in protobuf
+	// Reference: https://developers.google.com/protocol-buffers/docs/encoding#varints
 	for data >= 0x80 {
 		bits = append(bits, byte(data)|0x80)
 		data >>= 7
@@ -55,6 +57,8 @@ func encodeUvarint(bits []byte, data uint64) []byte {
 }
 
 func encodeUvarintReversed(bits []byte, data uint64) ([]byte, int) {
+	// Encode uint64 in varint format that is similar to protobuf but with bytes order reversed
+	// Reference: https://developers.google.com/protocol-buffers/docs/encoding#varints
 	buf := make([]byte, binary.MaxVarintLen64)
 	i := 0
 	for data >= 0x80 {
