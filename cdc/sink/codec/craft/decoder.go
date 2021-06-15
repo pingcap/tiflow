@@ -55,6 +55,8 @@ func decodeUvarint(bits []byte) ([]byte, uint64, error) {
 }
 
 func decodeUvarintReversed(bits []byte) (int, uint64, error) {
+	// Decode uint64 in varint format that is similar to protobuf but with bytes order reversed
+	// Reference: https://developers.google.com/protocol-buffers/docs/encoding#varints
 	l := len(bits) - 1
 	var x uint64
 	var s uint
