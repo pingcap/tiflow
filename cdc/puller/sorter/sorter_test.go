@@ -382,8 +382,10 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite", "return(true)")
 	c.Assert(err, check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite")
+		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
 	}()
 
 	// recreate the sorter
