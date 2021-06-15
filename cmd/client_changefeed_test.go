@@ -63,7 +63,7 @@ enable-old-value = false
 	pdCli = &mockPDClient{}
 	disableGCSafePointCheck = true
 	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
-	c.Assert(err.Error(), check.Matches, `*Creating changefeed with a sort-dir, it's invalid*`)
+	c.Assert(err, check.ErrorMatches, "*Creating changefeed with `--sort-dir`, it's invalid*")
 	_, err = verifyChangefeedParameters(ctx, cmd, true, nil, nil)
 	c.Assert(err, check.NotNil)
 
