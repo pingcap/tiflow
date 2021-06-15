@@ -85,9 +85,9 @@ while [[ ${1} ]]; do
     fi
 done
 
-#if [ -z "$sort_dir" ]; then
-#    sort_dir=${workdir}/cdc-sort${logsuffix}
-#fi
+if [ -z "$sort_dir" ]; then
+    sort_dir=${workdir}/cdc-sort${logsuffix}
+fi
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
@@ -101,8 +101,8 @@ if [[ "$restart" == "true" ]]; then
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
-        --data-dir /tmp/cdc_data
-#        --sort-dir $sort_dir \
+        --data-dir "/tmp/cdc_data" \
+        --sort-dir "$sort_dir" \
         $config_path \
         $tls \
         $certcn \
@@ -118,8 +118,8 @@ else
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
-    --data-dir /tmp/cdc_data
-#    --sort-dir $sort_dir \
+    --data-dir /tmp/cdc_data \
+    --sort-dir "$sort_dir" \
     $config_path \
     $tls \
     $certcn \
