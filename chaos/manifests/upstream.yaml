@@ -1,0 +1,42 @@
+apiVersion: pingcap.com/v1alpha1
+kind: TidbCluster
+metadata:
+  name: tidb-upstream
+  labels:
+    app.kubernetes.io/managed-by: test-infra
+spec:
+  schedulerName: default-scheduler
+  imagePullPolicy: Always
+  pvReclaimPolicy: Delete
+  pd:
+    image: pingcap/pd:nightly
+    replicas: 1
+    requests:
+      storage: 10Gi
+      cpu: '250m'
+      memory: '256Mi'
+    limits:
+      cpu: '4000m'
+      memory: '8Gi'
+  tikv:
+    image: pingcap/tikv:nightly
+    replicas: 1
+    requests:
+      storage: 40Gi
+      cpu: '500m'
+      memory: '1Gi'
+    limits:
+      cpu: '8000m'
+      memory: '16Gi'
+  tidb:
+    separateSlowLog: false
+    image: pingcap/tidb:nightly
+    replicas: 1
+    requests:
+      cpu: '500m'
+      memory: '512Mi'
+    limits:
+      cpu: '8000m'
+      memory: '16Gi'
+    service:
+      type: NodePort
