@@ -101,6 +101,7 @@ if [[ "$restart" == "true" ]]; then
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
+        --data-dir /tmp/cdc_data
 #        --sort-dir $sort_dir \
         $config_path \
         $tls \
@@ -117,6 +118,7 @@ else
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
+    --data-dir /tmp/cdc_data
 #    --sort-dir $sort_dir \
     $config_path \
     $tls \
