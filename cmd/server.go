@@ -70,7 +70,7 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().Int64Var(&serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	cmd.Flags().StringVar(&serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
-	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "Set the dir to store CDC generated data")
+	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
 
@@ -184,7 +184,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
 		case "sort-dir":
-			// user specified sorter dir not work
+			// user specified sorter dir should not take effect
 			conf.Sorter.SortDir = config.DefaultSortDir
 		case "pd", "config":
 			// do nothing
