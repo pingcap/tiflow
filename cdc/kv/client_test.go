@@ -1135,7 +1135,6 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
-	defer wg.Wait()
 
 	server1Stopped := make(chan struct{})
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
@@ -1243,6 +1242,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	c.Assert(strings.Count(stack, "collectWorkpoolError"), check.Equals, 1)
 
 	cancel()
+	wg.Wait()
 }
 
 func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
