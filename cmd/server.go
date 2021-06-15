@@ -185,6 +185,10 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
 		case "sort-dir":
 			// user specified sorter dir should not take effect
+			if serverConfig.Sorter.SortDir != config.DefaultSortDir {
+				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
+					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
+			}
 			conf.Sorter.SortDir = config.DefaultSortDir
 		case "pd", "config":
 			// do nothing
@@ -211,11 +215,6 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	if conf.DataDir == "" {
 		cmd.Printf(color.HiYellowString("[WARN] TiCDC server data-dir is not set. " +
 			"Please use `cdc server --data-dir` to start the cdc server if possible.\n"))
-	}
-
-	if serverConfig.Sorter.SortDir != config.DefaultSortDir {
-		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
-			"Please use `cdc server --data-dir` if possible. The sort-dir here will be no-op\n"))
 	}
 
 	return conf, nil
