@@ -16,10 +16,15 @@ package craft
 import (
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 var _ = check.Suite(&codecSuite{allocator: NewSliceAllocator(64)})
 
