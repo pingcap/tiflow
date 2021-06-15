@@ -184,7 +184,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
 		case "sort-dir":
-			// user specified sorter dir not work
+			// user specified sorter dir should not take effect
 			conf.Sorter.SortDir = config.DefaultSortDir
 		case "pd", "config":
 			// do nothing
