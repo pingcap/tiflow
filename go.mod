@@ -14,6 +14,7 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
+	github.com/fatih/color v1.10.0
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.3.4

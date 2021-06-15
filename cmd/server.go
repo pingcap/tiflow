@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -205,6 +206,16 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		} else if strings.Index(ep, "http://") != 0 {
 			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
 		}
+	}
+
+	if conf.DataDir == "" {
+		cmd.Printf(color.HiYellowString("[WARN] TiCDC server data-dir is not set. " +
+			"Please use `cdc server --data-dir` to start the cdc server if possible.\n"))
+	}
+
+	if serverConfig.Sorter.SortDir != config.DefaultSortDir {
+		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
+			"Please use `cdc server --data-dir` if possible. The sort-dir here will be no-op\n"))
 	}
 
 	return conf, nil

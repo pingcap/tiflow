@@ -144,7 +144,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	if err := s.initDataDir(ctx); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	// To not block CDC server startup, we need to warn instead of error
@@ -420,7 +420,7 @@ func (s *Server) initDataDir(ctx context.Context) error {
 	}
 
 	if diskInfo.Avail < dataDirThreshold {
-		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommand disk for data-dir "+
+		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
 			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
 	}
 
@@ -444,10 +444,6 @@ func findBestDataDir(dirs []string) (result string, err error) {
 		info, err := util.GetDiskInfo(dir)
 		if err != nil {
 			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
-			continue
-		}
-		if info.Avail < dataDirThreshold {
-			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Uint64("available", info.Avail))
 			continue
 		}
 		if info.Avail > low {

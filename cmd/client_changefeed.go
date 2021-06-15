@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -356,10 +357,10 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 
 	// user is not allowed to set sort-dir at changefeed level
 	if sortDir != "" {
-		cmd.Printf("[WARN] --sort-dir is deprecated in changefeed settings. " +
-			"Please use `cdc server --sort-dir` if possible. " +
-			"The sort-dir here will be no-op\n")
-		return nil, errors.New("Creating changefeed with a sort-dir, it's invalid")
+		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in changefeed settings. " +
+			"Please use `cdc server --data-dir` to start the cdc server if possible, sort-dir will be set automatically. " +
+			"The --sort-dir here will be no-op\n"))
+		return nil, errors.New("Creating changefeed with `--sort-dir`, it's invalid")
 	}
 
 	if info.Engine == model.SortInFile {
@@ -437,11 +438,11 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", "", "directory used for data sort")
 	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
-	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
-	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
-	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
-	command.PersistentFlags().BoolVar(&syncPointEnabled, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
-	command.PersistentFlags().DurationVar(&syncPointInterval, "sync-interval", 10*time.Minute, "(Expremental) Set the interval for syncpoint in replication(default 10min)")
+	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Experimental) Cyclic replication replica ID of changefeed")
+	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Experimental) Cyclic replication filter replica ID of changefeed")
+	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
+	command.PersistentFlags().BoolVar(&syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
+	command.PersistentFlags().DurationVar(&syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
 	_ = command.PersistentFlags().MarkHidden("sort-dir") //nolint:errcheck
 }
 

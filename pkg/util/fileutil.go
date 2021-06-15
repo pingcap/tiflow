@@ -112,7 +112,8 @@ func CheckDataDirSatisfied() error {
 			log.Info("inject check data dir satisfied error")
 			failpoint.Return(nil)
 		})
-		return errors.Errorf("disk is almost full, disk info: %+v", diskInfo)
+		return errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
+			"have 10%% available space, and at least 500GB is better. disk info: %+v", diskInfo)
 	}
 
 	return nil
