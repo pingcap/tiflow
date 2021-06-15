@@ -281,9 +281,9 @@ func newMockServiceSpecificAddr(
 	cdcpb.RegisterChangeDataServer(grpcServer, srv)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := grpcServer.Serve(lis)
 		c.Assert(err, check.IsNil)
-		wg.Done()
 	}()
 	return
 }
@@ -335,9 +335,9 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-		wg.Done()
 	}()
 
 	// new session, request to store 1, request to store 2
@@ -422,10 +422,10 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// new session, new request
@@ -511,10 +511,10 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -673,10 +673,10 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
+		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
 		cdcClient.Close() //nolint:errcheck
-		wg2.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -732,10 +732,10 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1178,10 +1178,10 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	var requestIds sync.Map
@@ -1287,10 +1287,10 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1642,10 +1642,10 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	err = retry.Run(time.Millisecond*500, 20, func() error {
@@ -1735,10 +1735,10 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
+		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(cerror.ErrNoPendingRegion.Equal(err), check.IsTrue)
 		cdcClient.Close() //nolint:errcheck
-		wg2.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1791,10 +1791,10 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1898,10 +1898,10 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1996,10 +1996,10 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
+		defer clientWg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(err, check.Equals, errUnreachable)
 		cdcClient.Close() //nolint:errcheck
-		clientWg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2130,10 +2130,10 @@ func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2274,10 +2274,10 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2502,10 +2502,10 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2594,10 +2594,10 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2679,10 +2679,10 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait the second region is scheduled
@@ -2745,10 +2745,10 @@ func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -2836,10 +2836,10 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -2986,10 +2986,10 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// the kv client is blocked by failpoint injection, and after region has split
@@ -3278,10 +3278,10 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
-		wg.Done()
 	}()
 
 	// wait request id allocated with: new session, new request
