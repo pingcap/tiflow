@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -42,11 +44,17 @@ import (
 
 const (
 	ownerRunInterval = time.Millisecond * 500
+<<<<<<< HEAD
 
 	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
 	DefaultCDCGCSafePointTTL = 24 * 60 * 60
 
 	defaultCaptureSessionTTL = 10
+=======
+	defaultDataDir   = "/tmp/cdc_data"
+	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
+	dataDirThreshold = 500
+>>>>>>> 9135351d (CDC Server support data-dir (#1879))
 )
 
 // Server is the capture server
@@ -100,6 +108,46 @@ func (s *Server) Run(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
+<<<<<<< HEAD
+=======
+	if config.NewReplicaImpl {
+		tlsConfig, err := conf.Security.ToTLSConfig()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		logConfig := logutil.DefaultZapLoggerConfig
+		logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+		etcdCli, err := clientv3.New(clientv3.Config{
+			Endpoints:   s.pdEndpoints,
+			TLS:         tlsConfig,
+			Context:     ctx,
+			LogConfig:   &logConfig,
+			DialTimeout: 5 * time.Second,
+			DialOptions: []grpc.DialOption{
+				grpcTLSOption,
+				grpc.WithBlock(),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
+			},
+		})
+		if err != nil {
+			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+		}
+		etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+		s.etcdClient = &etcdClient
+	}
+
+	if err := s.initDataDir(ctx); err != nil {
+		return errors.Trace(err)
+	}
+>>>>>>> 9135351d (CDC Server support data-dir (#1879))
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
@@ -295,4 +343,91 @@ func (s *Server) Close() {
 		}
 		s.statusServer = nil
 	}
+}
+
+func (s *Server) initDataDir(ctx context.Context) error {
+	if err := s.setUpDataDir(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	conf := config.GetGlobalServerConfig()
+	err := os.MkdirAll(conf.DataDir, 0o755)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	diskInfo, err := util.GetDiskInfo(conf.DataDir)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if diskInfo.Avail < dataDirThreshold {
+		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
+			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
+	}
+
+	return nil
+}
+
+func (s *Server) setUpDataDir(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	if conf.DataDir != "" {
+		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
+		config.StoreGlobalServerConfig(conf)
+
+		return nil
+	}
+
+	// data-dir will be decide by exist changefeed for backward compatibility
+	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	candidates := make([]string, 0, len(allStatus))
+	for id := range allStatus {
+		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if info.SortDir != "" {
+			candidates = append(candidates, info.SortDir)
+		}
+	}
+
+	conf.DataDir = defaultDataDir
+	best, ok := findBestDataDir(candidates)
+	if ok {
+		conf.DataDir = best
+	}
+
+	conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
+	config.StoreGlobalServerConfig(conf)
+	return nil
+}
+
+// try to find the best data dir by rules
+// at the moment, only consider available disk space
+func findBestDataDir(candidates []string) (result string, ok bool) {
+	var low uint64 = 0
+	for _, dir := range candidates {
+		if err := util.IsDirReadWritable(dir); err != nil {
+			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
+			continue
+		}
+		info, err := util.GetDiskInfo(dir)
+		if err != nil {
+			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
+			continue
+		}
+		if info.Avail > low {
+			result = dir
+			low = info.Avail
+			ok = true
+		}
+	}
+
+	if !ok && len(candidates) != 0 {
+		log.Warn("try to find directory for data-dir failed, use `/tmp/cdc_data` as data-dir", zap.Strings("candidates", candidates))
+	}
+
+	return result, ok
 }

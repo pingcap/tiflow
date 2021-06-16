@@ -13,7 +13,12 @@ require (
 	github.com/coreos/go-semver v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
+<<<<<<< HEAD
 	github.com/fatih/color v1.10.0 // indirect
+=======
+	github.com/fatih/color v1.10.0
+	github.com/frankban/quicktest v1.11.1 // indirect
+>>>>>>> 9135351d (CDC Server support data-dir (#1879))
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.3.4
 	github.com/golang/snappy v0.0.2 // indirect

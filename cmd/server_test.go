@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"time"
@@ -36,6 +37,30 @@ func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
 	c.Assert(cfg.TiKVClient.MaxBatchSize, check.Equals, uint(0))
 }
 
+func (s *serverSuite) TestDataDirServerConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cmd := new(cobra.Command)
+	initServerCmd(cmd)
+	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
+	cfg, err := loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	// data dir default to ""
+	c.Assert(cfg.DataDir, check.Equals, "")
+	c.Assert(cfg.Sorter.SortDir, check.Equals, filepath.Join("", "/tmp/sorter"))
+
+	dataDir := c.MkDir()
+	cmd = new(cobra.Command)
+	initServerCmd(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--data-dir=" + dataDir}), check.IsNil)
+	cfg, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	c.Assert(cfg.DataDir, check.Equals, dataDir)
+	// sorter-dir is not set yet
+	c.Assert(cfg.Sorter.SortDir, check.Equals, "/tmp/sorter")
+}
+
 func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	// test default flag values
@@ -44,6 +69,8 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
 	cfg, err := loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+
 	defcfg := config.GetDefaultServerConfig()
 	c.Assert(defcfg.ValidateAndAdjust(), check.IsNil)
 	c.Assert(cfg, check.DeepEquals, defcfg)
@@ -71,6 +98,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// test flags without config file
+	dataDir := c.MkDir()
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{
@@ -78,6 +106,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		"--advertise-addr", "127.5.5.1:7777",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
+		"--data-dir", dataDir,
 		"--gc-ttl", "10",
 		"--tz", "UTC",
 		"--owner-flush-interval", "150ms",
@@ -99,6 +128,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		AdvertiseAddr:          "127.5.5.1:7777",
 		LogFile:                "/root/cdc.log",
 		LogLevel:               "debug",
+		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
@@ -109,7 +139,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
-			SortDir:                "/tmp/just_a_test",
+			SortDir:                config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -120,15 +150,16 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	})
 
 	// test decode config file
+	dataDir = c.MkDir()
 	tmpDir := c.MkDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
-	configContent := `
+	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
 advertise-addr = "127.0.0.1:1111"
 
 log-file = "/root/cdc1.log"
 log-level = "warn"
-
+data-dir = "%+v"
 gc-ttl = 500
 tz = "US"
 
@@ -142,7 +173,7 @@ max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
-`
+`, dataDir)
 	err = ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 	cmd = new(cobra.Command)
@@ -155,6 +186,7 @@ sort-dir = "/tmp/just_a_test"
 		AdvertiseAddr:          "127.0.0.1:1111",
 		LogFile:                "/root/cdc1.log",
 		LogLevel:               "warn",
+		DataDir:                dataDir,
 		GcTTL:                  500,
 		TZ:                     "US",
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
@@ -165,7 +197,7 @@ sort-dir = "/tmp/just_a_test"
 			MaxMemoryPressure:      3,
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                "/tmp/just_a_test",
+			SortDir:                config.DefaultSortDir,
 		},
 		Security:            &config.SecurityConfig{},
 		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
@@ -186,6 +218,7 @@ cert-allowed-cn = ["dd","ee"]
 		"--addr", "127.5.5.1:8833",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
+		"--data-dir", dataDir,
 		"--gc-ttl", "10",
 		"--tz", "UTC",
 		"--owner-flush-interval", "150ms",
@@ -204,6 +237,7 @@ cert-allowed-cn = ["dd","ee"]
 		AdvertiseAddr:          "127.0.0.1:1111",
 		LogFile:                "/root/cdc.log",
 		LogLevel:               "debug",
+		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
@@ -214,7 +248,7 @@ cert-allowed-cn = ["dd","ee"]
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                "/tmp/just_a_test",
+			SortDir:                config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
