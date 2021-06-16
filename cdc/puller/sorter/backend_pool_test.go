@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -34,10 +35,17 @@ var _ = check.SerialSuites(&backendPoolSuite{})
 func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	dataDir := "/tmp/cdc_data"
+	err := os.MkdirAll(dataDir, 0o755)
+	c.Assert(err, check.IsNil)
+
+	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
+	err = os.MkdirAll(sortDir, 0o755)
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = dataDir
+	conf.Sorter.SortDir = sortDir
 	conf.Sorter.MaxMemoryPressure = 90                         // 90%
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
@@ -48,7 +56,7 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
-	backEndPool, err := newBackEndPool("/tmp/sorter", "")
+	backEndPool, err := newBackEndPool(sortDir, "")
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -103,14 +111,21 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	dir := c.MkDir()
-	err := os.Chmod(dir, 0o311) // no permission to `ls`
+	dataDir := "tmp/cdc_data"
+	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
+	err := os.MkdirAll(sortDir, 0o311)
 	c.Assert(err, check.IsNil)
 
+<<<<<<< HEAD
 	conf := config.GetDefaultServerConfig()
+=======
+	conf := config.GetGlobalServerConfig()
+	conf.DataDir = dataDir
+	conf.Sorter.SortDir = sortDir
+>>>>>>> 9135351d (CDC Server support data-dir (#1879))
 	conf.Sorter.MaxMemoryPressure = 0 // force using files
 
-	backEndPool, err := newBackEndPool(dir, "")
+	backEndPool, err := newBackEndPool(sortDir, "")
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -131,10 +146,17 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	dataDir := c.MkDir()
+	err := os.Chmod(dataDir, 0o755)
+	c.Assert(err, check.IsNil)
+
+	sorterDir := filepath.Join(dataDir, config.DefaultSortDir)
+	err = os.MkdirAll(sorterDir, 0o755)
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = dataDir
+	conf.Sorter.SortDir = sorterDir
 	conf.Sorter.MaxMemoryPressure = 90                         // 90%
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
@@ -142,7 +164,7 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
 
-	backEndPool, err := newBackEndPool("/tmp/sorter", "")
+	backEndPool, err := newBackEndPool(sorterDir, "")
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 

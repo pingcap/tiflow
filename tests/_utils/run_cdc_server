@@ -23,6 +23,7 @@ restart=
 failpoint=$GO_FAILPOINTS
 config_path=
 sort_dir=
+data_dir=
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -89,6 +90,10 @@ if [ -z "$sort_dir" ]; then
     sort_dir=${workdir}/cdc-sort${logsuffix}
 fi
 
+if [ -z "$data_dir" ]; then
+    data_dir=${workdir}/cdc_data${logsuffix}
+fi
+
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
 pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
@@ -101,7 +106,8 @@ if [[ "$restart" == "true" ]]; then
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
-        --sort-dir $sort_dir \
+        --data-dir "$data_dir" \
+        --sort-dir "$sort_dir" \
         $config_path \
         $tls \
         $certcn \
@@ -117,7 +123,8 @@ else
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
-    --sort-dir $sort_dir \
+    --data-dir "$data_dir" \
+    --sort-dir "$sort_dir" \
     $config_path \
     $tls \
     $certcn \

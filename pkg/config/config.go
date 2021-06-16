@@ -29,9 +29,23 @@ import (
 	"go.uber.org/zap"
 )
 
+<<<<<<< HEAD
 // NewReplicaImpl is true if we using new processor
 // new owner should be also switched on after it implemented
 const NewReplicaImpl = false
+=======
+const (
+	// NewReplicaImpl is true if we using new processor
+	// new owner should be also switched on after it implemented
+	NewReplicaImpl = true
+	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
+	DefaultSortDir = "/tmp/sorter"
+)
+
+func init() {
+	StoreGlobalServerConfig(GetDefaultServerConfig())
+}
+>>>>>>> 9135351d (CDC Server support data-dir (#1879))
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
@@ -143,6 +157,7 @@ var defaultServerConfig = &ServerConfig{
 	AdvertiseAddr: "",
 	LogFile:       "",
 	LogLevel:      "info",
+	DataDir:       "",
 	GcTTL:         24 * 60 * 60, // 24H
 	TZ:            "System",
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
@@ -158,7 +173,7 @@ var defaultServerConfig = &ServerConfig{
 		MaxMemoryPressure:      80,
 		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
 		NumWorkerPoolGoroutine: 16,
-		SortDir:                "/tmp/cdc_sort",
+		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
@@ -175,6 +190,7 @@ type ServerConfig struct {
 
 	LogFile  string `toml:"log-file" json:"log-file"`
 	LogLevel string `toml:"log-level" json:"log-level"`
+	DataDir  string `toml:"data-dir" json:"data-dir"`
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
@@ -272,6 +288,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.Sorter == nil {
 		c.Sorter = defaultServerConfig.Sorter
 	}
+	c.Sorter.SortDir = DefaultSortDir
 
 	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")

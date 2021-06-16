@@ -121,6 +121,21 @@ error = '''
 failed to request PD
 '''
 
+["CDC:ErrCheckDataDirSatisfied"]
+error = '''
+check data dir satisfied failed
+'''
+
+["CDC:ErrCheckDirReadable"]
+error = '''
+check dir readable failed
+'''
+
+["CDC:ErrCheckDirValid"]
+error = '''
+check dir valid failed
+'''
+
 ["CDC:ErrCheckDirWritable"]
 error = '''
 check dir writable failed
@@ -264,6 +279,11 @@ grpc dial failed
 ["CDC:ErrGetAllStoresFailed"]
 error = '''
 get stores from pd failed
+'''
+
+["CDC:ErrGetDiskInfo"]
+error = '''
+get dir disk info failed
 '''
 
 ["CDC:ErrGetRegionFailed"]
