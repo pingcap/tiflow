@@ -17,11 +17,14 @@ import (
 	"context"
 	"math"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"go.uber.org/zap/zapcore"
+
+	_ "net/http/pprof"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
@@ -32,7 +35,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	_ "net/http/pprof"
 )
 
 const (
@@ -62,18 +64,21 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -87,18 +92,21 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -126,6 +134,11 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
+
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
+	}()
 
 	ctx, cancel := context.WithCancel(ctx)
 	errg, ctx := errgroup.WithContext(ctx)
@@ -284,16 +297,19 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      0, // disable memory sort
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
 
 	// enable the failpoint to simulate delays
@@ -311,7 +327,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	}()
 
 	for i := 0; i < 5; i++ {
-		sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+		sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 		c.Assert(err, check.IsNil)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err = testSorter(ctx, c, sorter, 100000000, true)
@@ -325,18 +341,21 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -373,7 +392,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	}()
 
 	// recreate the sorter
-	sorter, err = NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err = NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
 	finishedCh = make(chan struct{})
@@ -399,18 +418,21 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	defer log.SetLevel(zapcore.InfoLevel)
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
