@@ -445,8 +445,8 @@ func findBestDataDir(dirs []string) (result string, ok bool) {
 		}
 	}
 
-	if !ok {
-		log.Warn("try to find directory for data-dir failed", zap.Strings("candidates", dirs))
+	if !ok && len(dirs) != 0 {
+		log.Warn("try to find directory for data-dir failed, use `/tmp/cdc_data` as data-dir", zap.Strings("candidates", dirs))
 	}
 
 	return result, ok
