@@ -541,6 +541,11 @@ error = '''
 pending region cancelled due to stream disconnecting
 '''
 
+["CDC:ErrPipelineTryAgain"]
+error = '''
+pipeline is full, please try again. Internal use only, report a bug if seen externally
+'''
+
 ["CDC:ErrPrepareAvroFailed"]
 error = '''
 prepare avro failed
