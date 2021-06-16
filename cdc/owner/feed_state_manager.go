@@ -112,15 +112,16 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.shouldBeRunning = false
 		jobsPending = true
 		m.patchState(model.StateRemoved)
-		if job.Opts != nil && job.Opts.ForceRemove {
-			// remove changefeed info and state
-			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-				return nil, true, nil
-			})
-			m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-				return nil, true, nil
-			})
-		}
+		// remove changefeed info and state
+		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			return nil, true, nil
+		})
+		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			return nil, true, nil
+		})
+		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
+		log.Info("the changefeed removed", zap.String("changefeed-id", m.state.ID), zap.Uint64("checkpoint-ts", checkpointTs))
+
 	case model.AdminResume:
 		switch m.state.Info.State {
 		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
