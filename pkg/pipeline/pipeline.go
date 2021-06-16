@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -107,6 +108,10 @@ func (p *Pipeline) SendToFirstNode(msg *Message) error {
 	if p.isClosed {
 		return cerror.ErrSendToClosedPipeline.GenWithStackByArgs()
 	}
+
+	failpoint.Inject("PipelineSendToFirstNodeTryAgain", func() {
+		failpoint.Return(cerror.ErrPipelineTryAgain.GenWithStackByArgs())
+	})
 
 	select {
 	case p.header <- msg:
