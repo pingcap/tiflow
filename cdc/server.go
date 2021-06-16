@@ -361,6 +361,28 @@ func (s *Server) Close() {
 	}
 }
 
+func (s *Server) initDataDir(ctx context.Context) error {
+	if err := s.setUpDataDir(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	conf := config.GetGlobalServerConfig()
+	err := os.MkdirAll(conf.DataDir, 0o755)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	diskInfo, err := util.GetDiskInfo(conf.DataDir)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if diskInfo.Avail < dataDirThreshold {
+		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
+			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
+	}
+
+	return nil
+}
+
 func (s *Server) setUpDataDir(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	if conf.DataDir != "" {
@@ -398,37 +420,14 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) initDataDir(ctx context.Context) error {
-	if err := s.setUpDataDir(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	conf := config.GetGlobalServerConfig()
-	err := os.MkdirAll(conf.DataDir, 0o755)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	diskInfo, err := util.GetDiskInfo(conf.DataDir)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if diskInfo.Avail < dataDirThreshold {
-		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
-			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
-	}
-
-	return nil
-}
-
 // try to find the best data dir by rules
 // at the moment, only consider available disk space
-func findBestDataDir(dirs []string) (result string, ok bool) {
+func findBestDataDir(candidates []string) (result string, ok bool) {
 	var (
-		low        uint64 = 0
-		candidates        = getDataDirCandidates(dirs)
+		low uint64 = 0
 	)
 
-	for dir := range candidates {
+	for _, dir := range candidates {
 		if err := util.IsDirReadWritable(dir); err != nil {
 			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
 			continue
@@ -445,25 +444,9 @@ func findBestDataDir(dirs []string) (result string, ok bool) {
 		}
 	}
 
-	if !ok && len(dirs) != 0 {
-		log.Warn("try to find directory for data-dir failed, use `/tmp/cdc_data` as data-dir", zap.Strings("candidates", dirs))
+	if !ok && len(candidates) != 0 {
+		log.Warn("try to find directory for data-dir failed, use `/tmp/cdc_data` as data-dir", zap.Strings("candidates", candidates))
 	}
 
 	return result, ok
-}
-
-func getDataDirCandidates(dirs []string) (result map[string]struct{}) {
-	result = make(map[string]struct{})
-	for _, dir := range dirs {
-		if strings.HasSuffix(dir, config.DefaultSortDir) {
-			t := strings.TrimSuffix(dir, config.DefaultSortDir)
-			if t == "" {
-				t = "/"
-			}
-			result[t] = struct{}{}
-		} else {
-			result["/"] = struct{}{}
-		}
-	}
-	return result
 }
