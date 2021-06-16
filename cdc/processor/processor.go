@@ -365,7 +365,11 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if opt.BoundaryTs < globalCheckpointTs {
 					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
 				}
-				table.AsyncStop(opt.BoundaryTs)
+				if !table.AsyncStop(opt.BoundaryTs) {
+					log.Warn("AsyncStop has failed, possible due to a full pipeline",
+						zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
+					continue
+				}
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.Status = model.OperProcessed
 					return nil
