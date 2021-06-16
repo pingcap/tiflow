@@ -78,7 +78,7 @@ type oldProcessor struct {
 	globalResolvedTs         uint64
 	localResolvedTs          uint64
 	checkpointTs             uint64
-	globalcheckpointTs       uint64
+	globalCheckpointTs       uint64
 	appliedLocalCheckpointTs uint64
 	flushCheckpointInterval  time.Duration
 
@@ -234,7 +234,7 @@ func newProcessor(
 	}
 
 	if err == nil {
-		p.globalcheckpointTs = info.CheckpointTs
+		p.globalCheckpointTs = info.CheckpointTs
 	}
 
 	for tableID, replicaInfo := range p.status.Tables {
@@ -672,7 +672,7 @@ func (p *oldProcessor) globalStatusWorker(ctx context.Context) error {
 	)
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
-		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
+		atomic.StoreUint64(&p.globalCheckpointTs, changefeedStatus.CheckpointTs)
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return
@@ -779,15 +779,15 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		return
 	}
 
-	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+	globalCheckpointTs := atomic.LoadUint64(&p.globalCheckpointTs)
 
-	if replicaInfo.StartTs < globalcheckpointTs {
-		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+	if replicaInfo.StartTs < globalCheckpointTs {
+		// use Warn instead of Panic in case that p.globalCheckpointTs has not been initialized.
 		// The cdc_state_checker will catch a real inconsistency in integration tests.
 		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("checkpoint", globalCheckpointTs),
 			zap.Uint64("startTs", replicaInfo.StartTs))
 	}
 
