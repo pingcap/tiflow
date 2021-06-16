@@ -423,10 +423,7 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 // try to find the best data dir by rules
 // at the moment, only consider available disk space
 func findBestDataDir(candidates []string) (result string, ok bool) {
-	var (
-		low uint64 = 0
-	)
-
+	var low uint64 = 0
 	for _, dir := range candidates {
 		if err := util.IsDirReadWritable(dir); err != nil {
 			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
