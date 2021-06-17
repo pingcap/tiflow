@@ -19,9 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/edwingeng/deque"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/pipeline"
@@ -65,9 +64,9 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 	if err != nil {
 		log.Panic("unexpected error", zap.Error(err))
 	}
-	defer receiver.Stop()
 
 	n.wg.Go(func() error {
+		defer receiver.Stop()
 		for {
 			select {
 			case <-stdCtx.Done():
