@@ -323,6 +323,20 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
+	if !config.NewReplicaImpl && cfStatus != nil {
+		switch cfStatus.AdminJobType {
+		case model.AdminNone, model.AdminResume:
+			if cfInfo != nil && cfInfo.Error != nil {
+				resp.FeedState = string(model.StateFailed)
+			}
+		case model.AdminStop:
+			resp.FeedState = string(model.StateStopped)
+		case model.AdminRemove:
+			resp.FeedState = string(model.StateRemoved)
+		case model.AdminFinish:
+			resp.FeedState = string(model.StateFinished)
+		}
+	}
 	writeData(w, resp)
 }
 

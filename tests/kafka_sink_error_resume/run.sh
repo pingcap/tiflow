@@ -49,8 +49,11 @@ function run() {
     run_sql "CREATE table kafka_sink_error_resume.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES ();"
 
-    ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "error"
-    cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
+    for i in $(seq 1 4); do
+        ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
+        cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
+        sleep 5
+    done
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
 
     check_table_exists "kafka_sink_error_resume.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
