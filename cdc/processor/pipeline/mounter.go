@@ -14,42 +14,107 @@
 package pipeline
 
 import (
-	"github.com/pingcap/ticdc/cdc/entry"
+	"context"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/edwingeng/deque"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/pipeline"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+)
+
+const (
+	waitEventMountedBatchSize = 1024
 )
 
 type mounterNode struct {
-	mounter entry.Mounter
+	mu    sync.Mutex
+	queue deque.Deque
+
+	wg     errgroup.Group
+	cancel context.CancelFunc
+
+	notifier notify.Notifier
+	rl       *rate.Limiter
 }
 
-func newMounterNode(mounter entry.Mounter) pipeline.Node {
+func newMounterNode() pipeline.Node {
 	return &mounterNode{
-		mounter: mounter,
+		queue: deque.NewDeque(),
+		rl:    rate.NewLimiter(20.0, 1),
 	}
 }
 
 func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
-	// do nothing
+	stdCtx, cancel := context.WithCancel(ctx)
+	n.cancel = cancel
+
+	receiver, err := n.notifier.NewReceiver(time.Millisecond * 100)
+	if err != nil {
+		log.Panic("unexpected error", zap.Error(err))
+	}
+	defer receiver.Stop()
+
+	n.wg.Go(func() error {
+		for {
+			select {
+			case <-stdCtx.Done():
+				return nil
+			case <-receiver.C:
+				for {
+					n.mu.Lock()
+					msgs := n.queue.PopManyFront(waitEventMountedBatchSize)
+					n.mu.Unlock()
+					if len(msgs) == 0 {
+						break // inner loop
+					}
+
+					for _, msg := range msgs {
+						msg := msg.(*pipeline.Message)
+						if msg.Tp != pipeline.MessageTypePolymorphicEvent {
+							// sends the control message directly to the next node
+							ctx.SendToNextNode(msg)
+							continue
+						}
+
+						// handles PolymorphicEvents
+						event := msg.PolymorphicEvent
+						if event.RawKV.OpType != model.OpTypeResolved {
+							err := event.WaitPrepare(stdCtx)
+							if err != nil {
+								ctx.Throw(err)
+								return nil
+							}
+						}
+
+						ctx.SendToNextNode(msg)
+					}
+				}
+			}
+		}
+	})
+
 	return nil
 }
 
 // Receive receives the message from the previous node
 func (n *mounterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
-	switch msg.Tp {
-	case pipeline.MessageTypePolymorphicEvent:
-		msg.PolymorphicEvent.SetUpFinishedChan()
-		select {
-		case <-ctx.Done():
-			return nil
-		case n.mounter.Input() <- msg.PolymorphicEvent:
-		}
+	n.queue.PushBack(msg)
+
+	if n.rl.Allow() {
+		n.notifier.Notify()
 	}
-	ctx.SendToNextNode(msg)
 	return nil
 }
 
 func (n *mounterNode) Destroy(ctx pipeline.NodeContext) error {
-	// do nothing
-	return nil
+	defer n.notifier.Close()
+	n.cancel()
+	return n.wg.Wait()
 }
