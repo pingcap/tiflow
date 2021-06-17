@@ -30,8 +30,8 @@ import (
 )
 
 const (
-	waitEventMountedBatchSize = 128 * 1024
-	maxNotificationsPerSecond = 2.0
+	waitEventMountedBatchSize = 128 * 1024 // larger means less CPU overhead used by `select` but more memory overhead.
+	maxNotificationsPerSecond = 10.0       // larger means lower latency, but more CPU used by `select`.
 )
 
 // mounterNode is now used to buffer unmounted events.
