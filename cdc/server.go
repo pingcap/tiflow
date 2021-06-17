@@ -100,47 +100,10 @@ func (s *Server) Run(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
-<<<<<<< HEAD
-=======
-	if config.NewReplicaImpl {
-		tlsConfig, err := conf.Security.ToTLSConfig()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		logConfig := logutil.DefaultZapLoggerConfig
-		logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-		etcdCli, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			TLS:         tlsConfig,
-			Context:     ctx,
-			LogConfig:   &logConfig,
-			DialTimeout: 5 * time.Second,
-			DialOptions: []grpc.DialOption{
-				grpcTLSOption,
-				grpc.WithBlock(),
-				grpc.WithConnectParams(grpc.ConnectParams{
-					Backoff: backoff.Config{
-						BaseDelay:  time.Second,
-						Multiplier: 1.1,
-						Jitter:     0.1,
-						MaxDelay:   3 * time.Second,
-					},
-					MinConnectTimeout: 3 * time.Second,
-				}),
-			},
-		})
-		if err != nil {
-			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
-		}
-		etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
-		s.etcdClient = &etcdClient
-	}
 
 	if err := s.initDataDir(ctx); err != nil {
 		return errors.Trace(err)
 	}
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
-
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false

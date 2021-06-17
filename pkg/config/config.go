@@ -29,11 +29,6 @@ import (
 	"go.uber.org/zap"
 )
 
-<<<<<<< HEAD
-// NewReplicaImpl is true if we using new processor
-// new owner should be also switched on after it implemented
-const NewReplicaImpl = false
-=======
 const (
 	// NewReplicaImpl is true if we using new processor
 	// new owner should be also switched on after it implemented
@@ -45,7 +40,6 @@ const (
 func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
