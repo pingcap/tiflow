@@ -86,6 +86,7 @@ jobs:
       - name: Export KUBECONFIG environment variable
         run: |
           echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
+          kubectl cluster-info
         shell: bash
 
       - name: Print cluster information
@@ -97,11 +98,34 @@ jobs:
           kubectl get sc
           kubectl version
 
-      # Disable AppArmor for MySQL, see https://github.com/moby/moby/issues/7512#issuecomment-61787845
-      - name: Disable AppArmor for MySQL
+      - name: install tidb-operator
         run: |
-          sudo ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/
-          sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
+          echo "install helm 3"
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh
+
+          echo "install tidb-operator CRDs"
+          kubectl apply -f https://raw.githubusercontent.com/pingcap/tidb-operator/v1.1.12/manifests/crd.yaml
+
+          echo "install tidb-operator into namespace playground"
+          helm repo add pingcap https://charts.pingcap.org/
+          kubectl create namespace playground
+          helm install --namespace playground tidb-operator pingcap/tidb-operator --version v1.1.12
+
+          kubectl get pods --namespace playground -l app.kubernetes.io/instance=tidb-operator
+
+      - name: Deploy upstream TiDB Cluster
+        run: |
+          kubectl appy -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
+
+      - name: Deploy downstream TiDB Cluster
+        run: |
+          kubectl appy -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
       - name: Build CDC binary
         run: make build
@@ -111,13 +135,6 @@ jobs:
           cp -r $GITHUB_WORKSPACE/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
           docker build -f $GITHUB_WORKSPACE/chaos/manifests/Dockerfile -t cdc:chaos $GITHUB_WORKSPACE/bin
           docker image list
-
-      # Set up upstream instances
-      - name: Set up sources
-        run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
 
       - name: Wait for sources ready # kubectl wait --all not working
         run: |
