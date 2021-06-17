@@ -62,6 +62,7 @@ func CheckClusterVersion(
 		}
 		log.Warn("check TiKV version failed", zap.Error(err))
 	}
+
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
 		return err
@@ -70,35 +71,39 @@ func CheckClusterVersion(
 	pdVer := struct {
 		Version string `json:"version"`
 	}{}
+
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdHTTP), nil)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
+
 	resp, err := httpCli.Do(req)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
-	if resp.StatusCode < 200 && resp.StatusCode >= 300 {
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		arg := fmt.Sprintf("response status: %s", resp.Status)
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
 	}
+
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
+
 	err = json.Unmarshal(content, &pdVer)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
-	err = resp.Body.Close()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
-	}
+
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
+
 	ord := ver.Compare(*minPDVersion)
 	if ord < 0 {
 		arg := fmt.Sprintf("PD %s is not supported, require minimal version %s",

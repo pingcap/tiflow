@@ -14,12 +14,12 @@
 package pipeline
 
 import (
-	stdContext "context"
+	"context"
 	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -36,11 +36,29 @@ type mockSink struct {
 	}
 }
 
-func (s *mockSink) Initialize(ctx stdContext.Context, tableInfo []*model.SimpleTableInfo) error {
+// mockFlowController is created because a real tableFlowController cannot be used
+// we are testing sinkNode by itself.
+type mockFlowController struct{}
+
+func (c *mockFlowController) Consume(commitTs uint64, size uint64, blockCallBack func() error) error {
 	return nil
 }
 
-func (s *mockSink) EmitRowChangedEvents(ctx stdContext.Context, rows ...*model.RowChangedEvent) error {
+func (c *mockFlowController) Release(resolvedTs uint64) {
+}
+
+func (c *mockFlowController) Abort() {
+}
+
+func (c *mockFlowController) GetConsumption() uint64 {
+	return 0
+}
+
+func (s *mockSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
+	return nil
+}
+
+func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		s.received = append(s.received, struct {
 			resolvedTs model.Ts
@@ -50,11 +68,11 @@ func (s *mockSink) EmitRowChangedEvents(ctx stdContext.Context, rows ...*model.R
 	return nil
 }
 
-func (s *mockSink) EmitDDLEvent(ctx stdContext.Context, ddl *model.DDLEvent) error {
+func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	panic("unreachable")
 }
 
-func (s *mockSink) FlushRowChangedEvents(ctx stdContext.Context, resolvedTs uint64) (uint64, error) {
+func (s *mockSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	s.received = append(s.received, struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
@@ -62,7 +80,7 @@ func (s *mockSink) FlushRowChangedEvents(ctx stdContext.Context, resolvedTs uint
 	return resolvedTs, nil
 }
 
-func (s *mockSink) EmitCheckpointTs(ctx stdContext.Context, ts uint64) error {
+func (s *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	panic("unreachable")
 }
 
@@ -87,10 +105,10 @@ var _ = check.Suite(&outputSuite{})
 
 func (s *outputSuite) TestStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 
 	// test stop at targetTs
-	node := newSinkNode(&mockSink{}, 0, 10)
+	node := newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -116,7 +134,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(10))
 
 	// test the stop at ts command
-	node = newSinkNode(&mockSink{}, 0, 10)
+	node = newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -138,7 +156,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(6))
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
-	node = newSinkNode(&mockSink{}, 0, 10)
+	node = newSinkNode(&mockSink{}, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 
@@ -162,9 +180,9 @@ func (s *outputSuite) TestStatus(c *check.C) {
 
 func (s *outputSuite) TestManyTs(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := context.NewContext(stdContext.Background(), &context.Vars{})
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	sink := &mockSink{}
-	node := newSinkNode(sink, 0, 10)
+	node := newSinkNode(sink, 0, 10, &mockFlowController{})
 	c.Assert(node.Init(pipeline.MockNodeContext4Test(ctx, nil, nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusInitializing)
 

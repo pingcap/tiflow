@@ -94,11 +94,12 @@ func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.V
 	defer entry.mu.Unlock()
 
 	if time.Now().After(entry.lastUpdated.Add(storageVersionCacheUpdateInterval)) {
-		var ver tidbkv.Version
-		ver, err = s.CurrentVersion(oracle.GlobalTxnScope)
+		var ts uint64
+		ts, err = s.CurrentTimestamp(oracle.GlobalTxnScope)
 		if err != nil {
 			return
 		}
+		ver := kv.NewVersion(ts)
 		entry.ts = ver.Ver
 		entry.lastUpdated = time.Now()
 	}

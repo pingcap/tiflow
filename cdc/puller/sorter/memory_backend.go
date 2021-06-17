@@ -90,7 +90,9 @@ func (r *memoryBackEndReader) resetAndClose() error {
 		atomic.StoreInt32(&r.backEnd.borrowed, 0)
 	})
 
-	atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
+	if pool != nil {
+		atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
+	}
 	r.backEnd.estimatedSize = 0
 
 	return nil
@@ -134,7 +136,9 @@ func (w *memoryBackEndWriter) flushAndClose() error {
 	})
 
 	w.backEnd.estimatedSize = w.bytesWritten
-	atomic.AddInt64(&pool.memoryUseEstimate, w.bytesWritten)
+	if pool != nil {
+		atomic.AddInt64(&pool.memoryUseEstimate, w.bytesWritten)
+	}
 
 	return nil
 }

@@ -78,7 +78,7 @@ type oldProcessor struct {
 	globalResolvedTs         uint64
 	localResolvedTs          uint64
 	checkpointTs             uint64
-	globalcheckpointTs       uint64
+	globalCheckpointTs       uint64
 	appliedLocalCheckpointTs uint64
 	flushCheckpointInterval  time.Duration
 
@@ -234,7 +234,7 @@ func newProcessor(
 	}
 
 	if err == nil {
-		p.globalcheckpointTs = info.CheckpointTs
+		p.globalCheckpointTs = info.CheckpointTs
 	}
 
 	for tableID, replicaInfo := range p.status.Tables {
@@ -672,7 +672,7 @@ func (p *oldProcessor) globalStatusWorker(ctx context.Context) error {
 	)
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
-		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
+		atomic.StoreUint64(&p.globalCheckpointTs, changefeedStatus.CheckpointTs)
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return
@@ -779,15 +779,15 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		return
 	}
 
-	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+	globalCheckpointTs := atomic.LoadUint64(&p.globalCheckpointTs)
 
-	if replicaInfo.StartTs < globalcheckpointTs {
-		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+	if replicaInfo.StartTs < globalCheckpointTs {
+		// use Warn instead of Panic in case that p.globalCheckpointTs has not been initialized.
 		// The cdc_state_checker will catch a real inconsistency in integration tests.
 		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("checkpoint", globalCheckpointTs),
 			zap.Uint64("startTs", replicaInfo.StartTs))
 	}
 
@@ -832,7 +832,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
-		case model.SortInFile, model.SortUnified:
+		case model.SortInFile:
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				if os.IsNotExist(errors.Cause(err)) {
@@ -847,11 +847,17 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 				}
 			}
 
-			if p.changefeed.Engine == model.SortInFile {
-				sorter = puller.NewFileSorter(p.changefeed.SortDir)
-			} else {
-				// Unified Sorter
-				sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
+			sorter = puller.NewFileSorter(p.changefeed.SortDir)
+		case model.SortUnified:
+			err := psorter.UnifiedSorterCheckDir(p.changefeed.SortDir)
+			if err != nil {
+				p.sendError(errors.Trace(err))
+				return nil
+			}
+			sorter, err = psorter.NewUnifiedSorter(p.changefeed.SortDir, p.changefeedID, tableName, tableID, util.CaptureAddrFromCtx(ctx))
+			if err != nil {
+				p.sendError(errors.Trace(err))
+				return nil
 			}
 		default:
 			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
@@ -913,6 +919,8 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
+const maxLagWithCheckpointTs = (30 * 1000) << 18 // 30s
+
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
 func (p *oldProcessor) sorterConsume(
@@ -925,7 +933,7 @@ func (p *oldProcessor) sorterConsume(
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 ) {
-	var lastResolvedTs uint64
+	var lastResolvedTs, lastCheckPointTs uint64
 	opDone := false
 	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
@@ -1005,7 +1013,7 @@ func (p *oldProcessor) sorterConsume(
 		return nil
 	}
 
-	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(1 * time.Second)
+	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(500 * time.Millisecond)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- errors.Trace(err)
@@ -1014,6 +1022,40 @@ func (p *oldProcessor) sorterConsume(
 	}
 	defer globalResolvedTsReceiver.Stop()
 
+	sendResolvedTs2Sink := func() error {
+		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+		var minTs uint64
+		if localResolvedTs < globalResolvedTs {
+			minTs = localResolvedTs
+			log.Warn("the local resolved ts is less than the global resolved ts",
+				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		} else {
+			minTs = globalResolvedTs
+		}
+		if minTs == 0 {
+			return nil
+		}
+
+		checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
+		if err != nil {
+			if errors.Cause(err) != context.Canceled {
+				p.sendError(errors.Trace(err))
+			}
+			return err
+		}
+		lastCheckPointTs = checkpointTs
+
+		if checkpointTs < replicaInfo.StartTs {
+			checkpointTs = replicaInfo.StartTs
+		}
+
+		if checkpointTs != 0 {
+			atomic.StoreUint64(pCheckpointTs, checkpointTs)
+			p.localCheckpointTsNotifier.Notify()
+		}
+		return nil
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -1024,6 +1066,28 @@ func (p *oldProcessor) sorterConsume(
 		case pEvent := <-sorter.Output():
 			if pEvent == nil {
 				continue
+			}
+
+			for lastResolvedTs > maxLagWithCheckpointTs+lastCheckPointTs {
+				log.Debug("the lag between local checkpoint Ts and local resolved Ts is too lang",
+					zap.Uint64("resolvedTs", lastResolvedTs), zap.Uint64("lastCheckPointTs", lastCheckPointTs),
+					zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
+				select {
+				case <-ctx.Done():
+					if ctx.Err() != context.Canceled {
+						p.sendError(errors.Trace(ctx.Err()))
+					}
+					return
+				case <-globalResolvedTsReceiver.C:
+					if err := sendResolvedTs2Sink(); err != nil {
+						// error is already sent to processor, so we can just ignore it
+						return
+					}
+				case <-checkDoneTicker.C:
+					if !opDone {
+						checkDone()
+					}
+				}
 			}
 
 			pEvent.SetUpFinishedChan()
@@ -1077,35 +1141,9 @@ func (p *oldProcessor) sorterConsume(
 				return
 			}
 		case <-globalResolvedTsReceiver.C:
-			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-			var minTs uint64
-			if localResolvedTs < globalResolvedTs {
-				minTs = localResolvedTs
-				log.Warn("the local resolved ts is less than the global resolved ts",
-					zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
-			} else {
-				minTs = globalResolvedTs
-			}
-			if minTs == 0 {
-				continue
-			}
-
-			checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
-			if err != nil {
-				if errors.Cause(err) != context.Canceled {
-					p.errCh <- errors.Trace(err)
-				}
+			if err := sendResolvedTs2Sink(); err != nil {
+				// error is already sent to processor, so we can just ignore it
 				return
-			}
-
-			if checkpointTs < replicaInfo.StartTs {
-				checkpointTs = replicaInfo.StartTs
-			}
-
-			if checkpointTs != 0 {
-				atomic.StoreUint64(pCheckpointTs, checkpointTs)
-				p.localCheckpointTsNotifier.Notify()
 			}
 		case <-checkDoneTicker.C:
 			if !opDone {

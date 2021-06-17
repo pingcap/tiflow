@@ -29,8 +29,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
-	"github.com/pingcap/tidb/store/mockstore/mocktikv"
+	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
@@ -139,7 +140,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}()
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
@@ -250,7 +251,7 @@ func prepareBench(b *testing.B, regionNum int) (
 		server1.Stop()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
@@ -389,12 +390,34 @@ func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
+func benchmarkResolvedTsClientV2(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(ctx) //nolint:errcheck
+	}()
+	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
+}
+
 func BenchmarkResolvedTsClientV1(b *testing.B) {
 	benchmarkSingleWorkerResolvedTs(b, false /* clientV1 */)
 }
 
 func BenchmarkResolvedTsClientV2(b *testing.B) {
-	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
+	benchmarkResolvedTsClientV2(b)
+}
+
+func BenchmarkResolvedTsClientV2WorkerPool(b *testing.B) {
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 10000
+	regionWorkerLowWatermark = 2000
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	benchmarkResolvedTsClientV2(b)
 }
 
 func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
@@ -489,10 +512,32 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
+func benchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(ctx) //nolint:errcheck
+	}()
+	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
+}
+
 func BenchmarkMultiStoreResolvedTsClientV1(b *testing.B) {
 	benchmarkMultipleStoreResolvedTs(b, false /* clientV1 */)
 }
 
 func BenchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
-	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
+	benchmarkMultiStoreResolvedTsClientV2(b)
+}
+
+func BenchmarkMultiStoreResolvedTsClientV2WorkerPool(b *testing.B) {
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 1000
+	regionWorkerLowWatermark = 200
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	benchmarkMultiStoreResolvedTsClientV2(b)
 }

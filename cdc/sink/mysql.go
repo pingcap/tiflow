@@ -94,6 +94,7 @@ type mysqlSink struct {
 	execWaitNotifier *notify.Notifier
 	resolvedNotifier *notify.Notifier
 	errCh            chan error
+	flushSyncWg      sync.WaitGroup
 
 	statistics *Statistics
 
@@ -133,6 +134,11 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 }
 
 func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
+	defer func() {
+		for _, worker := range s.workers {
+			worker.closedCh <- struct{}{}
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -636,20 +642,21 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 				select {
 				case s.errCh <- err:
 				default:
+					log.Info("mysql sink receives redundant error", zap.Error(err))
 				}
 			}
+			worker.cleanup()
 		}()
 	}
 	return nil
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
+	s.broadcastFinishTxn(ctx)
 	s.execWaitNotifier.Notify()
 	done := make(chan struct{})
 	go func() {
-		for _, w := range s.workers {
-			w.waitAllTxnsExecuted()
-		}
+		s.flushSyncWg.Wait()
 		close(done)
 	}()
 	// This is a hack code to avoid io wait in some routine blocks others to exit.
@@ -659,6 +666,15 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 	case <-done:
+	}
+}
+
+func (s *mysqlSink) broadcastFinishTxn(ctx context.Context) {
+	// Note all data txn is sent via channel, the control txn must come after all
+	// data txns in each worker. So after worker receives the control txn, it can
+	// flush txns immediately and call wait group done once.
+	for _, worker := range s.workers {
+		worker.appendFinishTxn(&s.flushSyncWg)
 	}
 }
 
@@ -696,13 +712,13 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 
 type mysqlSinkWorker struct {
 	txnCh            chan *model.SingleTableTxn
-	txnWg            sync.WaitGroup
 	maxTxnRow        int
 	bucket           int
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
 	checkpointTs     uint64
+	closedCh         chan struct{}
 }
 
 func newMySQLSinkWorker(
@@ -719,22 +735,26 @@ func newMySQLSinkWorker(
 		metricBucketSize: metricBucketSize,
 		execDMLs:         execDMLs,
 		receiver:         receiver,
+		closedCh:         make(chan struct{}, 1),
 	}
-}
-
-func (w *mysqlSinkWorker) waitAllTxnsExecuted() {
-	w.txnWg.Wait()
 }
 
 func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
 	if txn == nil {
 		return
 	}
-	w.txnWg.Add(1)
 	select {
 	case <-ctx.Done():
-		w.txnWg.Done()
 	case w.txnCh <- txn:
+	}
+}
+
+func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
+	// since worker will always fetch txns from txnCh, we don't need to worry the
+	// txnCh full and send is blocked.
+	wg.Add(1)
+	w.txnCh <- &model.SingleTableTxn{
+		FinishWg: wg,
 	}
 }
 
@@ -746,6 +766,20 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		lastCommitTs uint64
 	)
 
+	// mark FinishWg before worker exits, all data txns can be omitted.
+	defer func() {
+		for {
+			select {
+			case txn := <-w.txnCh:
+				if txn.FinishWg != nil {
+					txn.FinishWg.Done()
+				}
+			default:
+				return
+			}
+		}
+	}()
+
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
@@ -753,7 +787,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			buf = buf[:stackSize]
 			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
 			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
-			w.txnWg.Add(-1 * txnNum)
 		}
 	}()
 
@@ -765,14 +798,12 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		copy(rows, toExecRows)
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
-			w.txnWg.Add(-1 * txnNum)
 			txnNum = 0
 			return err
 		}
 		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
-		w.txnWg.Add(-1 * txnNum)
 		txnNum = 0
 		return nil
 	}
@@ -780,13 +811,21 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(flushRows())
+			return errors.Trace(ctx.Err())
 		case txn := <-w.txnCh:
 			if txn == nil {
 				return errors.Trace(flushRows())
 			}
+			if txn.FinishWg != nil {
+				if err := flushRows(); err != nil {
+					return errors.Trace(err)
+				}
+				txn.FinishWg.Done()
+				continue
+			}
 			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
+					txnNum++
 					return errors.Trace(err)
 				}
 			}
@@ -798,6 +837,25 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			if err := flushRows(); err != nil {
 				return errors.Trace(err)
 			}
+		}
+	}
+}
+
+// cleanup waits for notification from closedCh and consumes all txns from txnCh.
+// The exit sequence is
+// 1. producer(sink.flushRowChangedEvents goroutine) of txnCh exits
+// 2. goroutine in 1 sends notification to closedCh of each sink worker
+// 3. each sink worker receives the notification from closedCh and mark FinishWg as Done
+func (w *mysqlSinkWorker) cleanup() {
+	<-w.closedCh
+	for {
+		select {
+		case txn := <-w.txnCh:
+			if txn.FinishWg != nil {
+				txn.FinishWg.Done()
+			}
+		default:
+			return
 		}
 	}
 }
@@ -984,13 +1042,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, defaultDMLMaxRetryTime, bucket); err != nil {
-		ts := make([]uint64, 0, len(rows))
-		for _, row := range rows {
-			if len(ts) == 0 || ts[len(ts)-1] != row.CommitTs {
-				ts = append(ts, row.CommitTs)
-			}
-		}
-		log.Error("execute DMLs failed", zap.String("err", err.Error()), zap.Uint64s("ts", ts))
+		log.Error("execute DMLs failed", zap.String("err", err.Error()))
 		return errors.Trace(err)
 	}
 	return nil
@@ -1309,7 +1361,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1317,7 +1369,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1325,7 +1377,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1346,7 +1398,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 		log.Info("sync table: get tidb_current_ts err")
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1354,7 +1406,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
