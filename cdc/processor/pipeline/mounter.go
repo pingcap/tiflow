@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -29,8 +31,8 @@ import (
 )
 
 const (
-	waitEventMountedBatchSize = 32 * 1024
-	maxNotificationsPerSecond = 10.0
+	waitEventMountedBatchSize = 128 * 1024
+	maxNotificationsPerSecond = 2.0
 )
 
 // mounterNode is now used to buffer unmounted events.
@@ -91,6 +93,7 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 						// handles PolymorphicEvents
 						event := msg.PolymorphicEvent
 						if event.RawKV.OpType != model.OpTypeResolved {
+							failpoint.Inject("mounterNodeWaitPreapre", func() {})
 							// only RowChangedEvents need mounting
 							err := event.WaitPrepare(stdCtx)
 							if err != nil {
