@@ -161,9 +161,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/ticdc/pull/2038, kv client
-			// could still miss region change notification, which lead to resolved
-			// ts update missing, however resolved ts fallback here can be ignored
-			// here.
+			// could still miss region change notification, which leads to resolved
+			// ts update missing in puller, however resolved ts fallback here can
+			// be ignored since no late data is received and the guarantee of
+			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Warn("The CRTs is fallen back in pulelr",
 					zap.Reflect("row", raw),
