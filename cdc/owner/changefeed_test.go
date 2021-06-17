@@ -266,7 +266,7 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
 	mockAsyncSink := cf.sink.(*mockAsyncSink)
 	// add 5s to resolvedTs
-	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
+	mockDDLPuller.resolvedTs = oracle.ComposeTS(oracle.GetPhysical(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5*time.Second)), 0)
 	// tick 20 times
 	for i := 0; i <= 20; i++ {
 		cf.Tick(ctx, state, captures)
