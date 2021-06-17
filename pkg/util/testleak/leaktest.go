@@ -54,6 +54,9 @@ func interestingGoroutines() (gs []string) {
 		// TODO: remove these two lines after unified sorter is fixed
 		"github.com/pingcap/ticdc/cdc/puller/sorter.newBackEndPool",
 		"github.com/pingcap/ticdc/cdc/puller/sorter.(*heapSorter).flush",
+		// kv client region worker pool
+		"github.com/pingcap/ticdc/cdc/kv.RunWorkerPool",
+		"github.com/pingcap/ticdc/pkg/workerpool.(*defaultPoolImpl).Run",
 	}
 	shouldIgnore := func(stack string) bool {
 		if stack == "" {
