@@ -77,6 +77,9 @@ test: unit_test
 
 build: cdc
 
+bank:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
+
 build-failpoint:
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
@@ -222,6 +225,3 @@ failpoint-enable: check_failpoint_ctl
 
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
-
-chaos-case:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/chaos-case ./chaos/cases
