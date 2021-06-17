@@ -105,7 +105,9 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 // Receive receives the message from the previous node
 func (n *mounterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
+	n.mu.Lock()
 	n.queue.PushBack(msg)
+	n.mu.Unlock()
 
 	if n.rl.Allow() {
 		n.notifier.Notify()
