@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 var _ = check.Suite(&schemaSuite{})
@@ -35,7 +34,7 @@ func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	defer testleak.AfterTest(c)()
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := helper.Storage().CurrentVersion()
 	c.Assert(err, check.IsNil)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
@@ -82,7 +81,7 @@ func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
 	defer testleak.AfterTest(c)()
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := helper.Storage().CurrentVersion()
 	c.Assert(err, check.IsNil)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
@@ -102,7 +101,7 @@ func (s *schemaSuite) TestBuildDDLEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := helper.Storage().CurrentVersion()
 	c.Assert(err, check.IsNil)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
@@ -151,7 +150,7 @@ func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := helper.Storage().CurrentVersion()
 	c.Assert(err, check.IsNil)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)

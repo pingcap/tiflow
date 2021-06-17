@@ -62,7 +62,7 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
-		StartTs: oracle.GoTimeToTS(time.Now()),
+		StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 		Config:  config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
@@ -98,7 +98,7 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
-		StartTs: oracle.GoTimeToTS(time.Now()),
+		StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 		Config:  config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
@@ -145,7 +145,7 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
-		StartTs: oracle.GoTimeToTS(time.Now()),
+		StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
 		Config:  config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()

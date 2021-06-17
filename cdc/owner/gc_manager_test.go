@@ -161,7 +161,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	err := gcManager.CheckStaleCheckpointTs(ctx, 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.GoTimeToTS(time.Now()))
+	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
