@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	waitEventMountedBatchSize = 1024
-	maxNotificationsPerSecond = 20.0
+	waitEventMountedBatchSize = 32 * 1024
+	maxNotificationsPerSecond = 10.0
 )
 
 // mounterNode is now used to buffer unmounted events.
