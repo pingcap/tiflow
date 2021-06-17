@@ -11,8 +11,8 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - "/bank"
-            - "--upstream=root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/bank"
-            - "--downstream=root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/bank"
+            - "--upstream=root@tcp(upstream-tidb.playground.svc:4000)/bank"
+            - "--downstream=root@tcp(downstream-tidb.playground.svc:4000)/bank"
             - "--test-round=2000"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
