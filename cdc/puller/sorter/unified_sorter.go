@@ -38,6 +38,8 @@ type UnifiedSorter struct {
 	dir         string
 	pool        *backEndPool
 	metricsInfo *metricsInfo
+
+	closeCh chan struct{}
 }
 
 type metricsInfo struct {
@@ -113,6 +115,7 @@ func NewUnifiedSorter(
 			tableID:      tableID,
 			captureAddr:  captureAddr,
 		},
+		closeCh: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -133,6 +136,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	failpoint.Inject("sorterDebug", func() {
 		log.Info("sorterDebug: Running Unified Sorter in debug mode")
 	})
+
+	defer close(s.closeCh)
 
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
@@ -272,6 +277,7 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 	select {
 	case <-ctx.Done():
 		return
+	case <-s.closeCh:
 	case s.inputCh <- entry:
 	}
 }
