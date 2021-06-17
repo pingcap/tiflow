@@ -30,23 +30,28 @@ import (
 
 const (
 	waitEventMountedBatchSize = 1024
+	maxNotificationsPerSecond = 20.0
 )
 
+// mounterNode is now used to buffer unmounted events.
+// TODO rename this node, or refactor the mounter to make it synchronous.
 type mounterNode struct {
 	mu    sync.Mutex
-	queue deque.Deque
+	queue deque.Deque // we used Deque for better memory consumption and support for batching
 
 	wg     errgroup.Group
 	cancel context.CancelFunc
 
+	// notifies new events pushed to the queue
 	notifier notify.Notifier
-	rl       *rate.Limiter
+	// limits the rate at which notifications are sent
+	rl *rate.Limiter
 }
 
 func newMounterNode() pipeline.Node {
 	return &mounterNode{
 		queue: deque.NewDeque(),
-		rl:    rate.NewLimiter(20.0, 1),
+		rl:    rate.NewLimiter(maxNotificationsPerSecond, 1 /* burst */),
 	}
 }
 
@@ -66,6 +71,7 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 			case <-stdCtx.Done():
 				return nil
 			case <-receiver.C:
+				// handles writes to the queue
 				for {
 					n.mu.Lock()
 					msgs := n.queue.PopManyFront(waitEventMountedBatchSize)
@@ -79,12 +85,13 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 						if msg.Tp != pipeline.MessageTypePolymorphicEvent {
 							// sends the control message directly to the next node
 							ctx.SendToNextNode(msg)
-							continue
+							continue // to handling the next message
 						}
 
 						// handles PolymorphicEvents
 						event := msg.PolymorphicEvent
 						if event.RawKV.OpType != model.OpTypeResolved {
+							// only RowChangedEvents need mounting
 							err := event.WaitPrepare(stdCtx)
 							if err != nil {
 								ctx.Throw(err)
@@ -110,6 +117,7 @@ func (n *mounterNode) Receive(ctx pipeline.NodeContext) error {
 	n.mu.Unlock()
 
 	if n.rl.Allow() {
+		// send notification under the rate limiter
 		n.notifier.Notify()
 	}
 	return nil
