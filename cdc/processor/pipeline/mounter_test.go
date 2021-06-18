@@ -57,6 +57,11 @@ func (n *checkNode) Receive(ctx pipeline.NodeContext) error {
 	if n.count%100 == 0 {
 		log.Info("message received", zap.Int("count", n.count))
 	}
+
+	if n.count == basicsTestMessageCount/2 {
+		log.Info("sleeping for 5 seconds to simulate blocking")
+		time.Sleep(time.Second * 5)
+	}
 	n.count++
 	return nil
 }
@@ -137,7 +142,7 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 		log.Info("finished sending")
 	}()
 
-	wg.Add(2)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for {
@@ -153,4 +158,5 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 
 	p.Wait()
 	cancel()
+	wg.Wait()
 }

@@ -38,7 +38,7 @@ const (
 // TODO rename this node, or refactor the mounter to make it synchronous.
 type mounterNode struct {
 	mu    sync.Mutex
-	queue deque.Deque // we used Deque for better memory consumption and support for batching
+	queue deque.Deque // we use Deque for better memory consumption and support for batching
 
 	wg     errgroup.Group
 	cancel context.CancelFunc
