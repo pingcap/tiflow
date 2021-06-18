@@ -193,6 +193,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	tablePipeline.pullerNode = newPullerNode(tableID, replicaInfo, tableName)
 	p.AppendNode(ctx, "puller", tablePipeline.pullerNode)
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
+	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
