@@ -194,7 +194,7 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 		// value type for these mysql types are string
 		return unsafeStringToBytes(value.(string))
 	case mysql.TypeEnum, mysql.TypeSet, mysql.TypeBit:
-		// value type for thest mysql types are uint64
+		// value type for these mysql types are uint64
 		return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(uint64))
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
 		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
@@ -289,7 +289,7 @@ func (e *MessageEncoder) encodeRowChangeEvents(events []rowChangedEvent) *Messag
 	return e
 }
 
-// NewResolvedEventEncoder creates a new encoder with given allocator and timestsamp
+// NewResolvedEventEncoder creates a new encoder with given allocator and timestamp
 func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncoder {
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ts),
@@ -302,7 +302,7 @@ func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncod
 	}).encodeBodySize()
 }
 
-// NewDDLEventEncoder creates a new encoder with given allocator and timestsamp
+// NewDDLEventEncoder creates a new encoder with given allocator and timestamp
 func NewDDLEventEncoder(allocator *SliceAllocator, ev *model.DDLEvent) *MessageEncoder {
 	ty := uint64(ev.Type)
 	query := ev.Query
