@@ -69,7 +69,6 @@ jobs:
             --write-kubeconfig-mode=644 \
             "${k3s_disable_command:---disable}" metrics-server \
             "${k3s_disable_command:---disable}" traefik \
-            --flannel-backend=none \
             --docker
         shell: bash
 
@@ -138,7 +137,8 @@ jobs:
 
       - name: Create CDC changefeed
         run: |
-          how to do it?
+          kubectl exec -it cdc-0 -n playground -- /bin/bash
+          ./cdc cli changefeed create --pd=http://upstream-pd:2379 --sink-uri="mysql://root@downstream-tidb.playground.svc:4000/"
 
       - name: Deploy bank workload into playground
         run: |

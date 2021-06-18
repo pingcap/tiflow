@@ -49,18 +49,11 @@ spec:
             - containerPort: 8300
               name: cdc
           command:
-            - "/cdc server"
+            - "/cdc"
+            - "server"
             - "--pd=http://upstream-pd.playground.svc:2379"
             - "--log-file=/log/$(MY_POD_NAME).log"
             - "--data-dir=/data"
-#          readinessProbe:
-#            httpGet:
-#              port: 8300
-#              path: /status
-#              scheme: HTTP
-#            initialDelaySeconds: 5
-#            periodSeconds: 5
-#            failureThreshold: 5
   volumeClaimTemplates:
     - metadata:
         name: cdc

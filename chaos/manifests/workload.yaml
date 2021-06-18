@@ -7,12 +7,12 @@ spec:
     spec:
       containers:
         - name: bank-workload
-          image: bank-workload:latest # build this image in GitHub action workflow
+          image: bank:chaos # build this image in GitHub action workflow
           imagePullPolicy: IfNotPresent
           command:
             - "/bank"
-            - "--upstream=root@tcp(upstream-tidb.playground.svc:4000)/bank"
-            - "--downstream=root@tcp(downstream-tidb.playground.svc:4000)/bank"
-            - "--test-round=2000"
+            - "--upstream=root@tcp(upstream-tidb.playground.svc:4000)/"
+            - "--downstream=root@tcp(downstream-tidb.playground.svc:4000)/"
+            - "--test-round=20000"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
