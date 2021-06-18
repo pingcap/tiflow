@@ -46,6 +46,10 @@ spec:
         max-open-files: 4096
       raftdb:
         max-open-files: 4096
+    storageVolumes:
+      - name: log
+        storageSize: "1Gi"
+        mountPath: "/var/log/pdlog"
   tidb:
     baseImage: pingcap/tidb
     version: latest

@@ -46,6 +46,10 @@ spec:
         max-open-files: 4096
       raftdb:
         max-open-files: 4096
+    storageVolumes:
+      - name: log
+        storageSize: "1Gi"
+        mountPath: "/var/log/kvlog"
   tidb:
     baseImage: pingcap/tidb
     version: latest
@@ -61,15 +65,3 @@ spec:
       - name: log
         storageSize: "1Gi"
         mountPath: "/var/log/tidblog"
-  # ticdc:
-  #   baseImage: cdc
-  #   version: latest
-  #   replicas: 1
-  #   config:
-  #     gcTTL: 86400
-  #     logLevel: info
-  #     logFile: /var/log/ticdclog/cdc.log
-  #   storageVolumes:
-  #     - name: log
-  #       storageSize: "1Gi"
-  #       mountPath: "/var/log/cdclog"
