@@ -113,7 +113,10 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 
 	dataDir := "tmp/cdc_data"
 	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
-	err := os.MkdirAll(sortDir, 0o311)
+	err := os.MkdirAll(sortDir, 0o755)
+	c.Assert(err, check.IsNil)
+
+	err = os.Chmod(sortDir, 0o311) // no permission to `ls`
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetGlobalServerConfig()
