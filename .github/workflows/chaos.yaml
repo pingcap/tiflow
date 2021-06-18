@@ -107,12 +107,13 @@ jobs:
 
           echo "install tidb-operator CRDs"
           kubectl apply -f https://raw.githubusercontent.com/pingcap/tidb-operator/v1.1.12/manifests/crd.yaml
+          kubectl get crd
 
           echo "install tidb-operator into namespace playground"
           helm repo add pingcap https://charts.pingcap.org/
+
           kubectl create namespace playground
           helm install --namespace playground tidb-operator pingcap/tidb-operator --version v1.1.12
-
           kubectl get pods --namespace playground -l app.kubernetes.io/instance=tidb-operator
 
       - name: Deploy upstream TiDB Cluster into playground
@@ -129,15 +130,19 @@ jobs:
 
       - name: Deploy CDC into playground
         run: |
-          docker build -t cdc $GITHUB_WORKSPACE
+          docker build -t cdc:chaos $GITHUB_WORKSPACE
           docker image list
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
           kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
           kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
 
+      - name: Create CDC changefeed
+        run: |
+          how to do it?
+
       - name: Deploy bank workload into playground
         run: |
-          docker build -f $GITHUB_WORKSPACE/chaos/Dockerfile-chaos -t bank-workload $GITHUB_WORKSPACE
+          docker build -f $GITHUB_WORKSPACE/chaos/Dockerfile-chaos -t bank:chaos $GITHUB_WORKSPACE
           docker image list
 
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/workload.yaml -n playground

@@ -31,8 +31,8 @@ spec:
     spec:
       containers:
         - name: cdc
-          image: cdc:latest
-          imagePullPolicy: Never # build this image in GitHub action workflow, make sure use local image
+          image: cdc:chaos
+          imagePullPolicy: IfNotPresent # build this image in GitHub action workflow, make sure use local image
           volumeMounts:
             - mountPath: /data
               name: cdc
@@ -50,17 +50,17 @@ spec:
               name: cdc
           command:
             - "/cdc server"
-            - "--pd=http://upstream-pd:2379"
+            - "--pd=http://upstream-pd.playground.svc:2379"
             - "--log-file=/log/$(MY_POD_NAME).log"
             - "--data-dir=/data"
-          readinessProbe:
-            httpGet:
-              port: 8300
-              path: /status
-              scheme: HTTP
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            failureThreshold: 5
+#          readinessProbe:
+#            httpGet:
+#              port: 8300
+#              path: /status
+#              scheme: HTTP
+#            initialDelaySeconds: 5
+#            periodSeconds: 5
+#            failureThreshold: 5
   volumeClaimTemplates:
     - metadata:
         name: cdc
@@ -69,4 +69,4 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 2Gi
