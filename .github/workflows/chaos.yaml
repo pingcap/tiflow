@@ -115,26 +115,34 @@ jobs:
 
           kubectl get pods --namespace playground -l app.kubernetes.io/instance=tidb-operator
 
-      - name: Deploy upstream TiDB Cluster
+      - name: Deploy upstream TiDB Cluster into playground
         run: |
           kubectl appy -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
 
-      - name: Deploy downstream TiDB Cluster
+      - name: Deploy downstream TiDB Cluster into playground
         run: |
           kubectl appy -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
           kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
           kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
-      - name: Build CDC binary
-        run: make build
-
-      - name: Build CDC docker image
+      - name: Deploy CDC into playground
         run: |
-          cp -r $GITHUB_WORKSPACE/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
-          docker build -f $GITHUB_WORKSPACE/chaos/manifests/Dockerfile -t cdc:chaos $GITHUB_WORKSPACE/bin
+          docker build -t cdc $GITHUB_WORKSPACE
           docker image list
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
+
+      - name: Deploy bank workload into playground
+        run: |
+          docker build -f $GITHUB_WORKSPACE/chaos/Dockerfile-chaos -t bank-workload $GITHUB_WORKSPACE
+          docker image list
+
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/workload.yaml -n playground
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/workload.yaml -n playground
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/workload.yaml -n playground
 
       - name: Wait for sources ready # kubectl wait --all not working
         run: |

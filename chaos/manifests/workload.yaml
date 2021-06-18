@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: bank-workload
-          image: bank-workload # build this image in GitHub action workflow
+          image: bank-workload:latest # build this image in GitHub action workflow
           imagePullPolicy: IfNotPresent
           command:
             - "/bank"
