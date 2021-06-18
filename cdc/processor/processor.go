@@ -733,6 +733,12 @@ func (p *processor) Close() error {
 	log.Info("stop processor", zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeed.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
+<<<<<<< HEAD
+=======
+	}
+	for _, tbl := range p.tables {
+		tbl.Wait()
+>>>>>>> 75fc785a (processor: cancel all tables all at once (#2089))
 	}
 	p.cancel()
 	p.wg.Wait()
