@@ -49,9 +49,10 @@ spec:
             - containerPort: 8300
               name: cdc
           command:
-            - "/cdc"
-#            - "--advertise-addr=$(MY_POD_NAME).cdc.$(MY_POD_NAMESPACE):8300"
-#            - "--join=dm-master-0.dm-master.$(MY_POD_NAMESPACE):8261,dm-master-1.dm-master.$(MY_POD_NAMESPACE):8261,dm-master-2.dm-master.$(MY_POD_NAMESPACE):8261"
+            - "/cdc server"
+            - "--pd=http://upstream-pd:2379"
+            - "--log-file=/log/$(MY_POD_NAME).log"
+            - "--data-dir=/data"
           readinessProbe:
             httpGet:
               port: 8300
@@ -69,54 +70,3 @@ spec:
         resources:
           requests:
             storage: 1Gi
-
-
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: cdc
-#   labels:
-#     app: cdc
-# spec:
-#   ports:
-#     - name: cdc
-#       port: 8300
-#       targetPort: 8300
-#   selector:
-#     app: cdc
-#   clusterIP: None
-# ---
-# apiVersion: apps/v1
-# kind: StatefulSet
-# metadata:
-#   name: cdc
-#   labels:
-#     app: cdc
-# spec:
-#   selector:
-#     matchLabels:
-#       app: cdc
-#   serviceName: cdc
-#   replicas: 1
-#   template:
-#     metadata:
-#       labels:
-#         app: cdc
-#     spec:
-#       containers:
-#       - name: cdc
-#         image: cdc:latest
-#         ports:
-#         - containerPort: 8300
-#           name: cdc
-#         volumeMounts:
-#         - name: data-dir
-#           mountPath: /tmp/cdc_data
-#   volumeClaimTemplates:
-#   - metadata:
-#       name: data-dir
-#     spec:
-#       accessModes: [ "ReadWriteOnce" ]
-#       resources:
-#         requests:
-#           storage: 10Gi
