@@ -11,10 +11,10 @@ spec:
   mode: one
   selector:
     pods:
-      default: # default namespace
+      playground:
         - cdc-0
-        - cdc-1
-        - cdc-2
+        - upstream-tikv-0
+        - upstream-pd-0
   loss:
     loss: "25"
     correlation: "25"
@@ -36,10 +36,10 @@ spec:
   mode: one
   selector:
     pods:
-      default: # default namespace
+      playground:
         - cdc-0
-        - cdc-1
-        - cdc-2
+        - upstream-tikv-0
+        - upstream-pd-0
   delay:
     latency: "90ms"
     correlation: "25"
@@ -61,10 +61,10 @@ spec:
   mode: one
   selector:
     pods:
-      default: # default namespace
+      playground:
         - cdc-0
-        - cdc-1
-        - cdc-2
+        - upstream-tikv-0
+        - upstream-pd-0
   duplicate:
     duplicate: "40"
     correlation: "25"
@@ -85,10 +85,10 @@ spec:
   mode: one
   selector:
     pods:
-      default: # default namespace
+      playground:
         - cdc-0
-        - cdc-1
-        - cdc-2
+        - upstream-tikv-0
+        - upstream-pd-0
   corrupt:
     corrupt: "40"
     correlation: "25"

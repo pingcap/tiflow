@@ -10,9 +10,9 @@ spec:
   duration: "30s"
   selector:
     pods:
-      default: # default namespace
+      playground:
         - cdc-0
-        - cdc-1
-        - cdc-2
+        - upstream-tikv-0
+        - upstream-pd-0
   scheduler:
     cron: "@every 2m"
