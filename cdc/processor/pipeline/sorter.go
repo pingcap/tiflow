@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
@@ -47,16 +48,22 @@ type sorterNode struct {
 	// for per-table flow control
 	flowController tableFlowController
 
+	mounter entry.Mounter
+
 	wg     errgroup.Group
 	cancel context.CancelFunc
 }
 
+<<<<<<< HEAD
 func newSorterNode(
 	sortEngine model.SortEngine,
 	sortDir string,
 	changeFeedID model.ChangeFeedID,
 	tableName string, tableID model.TableID,
 	flowController tableFlowController) pipeline.Node {
+=======
+func newSorterNode(tableName string, tableID model.TableID, flowController tableFlowController, mounter entry.Mounter) pipeline.Node {
+>>>>>>> 9eabc17a (table_pipeline: Fix blocking entire pipeline when DDL puller is lagging behind (#2078))
 	return &sorterNode{
 		sortEngine: sortEngine,
 		sortDir:    sortDir,
@@ -66,6 +73,7 @@ func newSorterNode(
 		tableName:    tableName,
 
 		flowController: flowController,
+		mounter:        mounter,
 	}
 }
 
@@ -180,6 +188,15 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						return nil
 					}
 					lastCRTs = commitTs
+
+					// DESIGN NOTE: We send the messages to the mounter in this separate goroutine to prevent
+					// blocking the whole pipeline.
+					msg.SetUpFinishedChan()
+					select {
+					case <-ctx.Done():
+						return nil
+					case n.mounter.Input() <- msg:
+					}
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
