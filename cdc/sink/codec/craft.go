@@ -23,11 +23,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
-const (
-	// CraftVersion1 represents the version of craft format
-	CraftVersion1 uint64 = 1
-)
-
 // CraftEventBatchEncoder encodes the events into the byte of a batch into craft binary format.
 type CraftEventBatchEncoder struct {
 	rowChangedBuffer *craft.RowChangedEventBuffer
@@ -131,6 +126,9 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 
 // NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
 func NewCraftEventBatchEncoder() EventBatchEncoder {
+	// 64 is a magic number that come up with these assumptions and manual benchmark.
+	// 1. Most table will not have more than 64 columns
+	// 2. It only worth allocating slices in batch for slices that's small enough
 	return NewCraftEventBatchEncoderWithAllocator(craft.NewSliceAllocator(64))
 }
 
@@ -183,18 +181,18 @@ func (b *CraftEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, 
 	if !hasNext || ty != model.MqMessageTypeRow {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
 	}
-	old, new, err := b.decoder.RowChangedEvent(b.index)
+	oldValue, newValue, err := b.decoder.RowChangedEvent(b.index)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	ev := &model.RowChangedEvent{}
-	if old != nil {
-		if ev.PreColumns, err = old.ToModel(); err != nil {
+	if oldValue != nil {
+		if ev.PreColumns, err = oldValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	if new != nil {
-		if ev.Columns, err = new.ToModel(); err != nil {
+	if newValue != nil {
+		if ev.Columns, err = newValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
