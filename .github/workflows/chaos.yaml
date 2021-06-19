@@ -122,17 +122,9 @@ jobs:
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
-      - name: Wait for Upstream / Downstream TiDB Cluster Ready
-        run: |
-          echo "wait for upstream TiDB Cluster Ready"
-          kubectl wait --for=condition=Ready pod/upstream-tidb-0 -n playground --timeout=300s || true
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/managed-by=tidb-operator -n playground --timeout=300s || true
 
-          kubectl get pods -n playground
-
-          echo "wait for downstream TiDB Cluster Ready"
-          kubectl wait --for=condition=Ready pod/upstream-tidb-0 -n playground --timeout=300s || true
-
-          kubectl get pods -n playground
+          kubectl get all -n playground
 
       - name: Init Upstream / Downstream TiDB Cluster
         run: |
@@ -145,11 +137,6 @@ jobs:
           docker build -t cdc:chaos $GITHUB_WORKSPACE
           docker image list
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/ticdc.yaml -n playground
-
-      - name: Create CDC changefeed
-        run: |
 
           echo "wait for TiCDC Ready"
           kubectl wait --for=condition=Ready pod/cdc-0 -n playground --timeout=300s || true
@@ -157,7 +144,8 @@ jobs:
           echo "show pvc"
           kubectl get pvc -n playground
 
-          echo "try to create changefeed"
+      - name: Create CDC changefeed
+        run: |
           kubectl exec -it cdc-0 -n playground -- ./cdc cli changefeed create --pd=http://upstream-pd:2379 --sink-uri="mysql://root@downstream-tidb.playground.svc:4000/"
 
       - name: Deploy bank workload into playground
