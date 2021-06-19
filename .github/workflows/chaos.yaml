@@ -122,6 +122,8 @@ jobs:
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
+          sleep 30
+
           kubectl wait --for=condition=Ready pod -l app.kubernetes.io/managed-by=tidb-operator -n playground --timeout=300s || true
 
           kubectl get all -n playground
