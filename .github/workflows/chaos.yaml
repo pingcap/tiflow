@@ -65,10 +65,12 @@ jobs:
         run: |
           curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.18.9+k3s1 sh -s - \
             --write-kubeconfig-mode=644 \
-            "${k3s_disable_command:---disable}" metrics-server \
+            "${k3s_disablecommand:---disable}" metrics-server \
             "${k3s_disable_command:---disable}" traefik \
             --docker
           kubectl version
+          ls -al /etc/rancher/
+          ls -al /etc/rancher/k3s
 
       # this may be failed sometimes, and I want to exit the workflow directly if failed,
       # but GitHub Actions doesnt' support early-exit yet, see https://github.com/actions/runner/issues/662.
@@ -78,11 +80,6 @@ jobs:
           kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
         env:
           KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
-      - name: Export KUBECONFIG environment variable
-        run: |
-          echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
-          kubectl cluster-info
 
       - name: Print cluster information
         run: |
