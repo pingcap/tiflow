@@ -94,7 +94,7 @@ jobs:
           kubectl get sc
           kubectl version
 
-      - name: install tidb-operator
+      - name: Install tidb-operator
         run: |
           echo "install helm 3"
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
@@ -110,23 +110,26 @@ jobs:
 
           kubectl create namespace playground
           helm install --namespace playground tidb-operator pingcap/tidb-operator --version v1.1.12
+
+      - name: Wait for tidb-operator Ready
+        run: |
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=tidb-operator -n playground --timeout=300s || true
+
           kubectl get pods --namespace playground -l app.kubernetes.io/instance=tidb-operator
 
-      - name: Deploy upstream TiDB Cluster into playground
+      - name: Deploy Upstream / Downstream TiDB Cluster into playground
         run: |
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
+      - name: Wait for Upstream / Downstream TiDB Cluster Ready
+        run: |
           echo "wait for upstream TiDB Cluster Ready"
           kubectl wait --for=condition=Ready pod/upstream-tidb-0 -n playground --timeout=300s || true
 
           kubectl get pods -n playground
 
-
-      - name: Deploy downstream TiDB Cluster into playground
-        run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
-
-          echo "wait for upstream TiDB Cluster Ready"
+          echo "wait for downstream TiDB Cluster Ready"
           kubectl wait --for=condition=Ready pod/upstream-tidb-0 -n playground --timeout=300s || true
 
           kubectl get pods -n playground
