@@ -114,13 +114,13 @@ jobs:
 
       - name: Deploy upstream TiDB Cluster into playground
         run: |
-          kubectl appy -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
 
       - name: Deploy downstream TiDB Cluster into playground
         run: |
-          kubectl appy -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
           kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
           kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
