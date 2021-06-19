@@ -1,4 +1,3 @@
----
 # network partition between cdc pod
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
@@ -15,9 +14,11 @@ spec:
   direction: both
   target:
     selector:
+      namespace:
+        - playground
       labelSelectors:
         "app": "cdc"
     mode: one
-  duration: "30s"
+  duration: '10s'
   scheduler:
-    cron: "2-59/3 * * * *" # At every 3rd minute from 2 through 59, (2, 5, 8, ...)
+    cron: '@every 40s'
