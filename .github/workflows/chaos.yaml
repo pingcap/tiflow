@@ -151,7 +151,7 @@ jobs:
 
       - name: Deploy bank workload into playground
         run: |
-          docker build -f $GITHUB_WORKSPACE/chaos/Dockerfile.chaos -t bank:chaos $GITHUB_WORKSPACE/tests/bank
+          docker build -f $GITHUB_WORKSPACE/chaos/Dockerfile.chaos -t bank:chaos $GITHUB_WORKSPACE
           docker image list
 
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/workload.yaml -n playground
