@@ -35,7 +35,7 @@ spec:
     # if storageClassName is not set, the default Storage Class of the Kubernetes cluster will be used
     # storageClassName: local-storage
     requests:
-      storage: "4Gi"
+      storage: "3Gi"
     config:
       storage:
         # In basic examples, we set this to avoid using too much storage.

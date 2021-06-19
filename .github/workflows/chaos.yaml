@@ -115,24 +115,25 @@ jobs:
       - name: Deploy upstream TiDB Cluster into playground
         run: |
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
+
+          echo "wait for upstream TiDB Cluster Ready"
+          kubectl wait --for=condition=Ready pod/upstream-tidb-0 -n playground --timeout=300s || true
+
+          kubectl get pods -n playground
+
 
       - name: Deploy downstream TiDB Cluster into playground
         run: |
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
-      - name: Wait for TiDB Clusters Ready
-        run: |
           echo "wait for upstream TiDB Cluster Ready"
           kubectl wait --for=condition=Ready pod/upstream-tidb-0 -n playground --timeout=300s || true
 
-          kubectl run -it --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h upstream-tidb -P4000 -e "CREATE DATABASE bank"
+          kubectl get pods -n playground
 
-          echo "wait for downstream TiDB Cluster Ready"
-          kubectl wait --for=condition=Ready pod/downstream-tidb-0 -n playground --timeout=300s || true
+      - name: Init Upstream / Downstream TiDB Cluster
+        run: |
+          kubectl run -it --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h upstream-tidb -P4000 -e "CREATE DATABASE bank"
 
           kubectl run -it --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h downstream-tidb -P4000 -e "CREATE DATABASE bank"
 
