@@ -166,6 +166,7 @@ jobs:
         uses: chaos-mesh/chaos-mesh-action@master
         env:
           CFG_BASE64: ${{ env.CFG_BASE64 }}
+          CHAOS_MESH_VERSION: v1.0.0
 
       - name: Wait for chaos test case complete
         run: |
