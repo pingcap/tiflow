@@ -68,7 +68,7 @@ jobs:
             "${k3s_disable_command:---disable}" metrics-server \
             "${k3s_disable_command:---disable}" traefik \
             --docker
-        shell: bash
+          kubectl version
 
       # this may be failed sometimes, and I want to exit the workflow directly if failed,
       # but GitHub Actions doesnt' support early-exit yet, see https://github.com/actions/runner/issues/662.
@@ -76,7 +76,6 @@ jobs:
       - name: Wait for coredns
         run: |
           kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
-        shell: bash
         env:
           KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
@@ -84,7 +83,6 @@ jobs:
         run: |
           echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
           kubectl cluster-info
-        shell: bash
 
       - name: Print cluster information
         run: |
