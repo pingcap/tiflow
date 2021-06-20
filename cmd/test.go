@@ -19,8 +19,8 @@ import (
 	"strings"
 
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 )
 

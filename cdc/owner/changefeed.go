@@ -27,8 +27,8 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 

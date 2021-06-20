@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type mockPullerSuite struct{}

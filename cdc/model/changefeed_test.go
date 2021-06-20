@@ -23,7 +23,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type configSuite struct{}

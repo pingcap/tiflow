@@ -43,9 +43,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/mockstore/mocktikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/mockstore/mocktikv"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
