@@ -103,8 +103,17 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	defer testleak.AfterTest(c)()
 
+<<<<<<< HEAD
 	dir := c.MkDir()
 	err := os.Chmod(dir, 0o311) // no permission to `ls`
+=======
+	dataDir := c.MkDir()
+	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
+	err := os.MkdirAll(sortDir, 0o755)
+	c.Assert(err, check.IsNil)
+
+	err = os.Chmod(sortDir, 0o311) // no permission to `ls`
+>>>>>>> 8d14960f (puller: try to fix bad permission for backend test . (#2090))
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetDefaultServerConfig()
