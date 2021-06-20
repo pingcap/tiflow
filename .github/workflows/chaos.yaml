@@ -130,7 +130,7 @@ jobs:
 
       - name: Init Upstream / Downstream TiDB Cluster
         run: |
-          kubectl run -i --image=mysql --restart=Never mysql-client -n playground -- mysql -h upstream-tidb -P4000 -e "CREATE DATABASE bank"
+          kubectl run -i --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h upstream-tidb -P4000 -e "CREATE DATABASE bank"
 
           kubectl run -i --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h downstream-tidb -P4000 -e "CREATE DATABASE bank"
 
