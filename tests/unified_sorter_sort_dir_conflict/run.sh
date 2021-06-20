@@ -40,7 +40,7 @@ function prepare() {
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
     # starts the first cdc server instance. It will lock the sort-dir first.
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix 1 --sort-dir /tmp/cdc_sort_1
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix 1
     capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
 
     TOPIC_NAME="ticdc-simple-test-$RANDOM"
@@ -60,7 +60,7 @@ function prepare() {
 
     sleep 10
     # starts the first second server instance. It should fail, and bring down the changefeed
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix 1 --sort-dir /tmp/cdc_sort_1
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix 2
 
     ensure $MAX_RETRIES check_changefeed_mark_error_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*ErrConflictingFileLocks.*"
     kill $capture_pid
