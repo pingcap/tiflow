@@ -13,6 +13,6 @@ spec:
             - "/bank"
             - "--upstream=root@tcp(upstream-tidb.playground.svc:4000)/bank"
             - "--downstream=root@tcp(downstream-tidb.playground.svc:4000)/bank"
-            - "--test-round=50000"
+            - "--test-round=80000"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
