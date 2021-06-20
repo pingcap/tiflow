@@ -130,9 +130,9 @@ jobs:
 
       - name: Init Upstream / Downstream TiDB Cluster
         run: |
-          kubectl run -it --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h upstream-tidb -P4000 -e "CREATE DATABASE bank"
+          kubectl run -i --image=mysql --restart=Never mysql-client -n playground -- mysql -h upstream-tidb -P4000 -e "CREATE DATABASE bank"
 
-          kubectl run -it --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h downstream-tidb -P4000 -e "CREATE DATABASE bank"
+          kubectl run -i --rm --image=mysql --restart=Never mysql-client -n playground -- mysql -h downstream-tidb -P4000 -e "CREATE DATABASE bank"
 
       - name: Deploy CDC into playground
         run: |
@@ -147,7 +147,7 @@ jobs:
 
       - name: Create CDC changefeed
         run: |
-          kubectl exec -it cdc-0 -n playground -- ./cdc cli changefeed create --pd=http://upstream-pd:2379 --sink-uri="mysql://root@downstream-tidb.playground.svc:4000/"
+          kubectl exec -i cdc-0 -n playground -- ./cdc cli changefeed create --pd=http://upstream-pd:2379 --sink-uri="mysql://root@downstream-tidb.playground.svc:4000/"
 
       - name: Deploy bank workload into playground
         run: |
