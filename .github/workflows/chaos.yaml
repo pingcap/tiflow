@@ -176,7 +176,7 @@ jobs:
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          sudo cp -r -L /var/log/containers/. ./logs
+          sudo cp -r -L /var/log/. ./logs
           sudo chown -R runner ./logs
 
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
