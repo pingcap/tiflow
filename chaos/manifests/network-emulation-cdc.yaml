@@ -1,5 +1,3 @@
----
-# A Network Loss action causes network packets to drop randomly
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
@@ -15,12 +13,13 @@ spec:
         - cdc-0
         - upstream-tikv-0
         - upstream-pd-0
+        - downstream-tidb-0
   loss:
     loss: "25"
     correlation: "25"
   duration: "30s"
   scheduler:
-    cron: "2-59/5 * * * *" # At every 5th minute from 2 through 59, (2, 7, 12, ...)
+    cron: "2-59/3 * * * *" # At every 3th minute from 2 through 59, (2, 5, 8, ...)
 
 
 # A Network Delay action causes delays in message sending
@@ -40,13 +39,14 @@ spec:
         - cdc-0
         - upstream-tikv-0
         - upstream-pd-0
+        - downstream-tidb-0
   delay:
     latency: "90ms"
     correlation: "25"
     jitter: "90ms"
   duration: "30s"
   scheduler:
-    cron: "3-59/5 * * * *" # At every 5th minute from 3 through 59, (3, 8, 13, ...)
+    cron: "3-59/3 * * * *" # At every 5th minute from 3 through 59, (3, 6, 9, ...)
 
 ---
 # A Network Duplicate action causes packet duplication
@@ -65,12 +65,13 @@ spec:
         - cdc-0
         - upstream-tikv-0
         - upstream-pd-0
+        - downstream-tidb-0
   duplicate:
     duplicate: "40"
     correlation: "25"
   duration: "30s"
   scheduler:
-    cron: "4-59/5 * * * *" # At every 5th minute from 4 through 59, (4, 9, 14, ...)
+    cron: "4-59/3 * * * *" # At every 5th minute from 4 through 59, (4, 7, 10, ...)
 
 ---
 # A Network Corrupt action causes packet corruption
@@ -89,9 +90,10 @@ spec:
         - cdc-0
         - upstream-tikv-0
         - upstream-pd-0
+        - downstream-tidb-0
   corrupt:
     corrupt: "40"
     correlation: "25"
   duration: "30s"
   scheduler:
-    cron: "5-59/5 * * * *" # At every 5th minute from 5 through 59, (5, 10, 15, ...)
+    cron: "5-59/3 * * * *" # At every 5th minute from 5 through 59, (5, 8, 11, ...)

@@ -1,4 +1,4 @@
-# network partition between cdc pod
+# network partition between cdc and upstream
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
@@ -17,8 +17,8 @@ spec:
       namespace:
         - playground
       labelSelectors:
-        "app": "cdc"
+        "app.kubernetes.io/instance": "upstream"
     mode: one
-  duration: '10s'
+  duration: '30s'
   scheduler:
-    cron: '@every 40s'
+    cron: '@every 2m'

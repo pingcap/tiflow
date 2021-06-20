@@ -7,12 +7,13 @@ metadata:
 spec:
   action: pod-failure
   mode: one
-  duration: "30s"
+  duration: "20s"
   selector:
     pods:
       playground:
         - cdc-0
         - upstream-tikv-0
         - upstream-pd-0
+        - downstream-tidb-0
   scheduler:
     cron: "@every 2m"
