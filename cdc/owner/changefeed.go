@@ -176,7 +176,12 @@ LOOP:
 			break LOOP
 		}
 	}
+	log.Info("debug initialize", zap.String("changefeed", c.state.ID))
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	/*	if checkpointTs < c.state.Info.GetStartTs() {
+		checkpointTs = c.state.Info.GetStartTs()
+	}*/
+	log.Info("debug", zap.String("changefeed", c.state.ID), zap.Uint64("checkpoints", checkpointTs))
 	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info),
 		zap.Uint64("checkpoint ts", checkpointTs))
@@ -194,6 +199,7 @@ LOOP:
 			return errors.Trace(err)
 		}
 	}
+	log.Info("debug initialize###########", zap.String("changefeed", c.state.ID))
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
