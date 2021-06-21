@@ -294,6 +294,16 @@ func verifySink(
 	return nil
 }
 
+// verifyReplicaConfig do strictDecodeFile check and only verify the rules for now
+func verifyReplicaConfig(path, component string, cfg *config.ReplicaConfig) error {
+	err := strictDecodeFile(path, component, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = filter.VerifyRules(cfg)
+	return err
+}
+
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
 // into the Config struct, issue an error and stop the server from starting.
 func strictDecodeFile(path, component string, cfg interface{}) error {
