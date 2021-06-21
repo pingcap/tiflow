@@ -300,7 +300,7 @@ func (e *MessageEncoder) encodeRowChangeEvents(events []rowChangedEvent) *Messag
 func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncoder {
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ts),
-		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeResolved)),
+		ty:        allocator.oneInt64Slice(int64(model.MqMessageTypeResolved)),
 		partition: oneNullInt64Slice,
 		schema:    oneNullStringSlice,
 		table:     oneNullStringSlice,
@@ -321,7 +321,7 @@ func NewDDLEventEncoder(allocator *SliceAllocator, ev *model.DDLEvent) *MessageE
 	}
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ev.CommitTs),
-		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeDDL)),
+		ty:        allocator.oneInt64Slice(int64(model.MqMessageTypeDDL)),
 		partition: oneNullInt64Slice,
 		schema:    allocator.oneNullableStringSlice(schema),
 		table:     allocator.oneNullableStringSlice(table),
