@@ -34,8 +34,11 @@ import (
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc"
+	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -56,6 +59,7 @@ type Server struct {
 	ownerLock    sync.RWMutex
 	statusServer *http.Server
 	pdClient     pd.Client
+	etcdClient   *kv.CDCEtcdClient
 	pdEndpoints  []string
 }
 
@@ -100,6 +104,39 @@ func (s *Server) Run(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
+	if config.NewReplicaImpl {
+		tlsConfig, err := conf.Security.ToTLSConfig()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		logConfig := logutil.DefaultZapLoggerConfig
+		logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+		etcdCli, err := clientv3.New(clientv3.Config{
+			Endpoints:   s.pdEndpoints,
+			TLS:         tlsConfig,
+			Context:     ctx,
+			LogConfig:   &logConfig,
+			DialTimeout: 5 * time.Second,
+			DialOptions: []grpc.DialOption{
+				grpcTLSOption,
+				grpc.WithBlock(),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
+			},
+		})
+		if err != nil {
+			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+		}
+		etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+		s.etcdClient = &etcdClient
+	}
 
 	if err := s.initDataDir(ctx); err != nil {
 		return errors.Trace(err)
