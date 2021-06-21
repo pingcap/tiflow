@@ -147,7 +147,7 @@ jobs:
 
       - name: Create CDC changefeed
         run: |
-          kubectl exec -i cdc-0 -n playground -- ./cdc cli changefeed create --pd=http://upstream-pd:2379 --sink-uri="mysql://root@downstream-tidb.playground.svc:4000/" --sort-engine="file"
+          kubectl exec -i cdc-0 -n playground -- ./cdc cli changefeed create --pd=http://upstream-pd:2379 --sink-uri="mysql://root@downstream-tidb.playground.svc:4000/" --sorter-max-memory-consumption=0
 
       - name: Deploy bank workload into playground
         run: |
