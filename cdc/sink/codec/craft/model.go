@@ -171,7 +171,7 @@ func decodeTermDictionary(bits []byte, allocator *SliceAllocator) ([]byte, *term
 // Headers in columnar layout
 type Headers struct {
 	ts        []uint64
-	ty        []uint64
+	ty        []int64
 	partition []int64
 	schema    []*string
 	table     []*string
@@ -186,19 +186,19 @@ func (h *Headers) Count() int {
 
 func (h *Headers) encode(bits []byte, dict *termDictionary) []byte {
 	bits = encodeDeltaUvarintChunk(bits, h.ts[:h.count])
-	bits = encodeDeltaUvarintChunk(bits, h.ty[:h.count])
+	bits = encodeDeltaVarintChunk(bits, h.ty[:h.count])
 	bits = encodeDeltaVarintChunk(bits, h.partition[:h.count])
 	bits = encodeDeltaVarintChunk(bits, dict.encodeNullableChunk(h.schema[:h.count]))
 	bits = encodeDeltaVarintChunk(bits, dict.encodeNullableChunk(h.table[:h.count]))
 	return bits
 }
 
-func (h *Headers) appendHeader(allocator *SliceAllocator, ts, ty uint64, partition int64, schema, table *string) int {
+func (h *Headers) appendHeader(allocator *SliceAllocator, ts uint64, ty, partition int64, schema, table *string) int {
 	idx := h.count
 	if idx+1 > len(h.ty) {
 		size := newBufferSize(idx)
 		h.ts = allocator.resizeUint64Slice(h.ts, size)
-		h.ty = allocator.resizeUint64Slice(h.ty, size)
+		h.ty = allocator.resizeInt64Slice(h.ty, size)
 		h.partition = allocator.resizeInt64Slice(h.partition, size)
 		h.schema = allocator.resizeNullableStringSlice(h.schema, size)
 		h.table = allocator.resizeNullableStringSlice(h.table, size)
@@ -249,14 +249,14 @@ func (h *Headers) GetTable(index int) string {
 }
 
 func decodeHeaders(bits []byte, numHeaders int, allocator *SliceAllocator, dict *termDictionary) (*Headers, error) {
-	var ts, ty []uint64
-	var partition, tmp []int64
+	var ts []uint64
+	var ty, partition, tmp []int64
 	var schema, table []*string
 	var err error
 	if bits, ts, err = decodeDeltaUvarintChunk(bits, numHeaders, allocator); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if bits, ty, err = decodeDeltaUvarintChunk(bits, numHeaders, allocator); err != nil {
+	if bits, ty, err = decodeDeltaVarintChunk(bits, numHeaders, allocator); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if bits, partition, err = decodeDeltaVarintChunk(bits, numHeaders, allocator); err != nil {
@@ -471,7 +471,7 @@ func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent)
 	b.estimatedSize += b.headers.appendHeader(
 		b.allocator,
 		ev.CommitTs,
-		uint64(model.MqMessageTypeRow),
+		int64(model.MqMessageTypeRow),
 		partition,
 		schema,
 		table,
