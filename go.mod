@@ -52,7 +52,6 @@ require (
 	github.com/tikv/pd v1.1.0-beta.0.20210323121136-78679e5e209d
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
-	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/bbolt v1.3.4 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
