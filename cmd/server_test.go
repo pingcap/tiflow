@@ -239,6 +239,7 @@ cert-allowed-cn = ["dd","ee"]
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
+			RegionScanLimit:  40,
 		},
 	})
 }
