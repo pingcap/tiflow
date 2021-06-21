@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -69,6 +70,7 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().Int64Var(&serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	cmd.Flags().StringVar(&serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
 
@@ -84,6 +86,7 @@ func initServerCmd(cmd *cobra.Command) {
 	addSecurityFlags(cmd.Flags(), true /* isServer */)
 
 	cmd.Flags().StringVar(&serverConfigFilePath, "config", "", "Path of the configuration file")
+	_ = cmd.Flags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
@@ -156,6 +159,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			conf.LogFile = serverConfig.LogFile
 		case "log-level":
 			conf.LogLevel = serverConfig.LogLevel
+		case "data-dir":
+			conf.DataDir = serverConfig.DataDir
 		case "owner-flush-interval":
 			conf.OwnerFlushInterval = serverConfig.OwnerFlushInterval
 		case "processor-flush-interval":
@@ -179,7 +184,12 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
 		case "sort-dir":
-			conf.Sorter.SortDir = serverConfig.Sorter.SortDir
+			// user specified sorter dir should not take effect
+			if serverConfig.Sorter.SortDir != config.DefaultSortDir {
+				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
+					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
+			}
+			conf.Sorter.SortDir = config.DefaultSortDir
 		case "pd", "config":
 			// do nothing
 		default:
@@ -200,6 +210,11 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		} else if strings.Index(ep, "http://") != 0 {
 			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
 		}
+	}
+
+	if conf.DataDir == "" {
+		cmd.Printf(color.HiYellowString("[WARN] TiCDC server data-dir is not set. " +
+			"Please use `cdc server --data-dir` to start the cdc server if possible.\n"))
 	}
 
 	return conf, nil
