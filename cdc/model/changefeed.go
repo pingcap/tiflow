@@ -139,7 +139,6 @@ func (info *ChangeFeedInfo) GetCheckpointTs(status *ChangeFeedStatus) uint64 {
 	if status != nil {
 		return status.CheckpointTs
 	}
-	defer log.Info("start-ts", zap.Uint64("start-ts", info.GetStartTs()))
 	return info.GetStartTs()
 }
 
