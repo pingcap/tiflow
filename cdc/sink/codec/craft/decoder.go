@@ -361,8 +361,10 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 type MessageDecoder struct {
 	bits            []byte
 	sizeTables      [][]uint64
+	metaSizeTable   []uint64
 	bodyOffsetTable []int
 	allocator       *SliceAllocator
+	dict            *termDictionary
 }
 
 // NewMessageDecoder create a new message decode with bits and allocator
@@ -378,21 +380,43 @@ func NewMessageDecoder(bits []byte, allocator *SliceAllocator) (*MessageDecoder,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	// truncate tailing size tables
+	bits = bits[:len(bits)-sizeTablesSize]
+
+	// get size table for each body element
 	bodySizeTable := sizeTables[bodySizeTableIndex]
 	// build body offset table from size of each body
 	// offset table has number of bodies plus 1 elements
+	// TODO check bodyOffsetTable size - 1
 	bodyOffsetTable := make([]int, len(bodySizeTable)+1)
+
+	// start offset of last body element
 	start := 0
 	for i, size := range bodySizeTable {
 		bodyOffsetTable[i] = start
 		start += int(size)
 	}
+	// start equals total size of body elements
 	bodyOffsetTable[len(bodySizeTable)] = start
+
+	// get meta data size table which contains size of headers and term dictionary
+	metaSizeTable := sizeTables[metaSizeTableIndex]
+
+	// term dictionary offset starts from header size + body size
+	termDictionaryOffset := int(metaSizeTable[headerSizeIndex]) + start
+	termDictionaryEnd := termDictionaryOffset + int(metaSizeTable[termDictionarySizeIndex])
+	_, dict, err := decodeTermDictionary(bits[termDictionaryOffset:termDictionaryEnd], allocator)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &MessageDecoder{
-		bits:            bits[:len(bits)-sizeTablesSize],
+		bits:            bits[:termDictionaryOffset],
 		sizeTables:      sizeTables,
+		metaSizeTable:   metaSizeTable,
 		bodyOffsetTable: bodyOffsetTable,
 		allocator:       allocator,
+		dict:            dict,
 	}, nil
 }
 
@@ -400,13 +424,14 @@ func NewMessageDecoder(bits []byte, allocator *SliceAllocator) (*MessageDecoder,
 func (d *MessageDecoder) Headers() (*Headers, error) {
 	var pairs, headersSize int
 	var err error
-	d.bits, pairs, err = decodeUvarintLength(d.bits)
+	// get number of pairs from size of body size table
+	pairs = len(d.sizeTables[bodySizeTableIndex])
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	headersSize = int(d.sizeTables[headerSizeTableIndex][0])
+	headersSize = int(d.metaSizeTable[headerSizeIndex])
 	var headers *Headers
-	headers, err = decodeHeaders(d.bits[:headersSize], pairs, d.allocator)
+	headers, err = decodeHeaders(d.bits[:headersSize], pairs, d.allocator, d.dict)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -436,7 +461,7 @@ func (d *MessageDecoder) RowChangedEvent(index int) (preColumns, columns *column
 	columnGroupIndex := 0
 	for len(bits) > 0 {
 		columnGroupSize := columnGroupSizeTable[columnGroupIndex]
-		columnGroup, err := decodeColumnGroup(bits[:columnGroupSize], d.allocator)
+		columnGroup, err := decodeColumnGroup(bits[:columnGroupSize], d.allocator, d.dict)
 		bits = bits[columnGroupSize:]
 		columnGroupIndex++
 		if err != nil {

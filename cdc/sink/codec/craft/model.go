@@ -16,6 +16,7 @@ package craft
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 const (
@@ -30,10 +31,136 @@ const (
 	columnGroupTypeNew = 0x1
 
 	// Size tables index
-	headerSizeTableIndex           = 0
+	metaSizeTableIndex             = 0
 	bodySizeTableIndex             = 1
 	columnGroupSizeTableStartIndex = 2
+
+	// meta size table index
+	headerSizeIndex         = 0
+	termDictionarySizeIndex = 1
+	maxMetaSizeIndex        = termDictionarySizeIndex
+
+	nullInt64 = -1
 )
+
+var (
+	oneNullInt64Slice  = []int64{nullInt64}
+	oneNullStringSlice = []*string{nil}
+)
+
+type termDictionary struct {
+	term map[string]int
+	id   []string
+}
+
+func newEncodingTermDictionaryWithSize(size int) *termDictionary {
+	return &termDictionary{
+		term: make(map[string]int),
+		id:   make([]string, 0, size),
+	}
+}
+
+func newEncodingTermDictionary() *termDictionary {
+	return newEncodingTermDictionaryWithSize(8) // TODO, this number should be evaluated
+}
+
+func (d *termDictionary) encodeNullable(s *string) int64 {
+	if s == nil {
+		return nullInt64
+	}
+	return int64(d.encode(*s))
+}
+
+func (d *termDictionary) encode(s string) uint64 {
+	if id, ok := d.term[s]; !ok {
+		id := len(d.id)
+		d.term[s] = id
+		d.id = append(d.id, s)
+		return uint64(id)
+	} else {
+		return uint64(id)
+	}
+}
+
+func (d *termDictionary) encodeNullableChunk(array []*string) []int64 {
+	result := make([]int64, len(array))
+	for idx, s := range array {
+		result[idx] = d.encodeNullable(s)
+	}
+	return result
+}
+
+func (d *termDictionary) encodeChunk(array []string) []uint64 {
+	result := make([]uint64, len(array))
+	for idx, s := range array {
+		result[idx] = d.encode(s)
+	}
+	return result
+}
+
+func (d *termDictionary) decode(id uint64) (string, error) {
+	i := int(id)
+	if len(d.id) <= i || i < 0 {
+		return "", cerror.ErrCraftCodecInvalidData.GenWithStack("invalid term id")
+	}
+	return d.id[i], nil
+}
+
+func (d *termDictionary) decodeNullable(id int64) (*string, error) {
+	if id == nullInt64 {
+		return nil, nil
+	}
+	if id < nullInt64 {
+		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("invalid term id")
+	}
+	if s, err := d.decode(uint64(id)); err != nil {
+		return nil, err
+	} else {
+		return &s, nil
+	}
+}
+
+func (d *termDictionary) decodeChunk(array []uint64) ([]string, error) {
+	result := make([]string, len(array))
+	for idx, id := range array {
+		t, err := d.decode(id)
+		if err != nil {
+			return nil, err
+		}
+		result[idx] = t
+	}
+	return result, nil
+}
+
+func (d *termDictionary) decodeNullableChunk(array []int64) ([]*string, error) {
+	result := make([]*string, len(array))
+	for idx, id := range array {
+		t, err := d.decodeNullable(id)
+		if err != nil {
+			return nil, err
+		}
+		result[idx] = t
+	}
+	return result, nil
+}
+
+func encodeTermDictionary(bits []byte, dict *termDictionary) []byte {
+	bits = encodeUvarint(bits, uint64(len(dict.id)))
+	bits = encodeStringChunk(bits, dict.id)
+	return bits
+}
+
+func decodeTermDictionary(bits []byte, allocator *SliceAllocator) ([]byte, *termDictionary, error) {
+	newBits, l, err := decodeUvarint(bits)
+	if err != nil {
+		return bits, nil, err
+	}
+	newBits, id, err := decodeStringChunk(newBits, int(l), allocator)
+	if err != nil {
+		return bits, nil, err
+	}
+	return newBits, &termDictionary{id: id}, nil
+}
 
 // Headers in columnar layout
 type Headers struct {
@@ -51,12 +178,12 @@ func (h *Headers) Count() int {
 	return h.count
 }
 
-func (h *Headers) encode(bits []byte) []byte {
+func (h *Headers) encode(bits []byte, dict *termDictionary) []byte {
 	bits = encodeDeltaUvarintChunk(bits, h.ts[:h.count])
 	bits = encodeDeltaUvarintChunk(bits, h.ty[:h.count])
 	bits = encodeDeltaVarintChunk(bits, h.partition[:h.count])
-	bits = encodeNullableStringChunk(bits, h.schema[:h.count])
-	bits = encodeNullableStringChunk(bits, h.table[:h.count])
+	bits = encodeDeltaVarintChunk(bits, dict.encodeNullableChunk(h.schema[:h.count]))
+	bits = encodeDeltaVarintChunk(bits, dict.encodeNullableChunk(h.table[:h.count]))
 	return bits
 }
 
@@ -115,9 +242,9 @@ func (h *Headers) GetTable(index int) string {
 	return ""
 }
 
-func decodeHeaders(bits []byte, numHeaders int, allocator *SliceAllocator) (*Headers, error) {
+func decodeHeaders(bits []byte, numHeaders int, allocator *SliceAllocator, dict *termDictionary) (*Headers, error) {
 	var ts, ty []uint64
-	var partition []int64
+	var partition, tmp []int64
 	var schema, table []*string
 	var err error
 	if bits, ts, err = decodeDeltaUvarintChunk(bits, numHeaders, allocator); err != nil {
@@ -129,10 +256,16 @@ func decodeHeaders(bits []byte, numHeaders int, allocator *SliceAllocator) (*Hea
 	if bits, partition, err = decodeDeltaVarintChunk(bits, numHeaders, allocator); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if bits, schema, err = decodeNullableStringChunk(bits, numHeaders, allocator); err != nil {
+	if bits, tmp, err = decodeDeltaVarintChunk(bits, numHeaders, allocator); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if _, table, err = decodeNullableStringChunk(bits, numHeaders, allocator); err != nil {
+	if schema, err = dict.decodeNullableChunk(tmp); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if _, tmp, err = decodeDeltaVarintChunk(bits, numHeaders, allocator); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if table, err = dict.decodeNullableChunk(tmp); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &Headers{
@@ -154,10 +287,10 @@ type columnGroup struct {
 	values [][]byte
 }
 
-func (g *columnGroup) encode(bits []byte) []byte {
+func (g *columnGroup) encode(bits []byte, dict *termDictionary) []byte {
 	bits = append(bits, g.ty)
 	bits = encodeUvarint(bits, uint64(len(g.names)))
-	bits = encodeStringChunk(bits, g.names)
+	bits = encodeDeltaUvarintChunk(bits, dict.encodeChunk(g.names))
 	bits = encodeUvarintChunk(bits, g.types)
 	bits = encodeUvarintChunk(bits, g.flags)
 	bits = encodeNullableBytesChunk(bits, g.values)
@@ -184,7 +317,7 @@ func (g *columnGroup) ToModel() ([]*model.Column, error) {
 	return columns, nil
 }
 
-func decodeColumnGroup(bits []byte, allocator *SliceAllocator) (*columnGroup, error) {
+func decodeColumnGroup(bits []byte, allocator *SliceAllocator, dict *termDictionary) (*columnGroup, error) {
 	var numColumns int
 	bits, ty, err := decodeUint8(bits)
 	if err != nil {
@@ -195,9 +328,14 @@ func decodeColumnGroup(bits []byte, allocator *SliceAllocator) (*columnGroup, er
 		return nil, errors.Trace(err)
 	}
 	var names []string
+	var tmp []uint64
 	var values [][]byte
 	var types, flags []uint64
-	bits, names, err = decodeStringChunk(bits, numColumns, allocator)
+	bits, tmp, err = decodeDeltaUvarintChunk(bits, numColumns, allocator)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	names, err = dict.decodeChunk(tmp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
