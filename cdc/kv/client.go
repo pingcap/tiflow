@@ -71,15 +71,15 @@ const (
 
 	// defines the scan region limit for each table
 	regionScanLimitPerTable = 40
-
-	// time interval to force kv client to terminate gRPC stream and reconnect
-	reconnectInterval = 15 * time.Minute
 )
+
+// time interval to force kv client to terminate gRPC stream and reconnect
+var reconnectInterval = 15 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
 // false: use kv client v1, which runs a goroutine for every single region
-var enableKVClientV2 = false
+var enableKVClientV2 = true
 
 type singleRegionInfo struct {
 	verID  tikv.RegionVerID
@@ -175,6 +175,24 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
+}
+
+func (s *regionFeedState) isInitialized() bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.initialized
+}
+
+func (s *regionFeedState) getLastResolvedTs() uint64 {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.lastResolvedTs
+}
+
+func (s *regionFeedState) getRegionSpan() regionspan.ComparableSpan {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.sri.span
 }
 
 type syncRegionFeedStateMap struct {
