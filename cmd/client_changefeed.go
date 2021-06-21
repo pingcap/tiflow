@@ -272,7 +272,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 
 	cfg := config.GetDefaultReplicaConfig()
 	if len(configFile) > 0 {
-		if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+		if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -501,7 +501,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SinkURI = sinkURI
 				case "config":
 					cfg := info.Config
-					if err = strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+					if err = verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 						log.Error("decode config file error", zap.Error(err))
 					}
 				case "opts":
@@ -674,7 +674,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 
 				cfg := config.GetDefaultReplicaConfig()
 				if len(configFile) > 0 {
-					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+					if err := verifyReplicaConfig(serverConfigFilePath, "TiCDC server", cfg); err != nil {
 						return err
 					}
 				}
