@@ -77,6 +77,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	enableOldValue := ctx.Vars().Config.EnableOldValue
 	ctxC, cancel := stdContext.WithCancel(ctx.StdContext())
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
+	ctxC = util.PutChangefeedIDInCtx(ctxC, n.changefeedID)
 	plr := puller.NewPuller(ctxC, ctx.Vars().PDClient, n.credential, n.kvStorage,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, enableOldValue)
 	n.wg.Go(func() error {

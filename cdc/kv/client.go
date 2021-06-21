@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -68,9 +69,6 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
-
-	// defines the scan region limit for each table
-	regionScanLimitPerTable = 40
 
 	// defaultRegionChanSize is the default channel size for region channel, including
 	// range request, region request and region error.
@@ -573,6 +571,7 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	return &eventFeedSession{
 		client:            client,
 		regionCache:       regionCache,
