@@ -22,7 +22,6 @@ log_level=debug
 restart=
 failpoint=$GO_FAILPOINTS
 config_path=
-sort_dir=
 data_dir=
 
 while [[ ${1} ]]; do
@@ -71,8 +70,8 @@ while [[ ${1} ]]; do
             config_path="--config ${2}"
             shift
             ;;
-        --sort-dir)
-            sort_dir=${2}
+        --data-dir)
+            data_dir=${2}
             shift
             ;;
         *)
@@ -85,10 +84,6 @@ while [[ ${1} ]]; do
         exit 1
     fi
 done
-
-if [ -z "$sort_dir" ]; then
-    sort_dir=${workdir}/cdc-sort${logsuffix}
-fi
 
 if [ -z "$data_dir" ]; then
     data_dir=${workdir}/cdc_data${logsuffix}
@@ -107,7 +102,6 @@ if [[ "$restart" == "true" ]]; then
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
         --data-dir "$data_dir" \
-        --sort-dir "$sort_dir" \
         $config_path \
         $tls \
         $certcn \
@@ -124,7 +118,6 @@ else
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
     --data-dir "$data_dir" \
-    --sort-dir "$sort_dir" \
     $config_path \
     $tls \
     $certcn \
@@ -133,5 +126,3 @@ else
 fi
 
 cd $pwd
-
-
