@@ -294,7 +294,6 @@ func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncod
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ts),
 		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeResolved)),
-		rowID:     allocator.oneInt64Slice(-1),
 		partition: allocator.oneInt64Slice(-1),
 		schema:    allocator.oneNullableStringSlice(nil),
 		table:     allocator.oneNullableStringSlice(nil),
@@ -316,7 +315,6 @@ func NewDDLEventEncoder(allocator *SliceAllocator, ev *model.DDLEvent) *MessageE
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ev.CommitTs),
 		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeDDL)),
-		rowID:     allocator.oneInt64Slice(-1),
 		partition: allocator.oneInt64Slice(-1),
 		schema:    allocator.oneNullableStringSlice(schema),
 		table:     allocator.oneNullableStringSlice(table),
