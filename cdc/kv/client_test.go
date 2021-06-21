@@ -1479,7 +1479,7 @@ ReceiveLoop:
 	}
 }
 
-// TestStreamSendWithErrorNormal mainly tests the scenario that the `Recv` call
+// TestStreamRecvWithErrorNormal mainly tests the scenario that the `Recv` call
 // of a gPRC stream in kv client meets a **logical related** error, and kv client
 // logs the error and re-establish new request.
 func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
@@ -1497,7 +1497,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 }
 
-// TestStreamSendWithErrorIOEOF mainly tests the scenario that the `Recv` call
+// TestStreamRecvWithErrorIOEOF mainly tests the scenario that the `Recv` call
 // of a gPRC stream in kv client meets error io.EOF, and kv client logs the error
 // and re-establish new request
 func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
@@ -2422,7 +2422,7 @@ func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	c.Assert(sri.span.String(), check.Equals, "[61, 63)")
 	c.Assert(sri2.ts, check.Equals, uint64(2000))
 	c.Assert(sri2.span.String(), check.Equals, "[61, 62)")
-	c.Assert(sri2.rpcCtx, check.IsNil)
+	c.Assert(sri2.rpcCtx, check.DeepEquals, &tikv.RPCContext{})
 }
 
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally
@@ -3138,7 +3138,9 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
+	// The buffer size of event channel must be large enough because in the test
+	// case we send events first, and then retrive all events from this channel.
+	eventCh := make(chan *model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
@@ -3159,10 +3161,29 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	}
 
 	// wait for all regions requested from cdc kv client
+	// Since there exists incremental scan limit in kv client, we must wait for
+	// the ready region and send initialized event.
+	sent := make(map[uint64]bool, regionNum)
 	err = retry.Run(time.Millisecond*200, 20, func() error {
 		count := 0
-		requestIDs.Range(func(_, _ interface{}) bool {
+		// send initialized event and a resolved ts event to each region
+		requestIDs.Range(func(key, value interface{}) bool {
 			count++
+			regionID := key.(uint64)
+			requestID := value.(uint64)
+			if _, ok := sent[regionID]; !ok {
+				initialized := mockInitializedEvent(regionID, requestID)
+				ch1 <- initialized
+				sent[regionID] = true
+				resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+					{
+						RegionId:  regionID,
+						RequestId: requestID,
+						Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 120},
+					},
+				}}
+				ch1 <- resolved
+			}
 			return true
 		})
 		if count == regionNum {
@@ -3171,23 +3192,6 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
 	})
 	c.Assert(err, check.IsNil)
-
-	// send initialized event and a resolved ts event to each region
-	requestIDs.Range(func(key, value interface{}) bool {
-		regionID := key.(uint64)
-		requestID := value.(uint64)
-		initialized := mockInitializedEvent(regionID, requestID)
-		ch1 <- initialized
-		resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
-			{
-				RegionId:  regionID,
-				RequestId: requestID,
-				Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 120},
-			},
-		}}
-		ch1 <- resolved
-		return true
-	})
 
 	resolvedCount := 0
 checkEvent:
