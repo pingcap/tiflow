@@ -72,14 +72,14 @@ func (d *termDictionary) encodeNullable(s *string) int64 {
 }
 
 func (d *termDictionary) encode(s string) uint64 {
-	if id, ok := d.term[s]; !ok {
+	id, ok := d.term[s]
+	if !ok {
 		id := len(d.id)
 		d.term[s] = id
 		d.id = append(d.id, s)
 		return uint64(id)
-	} else {
-		return uint64(id)
 	}
+	return uint64(id)
 }
 
 func (d *termDictionary) encodeNullableChunk(array []*string) []int64 {
@@ -113,11 +113,11 @@ func (d *termDictionary) decodeNullable(id int64) (*string, error) {
 	if id < nullInt64 {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("invalid term id")
 	}
-	if s, err := d.decode(uint64(id)); err != nil {
+	s, err := d.decode(uint64(id))
+	if err != nil {
 		return nil, err
-	} else {
-		return &s, nil
 	}
+	return &s, nil
 }
 
 func (d *termDictionary) decodeChunk(array []uint64) ([]string, error) {

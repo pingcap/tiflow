@@ -92,6 +92,7 @@ func (b *int64SliceAllocator) alloc(size int) []int64 {
 	return result
 }
 
+//nolint:unused
 func (b *int64SliceAllocator) one(x int64) []int64 {
 	r := b.alloc(1)
 	r[0] = x
@@ -409,6 +410,7 @@ func (b *SliceAllocator) int64Slice(size int) []int64 {
 	return b.int64Allocator.alloc(size)
 }
 
+//nolint:unused
 func (b *SliceAllocator) oneInt64Slice(x int64) []int64 {
 	return b.int64Allocator.one(x)
 }
