@@ -17,8 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -71,7 +69,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete. Please revise your changefeed settings and use unified sorter",
-				util.ZapFieldChangefeed(ctx))
+				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
 		}
 		sortDir := ctx.ChangefeedVars().Info.SortDir
 		err := psorter.UnifiedSorterCheckDir(sortDir)
