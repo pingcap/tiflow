@@ -174,11 +174,11 @@ func encodeDeltaUvarintChunk(bits []byte, data []uint64) []byte {
 	return bits
 }
 
-func encodeSizeTables(bits []byte, tables [][]uint64) []byte {
+func encodeSizeTables(bits []byte, tables [][]int64) []byte {
 	size := len(bits)
 	for _, table := range tables {
 		bits = encodeUvarint(bits, uint64(len(table)))
-		bits = encodeDeltaUvarintChunk(bits, table)
+		bits = encodeDeltaVarintChunk(bits, table)
 	}
 	bits, _ = encodeUvarintReversed(bits, uint64(len(bits)-size))
 	return bits
@@ -225,11 +225,11 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 // MessageEncoder is encoder for message
 type MessageEncoder struct {
 	bits           []byte
-	sizeTables     [][]uint64
+	sizeTables     [][]int64
 	bodyLastOffset int
-	bodySize       []uint64
+	bodySize       []int64
 	bodySizeIndex  int
-	metaSizeTable  []uint64
+	metaSizeTable  []int64
 
 	allocator *SliceAllocator
 	dict      *termDictionary
@@ -245,7 +245,7 @@ func NewMessageEncoder(allocator *SliceAllocator) *MessageEncoder {
 }
 
 func (e *MessageEncoder) encodeBodySize() *MessageEncoder {
-	e.bodySize[e.bodySizeIndex] = uint64(len(e.bits) - e.bodyLastOffset)
+	e.bodySize[e.bodySizeIndex] = int64(len(e.bits) - e.bodyLastOffset)
 	e.bodyLastOffset = len(e.bits)
 	e.bodySizeIndex++
 	return e
@@ -263,11 +263,11 @@ func (e *MessageEncoder) encodeString(s string) *MessageEncoder {
 
 func (e *MessageEncoder) encodeHeaders(headers *Headers) *MessageEncoder {
 	oldSize := len(e.bits)
-	e.bodySize = e.allocator.uint64Slice(headers.count)
+	e.bodySize = e.allocator.int64Slice(headers.count)
 	e.bits = headers.encode(e.bits, e.dict)
 	e.bodyLastOffset = len(e.bits)
-	e.metaSizeTable = e.allocator.uint64Slice(maxMetaSizeIndex + 1)
-	e.metaSizeTable[headerSizeIndex] = uint64(len(e.bits) - oldSize)
+	e.metaSizeTable = e.allocator.int64Slice(maxMetaSizeIndex + 1)
+	e.metaSizeTable[headerSizeIndex] = int64(len(e.bits) - oldSize)
 	e.sizeTables = append(e.sizeTables, e.metaSizeTable, e.bodySize)
 	return e
 }
@@ -276,18 +276,18 @@ func (e *MessageEncoder) encodeHeaders(headers *Headers) *MessageEncoder {
 func (e *MessageEncoder) Encode() []byte {
 	offset := len(e.bits)
 	e.bits = encodeTermDictionary(e.bits, e.dict)
-	e.metaSizeTable[termDictionarySizeIndex] = uint64(len(e.bits) - offset)
+	e.metaSizeTable[termDictionarySizeIndex] = int64(len(e.bits) - offset)
 	return encodeSizeTables(e.bits, e.sizeTables)
 }
 
 func (e *MessageEncoder) encodeRowChangeEvents(events []rowChangedEvent) *MessageEncoder {
 	sizeTables := e.sizeTables
 	for _, event := range events {
-		columnGroupSizeTable := e.allocator.uint64Slice(len(event))
+		columnGroupSizeTable := e.allocator.int64Slice(len(event))
 		for gi, group := range event {
 			oldSize := len(e.bits)
 			e.bits = group.encode(e.bits, e.dict)
-			columnGroupSizeTable[gi] = uint64(len(e.bits) - oldSize)
+			columnGroupSizeTable[gi] = int64(len(e.bits) - oldSize)
 		}
 		sizeTables = append(sizeTables, columnGroupSizeTable)
 		e.encodeBodySize()

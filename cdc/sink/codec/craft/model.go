@@ -44,8 +44,11 @@ const (
 )
 
 var (
-	oneNullInt64Slice  = []int64{nullInt64}
-	oneNullStringSlice = []*string{nil}
+	oneNullInt64Slice           = []int64{nullInt64}
+	oneNullStringSlice          = []*string{nil}
+	emptyDecodingTermDictionary = &termDictionary{
+		id: make([]string, 0),
+	}
 )
 
 type termDictionary struct {
@@ -145,6 +148,9 @@ func (d *termDictionary) decodeNullableChunk(array []int64) ([]*string, error) {
 }
 
 func encodeTermDictionary(bits []byte, dict *termDictionary) []byte {
+	if len(dict.id) == 0 {
+		return bits
+	}
 	bits = encodeUvarint(bits, uint64(len(dict.id)))
 	bits = encodeStringChunk(bits, dict.id)
 	return bits
