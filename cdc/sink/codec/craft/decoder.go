@@ -290,7 +290,7 @@ func decodeDeltaUvarintChunk(bits []byte, size int, allocator *SliceAllocator) (
 }
 
 // size tables are always at end of serialized data, there is no unread bytes to return
-func decodeSizeTables(bits []byte, allocator *SliceAllocator) (int, [][]uint64, error) {
+func decodeSizeTables(bits []byte, allocator *SliceAllocator) (int, [][]int64, error) {
 	nb, size, _ := decodeUvarintReversedLength(bits)
 	sizeOffset := len(bits) - nb
 	tablesOffset := sizeOffset - size
@@ -298,14 +298,14 @@ func decodeSizeTables(bits []byte, allocator *SliceAllocator) (int, [][]uint64, 
 
 	tableSize := size + nb
 	var err error
-	var table []uint64
-	result := make([][]uint64, 0, 1)
+	var table []int64
+	result := make([][]int64, 0, 1)
 	for len(tables) > 0 {
 		tables, size, err = decodeUvarintLength(tables)
 		if err != nil {
 			return 0, nil, errors.Trace(err)
 		}
-		tables, table, err = decodeDeltaUvarintChunk(tables, size, allocator)
+		tables, table, err = decodeDeltaVarintChunk(tables, size, allocator)
 		if err != nil {
 			return 0, nil, errors.Trace(err)
 		}
@@ -360,8 +360,8 @@ func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{
 // MessageDecoder decoder
 type MessageDecoder struct {
 	bits            []byte
-	sizeTables      [][]uint64
-	metaSizeTable   []uint64
+	sizeTables      [][]int64
+	metaSizeTable   []int64
 	bodyOffsetTable []int
 	allocator       *SliceAllocator
 	dict            *termDictionary
@@ -403,12 +403,17 @@ func NewMessageDecoder(bits []byte, allocator *SliceAllocator) (*MessageDecoder,
 	// get meta data size table which contains size of headers and term dictionary
 	metaSizeTable := sizeTables[metaSizeTableIndex]
 
-	// term dictionary offset starts from header size + body size
+	var dict *termDictionary
 	termDictionaryOffset := int(metaSizeTable[headerSizeIndex]) + start
-	termDictionaryEnd := termDictionaryOffset + int(metaSizeTable[termDictionarySizeIndex])
-	_, dict, err := decodeTermDictionary(bits[termDictionaryOffset:termDictionaryEnd], allocator)
-	if err != nil {
-		return nil, errors.Trace(err)
+	if metaSizeTable[termDictionarySizeIndex] > 0 {
+		// term dictionary offset starts from header size + body size
+		termDictionaryEnd := termDictionaryOffset + int(metaSizeTable[termDictionarySizeIndex])
+		_, dict, err = decodeTermDictionary(bits[termDictionaryOffset:termDictionaryEnd], allocator)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		dict = emptyDecodingTermDictionary
 	}
 	return &MessageDecoder{
 		bits:            bits[:termDictionaryOffset],

@@ -36,7 +36,7 @@ type codecSuite struct {
 
 func (s *codecSuite) TestSizeTable(c *check.C) {
 	defer testleak.AfterTest(c)()
-	tables := [][]uint64{
+	tables := [][]int64{
 		{
 			1, 3, 5, 7, 9,
 		},
