@@ -74,15 +74,15 @@ func (d *termDictionary) encodeNullable(s *string) int64 {
 	return int64(d.encode(*s))
 }
 
-func (d *termDictionary) encode(s string) uint64 {
+func (d *termDictionary) encode(s string) int64 {
 	id, ok := d.term[s]
 	if !ok {
 		id := len(d.id)
 		d.term[s] = id
 		d.id = append(d.id, s)
-		return uint64(id)
+		return int64(id)
 	}
-	return uint64(id)
+	return int64(id)
 }
 
 func (d *termDictionary) encodeNullableChunk(array []*string) []int64 {
@@ -93,15 +93,15 @@ func (d *termDictionary) encodeNullableChunk(array []*string) []int64 {
 	return result
 }
 
-func (d *termDictionary) encodeChunk(array []string) []uint64 {
-	result := make([]uint64, len(array))
+func (d *termDictionary) encodeChunk(array []string) []int64 {
+	result := make([]int64, len(array))
 	for idx, s := range array {
 		result[idx] = d.encode(s)
 	}
 	return result
 }
 
-func (d *termDictionary) decode(id uint64) (string, error) {
+func (d *termDictionary) decode(id int64) (string, error) {
 	i := int(id)
 	if len(d.id) <= i || i < 0 {
 		return "", cerror.ErrCraftCodecInvalidData.GenWithStack("invalid term id")
@@ -116,14 +116,14 @@ func (d *termDictionary) decodeNullable(id int64) (*string, error) {
 	if id < nullInt64 {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("invalid term id")
 	}
-	s, err := d.decode(uint64(id))
+	s, err := d.decode(id)
 	if err != nil {
 		return nil, err
 	}
 	return &s, nil
 }
 
-func (d *termDictionary) decodeChunk(array []uint64) ([]string, error) {
+func (d *termDictionary) decodeChunk(array []int64) ([]string, error) {
 	result := make([]string, len(array))
 	for idx, id := range array {
 		t, err := d.decode(id)
@@ -296,7 +296,7 @@ type columnGroup struct {
 func (g *columnGroup) encode(bits []byte, dict *termDictionary) []byte {
 	bits = append(bits, g.ty)
 	bits = encodeUvarint(bits, uint64(len(g.names)))
-	bits = encodeDeltaUvarintChunk(bits, dict.encodeChunk(g.names))
+	bits = encodeDeltaVarintChunk(bits, dict.encodeChunk(g.names))
 	bits = encodeUvarintChunk(bits, g.types)
 	bits = encodeUvarintChunk(bits, g.flags)
 	bits = encodeNullableBytesChunk(bits, g.values)
@@ -334,10 +334,10 @@ func decodeColumnGroup(bits []byte, allocator *SliceAllocator, dict *termDiction
 		return nil, errors.Trace(err)
 	}
 	var names []string
-	var tmp []uint64
+	var tmp []int64
 	var values [][]byte
 	var types, flags []uint64
-	bits, tmp, err = decodeDeltaUvarintChunk(bits, numColumns, allocator)
+	bits, tmp, err = decodeDeltaVarintChunk(bits, numColumns, allocator)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
