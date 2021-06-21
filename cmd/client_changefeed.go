@@ -674,7 +674,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 
 				cfg := config.GetDefaultReplicaConfig()
 				if len(configFile) > 0 {
-					if err := verifyReplicaConfig(serverConfigFilePath, "TiCDC server", cfg); err != nil {
+					if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 						return err
 					}
 				}
