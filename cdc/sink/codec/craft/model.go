@@ -39,7 +39,6 @@ const (
 type Headers struct {
 	ts        []uint64
 	ty        []uint64
-	rowID     []int64
 	partition []int64
 	schema    []*string
 	table     []*string
@@ -55,27 +54,24 @@ func (h *Headers) Count() int {
 func (h *Headers) encode(bits []byte) []byte {
 	bits = encodeDeltaUvarintChunk(bits, h.ts[:h.count])
 	bits = encodeDeltaUvarintChunk(bits, h.ty[:h.count])
-	bits = encodeDeltaVarintChunk(bits, h.rowID[:h.count])
 	bits = encodeDeltaVarintChunk(bits, h.partition[:h.count])
 	bits = encodeNullableStringChunk(bits, h.schema[:h.count])
 	bits = encodeNullableStringChunk(bits, h.table[:h.count])
 	return bits
 }
 
-func (h *Headers) appendHeader(allocator *SliceAllocator, ts, ty uint64, rowID, partition int64, schema, table *string) int {
+func (h *Headers) appendHeader(allocator *SliceAllocator, ts, ty uint64, partition int64, schema, table *string) int {
 	idx := h.count
 	if idx+1 > len(h.ty) {
 		size := newBufferSize(idx)
 		h.ts = allocator.resizeUint64Slice(h.ts, size)
 		h.ty = allocator.resizeUint64Slice(h.ty, size)
-		h.rowID = allocator.resizeInt64Slice(h.rowID, size)
 		h.partition = allocator.resizeInt64Slice(h.partition, size)
 		h.schema = allocator.resizeNullableStringSlice(h.schema, size)
 		h.table = allocator.resizeNullableStringSlice(h.table, size)
 	}
 	h.ts[idx] = ts
 	h.ty[idx] = ty
-	h.rowID[idx] = rowID
 	h.partition[idx] = partition
 	h.schema[idx] = schema
 	h.table[idx] = table
@@ -121,16 +117,13 @@ func (h *Headers) GetTable(index int) string {
 
 func decodeHeaders(bits []byte, numHeaders int, allocator *SliceAllocator) (*Headers, error) {
 	var ts, ty []uint64
-	var rowID, partition []int64
+	var partition []int64
 	var schema, table []*string
 	var err error
 	if bits, ts, err = decodeDeltaUvarintChunk(bits, numHeaders, allocator); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if bits, ty, err = decodeDeltaUvarintChunk(bits, numHeaders, allocator); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if bits, rowID, err = decodeDeltaVarintChunk(bits, numHeaders, allocator); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if bits, partition, err = decodeDeltaVarintChunk(bits, numHeaders, allocator); err != nil {
@@ -145,7 +138,6 @@ func decodeHeaders(bits []byte, numHeaders int, allocator *SliceAllocator) (*Hea
 	return &Headers{
 		ts:        ts,
 		ty:        ty,
-		rowID:     rowID,
 		partition: partition,
 		schema:    schema,
 		table:     table,
@@ -336,7 +328,6 @@ func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent)
 		b.allocator,
 		ev.CommitTs,
 		uint64(model.MqMessageTypeRow),
-		ev.RowID,
 		partition,
 		schema,
 		table,
