@@ -54,6 +54,7 @@ spec:
             - "--pd=http://upstream-pd.playground.svc:2379"
             - "--log-file=/var/log/$(MY_POD_NAME).log"
             - "--data-dir=/data"
+            - "--sorter-max-memory-consumption=0"
   volumeClaimTemplates:
     - metadata:
         name: cdc
