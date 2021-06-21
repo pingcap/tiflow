@@ -229,8 +229,10 @@ type MessageEncoder struct {
 	bodyLastOffset int
 	bodySize       []uint64
 	bodySizeIndex  int
+	metaSizeTable  []uint64
 
 	allocator *SliceAllocator
+	dict      *termDictionary
 }
 
 // NewMessageEncoder creates a new encoder with given allocator
@@ -238,6 +240,7 @@ func NewMessageEncoder(allocator *SliceAllocator) *MessageEncoder {
 	return &MessageEncoder{
 		bits:      encodeUvarint(make([]byte, 0, DefaultBufferCapacity), Version1),
 		allocator: allocator,
+		dict:      newEncodingTermDictionary(),
 	}
 }
 
@@ -259,17 +262,21 @@ func (e *MessageEncoder) encodeString(s string) *MessageEncoder {
 }
 
 func (e *MessageEncoder) encodeHeaders(headers *Headers) *MessageEncoder {
-	e.bits = encodeUvarint(e.bits, uint64(headers.count))
 	oldSize := len(e.bits)
 	e.bodySize = e.allocator.uint64Slice(headers.count)
-	e.bits = headers.encode(e.bits)
+	e.bits = headers.encode(e.bits, e.dict)
 	e.bodyLastOffset = len(e.bits)
-	e.sizeTables = append(e.sizeTables, e.allocator.oneUint64Slice(uint64(len(e.bits)-oldSize)), e.bodySize)
+	e.metaSizeTable = e.allocator.uint64Slice(maxMetaSizeIndex + 1)
+	e.metaSizeTable[headerSizeIndex] = uint64(len(e.bits) - oldSize)
+	e.sizeTables = append(e.sizeTables, e.metaSizeTable, e.bodySize)
 	return e
 }
 
 // Encode message into bits
 func (e *MessageEncoder) Encode() []byte {
+	offset := len(e.bits)
+	e.bits = encodeTermDictionary(e.bits, e.dict)
+	e.metaSizeTable[termDictionarySizeIndex] = uint64(len(e.bits) - offset)
 	return encodeSizeTables(e.bits, e.sizeTables)
 }
 
@@ -279,7 +286,7 @@ func (e *MessageEncoder) encodeRowChangeEvents(events []rowChangedEvent) *Messag
 		columnGroupSizeTable := e.allocator.uint64Slice(len(event))
 		for gi, group := range event {
 			oldSize := len(e.bits)
-			e.bits = group.encode(e.bits)
+			e.bits = group.encode(e.bits, e.dict)
 			columnGroupSizeTable[gi] = uint64(len(e.bits) - oldSize)
 		}
 		sizeTables = append(sizeTables, columnGroupSizeTable)
@@ -294,9 +301,9 @@ func NewResolvedEventEncoder(allocator *SliceAllocator, ts uint64) *MessageEncod
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ts),
 		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeResolved)),
-		partition: allocator.oneInt64Slice(-1),
-		schema:    allocator.oneNullableStringSlice(nil),
-		table:     allocator.oneNullableStringSlice(nil),
+		partition: oneNullInt64Slice,
+		schema:    oneNullStringSlice,
+		table:     oneNullStringSlice,
 		count:     1,
 	}).encodeBodySize()
 }
@@ -315,7 +322,7 @@ func NewDDLEventEncoder(allocator *SliceAllocator, ev *model.DDLEvent) *MessageE
 	return NewMessageEncoder(allocator).encodeHeaders(&Headers{
 		ts:        allocator.oneUint64Slice(ev.CommitTs),
 		ty:        allocator.oneUint64Slice(uint64(model.MqMessageTypeDDL)),
-		partition: allocator.oneInt64Slice(-1),
+		partition: oneNullInt64Slice,
 		schema:    allocator.oneNullableStringSlice(schema),
 		table:     allocator.oneNullableStringSlice(table),
 		count:     1,
