@@ -172,11 +172,11 @@ jobs:
         run: |
           $GITHUB_WORKSPACE/chaos/checker.sh
 
-      - name: Copy logs to hack permission
+      - name: Collect logs
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          sudo cp -r -L /var/log/. ./logs
+          sudo cp -r -L /var/log/containers/. ./logs
           sudo chown -R runner ./logs
 
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
