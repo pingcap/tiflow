@@ -345,7 +345,7 @@ func (s *changefeedSuite) TestGetTs(c *check.C) {
 			CreateTime: createTime,
 		}
 	)
-	c.Assert(info.GetStartTs(), check.Equals, oracle.EncodeTSO(createTime.Unix()*1000))
+	c.Assert(info.GetStartTs(), check.Equals, oracle.GoTimeToTS(createTime))
 	info.StartTs = startTs
 	c.Assert(info.GetStartTs(), check.Equals, startTs)
 
