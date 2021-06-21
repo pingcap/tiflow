@@ -15,8 +15,9 @@ package pipeline
 
 import (
 	"context"
-	"os"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -27,7 +28,6 @@ import (
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -68,22 +68,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	switch sortEngine {
 	case model.SortInMemory:
 		sorter = puller.NewEntrySorter()
-	case model.SortInFile:
-		sortDir := ctx.ChangefeedVars().Info.SortDir
-		err := util.IsDirAndWritable(sortDir)
-		if err != nil {
-			if os.IsNotExist(errors.Cause(err)) {
-				err = os.MkdirAll(sortDir, 0o755)
-				if err != nil {
-					return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
-				}
-			} else {
-				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
-			}
+	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+		if sortEngine == model.SortInFile {
+			log.Warn("File sorter is obsolete. Please revise your changefeed settings and use unified sorter",
+				util.ZapFieldChangefeed(ctx))
 		}
-
-		sorter = puller.NewFileSorter(sortDir)
-	case model.SortUnified:
 		sortDir := ctx.ChangefeedVars().Info.SortDir
 		err := psorter.UnifiedSorterCheckDir(sortDir)
 		if err != nil {
