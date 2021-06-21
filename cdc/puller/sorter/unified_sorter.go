@@ -114,13 +114,8 @@ func NewUnifiedSorter(
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-<<<<<<< HEAD
-		inputCh:  make(chan *model.PolymorphicEvent, 128000),
-		outputCh: make(chan *model.PolymorphicEvent, 128000),
-=======
 		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
 		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
->>>>>>> fcd55523 (sorter: fix unified sorter magic numbers & reduce memory consumption by channels (#1915))
 		dir:      dir,
 		pool:     pool,
 		metricsInfo: &metricsInfo{
