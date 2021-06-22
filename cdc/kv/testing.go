@@ -29,8 +29,8 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )

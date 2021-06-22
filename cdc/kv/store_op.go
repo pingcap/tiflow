@@ -30,8 +30,8 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 )
 

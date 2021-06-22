@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +48,7 @@ const (
 	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
-	StateRemoved  FeedState = "removed"
+	StateRemoved  FeedState = "removed" // deprecated, will be removed in the next version
 	StateFinished FeedState = "finished"
 )
 
@@ -90,13 +90,15 @@ type ChangeFeedInfo struct {
 	CreatorVersion    string        `json:"creator-version"`
 }
 
-var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
+const changeFeedIDMaxLen = 128
+
+var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
 // ValidateChangefeedID returns true if the changefeed ID matches
-// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
-	if !changeFeedIDRe.MatchString(changefeedID) {
-		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs()
+	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
 	}
 	return nil
 }
@@ -129,7 +131,7 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 		return info.StartTs
 	}
 
-	return oracle.EncodeTSO(info.CreateTime.Unix() * 1000)
+	return oracle.GoTimeToTS(info.CreateTime)
 }
 
 // GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
