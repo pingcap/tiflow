@@ -256,6 +256,14 @@ error = '''
 event is larger than the total memory quota, size: %d, quota: %d
 '''
 
+<<<<<<< HEAD
+=======
+["CDC:ErrGCTTLExceeded"]
+error = '''
+the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
+'''
+
+>>>>>>> fb396165 (error: fix wrong error message of ErrGCTTLExceeded (#2121))
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
