@@ -144,7 +144,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 		state, ok := worker.getRegionState(regionID)
 		if ok {
 			if state.isStopped() {
-				log.Warn("drop resolved ts due to region feed stopped",
+				log.Debug("drop resolved ts due to region feed stopped",
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", state.requestID),
 					zap.String("addr", addr))
