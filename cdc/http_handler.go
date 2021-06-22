@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"encoding/json"
-	"github.com/pingcap/ticdc/pkg/config"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -282,12 +281,13 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
-
-	if s.captureV2 == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
-	} 
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
+	}
 
 	err := req.ParseForm()
 	if err != nil {
@@ -341,7 +341,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	writeData(w, resp)
 }
 
-func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
+func handleAdminLogLeve(w http.ResponseWriter, r *http.Request) {
 	var level string
 	data, err := ioutil.ReadAll(r.Body)
 	r.Body.Close()
