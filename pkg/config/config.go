@@ -167,9 +167,9 @@ var defaultServerConfig = &ServerConfig{
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
-		ChunkSizeLimit:         1024 * 1024 * 1024, // 1GB
-		MaxMemoryPressure:      80,
-		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
+		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
+		MaxMemoryPressure:      30,                      // 30% is safe on machines with memory capacity <= 16GB
+		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
 	},
@@ -178,6 +178,7 @@ var defaultServerConfig = &ServerConfig{
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+		RegionScanLimit:  40,
 	},
 }
 
@@ -312,6 +313,16 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.PerTableMemoryQuota < 6*1024*1024 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+	}
+
+	if c.KVClient == nil {
+		c.KVClient = defaultServerConfig.KVClient
+	}
+	if c.KVClient.WorkerConcurrent <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
+	if c.KVClient.RegionScanLimit <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
 	}
 
 	return nil
