@@ -8,7 +8,7 @@ on:
     branches:
       - master
   schedule:
-    - cron: '40 16-23 * * *' # run at minute 0 and 30 every hour from 00:00 ~ 06:00 UTC+8
+    - cron: '40 16-23 * * *' # run at minute 0 and 40 every hour from 00:00 ~ 06:00 UTC+8
 
 jobs:
   pre_job:
@@ -52,13 +52,6 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out code
         uses: actions/checkout@v2
-
-      - name: Cache Lint Tools
-        id: cache-lint-tools
-        uses: actions/cache@v2
-        with:
-          path: tools/bin
-          key: ${{ runner.os }}-cdc-lint-tools-${{ hashFiles('tools/check/go.sum') }}
 
       - name: Set up K3s cluster
         run: |

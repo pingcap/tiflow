@@ -49,7 +49,7 @@ spec:
     storageVolumes:
       - name: log
         storageSize: "1Gi"
-        mountPath: "/var/log/pdlog"
+        mountPath: "/var/log/kvlog"
   tidb:
     baseImage: pingcap/tidb
     version: latest
