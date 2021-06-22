@@ -159,6 +159,7 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/memoryPressureInjectPoint") //nolint:errcheck
 
 	backEndPool, err := newBackEndPool(sorterDir, "")
 	c.Assert(err, check.IsNil)
@@ -313,4 +314,34 @@ func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
 	c.Assert(backEndPool, check.IsNil)
 
 	mockP.assertFilesExist(c)
+}
+
+// TestGetMemoryPressureFailure verifies that the backendPool can handle gracefully failures that happen when
+// getting the current system memory pressure. Such a failure is usually caused by a lack of file descriptor quota
+// set by the operating system.
+func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/getMemoryPressureFails", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/getMemoryPressureFails") //nolint:errcheck
+
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
+	defer backEndPool.terminate()
+
+	after := time.After(time.Second * 20)
+	tick := time.Tick(time.Second * 1)
+	for {
+		select {
+		case <-after:
+			c.Fatal("TestGetMemoryPressureFailure timed out")
+		case <-tick:
+			if backEndPool.memoryPressure() == 100 {
+				return
+			}
+		}
+	}
 }

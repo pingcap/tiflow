@@ -112,16 +112,26 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 
 			// update memPressure
 			m, err := memory.Get()
+
+			failpoint.Inject("getMemoryPressureFails", func() {
+				m = nil
+				err = errors.New("injected get memory pressure failure")
+			})
+
 			if err != nil {
 				failpoint.Inject("sorterDebug", func() {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
 				})
 
 				log.Warn("unified sorter: getting system memory usage failed", zap.Error(err))
+				// Reports a 100% memory pressure, so that the backEndPool will allocate fileBackEnds.
+				// We default to fileBackEnds because they are unlikely to cause OOMs. If IO errors are
+				// encountered, we can fail gracefully.
+				atomic.StoreInt32(&ret.memPressure, 100)
+			} else {
+				memPressure := m.Used * 100 / m.Total
+				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			}
-
-			memPressure := m.Used * 100 / m.Total
-			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 
 			if memPressure := ret.memoryPressure(); memPressure > 50 {
 				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),

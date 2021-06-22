@@ -273,6 +273,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
+
 	if !config.NewReplicaImpl {
 		s.ownerLock.RLock()
 		defer s.ownerLock.RUnlock()
