@@ -365,7 +365,7 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	}
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
-		SkipCheckPath:   false,
+		SkipCheckPath:   true,
 		HTTPClient:      nil,
 	})
 	if err != nil {
