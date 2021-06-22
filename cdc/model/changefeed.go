@@ -89,13 +89,15 @@ type ChangeFeedInfo struct {
 	CreatorVersion    string        `json:"creator-version"`
 }
 
-var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
+const changeFeedIDMaxLen = 128
+
+var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
 // ValidateChangefeedID returns true if the changefeed ID matches
-// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
-	if !changeFeedIDRe.MatchString(changefeedID) {
-		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs()
+	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
 	}
 	return nil
 }
