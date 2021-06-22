@@ -20,6 +20,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
@@ -108,6 +109,15 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	ctx = util.PutCaptureAddrInCtx(ctx, conf.AdvertiseAddr)
 
 	version.LogVersionInfo()
+	if util.FailpointBuild {
+		for _, path := range failpoint.List() {
+			status, err := failpoint.Status(path)
+			if err != nil {
+				log.Error("fail to get failpoint status", zap.Error(err))
+			}
+			log.Info("failpoint enabled", zap.String("path", path), zap.String("status", status))
+		}
+	}
 
 	logHTTPProxies()
 	server, err := cdc.NewServer(strings.Split(serverPdAddr, ","))

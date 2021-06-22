@@ -276,6 +276,11 @@ error = '''
 event is larger than the total memory quota, size: %d, quota: %d
 '''
 
+["CDC:ErrGCTTLExceeded"]
+error = '''
+the checkpoint-ts(%d) lag of the changefeed(%s) %d has exceeded the GC TTL
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
@@ -421,6 +426,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrLeaseExpired"]
+error = '''
+owner lease expired 
+'''
+
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
@@ -516,6 +526,11 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
+["CDC:ErrNotOwner"]
+error = '''
+this capture is not a owner
+'''
+
 ["CDC:ErrOldValueNotEnabled"]
 error = '''
 old value is not enabled
@@ -529,6 +544,11 @@ operate on a closed notifier
 ["CDC:ErrOwnerCampaignKeyDeleted"]
 error = '''
 owner campaign key deleted
+'''
+
+["CDC:ErrOwnerChangedUnexpectedly"]
+error = '''
+owner changed unexpectedly
 '''
 
 ["CDC:ErrOwnerChangefeedNotFound"]
@@ -729,6 +749,11 @@ fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTableListenReplicated"]
+error = '''
+A table is being replicated by at least two processors(%s, %s), please report a bug
 '''
 
 ["CDC:ErrTableProcessorStoppedSafely"]

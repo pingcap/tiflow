@@ -41,6 +41,10 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
+func init() {
+	StoreGlobalServerConfig(GetDefaultServerConfig())
+}
+
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
 	EnableOldValue:   true,
