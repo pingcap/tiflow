@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 )
 
