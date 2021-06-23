@@ -146,6 +146,11 @@ error = '''
 codec decode error
 '''
 
+["CDC:ErrCraftCodecInvalidData"]
+error = '''
+craft codec invalid data
+'''
+
 ["CDC:ErrCreateMarkTableFailed"]
 error = '''
 create mark table failed
@@ -278,7 +283,7 @@ event is larger than the total memory quota, size: %d, quota: %d
 
 ["CDC:ErrGCTTLExceeded"]
 error = '''
-the checkpoint-ts(%d) lag of the changefeed(%s) %d has exceeded the GC TTL
+the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
 '''
 
 ["CDC:ErrGRPCDialFailed"]
@@ -714,6 +719,11 @@ server creates pd client failed
 ["CDC:ErrServiceSafepointLost"]
 error = '''
 service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
+'''
+
+["CDC:ErrSinkInvalidConfig"]
+error = '''
+sink config invalid
 '''
 
 ["CDC:ErrSinkURIInvalid"]

@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type mockPullerSuite struct{}
@@ -54,7 +54,7 @@ func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 2, 2)
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 3, 3)
 	pm.MustExec("delete from test.test")
-	waitForGrowingTs(&ts, oracle.EncodeTSO(time.Now().Unix()*1000))
+	waitForGrowingTs(&ts, oracle.GoTimeToTS(time.Now()))
 }
 
 func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
@@ -93,7 +93,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 2, 2)
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 3, 3)
 	pm.MustExec("delete from test.test")
-	waitForGrowingTs(&ts, oracle.EncodeTSO(time.Now().Unix()*1000))
+	waitForGrowingTs(&ts, oracle.GoTimeToTS(time.Now()))
 }
 
 func (s *mockPullerSuite) TestStartTs(c *check.C) {
@@ -122,7 +122,7 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 2, 2)
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 3, 3)
 	pm.MustExec("delete from test.test")
-	waitForGrowingTs(&ts, oracle.EncodeTSO(time.Now().Unix()*1000))
+	waitForGrowingTs(&ts, oracle.GoTimeToTS(time.Now()))
 	cancel()
 	mu.Lock()
 	index := len(rawTxns) / 2
