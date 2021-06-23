@@ -25,6 +25,7 @@ GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race
 endif
+GOVERSIONGE116 := $(shell expr $$(go version|cut -f3 -d' '|tr -d "go"|cut -f2 -d.) \>= 16)
 
 ARCH  := "`uname -s`"
 LINUX := "Linux"
@@ -41,13 +42,20 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-RELEASE_VERSION := v5.0.0-master
-ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep '^release-[0-9]\.[0-9].*$$|^HEAD$$'),)
-	# If we are in release branch, use tag version.
-	RELEASE_VERSION := $(shell git describe --tags --dirty="-dirty")
-else ifneq ($(shell git status --porcelain),)
-	# Add -dirty if the working tree is dirty for non release branch.
-	RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+RELEASE_VERSION =
+ifeq ($(RELEASE_VERSION),)
+	RELEASE_VERSION := v5.0.0-master
+	release_version_regex := ^v5\..*$$
+	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
+	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
+		# If we are in release branch, try to use tag version.
+		ifneq ($(shell git describe --tags --dirty | egrep $(release_version_regex)),)
+			RELEASE_VERSION := $(shell git describe --tags --dirty)
+		endif
+	else ifneq ($(shell git status --porcelain),)
+		# Add -dirty if the working tree is dirty for non release branch.
+		RELEASE_VERSION := $(RELEASE_VERSION)-dirty
+	endif
 endif
 
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
@@ -69,7 +77,7 @@ test: unit_test
 
 build: cdc
 
-build-failpoint: 
+build-failpoint:
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
 	$(FAILPOINT_DISABLE)
@@ -100,7 +108,13 @@ leak_test: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 check_failpoint_ctl:
+ifeq "$(GOVERSIONGE116)" "1"
+	# use -mod=mod to avoid error: missing go.sum entry for module providing package
+	# ref: https://github.com/golang/go/issues/44129
+	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILDNOVENDOR) -mod=mod -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl && go mod tidy
+else
 	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILDNOVENDOR) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
+endif
 
 check_third_party_binary:
 	@which bin/tidb-server
@@ -117,7 +131,7 @@ check_third_party_binary:
 integration_test_build: check_failpoint_ctl
 	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
-	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covemode=atomic \
+	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/ticdc/... \
 		-o bin/cdc.test github.com/pingcap/ticdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
@@ -165,7 +179,7 @@ check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
 	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls

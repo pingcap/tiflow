@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	numTables          = 20
-	numQueriesPerTable = 2000
+	numTables          = 10
+	numQueriesPerTable = 200
 )
 
 func main() {

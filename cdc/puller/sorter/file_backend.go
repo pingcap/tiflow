@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,12 +24,15 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
 
 const (
-	fileBufferSize = 1 * 1024 * 1024 // 1MB
-	magic          = 0xbeefbeef
+	fileBufferSize       = 32 * 1024 // 32KB
+	fileMagic            = 0x12345678
+	numFileEntriesOffset = 4
+	blockMagic           = 0xbeefbeef
 )
 
 var openFDCount int64
@@ -44,12 +47,12 @@ type fileBackEnd struct {
 func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(wrapIOError(err))
 	}
 
 	err = f.Close()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(wrapIOError(err))
 	}
 
 	log.Debug("new FileSorterBackEnd created", zap.String("filename", fileName))
@@ -63,7 +66,7 @@ func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd
 func (f *fileBackEnd) reader() (backEndReader, error) {
 	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o644)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(wrapIOError(err))
 	}
 
 	atomic.AddInt64(&openFDCount, 1)
@@ -72,7 +75,7 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 	failpoint.Inject("sorterDebug", func() {
 		info, err := fd.Stat()
 		if err != nil {
-			failpoint.Return(nil, errors.Trace(err))
+			failpoint.Return(nil, errors.Trace(wrapIOError(err)))
 		}
 		totalSize = info.Size()
 	})
@@ -83,18 +86,25 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 		}
 	})
 
-	return &fileBackEndReader{
+	ret := &fileBackEndReader{
 		backEnd:   f,
 		f:         fd,
 		reader:    bufio.NewReaderSize(fd, fileBufferSize),
 		totalSize: totalSize,
-	}, nil
+	}
+
+	err = ret.readHeader()
+	if err != nil {
+		return nil, errors.Trace(wrapIOError(err))
+	}
+
+	return ret, nil
 }
 
 func (f *fileBackEnd) writer() (backEndWriter, error) {
 	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0o644)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(wrapIOError(err))
 	}
 
 	atomic.AddInt64(&openFDCount, 1)
@@ -105,11 +115,18 @@ func (f *fileBackEnd) writer() (backEndWriter, error) {
 		}
 	})
 
-	return &fileBackEndWriter{
+	ret := &fileBackEndWriter{
 		backEnd: f,
 		f:       fd,
 		writer:  bufio.NewWriterSize(fd, fileBufferSize),
-	}, nil
+	}
+
+	err = ret.writeFileHeader()
+	if err != nil {
+		return nil, errors.Trace(wrapIOError(err))
+	}
+
+	return ret, nil
 }
 
 func (f *fileBackEnd) free() error {
@@ -126,10 +143,10 @@ func (f *fileBackEnd) free() error {
 	err := os.Remove(f.fileName)
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
-			failpoint.Return(errors.Trace(err))
+			failpoint.Return(errors.Trace(wrapIOError(err)))
 		})
 		// ignore this error in production to provide some resilience
-		log.Warn("fileBackEnd: failed to remove file", zap.Error(err))
+		log.Warn("fileBackEnd: failed to remove file", zap.Error(wrapIOError(err)))
 	}
 
 	return nil
@@ -149,9 +166,42 @@ type fileBackEndReader struct {
 	rawBytesBuf []byte
 	isEOF       bool
 
+	// to prevent truncation-like corruption
+	totalEvents uint64
+	readEvents  uint64
+
 	// debug only fields
 	readBytes int64
 	totalSize int64
+}
+
+func (r *fileBackEndReader) readHeader() error {
+	failpoint.Inject("sorterDebug", func() {
+		pos, err := r.f.Seek(0, 1 /* relative to the current position */)
+		if err != nil {
+			failpoint.Return(errors.Trace(err))
+		}
+		// verify that we are reading from the beginning of the file
+		if pos != 0 {
+			log.Panic("unexpected file descriptor cursor position", zap.Int64("pos", pos))
+		}
+	})
+
+	var m uint32
+	err := binary.Read(r.reader, binary.LittleEndian, &m)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if m != fileMagic {
+		log.Panic("fileSorterBackEnd: wrong fileMagic. Damaged file or bug?", zap.Uint32("actual", m))
+	}
+
+	err = binary.Read(r.reader, binary.LittleEndian, &r.totalEvents)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
@@ -165,19 +215,26 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	if err != nil {
 		if err == io.EOF {
 			r.isEOF = true
+			// verifies that the file has not been truncated unexpectedly.
+			if r.totalEvents != r.readEvents {
+				log.Panic("unexpected EOF",
+					zap.String("file", r.backEnd.fileName),
+					zap.Uint64("expected-num-events", r.totalEvents),
+					zap.Uint64("actual-num-events", r.readEvents))
+			}
 			return nil, nil
 		}
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(wrapIOError(err))
 	}
 
-	if m != magic {
-		log.Panic("fileSorterBackEnd: wrong magic. Damaged file or bug?", zap.Uint32("magic", m))
+	if m != blockMagic {
+		log.Panic("fileSorterBackEnd: wrong blockMagic. Damaged file or bug?", zap.Uint32("actual", m))
 	}
 
 	var size uint32
 	err = binary.Read(r.reader, binary.LittleEndian, &size)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(wrapIOError(err))
 	}
 
 	if cap(r.rawBytesBuf) < int(size) {
@@ -189,7 +246,7 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	// short reads are possible with bufio, hence the need for io.ReadFull
 	n, err := io.ReadFull(r.reader, r.rawBytesBuf)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Trace(wrapIOError(err))
 	}
 
 	if n != int(size) {
@@ -201,6 +258,8 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	r.readEvents += 1
 
 	failpoint.Inject("sorterDebug", func() {
 		r.readBytes += int64(4 + 4 + int(size))
@@ -238,7 +297,7 @@ func (r *fileBackEndReader) resetAndClose() error {
 		failpoint.Inject("sorterDebug", func() {
 			info, err1 := r.f.Stat()
 			if err1 != nil {
-				failpoint.Return(errors.Trace(err))
+				failpoint.Return(errors.Trace(wrapIOError(err)))
 			}
 
 			log.Info("file debug info", zap.String("filename", info.Name()),
@@ -273,11 +332,26 @@ type fileBackEndWriter struct {
 	eventsWritten int64
 }
 
+func (w *fileBackEndWriter) writeFileHeader() error {
+	err := binary.Write(w.writer, binary.LittleEndian, uint32(fileMagic))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// reserves the space for writing the total number of entries in this file
+	err = binary.Write(w.writer, binary.LittleEndian, uint64(0))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
 func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	var err error
 	w.rawBytesBuf, err = w.backEnd.serde.marshal(event, w.rawBytesBuf)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Trace(wrapIOError(err))
 	}
 
 	size := len(w.rawBytesBuf)
@@ -285,14 +359,14 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 		log.Panic("fileSorterBackEnd: serialized to empty byte array. Bug?")
 	}
 
-	err = binary.Write(w.writer, binary.LittleEndian, uint32(magic))
+	err = binary.Write(w.writer, binary.LittleEndian, uint32(blockMagic))
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Trace(wrapIOError(err))
 	}
 
 	err = binary.Write(w.writer, binary.LittleEndian, uint32(size))
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Trace(wrapIOError(err))
 	}
 
 	// short writes are possible with bufio
@@ -300,7 +374,7 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	for offset < size {
 		n, err := w.writer.Write(w.rawBytesBuf[offset:])
 		if err != nil {
-			return errors.Trace(err)
+			return errors.Trace(wrapIOError(err))
 		}
 		offset += n
 	}
@@ -329,13 +403,24 @@ func (w *fileBackEndWriter) flushAndClose() error {
 
 	err := w.writer.Flush()
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Trace(wrapIOError(err))
+	}
+
+	_, err = w.f.Seek(numFileEntriesOffset, 0 /* relative to the beginning of the file */)
+	if err != nil {
+		return errors.Trace(wrapIOError(err))
+	}
+
+	// write the total number of entries in the file to the header
+	err = binary.Write(w.f, binary.LittleEndian, uint64(w.eventsWritten))
+	if err != nil {
+		return errors.Trace(wrapIOError(err))
 	}
 
 	err = w.f.Close()
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
-			failpoint.Return(errors.Trace(err))
+			failpoint.Return(errors.Trace(wrapIOError(err)))
 		})
 		log.Warn("fileBackEndReader: could not close file", zap.Error(err))
 		return nil
@@ -350,4 +435,17 @@ func (w *fileBackEndWriter) flushAndClose() error {
 	})
 
 	return nil
+}
+
+// wrapIOError should be called when the error is to be returned to an caller outside this file and
+// if the error could be caused by a filesystem-related error.
+func wrapIOError(err error) error {
+	cause := errors.Cause(err)
+	switch cause.(type) {
+	case *os.PathError:
+		// We don't generate stack in this helper function to avoid confusion.
+		return cerrors.ErrUnifiedSorterIOError.FastGenByArgs(err.Error())
+	default:
+		return err
+	}
 }

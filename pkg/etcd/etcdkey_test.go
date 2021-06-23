@@ -30,13 +30,13 @@ func (s *etcdkeySuite) TestEtcdKey(c *check.C) {
 	}{{
 		key: "/tidb/cdc/owner/223176cb44d20a13",
 		expected: &CDCKey{
-			Tp:           CDCKeyTypeOnwer,
+			Tp:           CDCKeyTypeOwner,
 			OwnerLeaseID: "223176cb44d20a13",
 		},
 	}, {
 		key: "/tidb/cdc/owner",
 		expected: &CDCKey{
-			Tp:           CDCKeyTypeOnwer,
+			Tp:           CDCKeyTypeOwner,
 			OwnerLeaseID: "",
 		},
 	}, {

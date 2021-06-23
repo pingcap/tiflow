@@ -17,7 +17,6 @@ import (
 	"log"
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
@@ -41,7 +40,7 @@ type CDCKeyType = int
 // the types of etcd key
 const (
 	CDCKeyTypeUnknown CDCKeyType = iota
-	CDCKeyTypeOnwer
+	CDCKeyTypeOwner
 	CDCKeyTypeCapture
 	CDCKeyTypeChangefeedInfo
 	CDCKeyTypeChangeFeedStatus
@@ -76,8 +75,8 @@ const (
 */
 type CDCKey struct {
 	Tp           CDCKeyType
-	ChangefeedID model.ChangeFeedID
-	CaptureID    model.CaptureID
+	ChangefeedID string
+	CaptureID    string
 	OwnerLeaseID string
 }
 
@@ -89,7 +88,7 @@ func (k *CDCKey) Parse(key string) error {
 	key = key[len(etcdKeyBase):]
 	switch {
 	case strings.HasPrefix(key, ownerKey):
-		k.Tp = CDCKeyTypeOnwer
+		k.Tp = CDCKeyTypeOwner
 		k.CaptureID = ""
 		k.ChangefeedID = ""
 		key = key[len(ownerKey):]
@@ -147,7 +146,7 @@ func (k *CDCKey) Parse(key string) error {
 
 func (k *CDCKey) String() string {
 	switch k.Tp {
-	case CDCKeyTypeOnwer:
+	case CDCKeyTypeOwner:
 		if len(k.OwnerLeaseID) == 0 {
 			return etcdKeyBase + ownerKey
 		}

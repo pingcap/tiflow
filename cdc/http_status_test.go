@@ -14,6 +14,7 @@
 package cdc
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -72,6 +74,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	testHandleRebalance(c)
 	testHandleMoveTable(c)
 	testHandleChangefeedQuery(c)
+	testHandleFailpoint(c)
 }
 
 func testPprof(c *check.C) {
@@ -131,4 +134,38 @@ func testRequestNonOwnerFailed(c *check.C, uri string) {
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
 	c.Assert(string(data), check.Equals, concurrency.ErrElectionNotLeader.Error())
+}
+
+func testHandleFailpoint(c *check.C) {
+	fp := "github.com/pingcap/ticdc/cdc/TestHandleFailpoint"
+	uri := fmt.Sprintf("http://%s/debug/fail/%s", advertiseAddr4Test, fp)
+	body := bytes.NewReader([]byte("return(true)"))
+	req, err := http.NewRequest("PUT", uri, body)
+	c.Assert(err, check.IsNil)
+
+	resp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer resp.Body.Close()
+	c.Assert(resp.StatusCode, check.GreaterEqual, 200)
+	c.Assert(resp.StatusCode, check.Less, 300)
+
+	failpointHit := false
+	failpoint.Inject("TestHandleFailpoint", func() {
+		failpointHit = true
+	})
+	c.Assert(failpointHit, check.IsTrue)
+
+	req, err = http.NewRequest("DELETE", uri, body)
+	c.Assert(err, check.IsNil)
+	resp, err = http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer resp.Body.Close()
+	c.Assert(resp.StatusCode, check.GreaterEqual, 200)
+	c.Assert(resp.StatusCode, check.Less, 300)
+
+	failpointHit = false
+	failpoint.Inject("TestHandleFailpoint", func() {
+		failpointHit = true
+	})
+	c.Assert(failpointHit, check.IsFalse)
 }

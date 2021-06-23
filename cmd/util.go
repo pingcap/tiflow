@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -40,9 +42,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
@@ -63,8 +65,7 @@ func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 	if isServer {
-		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity "+
-			"(cert Common Name). Use `,` to separate multiple CN")
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 	}
 }
 
@@ -216,11 +217,11 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	return nil
 }
 
-func verifyStartTs(ctx context.Context, startTs uint64) error {
+func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) error {
 	if disableGCSafePointCheck {
 		return nil
 	}
-	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
+	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
 }
 
 func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
@@ -293,6 +294,16 @@ func verifySink(
 	return nil
 }
 
+// verifyReplicaConfig do strictDecodeFile check and only verify the rules for now
+func verifyReplicaConfig(path, component string, cfg *config.ReplicaConfig) error {
+	err := strictDecodeFile(path, component, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = filter.VerifyRules(cfg)
+	return err
+}
+
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
 // into the Config struct, issue an error and stop the server from starting.
 func strictDecodeFile(path, component string, cfg interface{}) error {
@@ -314,6 +325,29 @@ func strictDecodeFile(path, component string, cfg interface{}) error {
 	}
 
 	return errors.Trace(err)
+}
+
+// logHTTPProxies logs HTTP proxy relative environment variables.
+func logHTTPProxies() {
+	fields := proxyFields()
+	if len(fields) > 0 {
+		log.Info("using proxy config", fields...)
+	}
+}
+
+func proxyFields() []zap.Field {
+	proxyCfg := httpproxy.FromEnvironment()
+	fields := make([]zap.Field, 0, 3)
+	if proxyCfg.HTTPProxy != "" {
+		fields = append(fields, zap.String("http_proxy", proxyCfg.HTTPProxy))
+	}
+	if proxyCfg.HTTPSProxy != "" {
+		fields = append(fields, zap.String("https_proxy", proxyCfg.HTTPSProxy))
+	}
+	if proxyCfg.NoProxy != "" {
+		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
+	}
+	return fields
 }
 
 func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64) error {
