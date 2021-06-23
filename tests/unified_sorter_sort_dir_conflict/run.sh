@@ -9,15 +9,15 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 MAX_RETRIES=20
 
-function check_changefeed_mark_error_regex() {
+function check_changefeed_mark_stopped_regex() {
     endpoints=$1
     changefeedid=$2
     error_msg=$3
     info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
     echo "$info"
     state=$(echo $info|jq -r '.state')
-    if [[ ! "$state" == "error" ]]; then
-        echo "changefeed state $state does not equal to error"
+    if [[ ! "$state" == "stopped" ]]; then
+        echo "changefeed state $state does not equal to stopped"
         exit 1
     fi
     message=$(echo $info|jq -r '.error.message')
