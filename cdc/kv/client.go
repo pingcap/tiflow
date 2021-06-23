@@ -86,7 +86,7 @@ var reconnectInterval = 60 * time.Minute
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
 // false: use kv client v1, which runs a goroutine for every single region
-var enableKVClientV2 = true
+var enableKVClientV2 = false
 
 type singleRegionInfo struct {
 	verID  tikv.RegionVerID
