@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -69,8 +70,12 @@ const (
 	// don't need to force reload region any more.
 	regionScheduleReload = false
 
-	// defines the scan region limit for each table
-	regionScanLimitPerTable = 40
+	// defaultRegionChanSize is the default channel size for region channel, including
+	// range request, region request and region error.
+	// Note the producer of region error channel, and the consumer of range request
+	// channel work in an asynchronous way, the larger channel can decrease the
+	// frequency of creating new goroutine.
+	defaultRegionChanSize = 128
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -546,9 +551,6 @@ type eventFeedSession struct {
 	streams          map[string]cdcpb.ChangeData_EventFeedClient
 	streamsLock      sync.RWMutex
 	streamsCanceller map[string]context.CancelFunc
-
-	workers     map[string]*regionWorker
-	workersLock sync.RWMutex
 }
 
 type rangeRequestTask struct {
@@ -569,16 +571,17 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	return &eventFeedSession{
 		client:            client,
 		regionCache:       regionCache,
 		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, regionScanLimitPerTable),
-		regionCh:          make(chan singleRegionInfo, 16),
-		errCh:             make(chan regionErrorInfo, 16),
-		requestRangeCh:    make(chan rangeRequestTask, 16),
+		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
+		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
+		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
+		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
 		enableKVClientV2:  enableKVClientV2,
@@ -590,7 +593,6 @@ func newEventFeedSession(
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
 		streamsCanceller:  make(map[string]context.CancelFunc),
-		workers:           make(map[string]*regionWorker),
 	}
 }
 
@@ -897,6 +899,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			// `receiveFromStream`, so no need to retry here.
 			_, ok := pendingRegions.take(requestID)
 			if !ok {
+				// since this pending region has been removed, the token has been
+				// released in advance, re-add one token here.
+				s.regionRouter.Acquire(rpcCtx.Addr)
 				continue
 			}
 
@@ -937,6 +942,29 @@ func (s *eventFeedSession) dispatchRequest(
 		}
 
 		log.Debug("dispatching region", zap.Uint64("regionID", sri.verID.GetID()))
+
+		// Send a resolved ts to event channel first, for two reasons:
+		// 1. Since we have locked the region range, and have maintained correct
+		//    checkpoint ts for the range, it is safe to report the resolved ts
+		//    to puller at this moment.
+		// 2. Before the kv client gets region rpcCtx, sends request to TiKV and
+		//    receives the first kv event from TiKV, the region could split or
+		//    merge in advance, which should cause the change of resolved ts
+		//    distribution in puller, so this resolved ts event is needed.
+		// After this resolved ts event is sent, we don't need to send one more
+		// resolved ts event when the region starts to work.
+		resolvedEv := &model.RegionFeedEvent{
+			RegionID: sri.verID.GetID(),
+			Resolved: &model.ResolvedSpan{
+				Span:       sri.span,
+				ResolvedTs: sri.ts,
+			},
+		}
+		select {
+		case s.eventCh <- resolvedEv:
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
 
 		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
 		if err != nil {
@@ -1394,7 +1422,7 @@ func (s *eventFeedSession) sendResolvedTs(
 		state, ok := regionStates[regionID]
 		if ok {
 			if state.isStopped() {
-				log.Warn("drop resolved ts due to region feed stopped",
+				log.Debug("drop resolved ts due to region feed stopped",
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", state.requestID),
 					zap.String("addr", addr))
@@ -1474,18 +1502,6 @@ func (s *eventFeedSession) singleEventFeed(
 		return nil
 	}
 
-	select {
-	case s.eventCh <- &model.RegionFeedEvent{
-		RegionID: regionID,
-		Resolved: &model.ResolvedSpan{
-			Span:       span,
-			ResolvedTs: startTs,
-		},
-	}:
-	case <-ctx.Done():
-		err = errors.Trace(ctx.Err())
-		return
-	}
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
