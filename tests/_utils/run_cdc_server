@@ -22,11 +22,7 @@ log_level=debug
 restart=
 failpoint=$GO_FAILPOINTS
 config_path=
-<<<<<<< HEAD
-sort_dir=
-=======
 data_dir=
->>>>>>> 79abe74e (tests: remove --sort-dir in test scripts (#2110))
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -89,13 +85,8 @@ while [[ ${1} ]]; do
     fi
 done
 
-<<<<<<< HEAD
-if [ -z "$sort_dir" ]; then
-    sort_dir=${workdir}/cdc-sort${logsuffix}
-=======
 if [ -z "$data_dir" ]; then
     data_dir=${workdir}/cdc_data${logsuffix}
->>>>>>> 79abe74e (tests: remove --sort-dir in test scripts (#2110))
 fi
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
@@ -110,11 +101,7 @@ if [[ "$restart" == "true" ]]; then
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
-<<<<<<< HEAD
-        --sort-dir $sort_dir \
-=======
         --data-dir "$data_dir" \
->>>>>>> 79abe74e (tests: remove --sort-dir in test scripts (#2110))
         $config_path \
         $tls \
         $certcn \
@@ -130,11 +117,7 @@ else
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
-<<<<<<< HEAD
-    --sort-dir $sort_dir \
-=======
     --data-dir "$data_dir" \
->>>>>>> 79abe74e (tests: remove --sort-dir in test scripts (#2110))
     $config_path \
     $tls \
     $certcn \

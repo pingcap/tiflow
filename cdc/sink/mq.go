@@ -371,7 +371,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 		if partition >= 0 {
 			return k.mqProducer.SendMessage(ctx, message, partition)
 		}
-		return cerror.ErrAsyncBroadcaseNotSupport.GenWithStackByArgs()
+		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
 			err := k.mqProducer.SendMessage(ctx, message, partition)
@@ -460,6 +460,21 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	s = sinkURI.Query().Get("key")
 	if s != "" {
 		config.Credential.KeyPath = s
+	}
+
+	s = sinkURI.Query().Get("sasl-user")
+	if s != "" {
+		config.SaslScram.SaslUser = s
+	}
+
+	s = sinkURI.Query().Get("sasl-password")
+	if s != "" {
+		config.SaslScram.SaslPassword = s
+	}
+
+	s = sinkURI.Query().Get("sasl-mechanism")
+	if s != "" {
+		config.SaslScram.SaslMechanism = s
 	}
 
 	s = sinkURI.Query().Get("auto-create-topic")
