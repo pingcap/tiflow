@@ -35,6 +35,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// Endpoint schemes.
+const (
+	HTTP  = "http://"
+	HTTPS = "https://"
+)
+
 var (
 	serverPdAddr         string
 	serverConfigFilePath string
@@ -204,11 +210,15 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	}
 	for _, ep := range strings.Split(serverPdAddr, ",") {
 		if conf.Security.IsTLSEnabled() {
-			if strings.Index(ep, "http://") == 0 {
+			if strings.Index(ep, HTTP) == 0 {
 				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
 			}
-		} else if strings.Index(ep, "http://") != 0 {
-			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
+		} else {
+			if strings.Index(ep, HTTPS) == 0 {
+				return nil, errors.New("PD endpoint scheme is https, please provide certificate")
+			} else if strings.Index(ep, HTTP) != 0 {
+				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
+			}
 		}
 	}
 
