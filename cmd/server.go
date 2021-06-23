@@ -210,13 +210,13 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	}
 	for _, ep := range strings.Split(serverPdAddr, ",") {
 		if conf.Security.IsTLSEnabled() {
-			if strings.Index(ep, HTTP) == 0 {
+			if strings.HasPrefix(ep, HTTP) {
 				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
 			}
 		} else {
-			if strings.Index(ep, HTTPS) == 0 {
+			if strings.HasPrefix(ep, HTTPS) {
 				return nil, errors.New("PD endpoint scheme is https, please provide certificate")
-			} else if strings.Index(ep, HTTP) != 0 {
+			} else if !strings.HasPrefix(ep, HTTP) {
 				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
 			}
 		}
