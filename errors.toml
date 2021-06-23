@@ -11,7 +11,7 @@ error = '''
 stop processor by admin command
 '''
 
-["CDC:ErrAsyncBroadcaseNotSupport"]
+["CDC:ErrAsyncBroadcastNotSupport"]
 error = '''
 Async broadcasts not supported
 '''
@@ -156,6 +156,11 @@ error = '''
 decode row data to datum failed
 '''
 
+["CDC:ErrEmitCheckpointTsFailed"]
+error = '''
+emit checkpoint ts failed
+'''
+
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -256,6 +261,11 @@ error = '''
 event is larger than the total memory quota, size: %d, quota: %d
 '''
 
+["CDC:ErrGCTTLExceeded"]
+error = '''
+the checkpoint-ts(%d) lag of the changefeed(%s) %d has exceeded the GC TTL
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
@@ -308,7 +318,7 @@ invalid admin job type: %d
 
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
-bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"
+bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
 '''
 
 ["CDC:ErrInvalidEtcdKey"]
@@ -361,7 +371,7 @@ error = '''
 kafka async send message failed
 '''
 
-["CDC:ErrKafkaFlushUnfished"]
+["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
 '''
@@ -394,6 +404,11 @@ new sarama producer
 ["CDC:ErrKafkaSendMessage"]
 error = '''
 kafka send message failed
+'''
+
+["CDC:ErrLeaseExpired"]
+error = '''
+owner lease expired 
 '''
 
 ["CDC:ErrLeaseTimeout"]
@@ -491,6 +506,11 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
+["CDC:ErrNotOwner"]
+error = '''
+this capture is not a owner
+'''
+
 ["CDC:ErrOldValueNotEnabled"]
 error = '''
 old value is not enabled
@@ -504,6 +524,11 @@ operate on a closed notifier
 ["CDC:ErrOwnerCampaignKeyDeleted"]
 error = '''
 owner campaign key deleted
+'''
+
+["CDC:ErrOwnerChangedUnexpectedly"]
+error = '''
+owner changed unexpectedly
 '''
 
 ["CDC:ErrOwnerChangefeedNotFound"]
@@ -526,6 +551,11 @@ error = '''
 owner sort dir
 '''
 
+["CDC:ErrOwnerUnknown"]
+error = '''
+owner running unknown error
+'''
+
 ["CDC:ErrPDBatchLoadRegions"]
 error = '''
 pd batch load regions failed
@@ -539,6 +569,11 @@ etcd api call error
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
+'''
+
+["CDC:ErrPipelineTryAgain"]
+error = '''
+pipeline is full, please try again. Internal use only, report a bug if seen externally
 '''
 
 ["CDC:ErrPrepareAvroFailed"]
@@ -601,7 +636,7 @@ error = '''
 resolve locks failed
 '''
 
-["CDC:ErrS3SinkInitialzie"]
+["CDC:ErrS3SinkInitialize"]
 error = '''
 new s3 sink
 '''
@@ -696,9 +731,19 @@ error = '''
 fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
 '''
 
+["CDC:ErrSupportGetOnly"]
+error = '''
+this api supports GET method only
+'''
+
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:ErrTableListenReplicated"]
+error = '''
+A table is being replicated by at least two processors(%s, %s), please report a bug
 '''
 
 ["CDC:ErrTableProcessorStoppedSafely"]
@@ -738,7 +783,7 @@ unified sorter backend is terminating
 
 ["CDC:ErrUnifiedSorterIOError"]
 error = '''
-unified sorter IO error
+unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s
 '''
 
 ["CDC:ErrUnknownKVEventType"]

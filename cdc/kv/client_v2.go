@@ -138,7 +138,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 		state, ok := worker.getRegionState(regionID)
 		if ok {
 			if state.isStopped() {
-				log.Warn("drop resolved ts due to region feed stopped",
+				log.Debug("drop resolved ts due to region feed stopped",
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", state.requestID),
 					zap.String("addr", addr))
@@ -190,9 +190,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 				return
 			}
 		}
-		s.workersLock.Lock()
-		delete(s.workers, addr)
-		s.workersLock.Unlock()
 	}()
 
 	captureAddr := util.CaptureAddrFromCtx(ctx)
@@ -202,9 +199,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, limiter, addr)
-	s.workersLock.Lock()
-	s.workers[addr] = worker
-	s.workersLock.Unlock()
 
 	g.Go(func() error {
 		return worker.run(ctx)

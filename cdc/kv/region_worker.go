@@ -39,13 +39,9 @@ import (
 )
 
 var (
-	regionWorkerPool workerpool.WorkerPool
-	workerPoolOnce   sync.Once
-	// The magic number here is keep the same with some magic numbers in some
-	// other components in TiCDC, including worker pool task chan size, mounter
-	// chan size etc.
-	// TODO: unified channel buffer mechanism
-	regionWorkerInputChanSize = 12800
+	regionWorkerPool          workerpool.WorkerPool
+	workerPoolOnce            sync.Once
+	regionWorkerInputChanSize = 128
 	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
 	regionWorkerHighWatermark = int(float64(regionWorkerInputChanSize) * 0.7)
 )
@@ -131,8 +127,9 @@ lock for each region state(each region state has one lock).
 for event processing to increase throughput.
 */
 type regionWorker struct {
-	session *eventFeedSession
-	limiter *rate.Limiter
+	parentCtx context.Context
+	session   *eventFeedSession
+	limiter   *rate.Limiter
 
 	inputCh  chan *regionStatefulEvent
 	outputCh chan<- *model.RegionFeedEvent
@@ -226,7 +223,11 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		case <-t.C:
 			// We can proceed.
 		case <-ctx.Done():
-			return ctx.Err()
+			revokeToken := !state.initialized
+			return w.session.onRegionFail(w.parentCtx, regionErrorInfo{
+				singleRegionInfo: state.sri,
+				err:              err,
+			}, revokeToken)
 		}
 	}
 
@@ -528,13 +529,14 @@ func (w *regionWorker) checkErrorReconnect(err error) error {
 	return err
 }
 
-func (w *regionWorker) run(ctx context.Context) error {
+func (w *regionWorker) run(parentCtx context.Context) error {
 	defer func() {
 		for _, h := range w.handles {
 			h.Unregister()
 		}
 	}()
-	wg, ctx := errgroup.WithContext(ctx)
+	w.parentCtx = parentCtx
+	wg, ctx := errgroup.WithContext(parentCtx)
 	w.initMetrics(ctx)
 	w.initPoolHandles(ctx, w.concurrent)
 	wg.Go(func() error {
@@ -726,11 +728,12 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 			}
 			revokeToken := !state.initialized
 			state.lock.Unlock()
-			err = w.session.onRegionFail(ctx, regionErrorInfo{
+			// since the context used in region worker will be cancelled after
+			// region worker exits, we must use the parent context to prevent
+			// regionErrorInfo loss.
+			err = w.session.onRegionFail(w.parentCtx, regionErrorInfo{
 				singleRegionInfo: singleRegionInfo,
-				err: &rpcCtxUnavailableErr{
-					verID: singleRegionInfo.verID,
-				},
+				err:              cerror.ErrEventFeedAborted.FastGenByArgs(),
 			}, revokeToken)
 			return err == nil
 		})
