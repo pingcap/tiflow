@@ -138,13 +138,13 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
 			if tlsConfig != nil {
-				if strings.Contains(cliPdAddr, HTTP) {
+				if strings.HasPrefix(cliPdAddr, HTTP) {
 					return errors.New("PD endpoint scheme should be https")
 				}
 			} else {
-				if strings.Contains(cliPdAddr, HTTPS) {
+				if strings.HasPrefix(cliPdAddr, HTTPS) {
 					return errors.New("PD endpoint scheme is https, please provide certificate")
-				} else if !strings.Contains(cliPdAddr, HTTP) {
+				} else if !strings.HasPrefix(cliPdAddr, HTTP) {
 					return errors.New("PD endpoint scheme should be http")
 				}
 			}
