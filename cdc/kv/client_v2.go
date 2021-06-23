@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -94,19 +93,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 		state.start()
 		worker.setRegionState(event.RegionId, state)
-
-		// send resolved event when starting a single event feed
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case s.eventCh <- &model.RegionFeedEvent{
-			RegionID: state.sri.verID.GetID(),
-			Resolved: &model.ResolvedSpan{
-				Span:       state.sri.span,
-				ResolvedTs: state.sri.ts,
-			},
-		}:
-		}
 	} else if state.isStopped() {
 		log.Warn("drop event due to region feed stopped",
 			zap.Uint64("regionID", event.RegionId),

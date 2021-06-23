@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	"github.com/pingcap/check"
@@ -79,5 +80,29 @@ func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 	})
 	// longer than one check tick 3s
 	time.Sleep(time.Second * 4)
+	cancel()
+}
+
+func (s *serverSuite) TestInitDataDir(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	pdEndpoints := []string{
+		"http://" + s.clientURL.Host,
+		"http://invalid-pd-host:2379",
+	}
+	server, err := NewServer(pdEndpoints)
+	c.Assert(err, check.IsNil)
+	c.Assert(server, check.NotNil)
+
+	conf := config.GetGlobalServerConfig()
+	conf.DataDir = c.MkDir()
+
+	err = server.initDataDir(ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(conf.DataDir, check.Not(check.Equals), "")
+	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
+	config.StoreGlobalServerConfig(conf)
 	cancel()
 }
