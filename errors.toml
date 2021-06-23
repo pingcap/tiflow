@@ -146,6 +146,11 @@ error = '''
 codec decode error
 '''
 
+["CDC:ErrCraftCodecInvalidData"]
+error = '''
+craft codec invalid data
+'''
+
 ["CDC:ErrCreateMarkTableFailed"]
 error = '''
 create mark table failed
@@ -719,6 +724,11 @@ server creates pd client failed
 ["CDC:ErrServiceSafepointLost"]
 error = '''
 service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
+'''
+
+["CDC:ErrSinkInvalidConfig"]
+error = '''
+sink config invalid
 '''
 
 ["CDC:ErrSinkURIInvalid"]
