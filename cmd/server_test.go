@@ -106,6 +106,9 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		"--advertise-addr", "127.5.5.1:7777",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
+		"--log-file-max-size", "400",
+		"--log-file-max-days", "4",
+		"--log-file-max-backups", "4",
 		"--data-dir", dataDir,
 		"--gc-ttl", "10",
 		"--tz", "UTC",
@@ -128,6 +131,9 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		AdvertiseAddr:          "127.5.5.1:7777",
 		LogFile:                "/root/cdc.log",
 		LogLevel:               "debug",
+		LogFileMaxSize:         400,
+		LogFileMaxDays:         4,
+		LogFileMaxBackups:      4,
 		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
@@ -165,6 +171,9 @@ advertise-addr = "127.0.0.1:1111"
 
 log-file = "/root/cdc1.log"
 log-level = "warn"
+log-file-max-size = 200
+log-file-max-days = 1
+log-file-max-backups = 1
 data-dir = "%+v"
 gc-ttl = 500
 tz = "US"
@@ -193,6 +202,9 @@ sort-dir = "/tmp/just_a_test"
 		AdvertiseAddr:          "127.0.0.1:1111",
 		LogFile:                "/root/cdc1.log",
 		LogLevel:               "warn",
+		LogFileMaxSize:         200,
+		LogFileMaxDays:         1,
+		LogFileMaxBackups:      1,
 		DataDir:                dataDir,
 		GcTTL:                  500,
 		TZ:                     "US",
@@ -231,6 +243,9 @@ cert-allowed-cn = ["dd","ee"]
 		"--addr", "127.5.5.1:8833",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
+		"--log-file-max-size", "201",
+		"--log-file-max-days", "2",
+		"--log-file-max-backups", "2",
 		"--data-dir", dataDir,
 		"--gc-ttl", "10",
 		"--tz", "UTC",
@@ -250,6 +265,9 @@ cert-allowed-cn = ["dd","ee"]
 		AdvertiseAddr:          "127.0.0.1:1111",
 		LogFile:                "/root/cdc.log",
 		LogLevel:               "debug",
+		LogFileMaxSize:         201,
+		LogFileMaxDays:         2,
+		LogFileMaxBackups:      2,
 		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",

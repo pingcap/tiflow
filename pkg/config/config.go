@@ -188,9 +188,9 @@ type ServerConfig struct {
 
 	LogFile           string `toml:"log-file" json:"log-file"`
 	LogLevel          string `toml:"log-level" json:"log-level"`
-	LogFileMaxSize    int    `toml:"log-max-size" json:"log-max-size"`
-	LogFileMaxDays    int    `toml:"log-max-days" json:"log-max-days"`
-	LogFileMaxBackups int    `toml:"log-max-backups" json:"log-max-backups"`
+	LogFileMaxSize    int    `toml:"log-file-max-size" json:"log-file-max-size"`
+	LogFileMaxDays    int    `toml:"log-file-max-days" json:"log-file-max-days"`
+	LogFileMaxBackups int    `toml:"log-file-max-backups" json:"log-file-max-backups"`
 
 	DataDir string `toml:"data-dir" json:"data-dir"`
 
