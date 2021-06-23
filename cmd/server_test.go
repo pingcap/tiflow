@@ -63,6 +63,13 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.ErrorMatches, ".*PD endpoint scheme should be http.*")
 
+	// test missing certificate
+	cmd = new(cobra.Command)
+	initServerCmd(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--pd=https://aa"}), check.IsNil)
+	_, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.ErrorMatches, ".*PD endpoint scheme is https, please provide certificate.*")
+
 	// test undefined flag
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
