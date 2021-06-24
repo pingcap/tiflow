@@ -7065,9 +7065,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 15
-=======
   "version": 16
->>>>>>> ca64c784 (metrics: add metrics for table memory consumption (#1846))
 }
