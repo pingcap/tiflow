@@ -193,6 +193,7 @@ data-flow-diagram: docs/data-flow.dot
 clean:
 	go clean -i ./...
 	rm -rf *.out
+	rm -rf bin
 
 tools/bin/gofumports: tools/check/go.mod
 	cd tools/check; test -e ../bin/gofumports || \
