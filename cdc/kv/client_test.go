@@ -1519,17 +1519,11 @@ ReceiveLoop:
 func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	clientv2 := enableKVClientV2
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
-
 	// test client v2
 	// enableKVClientV2 = true
 	// s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 
 	// test client v1
-	enableKVClientV2 = false
 	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 }
 
@@ -1539,17 +1533,11 @@ func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	clientv2 := enableKVClientV2
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
-
 	// test client v2
 	// enableKVClientV2 = true
 	// s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 
 	// test client v1
-	enableKVClientV2 = false
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 }
 
@@ -2624,12 +2612,6 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
@@ -2683,15 +2665,9 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 
 // TestClientErrNoPendingRegion has the similar procedure with TestClientV1UnlockRangeReentrant
 // The difference is the delay injected point for region 2
-func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
+func (s *etcdSuite) TestClientV1ErrNoPendingRegion(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
-
-	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -2759,13 +2735,7 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	clientv2 := enableKVClientV2
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
-
 	// test kv client v1
-	enableKVClientV2 = false
 	s.testKVClientForceReconnect(c)
 
 	// enableKVClientV2 = true
