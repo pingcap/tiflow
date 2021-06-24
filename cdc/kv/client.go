@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -68,9 +69,6 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region any more.
 	regionScheduleReload = false
-
-	// defines the scan region limit for each table
-	regionScanLimitPerTable = 6
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -559,13 +557,14 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	return &eventFeedSession{
 		client:            client,
 		regionCache:       regionCache,
 		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, regionScanLimitPerTable),
+		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
 		regionCh:          make(chan singleRegionInfo, 16),
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),

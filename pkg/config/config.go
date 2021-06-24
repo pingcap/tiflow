@@ -188,6 +188,7 @@ var defaultServerConfig = &ServerConfig{
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+		RegionScanLimit:  6,
 	},
 }
 
@@ -322,6 +323,16 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.PerTableMemoryQuota < 6*1024*1024 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+	}
+
+	if c.KVClient == nil {
+		c.KVClient = defaultServerConfig.KVClient
+	}
+	if c.KVClient.WorkerConcurrent <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
+	if c.KVClient.RegionScanLimit <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
 	}
 
 	return nil
