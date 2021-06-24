@@ -34,7 +34,7 @@ spec:
           image: cdc:chaos
           imagePullPolicy: IfNotPresent # build this image in GitHub action workflow, make sure use local image
           volumeMounts:
-            - mountPath: /data
+            - mountPath: /tmp/cdc_data
               name: cdc
           env:
             - name: MY_POD_NAME
@@ -53,7 +53,6 @@ spec:
             - "server"
             - "--pd=http://upstream-pd.playground.svc:2379"
             - "--log-file=/var/log/$(MY_POD_NAME).log"
-            - "--data-dir=/data"
             - "--sorter-max-memory-consumption=0"
   volumeClaimTemplates:
     - metadata:
@@ -63,4 +62,4 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 2Gi
+            storage: 3Gi
