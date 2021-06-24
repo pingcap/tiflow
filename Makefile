@@ -193,7 +193,8 @@ data-flow-diagram: docs/data-flow.dot
 clean:
 	go clean -i ./...
 	rm -rf *.out
-	rm -rf bin
+	rm -f bin/cdc
+	rm -f bin/cdc_kafka_consumer
 
 tools/bin/gofumports: tools/check/go.mod
 	cd tools/check; test -e ../bin/gofumports || \
