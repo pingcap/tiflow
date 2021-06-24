@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"strings"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	ticonfig "github.com/pingcap/tidb/config"
@@ -38,6 +38,9 @@ import (
 var (
 	serverPdAddr         string
 	serverConfigFilePath string
+
+	logFile  string
+	logLevel string
 
 	serverConfig = config.GetDefaultServerConfig()
 
@@ -68,8 +71,8 @@ func initServerCmd(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&serverConfig.AdvertiseAddr, "advertise-addr", defaultServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 	cmd.Flags().StringVar(&serverConfig.TZ, "tz", defaultServerConfig.TZ, "Specify time zone of TiCDC cluster")
 	cmd.Flags().Int64Var(&serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
-	cmd.Flags().StringVar(&serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
-	cmd.Flags().StringVar(&serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().StringVar(&logFile, "log-file", defaultServerConfig.Log.File.Filename, "log file path")
+	cmd.Flags().StringVar(&logLevel, "log-level", defaultServerConfig.Log.Level, "log level (etc: debug|info|warn|error)")
 	cmd.Flags().StringVar(&serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
@@ -96,11 +99,11 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	}
 
 	cancel := initCmd(cmd, &logutil.Config{
-		File:           conf.LogFile,
-		Level:          conf.LogLevel,
-		FileMaxSize:    conf.LogFileMaxSize,
-		FileMaxDays:    conf.LogFileMaxDays,
-		FileMaxBackups: conf.LogFileMaxBackups,
+		Level:          conf.Log.Level,
+		File:           conf.Log.File.Filename,
+		FileMaxSize:    conf.Log.File.MaxSize,
+		FileMaxDays:    conf.Log.File.MaxDays,
+		FileMaxBackups: conf.Log.File.MaxBackups,
 	})
 	defer cancel()
 	tz, err := util.GetTimezone(conf.TZ)
@@ -159,9 +162,9 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		case "gc-ttl":
 			conf.GcTTL = serverConfig.GcTTL
 		case "log-file":
-			conf.LogFile = serverConfig.LogFile
+			conf.Log.File.Filename = logFile
 		case "log-level":
-			conf.LogLevel = serverConfig.LogLevel
+			conf.Log.Level = logLevel
 		case "data-dir":
 			conf.DataDir = serverConfig.DataDir
 		case "owner-flush-interval":

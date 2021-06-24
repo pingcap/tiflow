@@ -140,7 +140,7 @@ func (s *decodeFileSuite) TestAndWriteExampleServerTOML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defcfg := config.GetDefaultServerConfig()
 	defcfg.AdvertiseAddr = "127.0.0.1:8300"
-	defcfg.LogFile = "/tmp/ticdc/ticdc.log"
+	defcfg.Log.File.Filename = "/tmp/ticdc/ticdc.log"
 	c.Assert(cfg, check.DeepEquals, defcfg)
 }
 

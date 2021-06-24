@@ -146,17 +146,34 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
+// LogConfig represents log config for server
+type LogFileConfig struct {
+	Filename   string `toml:"filename" json:"filename"`
+	MaxSize    int    `toml:"max-size" json:"max-size"`
+	MaxDays    int    `toml:"max-days" json:"max-days"`
+	MaxBackups int    `toml:"max-backups" json:"max-backups"`
+}
+
+type LogConfig struct {
+	Level string         `toml:"level" json:"level"`
+	File  *LogFileConfig `toml:"file" json:"file"`
+}
+
 var defaultServerConfig = &ServerConfig{
-	Addr:              "127.0.0.1:8300",
-	AdvertiseAddr:     "",
-	LogFile:           "",
-	LogLevel:          "info",
-	LogFileMaxSize:    300,
-	LogFileMaxDays:    0,
-	LogFileMaxBackups: 0,
-	DataDir:           "",
-	GcTTL:             24 * 60 * 60, // 24H
-	TZ:                "System",
+	Addr:          "127.0.0.1:8300",
+	AdvertiseAddr: "",
+	Log: &LogConfig{
+		Level: "info",
+		File: &LogFileConfig{
+			Filename:   "",
+			MaxSize:    300,
+			MaxDays:    0,
+			MaxBackups: 0,
+		},
+	},
+	DataDir: "",
+	GcTTL:   24 * 60 * 60, // 24H
+	TZ:      "System",
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
 	// default capture session ttl to 10s to increase robust to PD jitter,
@@ -186,11 +203,7 @@ type ServerConfig struct {
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
-	LogFile           string `toml:"log-file" json:"log-file"`
-	LogLevel          string `toml:"log-level" json:"log-level"`
-	LogFileMaxSize    int    `toml:"log-file-max-size" json:"log-file-max-size"`
-	LogFileMaxDays    int    `toml:"log-file-max-days" json:"log-file-max-days"`
-	LogFileMaxBackups int    `toml:"log-file-max-backups" json:"log-file-max-backups"`
+	Log *LogConfig `toml:"log" json:"log"`
 
 	DataDir string `toml:"data-dir" json:"data-dir"`
 

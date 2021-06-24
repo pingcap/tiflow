@@ -124,13 +124,17 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "127.5.5.1:8833",
-		AdvertiseAddr:          "127.5.5.1:7777",
-		LogFile:                "/root/cdc.log",
-		LogLevel:               "debug",
-		LogFileMaxSize:         300,
-		LogFileMaxDays:         0,
-		LogFileMaxBackups:      0,
+		Addr:          "127.5.5.1:8833",
+		AdvertiseAddr: "127.5.5.1:7777",
+		Log: &config.LogConfig{
+			Level: "debug",
+			File: &config.LogFileConfig{
+				Filename:   "/root/cdc.log",
+				MaxSize:    300,
+				MaxDays:    0,
+				MaxBackups: 0,
+			},
+		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
@@ -166,11 +170,6 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 addr = "128.0.0.1:1234"
 advertise-addr = "127.0.0.1:1111"
 
-log-file = "/root/cdc1.log"
-log-level = "warn"
-log-file-max-size = 200
-log-file-max-days = 1
-log-file-max-backups = 1
 data-dir = "%+v"
 gc-ttl = 500
 tz = "US"
@@ -178,6 +177,15 @@ capture-session-ttl = 10
 
 owner-flush-interval = "600ms"
 processor-flush-interval = "600ms"
+
+[log]
+level = "warn"
+
+[log.file]
+filename = "/root/cdc1.log"
+max-size = 200
+max-days = 1
+max-backups = 1
 
 [sorter]
 chunk-size-limit = 10000000
@@ -195,13 +203,17 @@ sort-dir = "/tmp/just_a_test"
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "128.0.0.1:1234",
-		AdvertiseAddr:          "127.0.0.1:1111",
-		LogFile:                "/root/cdc1.log",
-		LogLevel:               "warn",
-		LogFileMaxSize:         200,
-		LogFileMaxDays:         1,
-		LogFileMaxBackups:      1,
+		Addr:          "128.0.0.1:1234",
+		AdvertiseAddr: "127.0.0.1:1111",
+		Log: &config.LogConfig{
+			Level: "warn",
+			File: &config.LogFileConfig{
+				Filename:   "/root/cdc1.log",
+				MaxSize:    200,
+				MaxDays:    1,
+				MaxBackups: 1,
+			},
+		},
 		DataDir:                dataDir,
 		GcTTL:                  500,
 		TZ:                     "US",
@@ -255,13 +267,17 @@ cert-allowed-cn = ["dd","ee"]
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "127.5.5.1:8833",
-		AdvertiseAddr:          "127.0.0.1:1111",
-		LogFile:                "/root/cdc.log",
-		LogLevel:               "debug",
-		LogFileMaxSize:         200,
-		LogFileMaxDays:         1,
-		LogFileMaxBackups:      1,
+		Addr:          "127.5.5.1:8833",
+		AdvertiseAddr: "127.0.0.1:1111",
+		Log: &config.LogConfig{
+			Level: "debug",
+			File: &config.LogFileConfig{
+				Filename:   "/root/cdc.log",
+				MaxSize:    200,
+				MaxDays:    1,
+				MaxBackups: 1,
+			},
+		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
