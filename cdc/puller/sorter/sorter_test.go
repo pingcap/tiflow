@@ -354,7 +354,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 100000, true)
+		err := testSorter(ctx, c, sorter, 10000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()
@@ -376,7 +376,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	finishedCh = make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 100000, true)
+		err := testSorter(ctx, c, sorter, 10000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected write error.*")
 		close(finishedCh)
 	}()
@@ -429,7 +429,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 100000, true)
+		err := testSorter(ctx, c, sorter, 10000, true)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()
