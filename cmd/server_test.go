@@ -128,6 +128,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
+			RegionScanLimit:  6,
 		},
 	})
 
@@ -198,6 +199,7 @@ sort-dir = "/tmp/just_a_test"
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
+			RegionScanLimit:  6,
 		},
 	})
 
@@ -263,6 +265,7 @@ cert-allowed-cn = ["dd","ee"]
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
+			RegionScanLimit:  6,
 		},
 	})
 }
