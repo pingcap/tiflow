@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -53,13 +54,15 @@ import (
 )
 
 const (
-	dialTimeout               = 10 * time.Second
-	maxRetry                  = 100
-	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms)
-	grpcInitialWindowSize     = 1 << 27 // 128 MB The value for initial window size on a stream
+	dialTimeout           = 10 * time.Second
+	maxRetry              = 100
+	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
+	// TODO find optimal values and test extensively before releasing
+	// The old values cause the gRPC stream to stall for some unknown reason.
+	grpcInitialWindowSize     = 1 << 26 // 64 MB The value for initial window size on a stream
 	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 30 // 1024 MB The maximum message size the client can receive
-	grpcConnCount             = 10
+	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
+	grpcConnCount             = 2
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
@@ -69,12 +72,16 @@ const (
 	// don't need to force reload region any more.
 	regionScheduleReload = false
 
-	// defines the scan region limit for each table
-	regionScanLimitPerTable = 40
+	// defaultRegionChanSize is the default channel size for region channel, including
+	// range request, region request and region error.
+	// Note the producer of region error channel, and the consumer of range request
+	// channel work in an asynchronous way, the larger channel can decrease the
+	// frequency of creating new goroutine.
+	defaultRegionChanSize = 128
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
-var reconnectInterval = 15 * time.Minute
+var reconnectInterval = 60 * time.Minute
 
 // hard code switch
 // true: use kv client v2, which has a region worker for each stream
@@ -175,12 +182,6 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return atomic.LoadInt32(&s.stopped) > 0
-}
-
-func (s *regionFeedState) isInitialized() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.initialized
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
@@ -546,9 +547,6 @@ type eventFeedSession struct {
 	streams          map[string]cdcpb.ChangeData_EventFeedClient
 	streamsLock      sync.RWMutex
 	streamsCanceller map[string]context.CancelFunc
-
-	workers     map[string]*regionWorker
-	workersLock sync.RWMutex
 }
 
 type rangeRequestTask struct {
@@ -569,16 +567,17 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	return &eventFeedSession{
 		client:            client,
 		regionCache:       regionCache,
 		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, regionScanLimitPerTable),
-		regionCh:          make(chan singleRegionInfo, 16),
-		errCh:             make(chan regionErrorInfo, 16),
-		requestRangeCh:    make(chan rangeRequestTask, 16),
+		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
+		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
+		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
+		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
 		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
 		enableKVClientV2:  enableKVClientV2,
@@ -590,7 +589,6 @@ func newEventFeedSession(
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
 		streamsCanceller:  make(map[string]context.CancelFunc),
-		workers:           make(map[string]*regionWorker),
 	}
 }
 
@@ -897,6 +895,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			// `receiveFromStream`, so no need to retry here.
 			_, ok := pendingRegions.take(requestID)
 			if !ok {
+				// since this pending region has been removed, the token has been
+				// released in advance, re-add one token here.
+				s.regionRouter.Acquire(rpcCtx.Addr)
 				continue
 			}
 
@@ -937,6 +938,29 @@ func (s *eventFeedSession) dispatchRequest(
 		}
 
 		log.Debug("dispatching region", zap.Uint64("regionID", sri.verID.GetID()))
+
+		// Send a resolved ts to event channel first, for two reasons:
+		// 1. Since we have locked the region range, and have maintained correct
+		//    checkpoint ts for the range, it is safe to report the resolved ts
+		//    to puller at this moment.
+		// 2. Before the kv client gets region rpcCtx, sends request to TiKV and
+		//    receives the first kv event from TiKV, the region could split or
+		//    merge in advance, which should cause the change of resolved ts
+		//    distribution in puller, so this resolved ts event is needed.
+		// After this resolved ts event is sent, we don't need to send one more
+		// resolved ts event when the region starts to work.
+		resolvedEv := &model.RegionFeedEvent{
+			RegionID: sri.verID.GetID(),
+			Resolved: &model.ResolvedSpan{
+				Span:       sri.span,
+				ResolvedTs: sri.ts,
+			},
+		}
+		select {
+		case s.eventCh <- resolvedEv:
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
 
 		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
 		if err != nil {
@@ -1474,18 +1498,6 @@ func (s *eventFeedSession) singleEventFeed(
 		return nil
 	}
 
-	select {
-	case s.eventCh <- &model.RegionFeedEvent{
-		RegionID: regionID,
-		Resolved: &model.ResolvedSpan{
-			Span:       span,
-			ResolvedTs: startTs,
-		},
-	}:
-	case <-ctx.Done():
-		err = errors.Trace(ctx.Err())
-		return
-	}
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
@@ -1496,7 +1508,7 @@ func (s *eventFeedSession) singleEventFeed(
 		var ok bool
 		select {
 		case <-ctx.Done():
-			err = errors.Trace(err)
+			err = errors.Trace(ctx.Err())
 			return
 		case <-advanceCheckTicker.C:
 			failpoint.Inject("kvClientForceReconnect", func() {
@@ -1515,7 +1527,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			if sinceLastEvent > reconnectInterval {
+			if sinceLastEvent > reconnectInterval && initialized {
 				log.Warn("kv client reconnect triggered", zap.Duration("duration", sinceLastEvent))
 				err = errReconnect
 				return
@@ -1531,6 +1543,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),
+					zap.Duration("lastEvent", sinceLastEvent),
 					zap.Uint64("resolvedTs", lastResolvedTs))
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 				err = s.lockResolver.Resolve(ctx, regionID, maxVersion)
@@ -1578,14 +1591,13 @@ func (s *eventFeedSession) singleEventFeed(
 						for _, cachedEvent := range cachedEvents {
 							revent, err = assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
-								err = errors.Trace(err)
 								return
 							}
 							select {
 							case s.eventCh <- revent:
 								metricSendEventCommitCounter.Inc()
 							case <-ctx.Done():
-								err = errors.Trace(err)
+								err = errors.Trace(ctx.Err())
 								return
 							}
 						}

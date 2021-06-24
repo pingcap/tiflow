@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -94,31 +93,12 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 		state.start()
 		worker.setRegionState(event.RegionId, state)
-
-		// send resolved event when starting a single event feed
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case s.eventCh <- &model.RegionFeedEvent{
-			RegionID: state.sri.verID.GetID(),
-			Resolved: &model.ResolvedSpan{
-				Span:       state.sri.span,
-				ResolvedTs: state.sri.ts,
-			},
-		}:
-		}
 	} else if state.isStopped() {
 		log.Warn("drop event due to region feed stopped",
 			zap.Uint64("regionID", event.RegionId),
 			zap.Uint64("requestID", event.RequestId),
 			zap.String("addr", addr))
 		return nil
-	}
-
-	// TODO: If a region doesn't receive any event from TiKV, this region
-	// can't be reconnected since the region state is not initialized.
-	if !state.isInitialized() {
-		worker.notifyEvTimeUpdate(event.RegionId, false /* isDelete */)
 	}
 
 	select {
@@ -190,15 +170,12 @@ func (s *eventFeedSession) receiveFromStreamV2(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			}, false /* initialized */)
+			}, true /* revokeToken */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
 			}
 		}
-		s.workersLock.Lock()
-		delete(s.workers, addr)
-		s.workersLock.Unlock()
 	}()
 
 	captureAddr := util.CaptureAddrFromCtx(ctx)
@@ -208,9 +185,6 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, limiter, addr)
-	s.workersLock.Lock()
-	s.workers[addr] = worker
-	s.workersLock.Unlock()
 
 	g.Go(func() error {
 		return worker.run(ctx)

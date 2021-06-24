@@ -49,7 +49,7 @@ type TablePipeline interface {
 	// UpdateBarrierTs updates the barrier ts in this table pipeline
 	UpdateBarrierTs(ts model.Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-	AsyncStop(targetTs model.Ts)
+	AsyncStop(targetTs model.Ts) bool
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
 	// Status returns the status of this table pipeline
@@ -93,21 +93,28 @@ func (t *tablePipelineImpl) CheckpointTs() model.Ts {
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
-	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
+	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) && !cerror.ErrPipelineTryAgain.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
 }
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) {
+func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
 	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
 		Tp:        pipeline.CommandTypeStopAtTs,
 		StoppedTs: targetTs,
 	}))
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
-	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
+	if err != nil {
+		if cerror.ErrPipelineTryAgain.Equal(err) {
+			return false
+		}
+		if cerror.ErrSendToClosedPipeline.Equal(err) {
+			return true
+		}
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
+	return true
 }
 
 var workload = model.WorkloadInfo{Workload: 1}
