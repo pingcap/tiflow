@@ -15,7 +15,6 @@ package cmd
 
 import (
 	"context"
-	"github.com/pingcap/ticdc/pkg/logutil"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	ticonfig "github.com/pingcap/tidb/config"
