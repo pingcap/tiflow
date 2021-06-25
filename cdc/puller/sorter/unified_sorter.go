@@ -17,8 +17,6 @@ import (
 	"context"
 	"os"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -34,11 +32,6 @@ const (
 	inputChSize       = 128
 	outputChSize      = 128
 	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
-	// maxOpenHeapNum is the maximum number of allowed pending chunks in memory OR on-disk.
-	// This constant is a worst case upper limit, and setting a large number DOES NOT imply actually
-	// allocating these resources. This constant is PER TABLE.
-	// TODO refactor this out
-	maxOpenHeapNum = 1280000
 )
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
@@ -48,6 +41,8 @@ type UnifiedSorter struct {
 	dir         string
 	pool        *backEndPool
 	metricsInfo *metricsInfo
+
+	closeCh chan struct{}
 }
 
 type metricsInfo struct {
@@ -123,6 +118,7 @@ func NewUnifiedSorter(
 			tableID:      tableID,
 			captureAddr:  captureAddr,
 		},
+		closeCh: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -143,6 +139,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	failpoint.Inject("sorterDebug", func() {
 		log.Info("sorterDebug: Running Unified Sorter in debug mode")
 	})
+
+	defer close(s.closeCh)
 
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
@@ -199,9 +197,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
-	var mergerBufLen int64
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, &mergerBufLen))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
 	})
 
 	errg.Go(func() error {
@@ -217,14 +214,6 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
-			for atomic.LoadInt64(&mergerBufLen) > maxOpenHeapNum {
-				after := time.After(1 * time.Second)
-				select {
-				case <-subctx.Done():
-					return subctx.Err()
-				case <-after:
-				}
-			}
 			select {
 			case <-subctx.Done():
 				return subctx.Err()
@@ -281,6 +270,7 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 	select {
 	case <-ctx.Done():
 		return
+	case <-s.closeCh:
 	case s.inputCh <- entry:
 	}
 }
