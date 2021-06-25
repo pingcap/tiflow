@@ -17,7 +17,7 @@ for i in {1..30}; do
         fi
         failed=$(kubectl get job bank-workload -n playground -o jsonpath={.status.failed})
         if [[ $failed -gt 0 ]]; then
-            echo "bank workload job has failed" ${failed}
+            echo "bank workload job has failed"
             break
         fi
     fi
