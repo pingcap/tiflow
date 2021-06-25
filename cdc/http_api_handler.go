@@ -81,7 +81,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	}
 	state := req.Form.Get(apiOpVarChangefeeds)
 
-	statuses, err := s.etcdClient.GetAllChangeFeedStatus(req.Context())
+	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
 	if err != nil {
 		writeInternalServerErrorJSON(w, err)
 		return
@@ -94,7 +94,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 
 	resps := make([]*ChangefeedCommonInfo, 0)
 	for changefeedID := range changefeedIDs {
-		cfInfo, err := s.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+		cfInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerErrorJSON(w, err)
 			return
@@ -102,7 +102,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 		if !httputil.IsFiltered(state, cfInfo.State) {
 			continue
 		}
-		cfStatus, _, err := s.etcdClient.GetChangeFeedStatus(req.Context(), changefeedID)
+		cfStatus, _, err := s.owner.etcdClient.GetChangeFeedStatus(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerErrorJSON(w, err)
 			return

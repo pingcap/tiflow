@@ -302,13 +302,13 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cfInfo, err := s.etcdClient.GetChangeFeedInfo(ctx, changefeedID)
+	cfInfo, err := s.owner.etcdClient.GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	cfStatus, _, err := s.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
+	cfStatus, _, err := s.owner.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		writeError(w, http.StatusBadRequest, err)
 		return

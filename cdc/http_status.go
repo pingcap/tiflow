@@ -116,7 +116,7 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	if config.NewReplicaImpl {
 		s.captureV2.WriteDebugInfo(w)
 		fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-		s.writeEtcdInfo(req.Context(), s.etcdClient, w)
+		s.writeEtcdInfo(req.Context(), &s.owner.etcdClient, w)
 		return
 	}
 	s.ownerLock.RLock()
