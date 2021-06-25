@@ -393,14 +393,14 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	}
 
 	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	allStatus, err := s.owner.etcdClient.GetAllChangeFeedStatus(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	candidates := make([]string, 0, len(allStatus))
 	for id := range allStatus {
-		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
+		info, err := s.owner.etcdClient.GetChangeFeedInfo(ctx, id)
 		if err != nil {
 			return errors.Trace(err)
 		}
