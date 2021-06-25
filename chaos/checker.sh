@@ -10,14 +10,14 @@ for i in {1..30}; do
         break
     else
         echo "bank workload has not completed" ${i}
-        kubectl get job bank-workload -n playground
+        kubectl describe job bank-workload -n playground
         if [ $? -ne 0 ]; then
             echo "bank workload job has been cleared"
             break
         fi
         failed=$(kubectl get job bank-workload -n playground -o jsonpath={.status.failed})
         if [[ $failed -gt 0 ]]; then
-            echo "bank workload job has failed"
+            echo "bank workload job has failed" ${failed}
             break
         fi
     fi
