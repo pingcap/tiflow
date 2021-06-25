@@ -36,6 +36,8 @@ spec:
           volumeMounts:
             - mountPath: /tmp/cdc_data
               name: cdc
+            - mountPath: /var/log
+              name: cdc-log
           env:
             - name: MY_POD_NAME
               valueFrom:
@@ -53,6 +55,7 @@ spec:
             - "server"
             - "--pd=http://upstream-pd.playground.svc:2379"
             - "--log-file=/var/log/$(MY_POD_NAME).log"
+            - "--data-dir=/tmp/cdc_data"
             - "--sorter-max-memory-consumption=0"
   volumeClaimTemplates:
     - metadata:
@@ -62,4 +65,12 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 3Gi
+            storage: 2Gi
+    - metadata:
+        name: cdc-log
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
