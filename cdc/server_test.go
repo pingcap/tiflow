@@ -104,5 +104,12 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
 	config.StoreGlobalServerConfig(conf)
+
+	server.etcdClient = nil
+	conf.DataDir = ""
+	err = server.initDataDir(ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(conf.DataDir, check.Not(check.Equals), "")
+
 	cancel()
 }
