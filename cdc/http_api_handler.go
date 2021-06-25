@@ -81,7 +81,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 	}
 	state := req.Form.Get(apiOpVarChangefeeds)
 
-	statuses, err := s.owner.etcdClient.GetAllChangeFeedStatus(req.Context())
+	statuses, err := s.etcdClient.GetAllChangeFeedStatus(req.Context())
 	if err != nil {
 		writeInternalServerErrorJSON(w, err)
 		return
