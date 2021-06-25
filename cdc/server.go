@@ -392,6 +392,8 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
+	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
+	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
 	cli := s.etcdClient
 	if cli == nil {
 		client, err := clientv3.New(clientv3.Config{
