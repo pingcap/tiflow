@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"encoding/json"
+	"github.com/pingcap/ticdc/pkg/config"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -215,11 +216,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-<<<<<<< HEAD
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner == nil {
-=======
+
 	if !config.NewReplicaImpl {
 		s.ownerLock.RLock()
 		defer s.ownerLock.RUnlock()
@@ -231,7 +228,6 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 
 	if s.captureV2 == nil {
 		// for test only
->>>>>>> 90116b26 (http_*: add a HTTP API to list changefeed info (#1917))
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
