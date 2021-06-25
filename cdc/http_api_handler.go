@@ -94,7 +94,7 @@ func (s *Server) handleChangefeedsList(w http.ResponseWriter, req *http.Request)
 
 	resps := make([]*ChangefeedCommonInfo, 0)
 	for changefeedID := range changefeedIDs {
-		cfInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+		cfInfo, err := s.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
 		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			writeInternalServerErrorJSON(w, err)
 			return
