@@ -179,8 +179,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
 	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController))
-	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
+	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
+	p.AppendNode(ctx, "mounter", newMounterNode())
 	config := ctx.ChangefeedVars().Info.Config
 	if config.Cyclic != nil && config.Cyclic.IsEnabled() {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
