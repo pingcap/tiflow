@@ -90,14 +90,14 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
 
-	// test invalid PD address
+	// test invalid PD address(without host)
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--pd=http://"}), check.IsNil)
 	_, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
 
-	// test missing certificate(without host)
+	// test missing certificate
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--pd=https://aa"}), check.IsNil)
