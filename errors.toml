@@ -171,9 +171,7 @@ error = '''
 the etcd session is done
 '''
 
-["CDC:
-
-"]
+["CDC:ErrEtcdTryAgain"]
 error = '''
 the etcd txn should be aborted and retried immediately
 '''
@@ -503,11 +501,7 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
-["CDC:
-
-
-
-"]
+["CDC:ErrNotOwner"]
 error = '''
 this capture is not a owner
 '''
@@ -727,8 +721,7 @@ error = '''
 this api supports POST method only
 '''
 
-["CDC:
-"]
+["CDC:ErrTableListenReplicated"]
 error = '''
 A table is being replicated by at least two processors(%s, %s), please report a bug
 '''
