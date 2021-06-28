@@ -112,6 +112,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 			Use:   "remove",
 			Short: "Remove a replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
+				if err := confirmChangefeedRemove(cmd); err != nil {
+					return err
+				}
 				ctx := defaultContext
 				job := model.AdminJob{
 					CfID: changefeedID,
@@ -738,4 +741,20 @@ func getUpstreamCredential() *security.Credential {
 		CertPath: upstreamSslCertPath,
 		KeyPath:  upstreamSslKeyPath,
 	}
+}
+
+func confirmChangefeedRemove(cmd *cobra.Command) error {
+	if noConfirm {
+		return nil
+	}
+	cmd.Printf("Confirm that you want to remove this changefeed [Y/N]\n")
+	var yOrN string
+	_, err := fmt.Scan(&yOrN)
+	if err != nil {
+		return err
+	}
+	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+		return errors.NewNoStackError("Abort remove changefeed!")
+	}
+	return nil
 }
