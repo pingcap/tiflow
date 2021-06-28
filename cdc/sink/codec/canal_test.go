@@ -164,7 +164,6 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoderWithoutTxn(c *check.C) {
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
-		size := encoder.Size()
 		res := encoder.Build()
 
 		if len(cs) == 0 {
@@ -174,7 +173,6 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoderWithoutTxn(c *check.C) {
 
 		c.Assert(res, check.HasLen, 1)
 		c.Assert(res[0].Key, check.IsNil)
-		c.Assert(len(res[0].Value), check.Equals, size)
 
 		packet := &canal.Packet{}
 		err := proto.Unmarshal(res[0].Value, packet)

@@ -99,7 +99,8 @@ func isCanalDdl(t canal.EventType) bool {
 		canal.EventType_DINDEX,
 		canal.EventType_ALTER,
 		canal.EventType_ERASE,
-		canal.EventType_TRUNCATE:
+		canal.EventType_TRUNCATE,
+		canal.EventType_QUERY:
 		return true
 	}
 	return false
@@ -157,6 +158,10 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	case mysql.TypeLong:
 		sqlType = JavaSQLTypeBIGINT
 	case mysql.TypeLonglong:
+		sqlType = JavaSQLTypeDECIMAL
+	case mysql.TypeBit:
+		// canal adapter can not support bit(n), it uses byte to parser bit(n), use decimal to prevent overflow
+		// ref https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/util/JdbcTypeUtil.java#L94
 		sqlType = JavaSQLTypeDECIMAL
 	}
 	switch sqlType {
@@ -357,6 +362,7 @@ func (d *CanalEventBatchEncoderWithTxn) EncodeDDLEvent(e *model.DDLEvent) (*MQMe
 }
 
 // Build implements the EventBatchEncoder interface
+// Alibaba Canal adapter regards a list of dmls at mq message as a transaction, just put dmls from transaction into mq message.
 func (d *CanalEventBatchEncoderWithTxn) Build() []*MQMessage {
 	resolvedTxns := d.txnCache.Resolved(d.resolvedTs)
 	if len(resolvedTxns) == 0 {
@@ -457,7 +463,7 @@ func (d *CanalEventBatchEncoderWithoutTxn) MixedBuild(withVersion bool) []byte {
 
 //Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithoutTxn) Size() int {
-	return d.encoder.size()
+	return -1
 }
 
 // Reset implements the EventBatchEncoder interface
@@ -557,8 +563,7 @@ func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
 }
 
 // SetParams is no-op for now
-func (d *CanalEventBatchEncoderWithoutTxn) SetParams(params map[string]string) error {
-
+func (d *CanalEventBatchEncoderWithoutTxn) SetParams(_ map[string]string) error {
 	return nil
 }
 
@@ -575,15 +580,6 @@ func (d *canalMessageEncoder) refreshPacketBody() error {
 
 	_, err := d.messages.MarshalToSizedBuffer(d.packet.Body)
 	return err
-}
-
-func (d *canalMessageEncoder) size() int {
-	// TODO: avoid marshaling the messages every time for calculating the size of the packet
-	err := d.refreshPacketBody()
-	if err != nil {
-		panic(err)
-	}
-	return proto.Size(d.packet)
 }
 
 func (d *canalMessageEncoder) resetPacket() {
