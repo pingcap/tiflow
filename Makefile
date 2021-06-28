@@ -217,7 +217,7 @@ tools/bin/errdoc-gen: tools/check/go.mod
 
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \
-	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.30.0
 
 failpoint-enable: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
