@@ -41,7 +41,9 @@ const (
 	totalTicksPerReactor = 1000
 )
 
-func Test(t *testing.T) { check.TestingT(t) }
+func Test(t *testing.T) {
+	check.TestingT(t)
+}
 
 var _ = check.Suite(&etcdWorkerSuite{})
 
@@ -81,7 +83,7 @@ func (s *simpleReactor) Tick(_ context.Context, state ReactorState) (nextState R
 			}
 		}
 		if sum != expectedSum {
-			log.Panic("state is inconsistent", zap.Int("expected-sum", sum), zap.Int("actual-sum", s.state.sum))
+			log.Panic("state is inconsistent", zap.Int("expected-sum", expectedSum), zap.Int("actual-sum", sum))
 		}
 
 		s.state.SetSum(sum)
@@ -497,7 +499,7 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond)
+	err = reactor.Run(ctx, nil, 100*time.Millisecond)
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
