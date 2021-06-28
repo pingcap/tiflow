@@ -64,6 +64,22 @@ func testCanal() {
 	runTests(testCases, env)
 }
 
+func testCanalWithTxn() {
+	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=false"}
+	task := &canal.SingleTableTask{TableName: "test"}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		tests.NewUnsignedCase(task),
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
 func testCanalJSON() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
