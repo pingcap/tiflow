@@ -176,7 +176,7 @@ func newCliCommand() *cobra.Command {
 			})
 			if err != nil {
 				// PD embeds an etcd server.
-				return errors.Annotatef(err, "fail to open PD etcd client, pd-addr=\"%s\"", cliPdAddr)
+				return errors.Annotatef(err, "fail to open PD etcd client, pd=\"%s\"", cliPdAddr)
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(defaultContext, etcdCli)
 			pdCli, err = pd.NewClientWithContext(
@@ -195,7 +195,7 @@ func newCliCommand() *cobra.Command {
 					}),
 				))
 			if err != nil {
-				return errors.Annotatef(err, "fail to open PD client, pd-addr=\"%s\"", cliPdAddr)
+				return errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", cliPdAddr)
 			}
 			ctx := defaultContext
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.

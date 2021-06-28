@@ -42,9 +42,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
@@ -292,6 +292,16 @@ func verifySink(
 	default:
 	}
 	return nil
+}
+
+// verifyReplicaConfig do strictDecodeFile check and only verify the rules for now
+func verifyReplicaConfig(path, component string, cfg *config.ReplicaConfig) error {
+	err := strictDecodeFile(path, component, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = filter.VerifyRules(cfg)
+	return err
 }
 
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped

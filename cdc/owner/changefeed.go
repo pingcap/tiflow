@@ -27,8 +27,8 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -101,6 +101,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		c.errCh <- errors.Trace(err)
 		return nil
 	})
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := c.tick(ctx, state, captures); err != nil {
 		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string
@@ -121,14 +122,16 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	switch c.state.Info.State {
+	case model.StateNormal, model.StateStopped, model.StateError:
+		if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
+			return errors.Trace(err)
+		}
+	}
 	if !c.feedStateManager.ShouldRunning() {
 		c.releaseResources()
 		return nil
-	}
-
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
-		return errors.Trace(err)
 	}
 	if !c.preflightCheck(captures) {
 		return nil

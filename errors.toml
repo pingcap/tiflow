@@ -11,7 +11,7 @@ error = '''
 stop processor by admin command
 '''
 
-["CDC:ErrAsyncBroadcaseNotSupport"]
+["CDC:ErrAsyncBroadcastNotSupport"]
 error = '''
 Async broadcasts not supported
 '''
@@ -121,6 +121,21 @@ error = '''
 failed to request PD
 '''
 
+["CDC:ErrCheckDataDirSatisfied"]
+error = '''
+check data dir satisfied failed
+'''
+
+["CDC:ErrCheckDirReadable"]
+error = '''
+check dir readable failed
+'''
+
+["CDC:ErrCheckDirValid"]
+error = '''
+check dir valid failed
+'''
+
 ["CDC:ErrCheckDirWritable"]
 error = '''
 check dir writable failed
@@ -129,6 +144,11 @@ check dir writable failed
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
+'''
+
+["CDC:ErrCraftCodecInvalidData"]
+error = '''
+craft codec invalid data
 '''
 
 ["CDC:ErrCreateMarkTableFailed"]
@@ -154,6 +174,11 @@ decode failed: %s
 ["CDC:ErrDecodeRowToDatum"]
 error = '''
 decode row data to datum failed
+'''
+
+["CDC:ErrEmitCheckpointTsFailed"]
+error = '''
+emit checkpoint ts failed
 '''
 
 ["CDC:ErrEncodeFailed"]
@@ -256,6 +281,11 @@ error = '''
 event is larger than the total memory quota, size: %d, quota: %d
 '''
 
+["CDC:ErrGCTTLExceeded"]
+error = '''
+the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
@@ -264,6 +294,11 @@ grpc dial failed
 ["CDC:ErrGetAllStoresFailed"]
 error = '''
 get stores from pd failed
+'''
+
+["CDC:ErrGetDiskInfo"]
+error = '''
+get dir disk info failed
 '''
 
 ["CDC:ErrGetRegionFailed"]
@@ -308,7 +343,7 @@ invalid admin job type: %d
 
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
-bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"
+bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
 '''
 
 ["CDC:ErrInvalidEtcdKey"]
@@ -361,7 +396,7 @@ error = '''
 kafka async send message failed
 '''
 
-["CDC:ErrKafkaFlushUnfished"]
+["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
 '''
@@ -561,6 +596,11 @@ error = '''
 pending region cancelled due to stream disconnecting
 '''
 
+["CDC:ErrPipelineTryAgain"]
+error = '''
+pipeline is full, please try again. Internal use only, report a bug if seen externally
+'''
+
 ["CDC:ErrPrepareAvroFailed"]
 error = '''
 prepare avro failed
@@ -626,7 +666,7 @@ error = '''
 resolve locks failed
 '''
 
-["CDC:ErrS3SinkInitialzie"]
+["CDC:ErrS3SinkInitialize"]
 error = '''
 new s3 sink
 '''
@@ -684,6 +724,11 @@ server creates pd client failed
 ["CDC:ErrServiceSafepointLost"]
 error = '''
 service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
+'''
+
+["CDC:ErrSinkInvalidConfig"]
+error = '''
+sink config invalid
 '''
 
 ["CDC:ErrSinkURIInvalid"]

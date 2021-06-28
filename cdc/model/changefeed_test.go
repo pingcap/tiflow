@@ -23,7 +23,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type configSuite struct{}
@@ -256,24 +256,80 @@ func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
 
 func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
 	defer testleak.AfterTest(c)()
-	validIDs := []string{
-		"test",
-		"1",
-		"9ff52aca-aea6-4022-8ec4-fbee3f2c7890",
-	}
-	for _, id := range validIDs {
-		err := ValidateChangefeedID(id)
-		c.Assert(err, check.IsNil)
-	}
 
-	invalidIDs := []string{
-		"",
-		"test_task",
-		"job$",
+	tests := []struct {
+		name    string
+		id      string
+		wantErr bool
+	}{
+		{
+			name:    "alphabet",
+			id:      "testTtTT",
+			wantErr: false,
+		},
+		{
+			name:    "number",
+			id:      "01131323",
+			wantErr: false,
+		},
+		{
+			name:    "mixed",
+			id:      "9ff52acaA-aea6-4022-8eVc4-fbee3fD2c7890",
+			wantErr: false,
+		},
+		{
+			name:    "len==128",
+			id:      "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890123456789012345678901234567890",
+			wantErr: false,
+		},
+		{
+			name:    "empty string 1",
+			id:      "",
+			wantErr: true,
+		},
+		{
+			name:    "empty string 2",
+			id:      "   ",
+			wantErr: true,
+		},
+		{
+			name:    "test_task",
+			id:      "test_task ",
+			wantErr: true,
+		},
+		{
+			name:    "job$",
+			id:      "job$ ",
+			wantErr: true,
+		},
+		{
+			name:    "test-",
+			id:      "test-",
+			wantErr: true,
+		},
+		{
+			name:    "-",
+			id:      "-",
+			wantErr: true,
+		},
+		{
+			name:    "-sfsdfdf1",
+			id:      "-sfsdfdf1",
+			wantErr: true,
+		},
+		{
+			name:    "len==129",
+			id:      "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-123456789012345678901234567890",
+			wantErr: true,
+		},
 	}
-	for _, id := range invalidIDs {
-		err := ValidateChangefeedID(id)
-		c.Assert(cerror.ErrInvalidChangefeedID.Equal(err), check.IsTrue)
+	for _, tt := range tests {
+		err := ValidateChangefeedID(tt.id)
+		if !tt.wantErr {
+			c.Assert(err, check.IsNil, check.Commentf("case:%s", tt.name))
+		} else {
+			c.Assert(cerror.ErrInvalidChangefeedID.Equal(err), check.IsTrue, check.Commentf("case:%s", tt.name))
+		}
 	}
 }
 
@@ -289,7 +345,7 @@ func (s *changefeedSuite) TestGetTs(c *check.C) {
 			CreateTime: createTime,
 		}
 	)
-	c.Assert(info.GetStartTs(), check.Equals, oracle.EncodeTSO(createTime.Unix()*1000))
+	c.Assert(info.GetStartTs(), check.Equals, oracle.GoTimeToTS(createTime))
 	info.StartTs = startTs
 	c.Assert(info.GetStartTs(), check.Equals, startTs)
 

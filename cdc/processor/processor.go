@@ -40,8 +40,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -122,6 +122,7 @@ func newProcessor4Test(ctx cdcContext.Context,
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	p.changefeed = state
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   state.ID,
 		Info: state.Info,
@@ -367,7 +368,13 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if opt.BoundaryTs < globalCheckpointTs {
 					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
 				}
-				table.AsyncStop(opt.BoundaryTs)
+				if !table.AsyncStop(opt.BoundaryTs) {
+					// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
+					// and we do not want to alarm the user.
+					log.Debug("AsyncStop has failed, possible due to a full pipeline",
+						zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
+					continue
+				}
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.Status = model.OperProcessed
 					return nil
@@ -773,6 +780,8 @@ func (p *processor) doGCSchemaStorage() error {
 func (p *processor) Close() error {
 	for _, tbl := range p.tables {
 		tbl.Cancel()
+	}
+	for _, tbl := range p.tables {
 		tbl.Wait()
 	}
 	p.cancel()
