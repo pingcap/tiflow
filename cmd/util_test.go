@@ -55,3 +55,39 @@ func (s *utilsSuite) TestProxyFields(c *check.C) {
 		}
 	}
 }
+
+func (s *utilsSuite) TestVerifyPdEndpoint(c *check.C) {
+	// empty URL.
+	url := ""
+	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+
+	// invalid URL.
+	url = "\n hi"
+	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*invalid control character in URL.*")
+
+	// http URL without host.
+	url = "http://"
+	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+
+	// https URL without host.
+	url = "https://"
+	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+
+	// postgres scheme.
+	url = "postgres://postgres@localhost/cargo_registry"
+	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+
+	// https scheme without TLS.
+	url = "https://aa"
+	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*PD endpoint scheme is https, please provide certificate.*")
+
+	// http scheme with TLS.
+	url = "http://aa"
+	c.Assert(verifyPdEndpoint(url, true), check.ErrorMatches, ".*PD endpoint scheme should be https.*")
+
+	// valid http URL.
+	c.Assert(verifyPdEndpoint("http://aa", false), check.IsNil)
+
+	// valid https URL with TLS.
+	c.Assert(verifyPdEndpoint("https://aa", true), check.IsNil)
+}
