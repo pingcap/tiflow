@@ -53,12 +53,12 @@ func testCanal() {
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=false"}
 	task := &canal.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
+		//tests.NewSimpleCase(task),
+		//tests.NewDeleteCase(task),
+		//tests.NewManyTypesCase(task),
 		tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
-		// tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
+		tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
 
 	runTests(testCases, env)
