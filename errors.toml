@@ -171,7 +171,9 @@ error = '''
 the etcd session is done
 '''
 
-["CDC:ErrEtcdTryAgain"]
+["CDC:
+
+"]
 error = '''
 the etcd txn should be aborted and retried immediately
 '''
@@ -401,6 +403,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrLeaseExpired"]
+error = '''
+owner lease expired 
+'''
+
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
@@ -496,6 +503,15 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
+["CDC:
+
+
+
+"]
+error = '''
+this capture is not a owner
+'''
+
 ["CDC:ErrOldValueNotEnabled"]
 error = '''
 old value is not enabled
@@ -509,6 +525,11 @@ operate on a closed notifier
 ["CDC:ErrOwnerCampaignKeyDeleted"]
 error = '''
 owner campaign key deleted
+'''
+
+["CDC:ErrOwnerChangedUnexpectedly"]
+error = '''
+owner changed unexpectedly
 '''
 
 ["CDC:ErrOwnerChangefeedNotFound"]
@@ -529,6 +550,11 @@ owner encountered inconsistent state. report a bug if this happens frequently. %
 ["CDC:ErrOwnerSortDir"]
 error = '''
 owner sort dir
+'''
+
+["CDC:ErrOwnerUnknown"]
+error = '''
+owner running unknown error
 '''
 
 ["CDC:ErrPDBatchLoadRegions"]
@@ -699,6 +725,12 @@ fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
 ["CDC:ErrSupportPostOnly"]
 error = '''
 this api supports POST method only
+'''
+
+["CDC:
+"]
+error = '''
+A table is being replicated by at least two processors(%s, %s), please report a bug
 '''
 
 ["CDC:ErrTableProcessorStoppedSafely"]
