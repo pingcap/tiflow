@@ -160,9 +160,9 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	case mysql.TypeLonglong:
 		sqlType = JavaSQLTypeDECIMAL
 	case mysql.TypeBit:
-		// canal adapter can not support bit(n), it uses byte to parser bit(n), use decimal to prevent overflow
+		// canal adapter can not support bit(n), it uses byte to parser bit(n), use bigint to prevent overflow
 		// ref https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/util/JdbcTypeUtil.java#L94
-		sqlType = JavaSQLTypeDECIMAL
+		sqlType = JavaSQLTypeBIGINT
 	}
 	switch sqlType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
