@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-  
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
