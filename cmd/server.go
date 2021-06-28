@@ -201,7 +201,10 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	}
 	for _, ep := range strings.Split(serverPdAddr, ",") {
 		u, err := url.Parse(ep)
-		if err != nil || (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
+		if err != nil {
+			return nil, errors.Annotate(err, "parse PD endpoint")
+		}
+		if (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
 			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint should be a valid http or https URL")
 		}
 
