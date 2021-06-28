@@ -43,7 +43,7 @@ func (p *PositionInertia) Write(bss ...[]byte) {
 	for _, bs := range bss {
 		_, err := p.hasher.Write(bs)
 		if err != nil {
-			log.Fatal("failed to write hash", zap.Error(err))
+			log.Panic("failed to write hash", zap.Error(err))
 		}
 	}
 	rawHash := p.hasher.Sum32()

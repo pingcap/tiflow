@@ -81,12 +81,34 @@ function deployConfig() {
     echo "snapshot = \"$2\"" >> $CUR/conf/diff_config.toml
 }
 
+# check wheter the given tso happens in a DDL job, if true returns the start_ts
+# and commit_ts of the DDL job
+function checkPrimaryTsNotInDDL() {
+    primary_ts=$1
+    tsos=$2
+    count=$(( ${#tsos[@]} / 2 ))
+    for i in $(seq 1 $count); do
+        start_ts=${tsos[(( 2 * $i - 2 ))]}
+        commit_ts=${tsos[(( 2 * $i - 1 ))]}
+        if [[ ($primary_ts > $start_ts) && ($primary_ts < $commit_ts) ]]; then
+            echo "$start_ts $commit_ts"
+        fi
+    done
+}
+
 function checkDiff() {
     primaryArr=(`grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'`)
     secondaryArr=(`grep secondary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'`)
+    tsos=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS/ddl/history |grep -E "start_ts|FinishedTS"|grep -oE "[0-9]*"))
     num=${#primaryArr[*]}
     for ((i=0;i<$num;i++))
     do
+        check_in_ddl=$(checkPrimaryTsNotInDDL ${primaryArr[$i]} $tsos)
+        if [[ ! -z $check_in_ddl ]]; then
+            echo "syncpoint ${primaryArr[$i]} ${secondaryArr[$i]} " \
+                "is recorded in a DDL event(${check_in_ddl[0]}), skip the check of it"
+            continue
+        fi
         deployConfig ${primaryArr[$i]} ${secondaryArr[$i]}
         check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
     done
@@ -104,13 +126,14 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
+    run_sql "CREATE DATABASE testSync;"
+    run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-    run_sql "CREATE DATABASE testSync;"
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     
-    SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
+    SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sync-point --sync-interval=10s
 
     goSql
@@ -132,4 +155,5 @@ function run() {
 
 trap stop_tidb_cluster EXIT
 run $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

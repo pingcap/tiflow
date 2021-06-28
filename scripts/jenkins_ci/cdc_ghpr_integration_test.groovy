@@ -1,8 +1,4 @@
 def script_path = "go/src/github.com/pingcap/ticdc/scripts/jenkins_ci/integration_test_common.groovy"
-println script_path
-sh"""
-wc -l ${script_path}
-"""
 def common = load script_path
 
 catchError {

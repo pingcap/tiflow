@@ -22,17 +22,17 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	parsemodel "github.com/pingcap/parser/model"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultDirMode  = 0755
-	defaultFileMode = 0644
+	defaultDirMode  = 0o755
+	defaultFileMode = 0o644
 
 	defaultFileName = "cdclog"
 
@@ -87,7 +87,7 @@ func (ts *tableStream) isEmpty() bool {
 }
 
 func (ts *tableStream) shouldFlush() bool {
-	return ts.sendSize.Load() > maxPartFlushSize
+	return ts.sendSize.Load() > maxRowFileSize
 }
 
 func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
@@ -197,11 +197,16 @@ func (f *fileSink) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 	// FIXME: if initialize succeed, O_WRONLY is enough, but sometimes it will failed
-	file, err := os.OpenFile(f.logPath.meta, os.O_CREATE|os.O_WRONLY, defaultFileMode)
+	tmpFileName := f.logPath.meta + ".tmp"
+	tmpFile, err := os.OpenFile(tmpFileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
-	_, err = file.Write(data)
+	_, err = tmpFile.Write(data)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
+	}
+	err = os.Rename(tmpFileName, f.logPath.meta)
 	return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 }
 
@@ -233,14 +238,14 @@ func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
-		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		f.logMeta.Names[ddl.TableInfo.TableID] = quotes.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 		err := f.flushLogMeta()
 		if err != nil {
 			return err
 		}
 	case parsemodel.ActionRenameTable:
 		delete(f.logMeta.Names, ddl.PreTableInfo.TableID)
-		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		f.logMeta.Names[ddl.TableInfo.TableID] = quotes.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 		err := f.flushLogMeta()
 		if err != nil {
 			return err
@@ -376,6 +381,8 @@ func NewLocalFileSink(ctx context.Context, sinkURI *url.URL, errCh chan error) (
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()

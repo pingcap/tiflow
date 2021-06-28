@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -43,7 +44,9 @@ type Config struct {
 	Compression     string
 	ClientID        string
 	Credential      *security.Credential
-	// TODO support SASL authentication
+	SaslScram       *security.SaslScram
+	// control whether to create topic and verify partition number
+	TopicPreProcess bool
 }
 
 // NewKafkaConfig returns a default Kafka configuration
@@ -54,6 +57,8 @@ func NewKafkaConfig() Config {
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
+		SaslScram:         &security.SaslScram{},
+		TopicPreProcess:   true,
 	}
 }
 
@@ -80,19 +85,19 @@ type kafkaSaramaProducer struct {
 	closed  int32
 }
 
-func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
-		Key:       sarama.ByteEncoder(key),
-		Value:     sarama.ByteEncoder(value),
+		Key:       sarama.ByteEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
 	}
 	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
 
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
-		// simulate sending message to intput channel successfully but flushing
+		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
 		log.Info("failpoint error injected")
 		k.failpointCh <- errors.New("kafka sink injected error")
@@ -101,7 +106,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
-		log.Fatal("SinkFlushDMLPanic")
+		log.Panic("SinkFlushDMLPanic")
 	})
 
 	select {
@@ -115,19 +120,21 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
 	for i := 0; i < int(k.partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
 			Topic:     k.topic,
-			Key:       sarama.ByteEncoder(key),
-			Value:     sarama.ByteEncoder(value),
+			Key:       sarama.ByteEncoder(message.Key),
+			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
 		}
 	}
 	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-k.closeCh:
 		return nil
 	default:
@@ -173,7 +180,7 @@ flushLoop:
 			if checkAllPartitionFlushed() {
 				return nil
 			}
-			return cerror.ErrKafkaFlushUnfished.GenWithStackByArgs()
+			return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
 		case <-k.flushedReceiver.C:
 			if !checkAllPartitionFlushed() {
 				continue flushLoop
@@ -256,10 +263,62 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
+// kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't
+// exit, creates it automatically.
+func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Config) (int32, error) {
+	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	defer func() {
+		err := admin.Close()
+		if err != nil {
+			log.Warn("close admin client failed", zap.Error(err))
+		}
+	}()
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	partitionNum := config.PartitionNum
+	topicDetail, exist := topics[topic]
+	if exist {
+		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+		if partitionNum == 0 {
+			partitionNum = topicDetail.NumPartitions
+		} else if partitionNum < topicDetail.NumPartitions {
+			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
+		} else if partitionNum > topicDetail.NumPartitions {
+			return 0, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
+		}
+	} else {
+		if partitionNum == 0 {
+			partitionNum = 4
+			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
+		}
+		log.Info("create a topic", zap.String("topic", topic),
+			zap.Int32("partition_num", partitionNum),
+			zap.Int16("replication_factor", config.ReplicationFactor))
+		err := admin.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     partitionNum,
+			ReplicationFactor: config.ReplicationFactor,
+		}, false)
+		// TODO idenfity the cause of "Topic with this name already exists"
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+	}
+
+	return partitionNum, nil
+}
+
+var newSaramaConfigImpl = newSaramaConfig
+
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
-	cfg, err := newSaramaConfig(ctx, config)
+	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}
@@ -275,47 +334,19 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	// get partition number or create topic automatically
-	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	topics, err := admin.ListTopics()
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 	partitionNum := config.PartitionNum
-	topicDetail, exist := topics[topic]
-	if exist {
-		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
-		if partitionNum == 0 {
-			partitionNum = topicDetail.NumPartitions
-		} else if partitionNum < topicDetail.NumPartitions {
-			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
-		} else if partitionNum > topicDetail.NumPartitions {
-			return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
-		}
-	} else {
-		if partitionNum == 0 {
-			partitionNum = 4
-			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
-		}
-		log.Info("create a topic", zap.String("topic", topic), zap.Int32("partition_num", partitionNum), zap.Int16("replication_factor", config.ReplicationFactor))
-		err := admin.CreateTopic(topic, &sarama.TopicDetail{
-			NumPartitions:     partitionNum,
-			ReplicationFactor: config.ReplicationFactor,
-		}, false)
+	if config.TopicPreProcess {
+		partitionNum, err = kafkaTopicPreProcess(topic, address, config, cfg)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+			return nil, err
 		}
 	}
 
-	err = admin.Close()
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 	notifier := new(notify.Notifier)
+	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
 	k := &kafkaSaramaProducer{
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
@@ -326,7 +357,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			sent    uint64
 		}, partitionNum),
 		flushedNotifier: notifier,
-		flushedReceiver: notifier.NewReceiver(50 * time.Millisecond),
+		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 	}
@@ -336,6 +367,8 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
@@ -347,7 +380,7 @@ func init() {
 }
 
 var (
-	validClienID      *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	validClientID     *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
 	commonInvalidChar *regexp.Regexp = regexp.MustCompile(`[\?:,"]`)
 )
 
@@ -358,7 +391,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
 		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
 	}
-	if !validClienID.MatchString(clientID) {
+	if !validClientID.MatchString(clientID) {
 		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
 	}
 	return
@@ -386,7 +419,10 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	config.Metadata.Retry.Max = 20
+	// See: https://kafka.apache.org/documentation/#replication
+	// When one of the brokers in a Kafka cluster is down, the partition leaders in this broker is broken, Kafka will election a new partition leader and replication logs, this process will last from a few seconds to a few minutes. Kafka cluster will not provide a writing service in this process.
+	// Time out in one minute(120 * 500ms).
+	config.Metadata.Retry.Max = 120
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
@@ -411,10 +447,12 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		config.Producer.Compression = sarama.CompressionNone
 	}
 
-	config.Producer.Retry.Max = 20
+	// Time out in five minutes(600 * 500ms).
+	config.Producer.Retry.Max = 600
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
-	config.Admin.Retry.Max = 10000
+	// Time out in one minute(120 * 500ms).
+	config.Admin.Retry.Max = 120
 	config.Admin.Retry.Backoff = 500 * time.Millisecond
 	config.Admin.Timeout = 20 * time.Second
 
@@ -423,6 +461,20 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+	}
+
+	if c.SaslScram != nil && len(c.SaslScram.SaslUser) != 0 {
+		config.Net.SASL.Enable = true
+		config.Net.SASL.User = c.SaslScram.SaslUser
+		config.Net.SASL.Password = c.SaslScram.SaslPassword
+		config.Net.SASL.Mechanism = sarama.SASLMechanism(c.SaslScram.SaslMechanism)
+		if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-256") {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256} }
+		} else if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-512") {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512} }
+		} else {
+			return nil, errors.New("Unsupported sasl-mechanism, should be SCRAM-SHA-256 or SCRAM-SHA-512")
 		}
 	}
 

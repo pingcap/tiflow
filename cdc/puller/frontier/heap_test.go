@@ -18,6 +18,7 @@ import (
 	"math/rand"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type tsHeapSuite struct{}
@@ -25,6 +26,7 @@ type tsHeapSuite struct{}
 var _ = check.Suite(&tsHeapSuite{})
 
 func (s *tsHeapSuite) TestInsert(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var heap fibonacciHeap
 	target := uint64(15000)
 
@@ -37,6 +39,7 @@ func (s *tsHeapSuite) TestInsert(c *check.C) {
 }
 
 func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	rand.Seed(0xdeadbeaf)
 	var heap fibonacciHeap
 	nodes := make([]*fibonacciHeapNode, 50000)
@@ -61,6 +64,7 @@ func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
 }
 
 func (s *tsHeapSuite) TestRemoveNode(c *check.C) {
+	defer testleak.AfterTest(c)()
 	rand.Seed(0xdeadbeaf)
 	var heap fibonacciHeap
 	nodes := make([]*fibonacciHeapNode, 50000)

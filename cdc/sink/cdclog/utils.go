@@ -22,12 +22,12 @@ import (
 
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
 const (
@@ -108,9 +108,9 @@ func (l *logSink) startFlush(ctx context.Context) error {
 				uReplica := u
 				eg.Go(func() error {
 					log.Info("start Flush asynchronously to storage by caller",
-						zap.Int64("table id", u.TableID()),
-						zap.Int64("size", u.Size().Load()),
-						zap.Int64("event count", u.Events().Load()),
+						zap.Int64("table id", uReplica.TableID()),
+						zap.Int64("size", uReplica.Size().Load()),
+						zap.Int64("event count", uReplica.Events().Load()),
 					)
 					return uReplica.flush(ectx, l)
 				})
@@ -129,9 +129,9 @@ func (l *logSink) startFlush(ctx context.Context) error {
 				if u.shouldFlush() {
 					eg.Go(func() error {
 						log.Info("start Flush asynchronously to storage",
-							zap.Int64("table id", u.TableID()),
-							zap.Int64("size", u.Size().Load()),
-							zap.Int64("event count", u.Events().Load()),
+							zap.Int64("table id", uReplica.TableID()),
+							zap.Int64("size", uReplica.Size().Load()),
+							zap.Int64("event count", uReplica.Events().Load()),
 						)
 						return uReplica.flush(ectx, l)
 					})
@@ -200,7 +200,6 @@ func (l *logSink) flushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 		}
 	}
 	return resolvedTs, nil
-
 }
 
 type logMeta struct {
@@ -237,7 +236,7 @@ func makeLogMetaContent(tableInfos []*model.SimpleTableInfo) *logMeta {
 	for _, table := range tableInfos {
 		if table != nil {
 			log.Info("[makeLogMetaContent]", zap.Reflect("table", table))
-			names[table.TableID] = model.QuoteSchema(table.Schema, table.Table)
+			names[table.TableID] = quotes.QuoteSchema(table.Schema, table.Table)
 		}
 	}
 	meta.Names = names

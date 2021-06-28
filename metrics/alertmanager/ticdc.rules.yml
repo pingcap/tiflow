@@ -1,6 +1,18 @@
 groups:
 - name: alert.rules
   rules:
+  - alert: cdc_multiple_owners
+    expr: sum(rate(ticdc_owner_ownership_counter[30s])) >= 2
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: warning
+      expr: sum(rate(ticdc_owner_ownership_counter[30s])) >= 2
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc cluster has multiple owners
+
   - alert: cdc_checkpoint_high_delay
     expr: (time() - ticdc_processor_checkpoint_ts / 1000) > 600
     for: 1m
@@ -167,3 +179,15 @@ groups:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values:{{ $value }}'
       value: '{{ $value }}'
       summary: TiCDC heap memory usage is over 10 GB
+
+  - alert: tikv_enabled_hibernate_regions
+    expr: sum(tikv_config_raftstore{name="hibernate_regions"}) > 0
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: warning
+      expr: sum(tikv_config_raftstore{name="hibernate_regions"}) > 0
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc will break tikv hibernate regions

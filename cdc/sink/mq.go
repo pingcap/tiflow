@@ -23,9 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
@@ -37,6 +34,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
+
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 type mqSink struct {
@@ -106,6 +107,7 @@ func newMqSink(
 			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
 			avroEncoder.SetKeySchemaManager(keySchemaManager)
 			avroEncoder.SetValueSchemaManager(valueSchemaManager)
+			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
 	case codec.ProtocolCanal, codec.ProtocolCanalJSON:
@@ -116,26 +118,32 @@ func newMqSink(
 		if protocol == codec.ProtocolCanalJSON {
 			break
 		}
-		var forceHkPk bool
-		forceHkPkOpt, ok := opts["force-handle-key-pkey"]
-		if ok && forceHkPkOpt == "true" {
-			forceHkPk = true
-		}
-		var supportTxn bool
-		supportTxnOpt, ok := opts["support-txn"]
-		if ok && supportTxnOpt == "true" {
-			supportTxn = true
-		}
 		newEncoder = func() codec.EventBatchEncoder {
-			if supportTxn {
-				canalEncoder := codec.NewCanalEventBatchEncoderWithTxn().(*codec.CanalEventBatchEncoderWithTxn)
-				canalEncoder.SetForceHandleKeyPKey(forceHkPk)
-				return canalEncoder
+			if opts["support-txn"] == "true" {
+				return codec.NewCanalEventBatchEncoderWithTxn()
 			}
-			canalEncoder := codec.NewCanalEventBatchEncoderWithoutTxn().(*codec.CanalEventBatchEncoderWithoutTxn)
-			canalEncoder.SetForceHandleKeyPKey(forceHkPk)
-			return canalEncoder
+			return codec.NewCanalEventBatchEncoderWithoutTxn()
 		}
+	}
+
+	// pre-flight verification of encoder parameters
+	if err := newEncoder().SetParams(opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	newEncoder1 := newEncoder
+	newEncoder = func() codec.EventBatchEncoder {
+		ret := newEncoder1()
+		err := ret.SetParams(opts)
+		if err != nil {
+			log.Panic("MQ Encoder could not parse parameters", zap.Error(err))
+		}
+		return ret
+	}
+
+	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
 	}
 	k := &mqSink{
 		mqProducer:          mqProducer,
@@ -147,8 +155,10 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
-		statistics:          NewStatistics(ctx, "MQ", opts),
+
+		resolvedReceiver:    resolvedReceiver,
+
+		statistics: NewStatistics(ctx, "MQ", opts),
 	}
 
 	go func() {
@@ -157,6 +167,8 @@ func newMqSink(
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
@@ -222,7 +234,7 @@ flushLoop:
 		return 0, errors.Trace(err)
 	}
 	k.checkpointTs = resolvedTs
-	k.statistics.PrintStatus()
+	k.statistics.PrintStatus(ctx)
 	return k.checkpointTs, nil
 }
 
@@ -235,7 +247,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if msg == nil {
 		return nil
 	}
-	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
 
@@ -259,13 +271,14 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 	var partition int32 = -1
-	if k.protocol == codec.ProtocolCanal {
-		// see https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L257
+	if k.protocol == codec.ProtocolCanal || k.protocol == codec.ProtocolCanalJSON{
+		// canal server always put ddl event into partition 0
+		// ref https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L257
 		partition = 0
 	}
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
 
-	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, partition)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }
 
@@ -312,7 +325,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			}
 
 			for _, msg := range messages {
-				err := k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedAsyncWrite, partition)
+				err := k.writeToProducer(ctx, msg, codec.EncoderNeedAsyncWrite, partition)
 				if err != nil {
 					return 0, err
 				}
@@ -378,27 +391,27 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	}
 }
 
-func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, op codec.EncoderResult, partition int32) error {
+func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, op codec.EncoderResult, partition int32) error {
 	switch op {
 	case codec.EncoderNeedAsyncWrite:
 		if partition >= 0 {
-			return k.mqProducer.SendMessage(ctx, key, value, partition)
+			return k.mqProducer.SendMessage(ctx, message, partition)
 		}
-		return cerror.ErrAsyncBroadcaseNotSupport.GenWithStackByArgs()
+		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
-			err := k.mqProducer.SendMessage(ctx, key, value, partition)
+			err := k.mqProducer.SendMessage(ctx, message, partition)
 			if err != nil {
 				return err
 			}
 			return k.mqProducer.Flush(ctx)
 		}
-		return k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+		return k.mqProducer.SyncBroadcastMessage(ctx, message)
 	}
 
 	log.Warn("writeToProducer called with no-op",
-		zap.ByteString("key", key),
-		zap.ByteString("value", value),
+		zap.ByteString("key", message.Key),
+		zap.ByteString("value", message.Value),
 		zap.Int32("partition", partition))
 	return nil
 }
@@ -440,6 +453,12 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		config.MaxMessageBytes = c
+		opts["max-message-bytes"] = s
+	}
+
+	s = sinkURI.Query().Get("max-batch-size")
+	if s != "" {
+		opts["max-batch-size"] = s
 	}
 
 	s = sinkURI.Query().Get("compression")
@@ -469,6 +488,30 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		config.Credential.KeyPath = s
 	}
 
+	s = sinkURI.Query().Get("sasl-user")
+	if s != "" {
+		config.SaslScram.SaslUser = s
+	}
+
+	s = sinkURI.Query().Get("sasl-password")
+	if s != "" {
+		config.SaslScram.SaslPassword = s
+	}
+
+	s = sinkURI.Query().Get("sasl-mechanism")
+	if s != "" {
+		config.SaslScram.SaslMechanism = s
+	}
+
+	s = sinkURI.Query().Get("auto-create-topic")
+	if s != "" {
+		autoCreate, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		config.TopicPreProcess = autoCreate
+	}
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -491,6 +534,16 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	s := sinkURI.Query().Get("protocol")
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
+	}
+	// These two options are not used by Pulsar producer itself, but the encoders
+	s = sinkURI.Query().Get("max-message-bytes")
+	if s != "" {
+		opts["max-message-bytes"] = s
+	}
+
+	s = sinkURI.Query().Get("max-batch-size")
+	if s != "" {
+		opts["max-batch-size"] = s
 	}
 	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
 	// and it may needs credential.

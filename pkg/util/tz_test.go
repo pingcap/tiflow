@@ -15,6 +15,7 @@ package util
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type tzSuite struct{}
@@ -22,19 +23,18 @@ type tzSuite struct{}
 var _ = check.Suite(&tzSuite{})
 
 func (s *tzSuite) TestGetTimezoneFromZonefile(c *check.C) {
-	var (
-		testCases = []struct {
-			hasErr   bool
-			zonefile string
-			name     string
-		}{
-			{true, "", ""},
-			{false, "UTC", "UTC"},
-			{false, "/usr/share/zoneinfo/UTC", "UTC"},
-			{false, "/usr/share/zoneinfo/Etc/UTC", "Etc/UTC"},
-			{false, "/usr/share/zoneinfo/Asia/Shanghai", "Asia/Shanghai"},
-		}
-	)
+	defer testleak.AfterTest(c)()
+	testCases := []struct {
+		hasErr   bool
+		zonefile string
+		name     string
+	}{
+		{true, "", ""},
+		{false, "UTC", "UTC"},
+		{false, "/usr/share/zoneinfo/UTC", "UTC"},
+		{false, "/usr/share/zoneinfo/Etc/UTC", "Etc/UTC"},
+		{false, "/usr/share/zoneinfo/Asia/Shanghai", "Asia/Shanghai"},
+	}
 	for _, tc := range testCases {
 		loc, err := getTimezoneFromZonefile(tc.zonefile)
 		if tc.hasErr {

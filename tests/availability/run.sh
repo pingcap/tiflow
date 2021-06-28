@@ -27,7 +27,7 @@ function prepare() {
     run_sql "CREATE table test.availability2(id int primary key, val int);"
     run_sql "CREATE table test.availability3(id int primary key, val int);"
 
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 }
 
 trap stop_tidb_cluster EXIT
@@ -35,4 +35,5 @@ prepare $*
 test_owner_ha $*
 test_capture_ha $*
 test_processor_ha $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

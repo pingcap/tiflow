@@ -20,18 +20,23 @@ import (
 	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/pingcap/ticdc/integration/framework/avro"
 	"github.com/pingcap/ticdc/integration/framework/canal"
+	"github.com/pingcap/ticdc/integration/framework/mysql"
 	"github.com/pingcap/ticdc/integration/tests"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-var testProtocol = flag.String("protocol", "avro", "the protocol we want to test: avro or canal")
-var dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
+var (
+	testProtocol      = flag.String("protocol", "avro", "the protocol we want to test: avro or canal")
+	dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
+)
 
 func testAvro() {
 	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=America/Los_Angeles"}
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
+		tests.NewDateTimeCase(task),
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
@@ -51,9 +56,9 @@ func testCanal() {
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
+		// tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
 
 	runTests(testCases, env)
@@ -67,7 +72,38 @@ func testCanalJSON() {
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		tests.NewUnsignedCase(task),
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
+func testMySQL() {
+	env := mysql.NewDockerEnv(*dockerComposeFile)
+	task := &mysql.SingleTableTask{TableName: "test"}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		tests.NewUnsignedCase(task),
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
+func testMySQLWithCheckingOldvValue() {
+	env := mysql.NewDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
+	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
 		tests.NewAlterCase(task),
 	}
@@ -97,6 +133,10 @@ func main() {
 		testCanal()
 	} else if *testProtocol == "canalJson" {
 		testCanalJSON()
+	} else if *testProtocol == "mysql" {
+		testMySQL()
+	} else if *testProtocol == "simple-mysql-checking-old-value" {
+		testMySQLWithCheckingOldvValue()
 	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}

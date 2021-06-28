@@ -36,7 +36,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "scan_regions_duration_seconds",
 			Help:      "The time it took to finish a scanRegions call.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 18),
 		}, []string{"capture"})
 	eventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -67,6 +67,13 @@ var (
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
 		}, []string{"id", "channel"})
+	clientRegionTokenSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_token",
+			Help:      "size of region token in kv client",
+		}, []string{"store", "table", "changefeed"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -93,6 +100,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
+	registry.MustRegister(clientRegionTokenSize)
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(etcdRequestCounter)
 }

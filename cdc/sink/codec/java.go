@@ -41,26 +41,26 @@ const (
 	JavaSQLTypeBLOB          JavaSQLType = 2004
 
 	// unused
-	//JavaSQLTypeFLOAT                   JavaSQLType = 6
-	//JavaSQLTypeNUMERIC                 JavaSQLType = 2
-	//JavaSQLTypeOTHER                   JavaSQLType = 1111
-	//JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
-	//JavaSQLTypeDISTINCT                JavaSQLType = 2001
-	//JavaSQLTypeSTRUCT                  JavaSQLType = 2002
-	//JavaSQLTypeARRAY                   JavaSQLType = 2003
-	//JavaSQLTypeCLOB                    JavaSQLType = 2005
-	//JavaSQLTypeREF                     JavaSQLType = 2006
-	//JavaSQLTypeDATALINK                JavaSQLType = 70
-	//JavaSQLTypeBOOLEAN                 JavaSQLType = 16
-	//JavaSQLTypeROWID                   JavaSQLType = -8
-	//JavaSQLTypeNCHAR                   JavaSQLType = -15
-	//JavaSQLTypeNVARCHAR                JavaSQLType = -9
-	//JavaSQLTypeLONGNVARCHAR            JavaSQLType = -16
-	//JavaSQLTypeNCLOB                   JavaSQLType = 2011
-	//JavaSQLTypeSQLXML                  JavaSQLType = 2009
-	//JavaSQLTypeREF_CURSOR              JavaSQLType = 2012
-	//JavaSQLTypeTIME_WITH_TIMEZONE      JavaSQLType = 2013
-	//JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
+	// JavaSQLTypeFLOAT                   JavaSQLType = 6
+	// JavaSQLTypeNUMERIC                 JavaSQLType = 2
+	// JavaSQLTypeOTHER                   JavaSQLType = 1111
+	// JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
+	// JavaSQLTypeDISTINCT                JavaSQLType = 2001
+	// JavaSQLTypeSTRUCT                  JavaSQLType = 2002
+	// JavaSQLTypeARRAY                   JavaSQLType = 2003
+	// JavaSQLTypeCLOB                    JavaSQLType = 2005
+	// JavaSQLTypeREF                     JavaSQLType = 2006
+	// JavaSQLTypeDATALINK                JavaSQLType = 70
+	// JavaSQLTypeBOOLEAN                 JavaSQLType = 16
+	// JavaSQLTypeROWID                   JavaSQLType = -8
+	// JavaSQLTypeNCHAR                   JavaSQLType = -15
+	// JavaSQLTypeNVARCHAR                JavaSQLType = -9
+	// JavaSQLTypeLONGNVARCHAR            JavaSQLType = -16
+	// JavaSQLTypeNCLOB                   JavaSQLType = 2011
+	// JavaSQLTypeSQLXML                  JavaSQLType = 2009
+	// JavaSQLTypeREF_CURSOR              JavaSQLType = 2012
+	// JavaSQLTypeTIME_WITH_TIMEZONE      JavaSQLType = 2013
+	// JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
 )
 
 // MysqlToJavaType converts the mysql protocol types to java sql types

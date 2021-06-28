@@ -18,16 +18,38 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type cyclicSuit struct{}
+type cyclicSuite struct{}
 
-var _ = check.Suite(&cyclicSuit{})
+var _ = check.Suite(&cyclicSuite{})
 
 func Test(t *testing.T) { check.TestingT(t) }
 
-func (s *cyclicSuit) TestRelaxSQLMode(c *check.C) {
+func (s *cyclicSuite) TestCyclicConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cfg := &config.CyclicConfig{
+		Enable:          true,
+		ReplicaID:       1,
+		FilterReplicaID: []uint64{2, 3},
+	}
+	cyc := NewCyclic(cfg)
+	c.Assert(cyc, check.NotNil)
+	c.Assert(cyc.Enabled(), check.IsTrue)
+	c.Assert(cyc.ReplicaID(), check.Equals, uint64(1))
+	c.Assert(cyc.FilterReplicaID(), check.DeepEquals, []uint64{2, 3})
+
+	cyc = NewCyclic(nil)
+	c.Assert(cyc, check.IsNil)
+	cyc = NewCyclic(&config.CyclicConfig{ReplicaID: 0})
+	c.Assert(cyc, check.IsNil)
+}
+
+func (s *cyclicSuite) TestRelaxSQLMode(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		oldMode string
 		newMode string
@@ -44,25 +66,37 @@ func (s *cyclicSuit) TestRelaxSQLMode(c *check.C) {
 	}
 }
 
-func (s *cyclicSuit) TestIsTablePaired(c *check.C) {
+func (s *cyclicSuite) TestIsTablePaired(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		tables   []model.TableName
 		isParied bool
 	}{
 		{[]model.TableName{}, true},
-		{[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_1"}},
-			true},
-		{[]model.TableName{{Schema: "a", Table: "a"}},
-			false},
-		{[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
-			{Schema: "a", Table: "a"}},
-			true},
-		{[]model.TableName{
-			{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
-			{Schema: mark.SchemaName, Table: "repl_mark_a_b"},
-			{Schema: "a", Table: "a"},
-			{Schema: "a", Table: "b"}},
-			true},
+		{
+			[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_1"}},
+			true,
+		},
+		{
+			[]model.TableName{{Schema: "a", Table: "a"}},
+			false,
+		},
+		{
+			[]model.TableName{
+				{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
+				{Schema: "a", Table: "a"},
+			},
+			true,
+		},
+		{
+			[]model.TableName{
+				{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
+				{Schema: mark.SchemaName, Table: "repl_mark_a_b"},
+				{Schema: "a", Table: "a"},
+				{Schema: "a", Table: "b"},
+			},
+			true,
+		},
 	}
 
 	for _, test := range tests {

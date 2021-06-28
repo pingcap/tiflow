@@ -53,7 +53,7 @@ func parseSinkOptions(u *url.URL) (opt *Option, err error) {
 
 	p.MessageRouter = func(message *pulsar.ProducerMessage, metadata pulsar.TopicMetadata) int {
 		partition, _ := strconv.Atoi(message.Properties[route])
-		message.Properties = nil
+		delete(message.Properties, route)
 		return partition
 	}
 	return
@@ -174,7 +174,7 @@ func (vs values) Str(name string) string {
 
 func (vs values) SubPathKV(prefix string) map[string]string {
 	prefix = prefix + "."
-	var m = map[string]string{}
+	m := map[string]string{}
 	for name, value := range vs {
 		if !strings.HasPrefix(name, prefix) {
 			continue

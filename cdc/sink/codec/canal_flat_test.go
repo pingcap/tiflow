@@ -15,10 +15,12 @@ package codec
 
 import (
 	"encoding/json"
+
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -28,6 +30,7 @@ type canalFlatSuite struct {
 var _ = check.Suite(&canalFlatSuite{})
 
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
+	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 	msg, err := encoder.newFlatMessageForDML(testCaseUpdate)
@@ -76,6 +79,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
+	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 
@@ -93,6 +97,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 }
 
 func (s *canalFlatSuite) TestBatching(c *check.C) {
+	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 

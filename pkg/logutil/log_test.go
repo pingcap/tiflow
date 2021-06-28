@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -34,6 +35,7 @@ type logSuite struct{}
 var _ = check.Suite(&logSuite{})
 
 func (s *logSuite) TestInitLoggerAndSetLogLevel(c *check.C) {
+	defer testleak.AfterTest(c)()
 	f := filepath.Join(c.MkDir(), "test")
 	cfg := &Config{
 		Level: "warning",
@@ -60,6 +62,7 @@ func (s *logSuite) TestInitLoggerAndSetLogLevel(c *check.C) {
 }
 
 func (s *logSuite) TestZapErrorFilter(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		err       = errors.New("test error")
 		testCases = []struct {

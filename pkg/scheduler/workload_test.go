@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 )
@@ -29,6 +30,7 @@ type workloadsSuite struct{}
 var _ = check.Suite(&workloadsSuite{})
 
 func (s *workloadsSuite) TestWorkloads(c *check.C) {
+	defer testleak.AfterTest(c)()
 	w := make(workloads)
 	w.SetCapture("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},

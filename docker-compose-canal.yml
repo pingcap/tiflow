@@ -8,7 +8,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
       - ./docker/config:/config
     command:

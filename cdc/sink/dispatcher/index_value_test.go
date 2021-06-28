@@ -16,6 +16,7 @@ package dispatcher
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type IndexValueDispatcherSuite struct{}
@@ -23,6 +24,7 @@ type IndexValueDispatcherSuite struct{}
 var _ = check.Suite(&IndexValueDispatcherSuite{})
 
 func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32

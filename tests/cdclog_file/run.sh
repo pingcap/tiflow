@@ -81,4 +81,5 @@ function cdclog_test() {
 trap stop_tidb_cluster EXIT
 prepare $*
 cdclog_test $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

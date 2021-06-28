@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
@@ -58,6 +59,7 @@ func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
+	defer testleak.AfterTest(c)()
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
@@ -83,10 +85,10 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
-		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
+		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
-	})
+	}, time.Local)
 	c.Assert(err, check.IsNil)
 
 	res, _, err := avroCodec.NativeFromBinary(r.data)
@@ -98,7 +100,52 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	log.Info("TestAvroEncodeOnly", zap.ByteString("result", txt))
 }
 
+func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	avroCodec, err := goavro.NewCodec(`
+        {
+          "type": "record",
+          "name": "test1",
+          "fields" : [
+            {"name": "id", "type": ["null", "int"], "default": null},
+			{"name": "myint", "type": ["null", "int"], "default": null},
+			{"name": "mybool", "type": ["null", "int"], "default": null},
+			{"name": "myfloat", "type": ["null", "float"], "default": null},
+			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
+			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
+          ]
+        }`)
+
+	c.Assert(err, check.IsNil)
+
+	table := model.TableName{
+		Schema: "testdb",
+		Table:  "test1",
+	}
+
+	location, err := time.LoadLocation("UTC")
+	c.Check(err, check.IsNil)
+
+	timestamp := time.Now()
+	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, []*model.Column{
+		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
+		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
+		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
+		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
+		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
+		{Name: "ts", Value: timestamp.In(location).Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+	}, location)
+	c.Assert(err, check.IsNil)
+
+	res, _, err := avroCodec.NativeFromBinary(r.data)
+	c.Check(err, check.IsNil)
+	c.Check(res, check.NotNil)
+	actual := (res.(map[string]interface{}))["ts"].(map[string]interface{})["long.timestamp-millis"].(time.Time)
+	c.Check(actual.Local().Sub(timestamp), check.LessEqual, time.Millisecond)
+}
+
 func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
+	defer testleak.AfterTest(c)()
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
@@ -137,6 +184,7 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -160,9 +208,11 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		Type:  model2.ActionCreateTable,
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	pm := puller.NewMockPullerManager(c, true)
+	defer pm.TearDown()
 	pm.MustExec(testCaseDdl.Query)
 	ddlPlr := pm.CreatePuller(0, []regionspan.ComparableSpan{regionspan.ToComparableSpan(regionspan.GetDDLSpan())})
 	go func() {

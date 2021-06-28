@@ -8,7 +8,7 @@ services:
       context: .
       dockerfile: ./Dockerfile.development
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
       - ./docker/config:/config
     command:
@@ -43,6 +43,8 @@ services:
       - --log-file=/logs/capturer0.log
       - --log-level=debug
       - --advertise-addr=capturer0:8300
+      - --tz=${CDC_TIME_ZONE:-SYSTEM}
+      - --sort-dir=/data/cdc_sort
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
@@ -64,6 +66,8 @@ services:
       - --log-file=/logs/capturer1.log
       - --log-level=debug
       - --advertise-addr=capturer1:8300
+      - --tz=${CDC_TIME_ZONE:-SYSTEM}
+      - --sort-dir=/data/cdc_sort
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
@@ -85,6 +89,8 @@ services:
       - --log-file=/logs/capturer2.log
       - --log-level=debug
       - --advertise-addr=capturer2:8300
+      - --tz=${CDC_TIME_ZONE:-SYSTEM}
+      - --sort-dir=/data/cdc_sort
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
@@ -134,7 +140,7 @@ services:
     image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160

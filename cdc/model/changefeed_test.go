@@ -14,12 +14,16 @@
 package model
 
 import (
+	"math"
 	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type configSuite struct{}
@@ -27,6 +31,7 @@ type configSuite struct{}
 var _ = check.Suite(&configSuite{})
 
 func (s *configSuite) TestFillV1(c *check.C) {
+	defer testleak.AfterTest(c)()
 	v1Config := `
 {
     "sink-uri":"blackhole://",
@@ -93,7 +98,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
             ]
         },
         "cyclic-replication":{
-            "enable":false,
+            "enable":true,
             "replica-id":1,
             "filter-replica-ids":[
                 2,
@@ -110,10 +115,11 @@ func (s *configSuite) TestFillV1(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
+		Opts: map[string]string{
+			"_cyclic_relax_sql_mode": `{"enable":true,"replica-id":1,"filter-replica-ids":[2,3],"id-buckets":4,"sync-ddl":true}`,
+		},
 		StartTs: 417136892416622595,
 		Engine:  "memory",
-		SortDir: ".",
 		Config: &config.ReplicaConfig{
 			CaseSensitive: true,
 			Filter: &config.FilterConfig{
@@ -148,6 +154,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
 				},
 			},
 			Cyclic: &config.CyclicConfig{
+				Enable:          true,
 				ReplicaID:       1,
 				FilterReplicaID: []uint64{2, 3},
 				IDBuckets:       4,
@@ -158,24 +165,52 @@ func (s *configSuite) TestFillV1(c *check.C) {
 }
 
 func (s *configSuite) TestVerifyAndFix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
-		Config:  &config.ReplicaConfig{},
+		Config: &config.ReplicaConfig{
+			CaseSensitive:    true,
+			EnableOldValue:   true,
+			CheckGCSafePoint: true,
+		},
 	}
 
 	err := info.VerifyAndFix()
 	c.Assert(err, check.IsNil)
-	c.Assert(info.Engine, check.Equals, SortInMemory)
+	c.Assert(info.Engine, check.Equals, SortUnified)
 
 	marshalConfig1, err := info.Config.Marshal()
 	c.Assert(err, check.IsNil)
 	defaultConfig := config.GetDefaultReplicaConfig()
-	defaultConfig.CaseSensitive = false
 	marshalConfig2, err := defaultConfig.Marshal()
 	c.Assert(err, check.IsNil)
 	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
+}
+
+func (s *configSuite) TestChangeFeedInfoClone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	info := &ChangeFeedInfo{
+		SinkURI: "blackhole://",
+		Opts:    map[string]string{},
+		StartTs: 417257993615179777,
+		Config: &config.ReplicaConfig{
+			CaseSensitive:    true,
+			EnableOldValue:   true,
+			CheckGCSafePoint: true,
+		},
+	}
+
+	cloned, err := info.Clone()
+	c.Assert(err, check.IsNil)
+	sinkURI := "mysql://unix:/var/run/tidb.sock"
+	cloned.SinkURI = sinkURI
+	cloned.Config.EnableOldValue = false
+	c.Assert(cloned.SinkURI, check.Equals, sinkURI)
+	c.Assert(cloned.Config.EnableOldValue, check.IsFalse)
+	c.Assert(info.SinkURI, check.Equals, "blackhole://")
+	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 }
 
 type changefeedSuite struct{}
@@ -183,6 +218,7 @@ type changefeedSuite struct{}
 var _ = check.Suite(&changefeedSuite{})
 
 func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
+	defer testleak.AfterTest(c)()
 	now := time.Now()
 	info := &ChangeFeedInfo{
 		ErrorHis: []int64{},
@@ -192,7 +228,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}
-	for i := 0; i < errorHistoryThreshold-1; i++ {
+	for i := 0; i < ErrorHistoryThreshold-1; i++ {
 		info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}
@@ -200,7 +236,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 	needSave, canInit := info.CheckErrorHistory()
 	c.Assert(needSave, check.IsTrue)
 	c.Assert(canInit, check.IsTrue)
-	c.Assert(info.ErrorHis, check.HasLen, errorHistoryThreshold-1)
+	c.Assert(info.ErrorHis, check.HasLen, ErrorHistoryThreshold-1)
 
 	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 	needSave, canInit = info.CheckErrorHistory()
@@ -209,10 +245,115 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 }
 
 func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		StartTs: 418881574869139457,
 	}
 	str := info.String()
 	c.Check(str, check.Matches, ".*sink-uri\":\"\\*\\*\\*\".*")
+}
+
+func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	tests := []struct {
+		name    string
+		id      string
+		wantErr bool
+	}{
+		{
+			name:    "alphabet",
+			id:      "testTtTT",
+			wantErr: false,
+		},
+		{
+			name:    "number",
+			id:      "01131323",
+			wantErr: false,
+		},
+		{
+			name:    "mixed",
+			id:      "9ff52acaA-aea6-4022-8eVc4-fbee3fD2c7890",
+			wantErr: false,
+		},
+		{
+			name:    "len==128",
+			id:      "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890123456789012345678901234567890",
+			wantErr: false,
+		},
+		{
+			name:    "empty string 1",
+			id:      "",
+			wantErr: true,
+		},
+		{
+			name:    "empty string 2",
+			id:      "   ",
+			wantErr: true,
+		},
+		{
+			name:    "test_task",
+			id:      "test_task ",
+			wantErr: true,
+		},
+		{
+			name:    "job$",
+			id:      "job$ ",
+			wantErr: true,
+		},
+		{
+			name:    "test-",
+			id:      "test-",
+			wantErr: true,
+		},
+		{
+			name:    "-",
+			id:      "-",
+			wantErr: true,
+		},
+		{
+			name:    "-sfsdfdf1",
+			id:      "-sfsdfdf1",
+			wantErr: true,
+		},
+		{
+			name:    "len==129",
+			id:      "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-123456789012345678901234567890",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		err := ValidateChangefeedID(tt.id)
+		if !tt.wantErr {
+			c.Assert(err, check.IsNil, check.Commentf("case:%s", tt.name))
+		} else {
+			c.Assert(cerror.ErrInvalidChangefeedID.Equal(err), check.IsTrue, check.Commentf("case:%s", tt.name))
+		}
+	}
+}
+
+func (s *changefeedSuite) TestGetTs(c *check.C) {
+	defer testleak.AfterTest(c)()
+	var (
+		startTs      uint64 = 418881574869139457
+		targetTs     uint64 = 420891571239139085
+		checkpointTs uint64 = 420874357546418177
+		createTime          = time.Now()
+		info                = &ChangeFeedInfo{
+			SinkURI:    "blackhole://",
+			CreateTime: createTime,
+		}
+	)
+	c.Assert(info.GetStartTs(), check.Equals, oracle.GoTimeToTS(createTime))
+	info.StartTs = startTs
+	c.Assert(info.GetStartTs(), check.Equals, startTs)
+
+	c.Assert(info.GetTargetTs(), check.Equals, uint64(math.MaxUint64))
+	info.TargetTs = targetTs
+	c.Assert(info.GetTargetTs(), check.Equals, targetTs)
+
+	c.Assert(info.GetCheckpointTs(nil), check.Equals, startTs)
+	status := &ChangeFeedStatus{CheckpointTs: checkpointTs}
+	c.Assert(info.GetCheckpointTs(status), check.Equals, checkpointTs)
 }

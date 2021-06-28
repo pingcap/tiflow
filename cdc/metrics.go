@@ -14,17 +14,16 @@
 package cdc
 
 import (
-	"time"
-
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/owner"
+	"github.com/pingcap/ticdc/cdc/processor"
+	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
-)
-
-const (
-	defaultMetricInterval = time.Second * 15
 )
 
 var registry = prometheus.NewRegistry()
@@ -37,5 +36,14 @@ func init() {
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
-	initProcessorMetrics(registry)
+	sorter.InitMetrics(registry)
+	if config.NewReplicaImpl {
+		processor.InitMetrics(registry)
+		tablepipeline.InitMetrics(registry)
+		owner.InitMetrics(registry)
+	} else {
+		initProcessorMetrics(registry)
+		initOwnerMetrics(registry)
+	}
+	initServerMetrics(registry)
 }

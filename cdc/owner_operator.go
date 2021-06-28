@@ -31,7 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-//TODO: add tests
+// TODO: add tests
 type ddlHandler struct {
 	puller     puller.Puller
 	resolvedTS uint64
@@ -43,8 +43,9 @@ type ddlHandler struct {
 }
 
 func newDDLHandler(pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
-	plr := puller.NewPuller(pdCli, credential, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
+	// TODO: context should be passed from outter caller
 	ctx, cancel := context.WithCancel(context.Background())
+	plr := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
 	h := &ddlHandler{
 		puller: plr,
 		cancel: cancel,

@@ -31,8 +31,7 @@ ddls=("create database ddl_reentrant" false
 )
 
 function complete_ddls() {
-    tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
-        "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
+    # TODO: refine the release detection after 5.0 tag of TiDB is ready
     if [[ ! $tidb_build_branch =~ master ]]; then
         echo "skip some DDLs in tidb v4.0.x"
     else
@@ -48,6 +47,8 @@ function complete_ddls() {
 }
 
 changefeedid=""
+# this test contains `recover table`, which requires super privilege, so we
+# can't use the normal user
 SINK_URI="mysql://root@127.0.0.1:3306/"
 
 function check_ts_forward() {
@@ -87,6 +88,9 @@ function check_ddl_executed() {
 export -f check_ts_forward
 export -f check_ddl_executed
 
+tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
+    "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
+
 function ddl_test() {
     ddl=$1
     is_reentrant=$2
@@ -99,7 +103,7 @@ function ddl_test() {
 
     echo $ddl > ${WORK_DIR}/ddl_temp.sql
     ensure 10 check_ddl_executed "${WORK_DIR}/cdc.log" "${WORK_DIR}/ddl_temp.sql" true
-    ddl_start_ts=$(grep "Execute DDL succeeded" ${WORK_DIR}/cdc.log|tail -n 1|grep -oE '"start_ts\\":[0-9]{18}'|awk -F: '{print $(NF)}')
+    ddl_start_ts=$(grep "Execute DDL succeeded" ${WORK_DIR}/cdc.log|tail -n 1|grep -oE '"StartTs\\":[0-9]{18}'|awk -F: '{print $(NF)}')
     cdc cli changefeed remove --changefeed-id=${changefeedid}
     changefeedid=$(cdc cli changefeed create --no-confirm --start-ts=${ddl_start_ts} --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     echo "create new changefeed ${changefeedid} from ${ddl_start_ts}"
@@ -118,6 +122,16 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR --tidb-config $CUR/conf/tidb_config.toml
 
     complete_ddls
+    # TODO: refine the release detection after 5.0 tag of TiDB is ready
+    if [[ $tidb_build_branch =~ master ]]; then
+        # https://github.com/pingcap/tidb/pull/21533 disables multi_schema change
+        # feature by default, turn it on first
+        run_sql "set global tidb_enable_change_multi_schema = on" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+        # This must be set before cdc server starts
+        run_sql "set global tidb_enable_change_multi_schema = on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+        # TiDB global variables cache 2 seconds at most
+        sleep 2
+    fi
 
     cd $WORK_DIR
 
@@ -141,4 +155,5 @@ function run() {
 
 trap stop_tidb_cluster EXIT
 run $*
+check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

@@ -15,12 +15,13 @@ package tests
 
 import (
 	"errors"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 	"math"
 	"time"
 
 	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/integration/framework/avro"
+	"github.com/pingcap/ticdc/integration/framework/canal"
+	"github.com/pingcap/ticdc/integration/framework/mysql"
 )
 
 // ManyTypesCase is base impl of test case for different types data
@@ -50,6 +51,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_boolean   BOOLEAN,
 						t_bigint    BIGINT,
 						t_double    DOUBLE,
+						t_float     FLOAT,
 						t_decimal   DECIMAL(38, 19),
 						t_bit       BIT(64),
 						t_date      DATE,
@@ -72,11 +74,35 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_boolean   BOOLEAN,
 						t_bigint    BIGINT,
 						t_double    DOUBLE,
+						t_float     FLOAT,
 						t_decimal   DECIMAL(38, 19),
 						t_date      DATE,
 						t_datetime  DATETIME,
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
+						t_char      CHAR,
+						t_varchar   VARCHAR(10),
+						t_blob      BLOB,
+						t_text      TEXT,
+						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
+						t_set       SET ('a', 'b', 'c'),
+						t_json      JSON,
+						PRIMARY KEY (id)
+					)`
+	case *mysql.SingleTableTask:
+		createDBQuery = `create table test (
+						id          INT,
+						t_boolean   BOOLEAN,
+						t_bigint    BIGINT,
+						t_double    DOUBLE,
+						t_float     FLOAT,
+						t_decimal   DECIMAL(38, 19),
+						t_bit       BIT(64),
+						t_date      DATE,
+						t_datetime  DATETIME,
+						t_timestamp TIMESTAMP NULL,
+						t_time      TIME,
+						t_year      YEAR,
 						t_char      CHAR,
 						t_varchar   VARCHAR(10),
 						t_blob      BLOB,
@@ -94,15 +120,16 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 	if err != nil {
 		return err
 	}
+	if _, ok := s.Task.(*avro.SingleTableTask); ok {
+		_, err = ctx.Downstream.ExecContext(ctx.Ctx, "drop table if exists test")
+		if err != nil {
+			return err
+		}
 
-	_, err = ctx.Downstream.ExecContext(ctx.Ctx, "drop table if exists test")
-	if err != nil {
-		return err
-	}
-
-	_, err = ctx.Downstream.ExecContext(ctx.Ctx, createDBQuery)
-	if err != nil {
-		return err
+		_, err = ctx.Downstream.ExecContext(ctx.Ctx, createDBQuery)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Get a handle of an existing table
@@ -112,6 +139,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		"t_boolean":   true,
 		"t_bigint":    math.MaxInt64,
 		"t_double":    1.01234,
+		"t_float":     2.45678,
 		"t_decimal":   "12345.6789",
 		"t_date":      time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
 		"t_datetime":  time.Now(),

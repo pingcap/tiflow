@@ -88,6 +88,8 @@ EOF
 # tidb server config file
 cat - > "$OUT_DIR/tidb-config-tls.toml" <<EOF
 split-table = true
+alter-primary-key = true
+new_collations_enabled_on_first_bootstrap = true
 [security]
 ssl-ca = "$TLS_DIR/ca.pem"
 ssl-cert = "$TLS_DIR/server.pem"
@@ -132,15 +134,18 @@ while ! mysql -uroot -h${TLS_TIDB_HOST} -P${TLS_TIDB_PORT} --default-character-s
     sleep 2
 done
 
-# TODO: remove this after TiCDC supports TiDB clustered index
-run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-    --ssl-ca=$TLS_DIR/ca.pem \
-    --ssl-cert=$TLS_DIR/server.pem \
-    --ssl-key=$TLS_DIR/server-key.pem
-# TiDB global variables cache 2 seconds
-sleep 2
-
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
     --ssl-ca=$TLS_DIR/ca.pem \
     --ssl-cert=$TLS_DIR/server.pem \
-    --ssl-key=$TLS_DIR/server-key.pem || echo "tidb_enable_clustered_index not supports"
+    --ssl-key=$TLS_DIR/server-key.pem
+
+echo "Starting CDC state checker..."
+cd $CUR/../../testing_utils/cdc_state_checker
+if [ ! -f ./cdc_state_checker ]; then
+  GO111MODULE=on go build
+fi
+./cdc_state_checker -pd ${TLS_PD_HOST}:${TLS_PD_PORT} \
+    -ca $TLS_DIR/ca.pem \
+    -cert $TLS_DIR/server.pem \
+    -key $TLS_DIR/server-key.pem > $OUT_DIR/cdc_etcd_check.log &
+cd $OUT_DIR

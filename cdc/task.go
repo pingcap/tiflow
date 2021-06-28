@@ -102,7 +102,7 @@ restart:
 		ev, err := w.parseTaskEvent(ctx, kv.Key, kv.Value)
 		if err != nil {
 			log.Warn("parse task event failed",
-				zap.String("captureid", w.capture.info.ID),
+				zap.String("capture-id", w.capture.info.ID),
 				zap.Error(err))
 			continue
 		}
@@ -137,7 +137,7 @@ restart:
 				ev, err := w.parseTaskEvent(ctx, ev.Kv.Key, ev.Kv.Value)
 				if err != nil {
 					log.Warn("parse task event failed",
-						zap.String("captureid", w.capture.info.ID),
+						zap.String("capture-id", w.capture.info.ID),
 						zap.Error(err))
 					continue
 				}
@@ -149,7 +149,7 @@ restart:
 				task, err := w.parseTask(ctx, ev.PrevKv.Key, ev.PrevKv.Value)
 				if err != nil {
 					log.Warn("parse task failed",
-						zap.String("captureid", w.capture.info.ID),
+						zap.String("capture-id", w.capture.info.ID),
 						zap.Error(err))
 					continue
 				}
@@ -185,7 +185,7 @@ func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*Tas
 	task, err := w.parseTask(ctx, key, val)
 	if err != nil {
 		log.Warn("parse task failed",
-			zap.String("captureid", w.capture.info.ID),
+			zap.String("capture-id", w.capture.info.ID),
 			zap.Error(err))
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*Tas
 	taskStatus := &model.TaskStatus{}
 	if err := taskStatus.Unmarshal(val); err != nil {
 		log.Warn("unmarshal task status failed",
-			zap.String("captureid", w.capture.info.ID),
+			zap.String("capture-id", w.capture.info.ID),
 			zap.Error(err))
 		return nil, err
 	}

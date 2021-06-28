@@ -52,7 +52,8 @@ var (
 	ErrPDEtcdAPIError         = errors.Normalize("etcd api call error", errors.RFCCodeText("CDC:ErrPDEtcdAPIError"))
 	ErrCachedTSONotExists     = errors.Normalize("GetCachedCurrentVersion: cache entry does not exist", errors.RFCCodeText("CDC:ErrCachedTSONotExists"))
 	ErrGetStoreSnapshot       = errors.Normalize("get snapshot failed", errors.RFCCodeText("CDC:ErrGetStoreSnapshot"))
-	ErrNewStore               = errors.Normalize("new store faile", errors.RFCCodeText("CDC:ErrNewStore"))
+	ErrNewStore               = errors.Normalize("new store failed", errors.RFCCodeText("CDC:ErrNewStore"))
+	ErrRegionWorkerExit       = errors.Normalize("region worker exited", errors.RFCCodeText("CDC:ErrRegionWorkerExit"))
 
 	// rule related errors
 	ErrEncodeFailed      = errors.Normalize("encode failed: %s", errors.RFCCodeText("CDC:ErrEncodeFailed"))
@@ -67,10 +68,11 @@ var (
 
 	// sink related errors
 	ErrExecDDLFailed             = errors.Normalize("exec DDL failed", errors.RFCCodeText("CDC:ErrExecDDLFailed"))
+	ErrEmitCheckpointTsFailed    = errors.Normalize("emit checkpoint ts failed", errors.RFCCodeText("CDC:ErrEmitCheckpointTsFailed"))
 	ErrDDLEventIgnored           = errors.Normalize("ddl event is ignored", errors.RFCCodeText("CDC:ErrDDLEventIgnored"))
 	ErrKafkaSendMessage          = errors.Normalize("kafka send message failed", errors.RFCCodeText("CDC:ErrKafkaSendMessage"))
 	ErrKafkaAsyncSendMessage     = errors.Normalize("kafka async send message failed", errors.RFCCodeText("CDC:ErrKafkaAsyncSendMessage"))
-	ErrKafkaFlushUnfished        = errors.Normalize("flush not finished before producer close", errors.RFCCodeText("CDC:ErrKafkaFlushUnfished"))
+	ErrKafkaFlushUnfinished      = errors.Normalize("flush not finished before producer close", errors.RFCCodeText("CDC:ErrKafkaFlushUnfinished"))
 	ErrKafkaInvalidPartitionNum  = errors.Normalize("invalid partition num %d", errors.RFCCodeText("CDC:ErrKafkaInvalidPartitionNum"))
 	ErrKafkaNewSaramaProducer    = errors.Normalize("new sarama producer", errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"))
 	ErrKafkaInvalidClientID      = errors.Normalize("invalid kafka client ID '%s'", errors.RFCCodeText("CDC:ErrKafkaInvalidClientID"))
@@ -81,10 +83,10 @@ var (
 	ErrFileSinkFileOp            = errors.Normalize("file sink file operation", errors.RFCCodeText("CDC:ErrFileSinkFileOp"))
 	ErrFileSinkMetaAlreadyExists = errors.Normalize("file sink meta file already exists", errors.RFCCodeText("CDC:ErrFileSinkMetaAlreadyExists"))
 	ErrS3SinkWriteStorage        = errors.Normalize("write to storage", errors.RFCCodeText("CDC:ErrS3SinkWriteStorage"))
-	ErrS3SinkInitialzie          = errors.Normalize("new s3 sink", errors.RFCCodeText("CDC:ErrS3SinkInitialzie"))
+	ErrS3SinkInitialize          = errors.Normalize("new s3 sink", errors.RFCCodeText("CDC:ErrS3SinkInitialize"))
 	ErrS3SinkStorageAPI          = errors.Normalize("s3 sink storage api", errors.RFCCodeText("CDC:ErrS3SinkStorageAPI"))
 	ErrPrepareAvroFailed         = errors.Normalize("prepare avro failed", errors.RFCCodeText("CDC:ErrPrepareAvroFailed"))
-	ErrAsyncBroadcaseNotSupport  = errors.Normalize("Async broadcasts not supported", errors.RFCCodeText("CDC:ErrAsyncBroadcaseNotSupport"))
+	ErrAsyncBroadcastNotSupport  = errors.Normalize("Async broadcasts not supported", errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"))
 	ErrKafkaInvalidConfig        = errors.Normalize("kafka config invalid", errors.RFCCodeText("CDC:ErrKafkaInvalidConfig"))
 	ErrSinkURIInvalid            = errors.Normalize("sink uri invalid", errors.RFCCodeText("CDC:ErrSinkURIInvalid"))
 	ErrMySQLTxnError             = errors.Normalize("MySQL txn error", errors.RFCCodeText("CDC:ErrMySQLTxnError"))
@@ -105,15 +107,22 @@ var (
 	ErrCanalDecodeFailed         = errors.Normalize("canal decode failed", errors.RFCCodeText("CDC:ErrCanalDecodeFailed"))
 	ErrCanalEncodeFailed         = errors.Normalize("canal encode failed", errors.RFCCodeText("CDC:ErrCanalEncodeFailed"))
 	ErrOldValueNotEnabled        = errors.Normalize("old value is not enabled", errors.RFCCodeText("CDC:ErrOldValueNotEnabled"))
+	ErrSinkInvalidConfig         = errors.Normalize("sink config invalid", errors.RFCCodeText("CDC:ErrSinkInvalidConfig"))
+	ErrCraftCodecInvalidData     = errors.Normalize("craft codec invalid data", errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"))
 
 	// utilities related errors
 	ErrToTLSConfigFailed         = errors.Normalize("generate tls config failed", errors.RFCCodeText("CDC:ErrToTLSConfigFailed"))
 	ErrCheckClusterVersionFromPD = errors.Normalize("failed to request PD", errors.RFCCodeText("CDC:ErrCheckClusterVersionFromPD"))
 	ErrNewSemVersion             = errors.Normalize("create sem version", errors.RFCCodeText("CDC:ErrNewSemVersion"))
 	ErrCheckDirWritable          = errors.Normalize("check dir writable failed", errors.RFCCodeText("CDC:ErrCheckDirWritable"))
+	ErrCheckDirReadable          = errors.Normalize("check dir readable failed", errors.RFCCodeText("CDC:ErrCheckDirReadable"))
+	ErrCheckDirValid             = errors.Normalize("check dir valid failed", errors.RFCCodeText("CDC:ErrCheckDirValid"))
+	ErrGetDiskInfo               = errors.Normalize("get dir disk info failed", errors.RFCCodeText("CDC:ErrGetDiskInfo"))
+	ErrCheckDataDirSatisfied     = errors.Normalize("check data dir satisfied failed", errors.RFCCodeText("CDC:ErrCheckDataDirSatisfied"))
 	ErrLoadTimezone              = errors.Normalize("load timezone", errors.RFCCodeText("CDC:ErrLoadTimezone"))
 	ErrURLFormatInvalid          = errors.Normalize("url format is invalid", errors.RFCCodeText("CDC:ErrURLFormatInvalid"))
 	ErrIntersectNoOverlap        = errors.Normalize("span doesn't overlap: %+v vs %+v", errors.RFCCodeText("CDC:ErrIntersectNoOverlap"))
+	ErrOperateOnClosedNotifier   = errors.Normalize("operate on a closed notifier", errors.RFCCodeText("CDC:ErrOperateOnClosedNotifier"))
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey      = errors.Normalize("invalid record key - %q", errors.RFCCodeText("CDC:ErrInvalidRecordKey"))
@@ -126,7 +135,7 @@ var (
 	ErrDecodeRowToDatum      = errors.Normalize("decode row data to datum failed", errors.RFCCodeText("CDC:ErrDecodeRowToDatum"))
 	ErrMarshalFailed         = errors.Normalize("marshal failed", errors.RFCCodeText("CDC:ErrMarshalFailed"))
 	ErrUnmarshalFailed       = errors.Normalize("unmarshal failed", errors.RFCCodeText("CDC:ErrUnmarshalFailed"))
-	ErrInvalidChangefeedID   = errors.Normalize(`bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"`, errors.RFCCodeText("CDC:ErrInvalidChangefeedID"))
+	ErrInvalidChangefeedID   = errors.Normalize(`bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"`, errors.RFCCodeText("CDC:ErrInvalidChangefeedID"))
 	ErrInvalidEtcdKey        = errors.Normalize("invalid key: %s", errors.RFCCodeText("CDC:ErrInvalidEtcdKey"))
 
 	// schema storage errors
@@ -149,28 +158,81 @@ var (
 	ErrFileSorterInvalidData = errors.Normalize("invalid data", errors.RFCCodeText("CDC:ErrFileSorterInvalidData"))
 
 	// server related errors
-	ErrCaptureSuicide             = errors.Normalize("capture suicide", errors.RFCCodeText("CDC:ErrCaptureSuicide"))
-	ErrNewCaptureFailed           = errors.Normalize("new capture failed", errors.RFCCodeText("CDC:ErrNewCaptureFailed"))
-	ErrCaptureRegister            = errors.Normalize("capture register to etcd failed", errors.RFCCodeText("CDC:ErrCaptureRegister"))
-	ErrNewProcessorFailed         = errors.Normalize("new processor failed", errors.RFCCodeText("CDC:ErrNewProcessorFailed"))
-	ErrProcessorUnknown           = errors.Normalize("processor running unknown error", errors.RFCCodeText("CDC:ErrProcessorUnknown"))
-	ErrProcessorTableNotFound     = errors.Normalize("table not found in processor cache", errors.RFCCodeText("CDC:ErrProcessorTableNotFound"))
-	ErrProcessorEtcdWatch         = errors.Normalize("etcd watch returns error", errors.RFCCodeText("CDC:ErrProcessorEtcdWatch"))
-	ErrProcessorSortDir           = errors.Normalize("sort dir error", errors.RFCCodeText("CDC:ErrProcessorSortDir"))
-	ErrUnknownSortEngine          = errors.Normalize("unknown sort engine %s", errors.RFCCodeText("CDC:ErrUnknownSortEngine"))
-	ErrInvalidTaskKey             = errors.Normalize("invalid task key: %s", errors.RFCCodeText("CDC:ErrInvalidTaskKey"))
-	ErrInvalidServerOption        = errors.Normalize("invalid server option", errors.RFCCodeText("CDC:ErrInvalidServerOption"))
-	ErrServerNewPDClient          = errors.Normalize("server creates pd client failed", errors.RFCCodeText("CDC:ErrServerNewPDClient"))
-	ErrServeHTTP                  = errors.Normalize("serve http error", errors.RFCCodeText("CDC:ErrServeHTTP"))
-	ErrCaptureCampaignOwner       = errors.Normalize("campaign owner failed", errors.RFCCodeText("CDC:ErrCaptureCampaignOwner"))
-	ErrCaptureResignOwner         = errors.Normalize("resign owner failed", errors.RFCCodeText("CDC:ErrCaptureResignOwner"))
-	ErrWaitHandleOperationTimeout = errors.Normalize("waiting processor to handle the operation finished timeout", errors.RFCCodeText("CDC:ErrWaitHandleOperationTimeout"))
-	ErrSupportPostOnly            = errors.Normalize("this api supports POST method only", errors.RFCCodeText("CDC:ErrSupportPostOnly"))
-	ErrAPIInvalidParam            = errors.Normalize("invalid api parameter", errors.RFCCodeText("CDC:ErrAPIInvalidParam"))
-	ErrInternalServerError        = errors.Normalize("internal server error", errors.RFCCodeText("CDC:ErrInternalServerError"))
-	ErrOwnerSortDir               = errors.Normalize("owner sort dir", errors.RFCCodeText("CDC:ErrOwnerSortDir"))
-	ErrOwnerChangefeedNotFound    = errors.Normalize("changefeed %s not found in owner cache", errors.RFCCodeText("CDC:ErrOwnerChangefeedNotFound"))
-	ErrChangefeedAbnormalState    = errors.Normalize("changefeed in abnormal state: %s, replication status: %+v", errors.RFCCodeText("CDC:ErrChangefeedAbnormalState"))
-	ErrInvalidAdminJobType        = errors.Normalize("invalid admin job type: %d", errors.RFCCodeText("CDC:ErrInvalidAdminJobType"))
-	ErrOwnerEtcdWatch             = errors.Normalize("etcd watch returns error", errors.RFCCodeText("CDC:ErrOwnerEtcdWatch"))
+	ErrCaptureSuicide               = errors.Normalize("capture suicide", errors.RFCCodeText("CDC:ErrCaptureSuicide"))
+	ErrNewCaptureFailed             = errors.Normalize("new capture failed", errors.RFCCodeText("CDC:ErrNewCaptureFailed"))
+	ErrCaptureRegister              = errors.Normalize("capture register to etcd failed", errors.RFCCodeText("CDC:ErrCaptureRegister"))
+	ErrNewProcessorFailed           = errors.Normalize("new processor failed", errors.RFCCodeText("CDC:ErrNewProcessorFailed"))
+	ErrProcessorUnknown             = errors.Normalize("processor running unknown error", errors.RFCCodeText("CDC:ErrProcessorUnknown"))
+	ErrOwnerUnknown                 = errors.Normalize("owner running unknown error", errors.RFCCodeText("CDC:ErrOwnerUnknown"))
+	ErrProcessorTableNotFound       = errors.Normalize("table not found in processor cache", errors.RFCCodeText("CDC:ErrProcessorTableNotFound"))
+	ErrProcessorEtcdWatch           = errors.Normalize("etcd watch returns error", errors.RFCCodeText("CDC:ErrProcessorEtcdWatch"))
+	ErrProcessorSortDir             = errors.Normalize("sort dir error", errors.RFCCodeText("CDC:ErrProcessorSortDir"))
+	ErrUnknownSortEngine            = errors.Normalize("unknown sort engine %s", errors.RFCCodeText("CDC:ErrUnknownSortEngine"))
+	ErrInvalidTaskKey               = errors.Normalize("invalid task key: %s", errors.RFCCodeText("CDC:ErrInvalidTaskKey"))
+	ErrInvalidServerOption          = errors.Normalize("invalid server option", errors.RFCCodeText("CDC:ErrInvalidServerOption"))
+	ErrServerNewPDClient            = errors.Normalize("server creates pd client failed", errors.RFCCodeText("CDC:ErrServerNewPDClient"))
+	ErrServeHTTP                    = errors.Normalize("serve http error", errors.RFCCodeText("CDC:ErrServeHTTP"))
+	ErrCaptureCampaignOwner         = errors.Normalize("campaign owner failed", errors.RFCCodeText("CDC:ErrCaptureCampaignOwner"))
+	ErrCaptureResignOwner           = errors.Normalize("resign owner failed", errors.RFCCodeText("CDC:ErrCaptureResignOwner"))
+	ErrWaitHandleOperationTimeout   = errors.Normalize("waiting processor to handle the operation finished timeout", errors.RFCCodeText("CDC:ErrWaitHandleOperationTimeout"))
+	ErrSupportPostOnly              = errors.Normalize("this api supports POST method only", errors.RFCCodeText("CDC:ErrSupportPostOnly"))
+	ErrSupportGetOnly               = errors.Normalize("this api supports GET method only", errors.RFCCodeText("CDC:ErrSupportGetOnly"))
+	ErrAPIInvalidParam              = errors.Normalize("invalid api parameter", errors.RFCCodeText("CDC:ErrAPIInvalidParam"))
+	ErrInternalServerError          = errors.Normalize("internal server error", errors.RFCCodeText("CDC:ErrInternalServerError"))
+	ErrOwnerSortDir                 = errors.Normalize("owner sort dir", errors.RFCCodeText("CDC:ErrOwnerSortDir"))
+	ErrOwnerChangefeedNotFound      = errors.Normalize("changefeed %s not found in owner cache", errors.RFCCodeText("CDC:ErrOwnerChangefeedNotFound"))
+	ErrChangefeedAbnormalState      = errors.Normalize("changefeed in abnormal state: %s, replication status: %+v", errors.RFCCodeText("CDC:ErrChangefeedAbnormalState"))
+	ErrInvalidAdminJobType          = errors.Normalize("invalid admin job type: %d", errors.RFCCodeText("CDC:ErrInvalidAdminJobType"))
+	ErrOwnerEtcdWatch               = errors.Normalize("etcd watch returns error", errors.RFCCodeText("CDC:ErrOwnerEtcdWatch"))
+	ErrOwnerCampaignKeyDeleted      = errors.Normalize("owner campaign key deleted", errors.RFCCodeText("CDC:ErrOwnerCampaignKeyDeleted"))
+	ErrServiceSafepointLost         = errors.Normalize("service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint", errors.RFCCodeText("CDC:ErrServiceSafepointLost"))
+	ErrUpdateServiceSafepointFailed = errors.Normalize("updating service safepoint failed", errors.RFCCodeText("CDC:ErrUpdateServiceSafepointFailed"))
+	ErrStartTsBeforeGC              = errors.Normalize("fail to create changefeed because start-ts %d is earlier than GC safepoint at %d", errors.RFCCodeText("CDC:ErrStartTsBeforeGC"))
+	ErrSnapshotLostByGC             = errors.Normalize("fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than GC safepoint at %d", errors.RFCCodeText("CDC:ErrSnapshotLostByGC"))
+	ErrGCTTLExceeded                = errors.Normalize("the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL", errors.RFCCodeText("CDC:ErrGCTTLExceeded"))
+	ErrNotOwner                     = errors.Normalize("this capture is not a owner", errors.RFCCodeText("CDC:ErrNotOwner"))
+	ErrTableListenReplicated        = errors.Normalize("A table is being replicated by at least two processors(%s, %s), please report a bug", errors.RFCCodeText("CDC:ErrTableListenReplicated"))
+	// EtcdWorker related errors. Internal use only.
+	// ErrEtcdTryAgain is used by a PatchFunc to force a transaction abort.
+	ErrEtcdTryAgain = errors.Normalize("the etcd txn should be aborted and retried immediately", errors.RFCCodeText("CDC:ErrEtcdTryAgain"))
+	// ErrEtcdIgnore is used by a PatchFunc to signal that the reactor no longer wishes to update Etcd.
+	ErrEtcdIgnore = errors.Normalize("this patch should be excluded from the current etcd txn", errors.RFCCodeText("CDC:ErrEtcdIgnore"))
+	// ErrEtcdSessionDone is used by etcd worker to signal a session done
+	ErrEtcdSessionDone = errors.Normalize("the etcd session is done", errors.RFCCodeText("CDC:ErrEtcdSessionDone"))
+	// ErrReactorFinished is used by reactor to signal a **normal** exit.
+	ErrReactorFinished = errors.Normalize("the reactor has done its job and should no longer be executed", errors.RFCCodeText("CDC:ErrReactorFinished"))
+	ErrLeaseTimeout    = errors.Normalize("owner lease timeout", errors.RFCCodeText("CDC:ErrLeaseTimeout"))
+	ErrLeaseExpired    = errors.Normalize("owner lease expired ", errors.RFCCodeText("CDC:ErrLeaseExpired"))
+
+	// pipeline errors
+	ErrSendToClosedPipeline = errors.Normalize("pipeline is closed, cannot send message", errors.RFCCodeText("CDC:ErrSendToClosedPipeline"))
+	ErrPipelineTryAgain     = errors.Normalize("pipeline is full, please try again. Internal use only, report a bug if seen externally", errors.RFCCodeText("CDC:ErrPipelineTryAgain"))
+
+	// workerpool errors
+	ErrWorkerPoolHandleCancelled = errors.Normalize("workerpool handle is cancelled", errors.RFCCodeText("CDC:ErrWorkerPoolHandleCancelled"))
+	ErrWorkerPoolEmptyTask       = errors.Normalize("workerpool received an empty task, please report a bug", errors.RFCCodeText("CDC:ErrWorkerPoolEmptyTask"))
+	ErrAsyncPoolExited           = errors.Normalize("asyncPool has exited. Report a bug if seen externally.", errors.RFCCodeText("CDC:ErrAsyncPoolExited"))
+
+	// unified sorter errors
+	ErrUnifiedSorterBackendTerminating = errors.Normalize("unified sorter backend is terminating", errors.RFCCodeText("CDC:ErrUnifiedSorterBackendTerminating"))
+	ErrIllegalUnifiedSorterParameter   = errors.Normalize("illegal parameter for unified sorter: %s", errors.RFCCodeText("CDC:ErrIllegalUnifiedSorterParameter"))
+	ErrAsyncIOCancelled                = errors.Normalize("asynchronous IO operation is cancelled. Internal use only, report a bug if seen in log", errors.RFCCodeText("CDC:ErrAsyncIOCancelled"))
+	ErrUnifiedSorterIOError            = errors.Normalize("unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s", errors.RFCCodeText("CDC:ErrUnifiedSorterIOError"))
+	ErrConflictingFileLocks            = errors.Normalize("file lock conflict: %s", errors.RFCCodeText("ErrConflictingFileLocks"))
+	ErrSortDirLockError                = errors.Normalize("error encountered when locking sort-dir", errors.RFCCodeText("ErrSortDirLockError"))
+
+	// processor errors
+	ErrTableProcessorStoppedSafely = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
+
+	// owner errors
+	ErrOwnerChangedUnexpectedly = errors.Normalize("owner changed unexpectedly", errors.RFCCodeText("CDC:ErrOwnerChangedUnexpectedly"))
+	// owner related errors
+	ErrOwnerInconsistentStates = errors.Normalize("owner encountered inconsistent state. report a bug if this happens frequently. %s", errors.RFCCodeText("CDC:ErrOwnerInconsistentStates"))
+
+	// miscellaneous internal errors
+	ErrFlowControllerAborted              = errors.Normalize("flow controller is aborted", errors.RFCCodeText("CDC:ErrFlowControllerAborted"))
+	ErrFlowControllerEventLargerThanQuota = errors.Normalize("event is larger than the total memory quota, size: %d, quota: %d", errors.RFCCodeText("CDC:ErrFlowControllerEventLargerThanQuota"))
+
+	// retry error
+	ErrReachMaxTry = errors.Normalize("reach maximum try: %d", errors.RFCCodeText("CDC:ErrReachMaxTry"))
 )

@@ -33,10 +33,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/tests/util"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/store/tikv/tikvrpc"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/tablecodec"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
+	"github.com/tikv/client-go/v2/tikvrpc"
 	pd "github.com/tikv/pd/client"
 )
 
@@ -78,7 +80,8 @@ func main() {
 func prepare(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
-		"create table t1 (a int primary key);"}
+		"create table t1 (a int primary key);",
+	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)
 		if err != nil {
@@ -92,7 +95,8 @@ func finishMark(sourceDB *sql.DB) error {
 	sqls := []string{
 		"use test;",
 		"insert into t1 value (1);",
-		"create table t2 (a int primary key);"}
+		"create table t2 (a int primary key);",
+	}
 	for _, sql := range sqls {
 		_, err := sourceDB.Exec(sql)
 		if err != nil {
@@ -117,7 +121,7 @@ func addLock(ctx context.Context, cfg *util.Config) error {
 	}
 	defer pdcli.Close()
 
-	driver := tikv.Driver{}
+	driver := driver.TiKVDriver{}
 	store, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PDAddr))
 	if err != nil {
 		return errors.Trace(err)
@@ -223,7 +227,7 @@ func (c *Locker) lockKeys(ctx context.Context, rowIDs []int64) error {
 
 	keyPrefix := tablecodec.GenTableRecordPrefix(c.tableID)
 	for _, rowID := range rowIDs {
-		key := tablecodec.EncodeRecordKey(keyPrefix, rowID)
+		key := tablecodec.EncodeRecordKey(keyPrefix, kv.IntHandle(rowID))
 		keys = append(keys, key)
 	}
 
@@ -310,7 +314,7 @@ func (c *Locker) lockBatch(ctx context.Context, keys [][]byte, primary []byte) (
 			return 0, errors.Trace(err)
 		}
 		if regionErr != nil {
-			err = bo.Backoff(tikv.BoRegionMiss, errors.New(regionErr.String()))
+			err = bo.Backoff(tikv.BoRegionMiss(), errors.New(regionErr.String()))
 			if err != nil {
 				return 0, errors.Trace(err)
 			}
@@ -326,6 +330,7 @@ func (c *Locker) lockBatch(ctx context.Context, keys [][]byte, primary []byte) (
 		return lockedKeys, nil
 	}
 }
+
 func randStr() string {
 	length := rand.Intn(128)
 	res := ""

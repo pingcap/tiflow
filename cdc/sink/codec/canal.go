@@ -25,13 +25,14 @@ import (
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
+	"go.uber.org/zap"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
-	"go.uber.org/zap"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
 )
 
 // compatible with canal-1.1.4
@@ -91,9 +92,6 @@ func convertDdlEventType(e *model.DDLEvent) canal.EventType {
 }
 
 func isCanalDdl(t canal.EventType) bool {
-	// EventType_QUERY is not a ddl type in canal, but in cdc it is.
-	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/ddl/DruidDdlParser.java
-	// &   https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L278
 	switch t {
 	case canal.EventType_CREATE,
 		canal.EventType_RENAME,
@@ -101,8 +99,7 @@ func isCanalDdl(t canal.EventType) bool {
 		canal.EventType_DINDEX,
 		canal.EventType_ALTER,
 		canal.EventType_ERASE,
-		canal.EventType_TRUNCATE,
-		canal.EventType_QUERY:
+		canal.EventType_TRUNCATE:
 		return true
 	}
 	return false
@@ -325,6 +322,11 @@ func (d *CanalEventBatchEncoderWithTxn) SetForceHandleKeyPKey(forceHkPk bool) {
 	d.forceHkPk = forceHkPk
 }
 
+func (d *CanalEventBatchEncoderWithTxn) SetParams(opts map[string]string) error {
+	d.forceHkPk = opts["force-handle-key-pkey"] == "true"
+	return nil
+}
+
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithTxn) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
@@ -399,7 +401,7 @@ func (d *CanalEventBatchEncoderWithTxn) Reset() {
 }
 
 // NewCanalEventBatchEncoderWithTxn creates a new CanalEventBatchEncoderWithTxn.
-func NewCanalEventBatchEncoderWithTxn() EventBatchEncoder {
+func NewCanalEventBatchEncoderWithTxn() *CanalEventBatchEncoderWithTxn {
 	encoder := &CanalEventBatchEncoderWithTxn{
 		txnCache: common.NewUnresolvedTxnCache(),
 	}
@@ -455,7 +457,6 @@ func (d *CanalEventBatchEncoderWithoutTxn) MixedBuild(withVersion bool) []byte {
 
 //Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithoutTxn) Size() int {
-	// FIXME encoder with transaction support is hard to calculate the encoded buffer size
 	return d.encoder.size()
 }
 
@@ -465,7 +466,7 @@ func (d *CanalEventBatchEncoderWithoutTxn) Reset() {
 }
 
 // NewCanalEventBatchEncoderWithoutTxn creates a new NewCanalEventBatchEncoderWithoutTxn.
-func NewCanalEventBatchEncoderWithoutTxn() EventBatchEncoder {
+func NewCanalEventBatchEncoderWithoutTxn() *CanalEventBatchEncoderWithoutTxn {
 	encoder := &CanalEventBatchEncoderWithoutTxn{
 		encoder: newCanalMessageEncoder(),
 	}
@@ -531,7 +532,7 @@ func (d *canalMessageEncoder) encodeDDLEvent(e *model.DDLEvent) (*MQMessage, err
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	return NewMQMessage(nil, b, e.CommitTs), nil
+	return newDDLMQMessage(ProtocolCanal, nil, b, e), nil
 }
 
 func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
@@ -541,17 +542,24 @@ func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
 
 	err := d.refreshPacketBody()
 	if err != nil {
-		log.Fatal("Error when generating Canal packet", zap.Error(err))
+		log.Panic("Error when generating Canal packet", zap.Error(err))
 	}
 
 	value, err := proto.Marshal(d.packet)
 	if err != nil {
-		log.Fatal("Error when serializing Canal packet", zap.Error(err))
+		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
-	ret := NewMQMessage(nil, value, commitTs)
+
+	ret := NewMQMessage(ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
 	d.messages.Reset()
 	d.resetPacket()
 	return ret
+}
+
+// SetParams is no-op for now
+func (d *CanalEventBatchEncoderWithoutTxn) SetParams(params map[string]string) error {
+
+	return nil
 }
 
 // refreshPacketBody() marshals the messages to the packet body

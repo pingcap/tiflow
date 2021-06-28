@@ -206,7 +206,7 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
-	return NewMQMessage(nil, value, e.CommitTs), nil
+	return newDDLMQMessage(ProtocolCanalJSON, nil, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -215,13 +215,13 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 	ret := make([]*MQMessage, len(c.resolvedBuf))
-	for i := range c.resolvedBuf {
-		value, err := json.Marshal(c.resolvedBuf[i])
+	for i, msg := range c.resolvedBuf {
+		value, err := json.Marshal(msg)
 		if err != nil {
-			log.Fatal("CanalFlatEventBatchEncoder", zap.Error(err))
+			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		ret[i] = NewMQMessage(nil, value, c.resolvedBuf[i].tikvTs)
+		ret[i] = NewMQMessage(ProtocolCanalJSON, nil, value, msg.tikvTs, model.MqMessageTypeRow, &msg.Schema, &msg.Table)
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
@@ -240,4 +240,10 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 // Reset is only supported by JSONEventBatchEncoder
 func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
+}
+
+// SetParams is no-op for now
+func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
+	// no op
+	return nil
 }

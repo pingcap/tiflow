@@ -23,9 +23,10 @@ type PolymorphicEvent struct {
 	// Commit or resolved TS
 	CRTs uint64
 
-	RawKV    *RawKVEntry
-	Row      *RowChangedEvent
-	finished chan struct{}
+	RawKV     *RawKVEntry
+	Row       *RowChangedEvent
+	ReplicaID uint64
+	finished  chan struct{}
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
@@ -37,7 +38,7 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		StartTs:  rawKV.StartTs,
 		CRTs:     rawKV.CRTs,
 		RawKV:    rawKV,
-		finished: make(chan struct{}),
+		finished: nil,
 	}
 }
 
@@ -54,6 +55,13 @@ func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *Polymorphi
 // RegionID returns the region ID where the event comes from.
 func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
+}
+
+// SetUpFinishedChan creates an internal channel to support PrepareFinished and WaitPrepare
+func (e *PolymorphicEvent) SetUpFinishedChan() {
+	if e.finished == nil {
+		e.finished = make(chan struct{})
+	}
 }
 
 // PrepareFinished marks the prepare process is finished

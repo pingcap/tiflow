@@ -17,6 +17,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/cenkalti/backoff"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	"google.golang.org/grpc/codes"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -122,6 +126,22 @@ func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.Revoke(ctx, id)
+		if inErr == nil {
+			return nil
+		} else if etcdErr := inErr.(rpctypes.EtcdError); etcdErr.Code() == codes.NotFound {
+			// it means the etcd lease is already expired or revoked
+			return backoff.Permanent(inErr)
+		}
+		return inErr
+	})
+	return
+}
+
+// TimeToLive delegates request to clientv3.Lease.TimeToLive
+func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ...clientv3.LeaseOption) (resp *clientv3.LeaseTimeToLiveResponse, err error) {
+	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
+		var inErr error
+		resp, inErr = c.cli.TimeToLive(ctx, lease, opts...)
 		return inErr
 	})
 	return
@@ -130,4 +150,9 @@ func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv
 // Watch delegates request to clientv3.Watcher.Watch
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	return c.cli.Watch(ctx, key, opts...)
+}
+
+// RequestProgress requests a progress notify response be sent in all watch channels.
+func (c *Client) RequestProgress(ctx context.Context) error {
+	return c.cli.RequestProgress(ctx)
 }

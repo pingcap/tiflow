@@ -8,7 +8,7 @@ killall $process || true
 
 counter=0
 while [ $counter -lt $retry_count ]; do
-    pgrep $process > /dev/null 2>&1
+    pgrep -x $process > /dev/null 2>&1
     ret=$?
     if [ "$ret" != "0" ]; then
         echo "process $process already exit"

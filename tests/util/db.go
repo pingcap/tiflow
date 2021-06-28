@@ -111,7 +111,6 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 			log.Info("check equal", zap.String("sql", sql))
 			return nil
 		})
-
 		if err != nil {
 			log.Error("check equal", zap.String("err", errors.ErrorStack(err)))
 			return false

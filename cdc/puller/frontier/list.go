@@ -126,7 +126,7 @@ LevelLoop:
 // InsertNextToNode insert the specified node after the seek result
 func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode) {
 	if seekR.Node() != nil && !nextTo(seekR.Node(), key) {
-		log.Fatal("the InsertNextToNode function can only append node to the seek result.")
+		log.Panic("the InsertNextToNode function can only append node to the seek result.")
 	}
 	height := l.randomHeight()
 	if l.height < height {
@@ -159,7 +159,7 @@ func (l *skipList) Insert(key []byte, value *fibonacciHeapNode) {
 func (l *skipList) Remove(seekR seekResult, toRemove *skipListNode) {
 	seekCurrent := seekR.Node()
 	if seekCurrent == nil || seekCurrent.Next() != toRemove {
-		log.Fatal("the Remove function can only remove node right next to the seek result.")
+		log.Panic("the Remove function can only remove node right next to the seek result.")
 	}
 	for i := range toRemove.nexts {
 		seekR[i].nexts[i] = toRemove.nexts[i]

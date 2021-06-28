@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type spanFrontierSuite struct{}
@@ -30,6 +31,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 var _ = check.Suite(&spanFrontierSuite{})
 
 func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
+	defer testleak.AfterTest(c)()
 	keyA := []byte("a")
 	keyB := []byte("b")
 	keyC := []byte("c")
@@ -159,13 +161,55 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	c.Assert(f.Frontier(), check.Equals, uint64(9))
 	c.Assert(f.String(), check.Equals, `[1 @ 9] [g @ 10] [i @ Max] `)
 	checkFrontier(c, f)
+}
 
+func (s *spanFrontierSuite) TestSpanFrontierFallback(c *check.C) {
+	defer testleak.AfterTest(c)()
+	keyA := []byte("a")
+	keyB := []byte("b")
+	keyC := []byte("c")
+	keyD := []byte("d")
+	keyE := []byte("e")
+
+	spAB := regionspan.ComparableSpan{Start: keyA, End: keyB}
+	spBC := regionspan.ComparableSpan{Start: keyB, End: keyC}
+	spCD := regionspan.ComparableSpan{Start: keyC, End: keyD}
+	spDE := regionspan.ComparableSpan{Start: keyD, End: keyE}
+
+	f := NewFrontier(20, spAB).(*spanFrontier)
+	f.Forward(spBC, 20)
+	f.Forward(spCD, 10)
+	f.Forward(spDE, 20)
+
+	// [A, B) [B, C) [C, D) [D, E)
+	// 20     20     10     20
+	c.Assert(f.Frontier(), check.Equals, uint64(10))
+	c.Assert(f.String(), check.Equals, `[a @ 20] [b @ 20] [c @ 10] [d @ 20] [e @ Max] `)
+	checkFrontier(c, f)
+
+	// [A, B) [B, D) [D, E)
+	// 20     10     10
+	// [B, D) does not forward, because of split to [B, C) and [C, D) immediately
+
+	// [A, B) [B, C) [C, D) [D, E)
+	// 20     10     10     20
+	// [B, C) does not forward, because of merge into [A, C) immediately
+	f.Forward(spCD, 20)
+	c.Assert(f.Frontier(), check.Equals, uint64(20))
+	// the frontier stoes [A, B) and [B, C) but they are not correct exactly
+	c.Assert(f.String(), check.Equals, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [e @ Max] `)
+	checkFrontier(c, f)
+
+	// Bump, here we meet resolved ts fall back, where 10 is less than f.Frontier()
+	// But there is no data loss actually.
+	// f.Forward(spAC, 10)
 }
 
 func (s *spanFrontierSuite) TestMinMax(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var keyMin []byte
 	var keyMax []byte
-	var keyMid = []byte("m")
+	keyMid := []byte("m")
 
 	spMinMid := regionspan.ComparableSpan{Start: keyMin, End: keyMid}
 	spMidMax := regionspan.ComparableSpan{Start: keyMid, End: keyMax}
@@ -198,6 +242,7 @@ func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 }
 
 func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
+	defer testleak.AfterTest(c)()
 	key1 := []byte("1")
 	key2 := []byte("2")
 	keyA := []byte("a")
@@ -262,6 +307,7 @@ func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
 }
 
 func (s *spanFrontierSuite) TestSpanFrontierRandomly(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var keyMin []byte
 	var keyMax []byte
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}

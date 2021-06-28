@@ -59,6 +59,7 @@ var (
 	noConfirm  bool
 	sortEngine string
 	sortDir    string
+	timezone   string
 
 	cyclicReplicaID        uint64
 	cyclicFilterReplicaIDs []uint
@@ -73,9 +74,10 @@ var (
 	cliLogLevel       string
 	changefeedListAll bool
 
-	changefeedID string
-	captureID    string
-	interval     uint
+	changefeedID            string
+	captureID               string
+	interval                uint
+	disableGCSafePointCheck bool
 
 	syncPointEnabled  bool
 	syncPointInterval time.Duration
@@ -148,9 +150,10 @@ func newCliCommand() *cobra.Command {
 			}
 
 			pdEndpoints := strings.Split(cliPdAddr, ",")
-
 			logConfig := etcdlogutil.DefaultZapLoggerConfig
 			logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+
+			logHTTPProxies()
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Context:     defaultContext,
 				Endpoints:   pdEndpoints,
@@ -173,7 +176,7 @@ func newCliCommand() *cobra.Command {
 			})
 			if err != nil {
 				// PD embeds an etcd server.
-				return errors.Annotatef(err, "fail to open PD etcd client, pd-addr=\"%s\"", cliPdAddr)
+				return errors.Annotatef(err, "fail to open PD etcd client, pd=\"%s\"", cliPdAddr)
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(defaultContext, etcdCli)
 			pdCli, err = pd.NewClientWithContext(
@@ -192,7 +195,7 @@ func newCliCommand() *cobra.Command {
 					}),
 				))
 			if err != nil {
-				return errors.Annotatef(err, "fail to open PD client, pd-addr=\"%s\"", cliPdAddr)
+				return errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", cliPdAddr)
 			}
 			ctx := defaultContext
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.

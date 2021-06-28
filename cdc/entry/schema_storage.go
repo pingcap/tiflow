@@ -43,6 +43,9 @@ type schemaSnapshot struct {
 	tables         map[int64]*model.TableInfo
 	partitionTable map[int64]*model.TableInfo
 
+	// key is schemaID and value is tableIDs
+	tableInSchema map[int64][]int64
+
 	truncateTableID   map[int64]struct{}
 	ineligibleTableID map[int64]struct{}
 
@@ -97,6 +100,12 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 
 // NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTables bool) (*SingleSchemaSnapshot, error) {
+	// meta is nil only in unit tests
+	if meta == nil {
+		snap := newEmptySchemaSnapshot(explicitTables)
+		snap.currentTs = currentTs
+		return snap, nil
+	}
 	return newSchemaSnapshotFromMeta(meta, currentTs, explicitTables)
 }
 
@@ -109,6 +118,7 @@ func newEmptySchemaSnapshot(explicitTables bool) *schemaSnapshot {
 		tables:         make(map[int64]*model.TableInfo),
 		partitionTable: make(map[int64]*model.TableInfo),
 
+		tableInSchema:     make(map[int64][]int64),
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
 
@@ -131,9 +141,9 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTabl
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
-		dbinfo.Tables = make([]*timodel.TableInfo, 0, len(tableInfos))
+		snap.tableInSchema[schemaID] = make([]int64, 0, len(tableInfos))
 		for _, tableInfo := range tableInfos {
-			dbinfo.Tables = append(dbinfo.Tables, tableInfo)
+			snap.tableInSchema[schemaID] = append(snap.tableInSchema[schemaID], tableInfo.ID)
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
 			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
@@ -223,13 +233,21 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 
 	tables := make(map[int64]*model.TableInfo, len(s.tables))
 	for k, v := range s.tables {
-		tables[k] = v.Clone()
+		tables[k] = v
 	}
 	clone.tables = tables
 
+	tableInSchema := make(map[int64][]int64, len(s.tableInSchema))
+	for k, v := range s.tableInSchema {
+		cloneV := make([]int64, len(v))
+		copy(cloneV, v)
+		tableInSchema[k] = cloneV
+	}
+	clone.tableInSchema = tableInSchema
+
 	partitionTable := make(map[int64]*model.TableInfo, len(s.partitionTable))
 	for k, v := range s.partitionTable {
-		partitionTable[k] = v.Clone()
+		partitionTable[k] = v
 	}
 	clone.partitionTable = partitionTable
 
@@ -349,23 +367,19 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(id)
 	}
 
-	for _, table := range schema.Tables {
-		if pi := table.GetPartitionInfo(); pi != nil {
+	for _, tableID := range s.tableInSchema[id] {
+		tableName := s.tables[tableID].TableName
+		if pi := s.tables[tableID].GetPartitionInfo(); pi != nil {
 			for _, partition := range pi.Definitions {
 				delete(s.partitionTable, partition.ID)
 			}
 		}
-		tableName := s.tables[table.ID].TableName
-		if pi := table.GetPartitionInfo(); pi != nil {
-			for _, partition := range pi.Definitions {
-				delete(s.partitionTable, partition.ID)
-			}
-		}
-		delete(s.tables, table.ID)
+		delete(s.tables, tableID)
 		delete(s.tableNameToID, tableName)
 	}
 
 	delete(s.schemas, id)
+	delete(s.tableInSchema, id)
 	delete(s.schemaNameToID, schema.Name.O)
 
 	return nil
@@ -378,13 +392,15 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 
 	s.schemas[db.ID] = db.Clone()
 	s.schemaNameToID[db.Name.O] = db.ID
+	s.tableInSchema[db.ID] = []int64{}
 
 	log.Debug("create schema success, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
 	return nil
 }
 
 func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
-	if _, ok := s.schemas[db.ID]; !ok {
+	_, ok := s.schemas[db.ID]
+	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", db.Name, db.ID)
 	}
 	s.schemas[db.ID] = db.Clone()
@@ -397,15 +413,15 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	if !ok {
 		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
 	}
-	schema, ok := s.SchemaByTableID(id)
+	tableInSchema, ok := s.tableInSchema[table.SchemaID]
 	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table(%d)'s schema", id)
 	}
 
-	for i := range schema.Tables {
-		if schema.Tables[i].ID == id {
-			copy(schema.Tables[i:], schema.Tables[i+1:])
-			schema.Tables = schema.Tables[:len(schema.Tables)-1]
+	for i, tableID := range tableInSchema {
+		if tableID == id {
+			copy(tableInSchema[i:], tableInSchema[i+1:])
+			s.tableInSchema[table.SchemaID] = tableInSchema[:len(tableInSchema)-1]
 			break
 		}
 	}
@@ -473,12 +489,16 @@ func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", table.SchemaID)
 	}
+	tableInSchema, ok := s.tableInSchema[table.SchemaID]
+	if !ok {
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", table.SchemaID)
+	}
 	_, ok = s.tables[table.ID]
 	if ok {
 		return cerror.ErrSnapshotTableExists.GenWithStackByArgs(schema.Name, table.Name)
 	}
-
-	schema.Tables = append(schema.Tables, table.TableInfo)
+	tableInSchema = append(tableInSchema, table.ID)
+	s.tableInSchema[table.SchemaID] = tableInSchema
 
 	s.tables[table.ID] = table
 	if !table.IsEligible(s.explicitTables) {
@@ -530,7 +550,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
 		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
 			job.BinlogInfo.FinishedTS,
-			job.BinlogInfo.TableInfo.Clone())
+			job.BinlogInfo.TableInfo)
 	}
 	switch job.Type {
 	case timodel.ActionCreateSchema:
@@ -620,8 +640,29 @@ func (s *schemaSnapshot) CloneTables() map[model.TableID]model.TableName {
 	return mp
 }
 
+// Tables return a map between table id and table info
+// the returned map must be READ-ONLY. Any modified of this map will lead to the internal state confusion in schema storage
+func (s *schemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
+	return s.tables
+}
+
 // SchemaStorage stores the schema information with multi-version
-type SchemaStorage struct {
+type SchemaStorage interface {
+	// GetSnapshot returns the snapshot which of ts is specified
+	GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error)
+	// GetLastSnapshot returns the last snapshot
+	GetLastSnapshot() *schemaSnapshot
+	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
+	HandleDDLJob(job *timodel.Job) error
+	// AdvanceResolvedTs advances the resolved
+	AdvanceResolvedTs(ts uint64)
+	// ResolvedTs returns the resolved ts of the schema storage
+	ResolvedTs() uint64
+	// DoGC removes snaps which of ts less than this specified ts
+	DoGC(ts uint64)
+}
+
+type schemaStorageImpl struct {
 	snaps      []*schemaSnapshot
 	snapsMu    sync.RWMutex
 	gcTs       uint64
@@ -632,7 +673,7 @@ type SchemaStorage struct {
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool) (*SchemaStorage, error) {
+func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool) (SchemaStorage, error) {
 	var snap *schemaSnapshot
 	var err error
 	if meta == nil {
@@ -643,7 +684,7 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schema := &SchemaStorage{
+	schema := &schemaStorageImpl{
 		snaps:          []*schemaSnapshot{snap},
 		resolvedTs:     startTs,
 		filter:         filter,
@@ -652,7 +693,7 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, 
 	return schema, nil
 }
 
-func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
+func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
 		return nil, cerror.ErrSchemaStorageGCed.GenWithStackByArgs(ts, gcTs)
@@ -673,22 +714,30 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 }
 
 // GetSnapshot returns the snapshot which of ts is specified
-func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
+func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
-	err := retry.Run(10*time.Millisecond, 25,
-		func() error {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			default:
-			}
-			var err error
-			snap, err = s.getSnapshot(ts)
-			if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
-				return backoff.Permanent(err)
-			}
-			return err
-		})
+
+	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
+	// DDL puller lagging too much.
+	err := retry.RunWithInfiniteRetry(10*time.Millisecond, func() error {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		default:
+		}
+		var err error
+		snap, err = s.getSnapshot(ts)
+		if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
+			return backoff.Permanent(err)
+		}
+
+		return err
+	}, func(elapsed time.Duration) {
+		if elapsed >= 5*time.Minute {
+			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
+		}
+	})
+
 	switch e := err.(type) {
 	case *backoff.PermanentError:
 		return nil, e.Err
@@ -698,14 +747,14 @@ func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnap
 }
 
 // GetLastSnapshot returns the last snapshot
-func (s *SchemaStorage) GetLastSnapshot() *schemaSnapshot {
+func (s *schemaStorageImpl) GetLastSnapshot() *schemaSnapshot {
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
 	return s.snaps[len(s.snaps)-1]
 }
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
-func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
+func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
@@ -732,7 +781,7 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 }
 
 // AdvanceResolvedTs advances the resolved
-func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
+func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
 	var swapped bool
 	for !swapped {
 		oldResolvedTs := atomic.LoadUint64(&s.resolvedTs)
@@ -743,8 +792,13 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	}
 }
 
+// ResolvedTs returns the resolved ts of the schema storage
+func (s *schemaStorageImpl) ResolvedTs() uint64 {
+	return atomic.LoadUint64(&s.resolvedTs)
+}
+
 // DoGC removes snaps which of ts less than this specified ts
-func (s *SchemaStorage) DoGC(ts uint64) {
+func (s *schemaStorageImpl) DoGC(ts uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var startIdx int
@@ -773,7 +827,7 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func (s *SchemaStorage) skipJob(job *timodel.Job) bool {
+func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 		return true

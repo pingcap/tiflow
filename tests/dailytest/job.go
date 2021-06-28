@@ -120,7 +120,6 @@ func doDMLProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch
 	}
 
 	doWait(doneChan, start, jobCount, workerCount)
-
 }
 
 func doDDLProcess(table *table, db *sql.DB) {

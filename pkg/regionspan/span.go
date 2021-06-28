@@ -54,6 +54,14 @@ func (s ComparableSpan) Hack() ComparableSpan {
 	return s
 }
 
+// Clone clones a ComparableSpan
+func (s ComparableSpan) Clone() ComparableSpan {
+	return ComparableSpan{
+		Start: append(make([]byte, 0, len(s.Start)), s.Start...),
+		End:   append(make([]byte, 0, len(s.End)), s.End...),
+	}
+}
+
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s Span) Hack() Span {
 	s.Start, s.End = hackSpan(s.Start, s.End)
@@ -206,7 +214,7 @@ func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err
 // IsSubSpan returns true if the sub span is parents spans
 func IsSubSpan(sub ComparableSpan, parents ...ComparableSpan) bool {
 	if bytes.Compare(sub.Start, sub.End) >= 0 {
-		log.Fatal("the sub span is invalid", zap.Reflect("sub span", sub))
+		log.Panic("the sub span is invalid", zap.Reflect("sub span", sub))
 	}
 	for _, parent := range parents {
 		if StartCompare(parent.Start, sub.Start) <= 0 &&

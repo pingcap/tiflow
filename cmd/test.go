@@ -20,12 +20,11 @@ import (
 
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 )
 
-var (
-	testPdAddr string
-)
+var testPdAddr string
 
 func init() {
 	rootCmd.AddCommand(testKVCmd)
@@ -65,8 +64,10 @@ var testKVCmd = &cobra.Command{
 			return
 		}
 
+		tikvStorage := storage.(tikv.Storage) // we know it is tikv.
+
 		t := new(testingT)
-		kv.TestGetKVSimple(t, cli, storage)
-		kv.TestSplit(t, cli, storage)
+		kv.TestGetKVSimple(t, cli, tikvStorage, storage)
+		kv.TestSplit(t, cli, tikvStorage, storage)
 	},
 }

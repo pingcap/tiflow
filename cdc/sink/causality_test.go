@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type testCausalitySuite struct{}
@@ -27,6 +28,7 @@ type testCausalitySuite struct{}
 var _ = check.Suite(&testCausalitySuite{})
 
 func (s *testCausalitySuite) TestCausality(c *check.C) {
+	defer testleak.AfterTest(c)()
 	rows := [][][]byte{
 		{[]byte("a")},
 		{[]byte("b")},
@@ -71,6 +73,7 @@ func (s *testCausalitySuite) TestCausality(c *check.C) {
 }
 
 func (s *testCausalitySuite) TestGenKeys(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		txn      *model.SingleTableTxn
 		expected [][]byte

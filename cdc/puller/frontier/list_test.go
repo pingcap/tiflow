@@ -18,6 +18,7 @@ import (
 	"math/rand"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type spanListSuite struct{}
@@ -31,6 +32,7 @@ func (s *spanListSuite) insertIntoList(l *skipList, keys ...[]byte) {
 }
 
 func (s *spanListSuite) TestInsertAndRemove(c *check.C) {
+	defer testleak.AfterTest(c)()
 	list := newSpanList()
 	var keys [][]byte
 	for i := 0; i < 100000; i++ {
@@ -93,6 +95,7 @@ func checkList(c *check.C, list *skipList) {
 }
 
 func (s *spanListSuite) TestSeek(c *check.C) {
+	defer testleak.AfterTest(c)()
 	key1 := []byte("15")
 	keyA := []byte("a5")
 	keyB := []byte("b5")

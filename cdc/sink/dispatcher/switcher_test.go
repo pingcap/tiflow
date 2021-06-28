@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type SwitcherSuite struct{}
@@ -24,6 +25,7 @@ type SwitcherSuite struct{}
 var _ = check.Suite(&SwitcherSuite{})
 
 func (s SwitcherSuite) TestSwitcher(c *check.C) {
+	defer testleak.AfterTest(c)()
 	d, err := NewDispatcher(config.GetDefaultReplicaConfig(), 4)
 	c.Assert(err, check.IsNil)
 	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{

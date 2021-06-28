@@ -14,6 +14,7 @@
 package framework
 
 import (
+	"database/sql"
 	"os"
 	"os/exec"
 	"time"
@@ -38,13 +39,54 @@ func (d *DockerComposeOperator) Setup() {
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, d.ExecEnv...)
 	runCmdHandleError(cmd)
+	err := waitTiDBStarted(UpstreamDSN)
+	if err != nil {
+		log.Fatal("ping upstream database but not receive a pong", zap.Error(err))
+	}
+	err = waitTiDBStarted(DownstreamDSN)
+	if err != nil {
+		log.Fatal("ping downstream database but not receive a pong", zap.Error(err))
+	}
+	d.WaitClusterStarted()
+}
 
+// WaitClusterStarted waits the cluster is started and ready
+func (d *DockerComposeOperator) WaitClusterStarted() {
 	if d.HealthChecker != nil {
 		err := retry.Run(time.Second, 120, d.HealthChecker)
 		if err != nil {
 			log.Fatal("Docker service health check failed after max retries", zap.Error(err))
 		}
 	}
+}
+
+// RestartComponents restarts a docker-compose service
+func (d *DockerComposeOperator) RestartComponents(names ...string) {
+	for _, name := range names {
+		cmd := exec.Command("docker-compose", "-f", d.FileName, "rm", "-sf", name)
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, d.ExecEnv...)
+		runCmdHandleError(cmd)
+	}
+	cmd := exec.Command("docker-compose", "-f", d.FileName, "up", "-d")
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, d.ExecEnv...)
+	runCmdHandleError(cmd)
+}
+
+func waitTiDBStarted(dsn string) error {
+	return retry.Run(time.Second, 60, func() error {
+		upstream, err := sql.Open("mysql", dsn)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		defer upstream.Close()
+		err = upstream.Ping()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	})
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {
@@ -61,7 +103,7 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 			zap.ByteString("output", bytes))
 	}
 
-	log.Info("Finished executing command", zap.String("cmd", cmd.String()))
+	log.Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
 	return bytes
 }
 

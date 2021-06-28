@@ -30,8 +30,8 @@ type Filter struct {
 	isCyclicEnabled  bool
 }
 
-// NewFilter creates a filter
-func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
+// VerifyRules ...
+func VerifyRules(cfg *config.ReplicaConfig) (filterV2.Filter, error) {
 	var f filterV2.Filter
 	var err error
 	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
@@ -46,6 +46,17 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
+
+	return f, nil
+}
+
+// NewFilter creates a filter
+func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
+	f, err := VerifyRules(cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+	}
+
 	if !cfg.CaseSensitive {
 		f = filterV2.CaseInsensitive(f)
 	}
@@ -126,6 +137,16 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 	ActionCreateSequence                ActionType = 34
 	ActionAlterSequence                 ActionType = 35
 	ActionDropSequence                  ActionType = 36
+	ActionModifyTableAutoIdCache        ActionType = 39
+	ActionRebaseAutoRandomBase          ActionType = 40
+	ActionAlterIndexVisibility          ActionType = 41
+	ActionExchangeTablePartition        ActionType = 42
+	ActionAddCheckConstraint            ActionType = 43
+	ActionDropCheckConstraint           ActionType = 44
+	ActionAlterCheckConstraint          ActionType = 45
+	ActionAlterTableAlterPartition      ActionType = 46
+
+	... Any Action which of value is greater than 46 ...
 	*/
 	switch ddlType {
 	case model.ActionCreateSchema,

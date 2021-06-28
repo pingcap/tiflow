@@ -56,6 +56,10 @@ import java.util.List;
  * </pre>
  */
 public class TicdcEventDecoder implements Iterator<TicdcEventData> {
+
+    private static final String UPDATE_NEW_VALUE_TOKEN = "u";
+    private static final String UPDATE_OLD_VALUE_TOKEN = "p";
+
     private DataInputStream keyStream;
     private DataInputStream valueStream;
     private long version;
@@ -146,34 +150,46 @@ public class TicdcEventDecoder implements Iterator<TicdcEventData> {
 
         // row change
         String updateOrDelete;
-        if (jsonObject.containsKey("u")) {
-            updateOrDelete = "u";
+        if (jsonObject.containsKey(UPDATE_NEW_VALUE_TOKEN)) {
+            updateOrDelete = UPDATE_NEW_VALUE_TOKEN;
         } else if (jsonObject.containsKey("d")) {
             updateOrDelete = "d";
         } else {
             throw new RuntimeException("Can not parse Value:" + json);
         }
+
         JSONObject row = jsonObject.getJSONObject(updateOrDelete);
         TicdcEventRowChange v = new TicdcEventRowChange(kafkaMessage);
         v.setUpdateOrDelete(updateOrDelete);
         if (v.getType() == TicdcEventType.rowChange) {
-            List<TicdcEventColumn> columns = new ArrayList<>();
-            if (row != null) {
-                for (String col : row.keySet()) {
-                    JSONObject columnObj = row.getJSONObject(col);
-                    TicdcEventColumn column = new TicdcEventColumn();
-                    column.setH(columnObj.getBooleanValue("h"));
-                    column.setT(columnObj.getIntValue("t"));
-                    column.setV(columnObj.get("v"));
-                    column.setName(col);
-                    columns.add(column);
-                }
-            }
+            List<TicdcEventColumn> columns = getTicdcEventColumns(row);
             v.setColumns(columns);
         }
+
+        if(UPDATE_NEW_VALUE_TOKEN.equals(updateOrDelete) ){
+            row = jsonObject.getJSONObject(UPDATE_OLD_VALUE_TOKEN);
+            if(row != null){
+                v.setOldColumns(getTicdcEventColumns(row));
+            }
+        }
+
         return v;
     }
-
+    private List<TicdcEventColumn> getTicdcEventColumns(JSONObject row) {
+        List<TicdcEventColumn> columns = new ArrayList<>();
+        if (row != null) {
+            for (String col : row.keySet()) {
+                JSONObject columnObj = row.getJSONObject(col);
+                TicdcEventColumn column = new TicdcEventColumn();
+                column.setH(columnObj.getBooleanValue("h"));
+                column.setT(columnObj.getIntValue("t"));
+                column.setV(columnObj.get("v"));
+                column.setName(col);
+                columns.add(column);
+            }
+        }
+        return columns;
+    }
     @Override
     public TicdcEventData next() {
         try {

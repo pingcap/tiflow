@@ -37,13 +37,7 @@ type blackHoleSink struct {
 }
 
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	checkpointTs := atomic.LoadUint64(&b.checkpointTs)
 	for _, row := range rows {
-		if row.CommitTs <= checkpointTs {
-			log.Fatal("The CommitTs must be greater than the checkpointTs",
-				zap.Uint64("CommitTs", row.CommitTs),
-				zap.Uint64("checkpointTs", checkpointTs))
-		}
 		log.Debug("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
 	}
 	rowsCount := len(rows)
@@ -61,7 +55,7 @@ func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs ui
 		b.lastAccumulated = accumulated
 		return int(batchSize), nil
 	})
-	b.statistics.PrintStatus()
+	b.statistics.PrintStatus(ctx)
 	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
 	return resolvedTs, err
 }
