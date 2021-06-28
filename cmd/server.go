@@ -15,7 +15,6 @@ package cmd
 
 import (
 	"context"
-	"net/url"
 	"strings"
 	"time"
 
@@ -34,12 +33,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
-)
-
-// Endpoint schemes.
-const (
-	HTTP  = "http"
-	HTTPS = "https"
 )
 
 var (
@@ -210,22 +203,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		return nil, cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
 	for _, ep := range strings.Split(serverPdAddr, ",") {
-		u, err := url.Parse(ep)
-		if err != nil {
-			return nil, errors.Annotate(err, "parse PD endpoint")
-		}
-		if (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
-			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint should be a valid http or https URL")
-		}
-
-		if conf.Security.IsTLSEnabled() {
-			if u.Scheme == HTTP {
-				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
-			}
-		} else {
-			if u.Scheme == HTTPS {
-				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme is https, please provide certificate")
-			}
+		if err := verifyPdEndpoint(ep, conf.Security.IsTLSEnabled()); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
 		}
 	}
 
