@@ -14,6 +14,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"regexp"
@@ -153,7 +154,15 @@ func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 // Marshal returns the json marshal format of a ChangeFeedInfo
 func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
-	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
+	if err != nil{
+		return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
+	}
+	var out bytes.Buffer
+	err = json.Indent(&out, data, "", "\t")
+	if err != nil{
+		return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
+	}
+	return out.String(), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
