@@ -69,7 +69,8 @@ public class TicdcEventDecoderTest {
         Assert.assertNotNull(keyFiles);
         Assert.assertNotNull(valueFiles);
         Assert.assertEquals(keyFiles.length, valueFiles.length);
-
+        Arrays.sort(keyFiles);
+        Arrays.sort(valueFiles);
         for (int i = 0; i < keyFiles.length; i++) {
             File kf = keyFiles[i];
             byte[] kafkaMessageKey = Files.readAllBytes(kf.toPath());
