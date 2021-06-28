@@ -215,7 +215,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 			}
 		} else {
 			if strings.HasPrefix(ep, HTTPS) {
-				return nil, errors.New("PD endpoint scheme is https, please provide certificate")
+				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme is https, please provide certificate")
 			} else if !strings.HasPrefix(ep, HTTP) {
 				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
 			}
