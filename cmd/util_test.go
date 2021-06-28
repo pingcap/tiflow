@@ -57,6 +57,7 @@ func (s *utilsSuite) TestProxyFields(c *check.C) {
 }
 
 func (s *utilsSuite) TestVerifyPdEndpoint(c *check.C) {
+	defer testleak.AfterTest(c)()
 	// empty URL.
 	url := ""
 	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
