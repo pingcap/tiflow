@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -137,15 +138,18 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
+			u, err := url.Parse(cliPdAddr)
+			if err != nil || (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
+				return errors.New("PD endpoint should be a valid http or https URL")
+			}
+
 			if tlsConfig != nil {
-				if strings.HasPrefix(cliPdAddr, HTTP) {
+				if u.Scheme == HTTP {
 					return errors.New("PD endpoint scheme should be https")
 				}
 			} else {
-				if strings.HasPrefix(cliPdAddr, HTTPS) {
+				if u.Scheme == HTTPS {
 					return errors.New("PD endpoint scheme is https, please provide certificate")
-				} else if !strings.HasPrefix(cliPdAddr, HTTP) {
-					return errors.New("PD endpoint scheme should be http")
 				}
 			}
 			grpcTLSOption, err := credential.ToGRPCDialOption()
