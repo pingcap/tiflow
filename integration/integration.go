@@ -56,7 +56,7 @@ func testCanal() {
 		//tests.NewSimpleCase(task),
 		//tests.NewDeleteCase(task),
 		//tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
+		// tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
 		tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
@@ -85,12 +85,12 @@ func testCanalJSON() {
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
 	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
+		//tests.NewSimpleCase(task),
+		//tests.NewDeleteCase(task),
+		//tests.NewManyTypesCase(task),
+		//tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
+		//tests.NewAlterCase(task),
 	}
 
 	runTests(testCases, env)
