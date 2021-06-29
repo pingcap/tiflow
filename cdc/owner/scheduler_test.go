@@ -57,13 +57,22 @@ func (s *schedulerSuite) addCapture(captureID model.CaptureID) {
 }
 
 func (s *schedulerSuite) finishTableOperation(captureID model.CaptureID, tableIDs ...model.TableID) {
-	s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		for _, tableID := range tableIDs {
-			status.Operation[tableID].Done = true
-			status.Operation[tableID].Status = model.OperFinished
-		}
-		return status, true, nil
-	})
+	for _, tableID := range tableIDs {
+		s.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+			status.Operation.Done = true
+			status.Operation.Status = model.OperFinished
+			return status, true, nil
+		})
+	}
+	/*
+		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			for _, tableID := range tableIDs {
+				status.Operation[tableID].Done = true
+				status.Operation[tableID].Status = model.OperFinished
+			}
+			return status, true, nil
+		})
+	*/
 	s.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		if workload == nil {
 			workload = make(model.TaskWorkload)
@@ -276,15 +285,15 @@ func (s *schedulerSuite) TestScheduleRebalance(c *check.C) {
 	s.addCapture(captureID2)
 	s.addCapture(captureID3)
 
+	for i := 1; i <= 6; i++ {
+		s.state.PatchTableStatus(captureID1, model.TableID(i), func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+			return &model.TableStatus{
+				ReplicaInfo: &model.TableReplicaInfo{StartTs: 1},
+			}, true, nil
+		})
+	}
 	s.state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables = make(map[model.TableID]*model.TableReplicaInfo)
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 1}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 1}
-		status.Tables[3] = &model.TableReplicaInfo{StartTs: 1}
-		status.Tables[4] = &model.TableReplicaInfo{StartTs: 1}
-		status.Tables[5] = &model.TableReplicaInfo{StartTs: 1}
-		status.Tables[6] = &model.TableReplicaInfo{StartTs: 1}
-		return status, true, nil
+		return &model.TaskStatus{}, true, nil
 	})
 	s.tester.MustApplyPatches()
 
@@ -298,13 +307,16 @@ func (s *schedulerSuite) TestScheduleRebalance(c *check.C) {
 	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.HasLen, 0)
 	c.Assert(s.state.TaskStatuses[captureID3].Tables, check.HasLen, 0)
 
-	s.state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		for _, opt := range status.Operation {
-			opt.Done = true
-			opt.Status = model.OperFinished
-		}
-		return status, true, nil
-	})
+	for tableID := range s.state.TaskStatuses[captureID1].Operation {
+		s.state.PatchTableStatus(captureID1, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+			if status.Operation == nil {
+				return status, false, nil
+			}
+			status.Operation.Done = true
+			status.Operation.Status = model.OperFinished
+			return status, true, nil
+		})
+	}
 	s.state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		c.Assert(workload, check.IsNil)
 		workload = make(model.TaskWorkload)

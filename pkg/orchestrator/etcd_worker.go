@@ -17,10 +17,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pingcap/failpoint"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pingcap/failpoint"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

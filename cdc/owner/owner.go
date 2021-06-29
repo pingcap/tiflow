@@ -210,10 +210,25 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return nil, status != nil, nil
 	})
-	for captureID := range state.TaskStatuses {
+	for captureID, taskStatus := range state.TaskStatuses {
+		// TODO extract this
 		state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			return nil, status != nil, nil
 		})
+		if taskStatus.Tables != nil {
+			for tableID := range taskStatus.Tables {
+				state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+					return nil, status != nil, nil
+				})
+			}
+		}
+		if taskStatus.Operation != nil {
+			for tableID := range taskStatus.Operation {
+				state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+					return nil, status != nil, nil
+				})
+			}
+		}
 	}
 	for captureID := range state.TaskPositions {
 		state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {

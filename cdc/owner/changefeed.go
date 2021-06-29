@@ -101,7 +101,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		c.errCh <- errors.Trace(err)
 		return nil
 	})
-	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	state.MustCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := c.tick(ctx, state, captures); err != nil {
 		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 		var code string
@@ -286,11 +286,25 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			ok = false
 		}
 	}
-	for captureID := range c.state.TaskStatuses {
+	for captureID, taskStatus := range c.state.TaskStatuses {
 		if _, exist := captures[captureID]; !exist {
 			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 				return nil, status != nil, nil
 			})
+			if taskStatus.Tables != nil {
+				for tableID := range taskStatus.Tables {
+					c.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+						return nil, status != nil, nil
+					})
+				}
+			}
+			if taskStatus.Operation != nil {
+				for tableID := range taskStatus.Operation {
+					c.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+						return nil, status != nil, nil
+					})
+				}
+			}
 			ok = false
 		}
 	}

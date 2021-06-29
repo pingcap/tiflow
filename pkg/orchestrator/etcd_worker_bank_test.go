@@ -16,12 +16,13 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/failpoint"
 	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pingcap/failpoint"
 
 	"go.uber.org/zap/zapcore"
 

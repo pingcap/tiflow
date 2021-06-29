@@ -77,7 +77,8 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		etcd.CDCKeyTypeChangeFeedStatus,
 		etcd.CDCKeyTypeTaskPosition,
 		etcd.CDCKeyTypeTaskStatus,
-		etcd.CDCKeyTypeTaskWorkload:
+		etcd.CDCKeyTypeTaskWorkload,
+		etcd.CDCKeyTypeTableStatus:
 		changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 		if !exist {
 			if value == nil {
@@ -188,9 +189,48 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 			delete(s.TaskStatuses, key.CaptureID)
 			return nil
 		}
-		status := new(TaskStatus)
-		s.TaskStatuses[key.CaptureID] = status
-		e = status
+		shadowStatus := new(TaskStatus)
+		e = shadowStatus
+	case etcd.CDCKeyTypeTableStatus:
+		if key.ChangefeedID != s.ID {
+			return nil
+		}
+		if value == nil {
+			if taskStatus, ok := s.TaskStatuses[key.CaptureID]; ok {
+				if taskStatus.Tables != nil {
+					delete(taskStatus.Tables, key.TableID)
+				}
+				if taskStatus.Operation != nil {
+					delete(taskStatus.Operation, key.TableID)
+				}
+			}
+		} else {
+			if _, ok := s.TaskStatuses[key.CaptureID]; !ok {
+				s.TaskStatuses[key.CaptureID] = new(TaskStatus)
+			}
+			var tableStatus TableStatus
+			err := json.Unmarshal(value, &tableStatus)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			if tableStatus.ReplicaInfo != nil {
+				if s.TaskStatuses[key.CaptureID].Tables == nil {
+					s.TaskStatuses[key.CaptureID].Tables = make(map[TableID]*TableReplicaInfo)
+				}
+				s.TaskStatuses[key.CaptureID].Tables[key.TableID] = tableStatus.ReplicaInfo
+			} else if s.TaskStatuses[key.CaptureID].Tables != nil {
+				delete(s.TaskStatuses[key.CaptureID].Tables, key.TableID)
+			}
+			if tableStatus.Operation != nil {
+				if s.TaskStatuses[key.CaptureID].Operation == nil {
+					s.TaskStatuses[key.CaptureID].Operation = make(map[TableID]*TableOperation)
+				}
+				s.TaskStatuses[key.CaptureID].Operation[key.TableID] = tableStatus.Operation
+			} else if s.TaskStatuses[key.CaptureID].Operation != nil {
+				delete(s.TaskStatuses[key.CaptureID].Operation, key.TableID)
+			}
+		}
 	case etcd.CDCKeyTypeTaskWorkload:
 		if key.ChangefeedID != s.ID {
 			return nil
@@ -205,8 +245,25 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 	default:
 		return nil
 	}
+	if e == nil {
+		return nil
+	}
 	if err := json.Unmarshal(value, e); err != nil {
 		return errors.Trace(err)
+	}
+	if shadowStatus, ok := e.(*TaskStatus); ok {
+		if _, ok := s.TaskStatuses[key.CaptureID]; !ok {
+			s.TaskStatuses[key.CaptureID] = shadowStatus
+		} else {
+			realStatus := s.TaskStatuses[key.CaptureID]
+			realStatus.AdminJobType = shadowStatus.AdminJobType
+			if shadowStatus.Tables != nil {
+				realStatus.Tables = shadowStatus.Tables
+			}
+			if shadowStatus.Operation != nil {
+				realStatus.Operation = shadowStatus.Operation
+			}
+		}
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
 		if err := s.Info.VerifyAndFix(); err != nil {
@@ -237,9 +294,9 @@ func (s *ChangefeedReactorState) getPatches() []orchestrator.DataPatch {
 	return pendingPatches
 }
 
-// CheckCaptureAlive checks if the capture is alive, if the capture offline,
+// MustCaptureAlive checks if the capture is alive, if the capture offline,
 // the etcd worker will exit and throw the ErrLeaseExpired error.
-func (s *ChangefeedReactorState) CheckCaptureAlive(captureID CaptureID) {
+func (s *ChangefeedReactorState) MustCaptureAlive(captureID CaptureID) {
 	k := etcd.CDCKey{
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: captureID,
@@ -346,6 +403,27 @@ func (s *ChangefeedReactorState) PatchTaskStatus(captureID CaptureID, fn func(*T
 	})
 }
 
+// PatchTableStatus appends a DataPatch which can modify the TableStatus of a specified capture for a specific table
+func (s *ChangefeedReactorState) PatchTableStatus(captureID CaptureID, tableID TableID, fn func(*TableStatus) (*TableStatus, bool, error)) {
+	key := &etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeTableStatus,
+		CaptureID:    captureID,
+		ChangefeedID: s.ID,
+		TableID:      tableID,
+	}
+	s.patchAny(key.String(), tableStatusTPI, func(e interface{}) (interface{}, bool, error) {
+		if _, ok := s.TaskStatuses[captureID]; !ok {
+			// Checks that TaskStatus exists for backward compatibility
+			// TODO do this in a more elegant way
+			return nil, false, nil
+		}
+		if e == nil {
+			return fn(nil)
+		}
+		return fn(e.(*TableStatus))
+	})
+}
+
 // PatchTaskWorkload appends a DataPatch which can modify the TaskWorkload of a specified capture
 func (s *ChangefeedReactorState) PatchTaskWorkload(captureID CaptureID, fn func(TaskWorkload) (TaskWorkload, bool, error)) {
 	key := &etcd.CDCKey{
@@ -366,6 +444,7 @@ var (
 	taskPositionTPI     *TaskPosition
 	taskStatusTPI       *TaskStatus
 	taskWorkloadTPI     *TaskWorkload
+	tableStatusTPI      *TableStatus
 	changefeedStatusTPI *ChangeFeedStatus
 	changefeedInfoTPI   *ChangeFeedInfo
 )

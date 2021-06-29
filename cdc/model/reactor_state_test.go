@@ -34,11 +34,11 @@ func (s *stateSuite) TestCheckCaptureAlive(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test")
 	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
-	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
+	state.MustCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	c.Assert(stateTester.ApplyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
 	err := stateTester.Update("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`))
 	c.Assert(err, check.IsNil)
-	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
+	state.MustCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	stateTester.MustApplyPatches()
 }
 
@@ -68,7 +68,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
 				`{"45":{"workload":1}}`,
-				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
+				`{"id":"6bbc01c8-0605-Tables4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 			},
 			expected: ChangefeedReactorState{
 				ID: "test1",

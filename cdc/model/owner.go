@@ -211,6 +211,12 @@ func (i *TableReplicaInfo) Clone() *TableReplicaInfo {
 	return &clone
 }
 
+// TableStatus records the task information of a table
+type TableStatus struct {
+	ReplicaInfo *TableReplicaInfo `json:"replica-info"`
+	Operation   *TableOperation   `json:"operation"`
+}
+
 // TaskStatus records the task information of a capture
 type TaskStatus struct {
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.

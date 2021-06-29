@@ -119,7 +119,7 @@ func newProcessor4Test(ctx cdcContext.Context,
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	p.changefeed = state
-	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	state.MustCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   state.ID,
 		Info: state.Info,
@@ -326,21 +326,37 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 // handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
 func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
-		p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			if status == nil || status.Operation == nil {
+		p.changefeed.PatchTableStatus(p.captureInfo.ID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+			if status == nil {
 				log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
 				return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
 			}
-			opt := status.Operation[tableID]
-			if opt == nil {
+			if status.Operation == nil {
 				log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
 				return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
 			}
-			if err := fn(opt); err != nil {
+			if err := fn(status.Operation); err != nil {
 				return nil, false, errors.Trace(err)
 			}
 			return status, true, nil
 		})
+		/*
+			p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+				if status == nil || status.Operation == nil {
+					log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
+					return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
+				}
+				opt := status.Operation[tableID]
+				if opt == nil {
+					log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
+					return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
+				}
+				if err := fn(opt); err != nil {
+					return nil, false, errors.Trace(err)
+				}
+				return status, true, nil
+			})
+		*/
 	}
 	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
 	for tableID, opt := range taskStatus.Operation {

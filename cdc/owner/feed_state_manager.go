@@ -211,10 +211,25 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 }
 
 func (m *feedStateManager) cleanUpInfos() {
-	for captureID := range m.state.TaskStatuses {
+	// TODO extract this clean-up logic into a function
+	for captureID, taskStatus := range m.state.TaskStatuses {
 		m.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			return nil, status != nil, nil
 		})
+		if taskStatus.Tables != nil {
+			for tableID := range taskStatus.Tables {
+				m.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+					return nil, status != nil, nil
+				})
+			}
+		}
+		if taskStatus.Operation != nil {
+			for tableID := range taskStatus.Operation {
+				m.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+					return nil, status != nil, nil
+				})
+			}
+		}
 	}
 	for captureID := range m.state.TaskPositions {
 		m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {

@@ -121,16 +121,18 @@ func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool, err error) {
 		shouldUpdateState = false
 		// for all move table job, this just remove the table from the source capture.
 		// and the removed table by this function will be added to target function by syncTablesWithCurrentTables in the next tick.
-		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		s.state.PatchTableStatus(source, job.tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
 			if status == nil {
-				// the capture may be down, just skip remove this table
+				return nil, false, nil
+			}
+			if status.Operation != nil {
 				return status, false, nil
 			}
-			if status.Operation != nil && status.Operation[job.tableID] != nil {
-				// skip removing this table to avoid the remove operation created by the rebalance function interfering with the operation created by another function
-				return status, false, nil
+			status.Operation = &model.TableOperation{
+				Delete:     true,
+				BoundaryTs: s.state.Status.CheckpointTs,
 			}
-			status.RemoveTable(job.tableID, s.state.Status.CheckpointTs, false)
+			status.ReplicaInfo = nil
 			return status, true, nil
 		})
 	}
@@ -267,18 +269,22 @@ func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
 func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 	for _, job := range jobs {
 		job := job
-		s.state.PatchTaskStatus(job.TargetCapture, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		s.state.PatchTableStatus(job.TargetCapture, job.TableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
 			switch job.Tp {
 			case schedulerJobTypeAddTable:
-				if status == nil {
-					// if task status is not found, we can just skip adding the adding-table operation, since this table will be added in the next tick
-					log.Warn("task status of the capture is not found, may be the capture is already down. specify a new capture and redo the job", zap.Any("job", job))
-					return status, false, nil
+				if status != nil && status.ReplicaInfo != nil {
+					return nil, false, nil
 				}
-				status.AddTable(job.TableID, &model.TableReplicaInfo{
+				status = new(model.TableStatus)
+				status.ReplicaInfo = &model.TableReplicaInfo{
 					StartTs:     job.BoundaryTs,
 					MarkTableID: 0, // mark table ID will be set in processors
-				}, job.BoundaryTs)
+				}
+				status.Operation = &model.TableOperation{
+					Delete:     false,
+					BoundaryTs: job.BoundaryTs,
+					Status:     model.OperDispatched,
+				}
 			case schedulerJobTypeRemoveTable:
 				failpoint.Inject("OwnerRemoveTableError", func() {
 					// just skip removing this table
@@ -288,7 +294,12 @@ func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 					log.Warn("Task status of the capture is not found. Maybe the capture is already down. Specify a new capture and redo the job", zap.Any("job", job))
 					return status, false, nil
 				}
-				status.RemoveTable(job.TableID, job.BoundaryTs, false)
+				status.ReplicaInfo = nil
+				status.Operation = &model.TableOperation{
+					Delete:     true,
+					BoundaryTs: job.BoundaryTs,
+					Status:     model.OperDispatched,
+				}
 			default:
 				log.Panic("Unreachable, please report a bug", zap.Any("job", job))
 			}
@@ -299,17 +310,19 @@ func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 
 // cleanUpFinishedOperations clean up the finished operations.
 func (s *scheduler) cleanUpFinishedOperations() {
-	for captureID := range s.state.TaskStatuses {
-		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			changed := false
-			for tableID, operation := range status.Operation {
-				if operation.Status == model.OperFinished {
-					delete(status.Operation, tableID)
-					changed = true
+	for captureID, status := range s.state.TaskStatuses {
+		for tableID := range status.Operation {
+			s.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+				if status.Operation == nil {
+					return status, false, nil
 				}
-			}
-			return status, changed, nil
-		})
+				if status.Operation.Status == model.OperFinished {
+					status.Operation = nil
+					return status, true, nil
+				}
+				return status, false, nil
+			})
+		}
 	}
 }
 
@@ -364,20 +377,21 @@ func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 				break
 			}
 			shouldUpdateState = false
-			s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			s.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
 				if status == nil {
-					// the capture may be down, just skip remove this table
 					return status, false, nil
 				}
-				if status.Operation != nil && status.Operation[tableID] != nil {
-					// skip remove this table to avoid the remove operation created by rebalance function to influence the operation created by other function
+				if status.Operation != nil {
 					return status, false, nil
 				}
-				status.RemoveTable(tableID, s.state.Status.CheckpointTs, false)
-				log.Info("Rebalance: Move table",
-					zap.Int64("table-id", tableID),
-					zap.String("capture", captureID),
-					zap.String("changefeed-id", s.state.ID))
+				if status.ReplicaInfo == nil {
+					return status, false, nil
+				}
+				status.ReplicaInfo = nil
+				status.Operation = &model.TableOperation{
+					Delete:     true,
+					BoundaryTs: s.state.Status.CheckpointTs,
+				}
 				return status, true, nil
 			})
 			tableNum2Remove--
