@@ -252,9 +252,9 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 	}
 
 	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(int64(tID))
+		tableInfo, exist := snap.TableByID(tID)
 		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", int64(tID))
+			return nil, nil, errors.NotFoundf("table %d", tID)
 		}
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
