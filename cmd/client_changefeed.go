@@ -485,7 +485,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			}
 			var out bytes.Buffer
 			err = json.Indent(&out, []byte(infoStr), "", "\t")
-			if err == nil{
+			if err == nil {
 				infoStr = out.String()
 			}
 			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, infoStr)
