@@ -150,13 +150,14 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
-// LogConfig represents log config for server
+// LogFileConfig represents log file config for server
 type LogFileConfig struct {
 	MaxSize    int `toml:"max-size" json:"max-size"`
 	MaxDays    int `toml:"max-days" json:"max-days"`
 	MaxBackups int `toml:"max-backups" json:"max-backups"`
 }
 
+// LogConfig represents log config for server
 type LogConfig struct {
 	File *LogFileConfig `toml:"file" json:"file"`
 }
