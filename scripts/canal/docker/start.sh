@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # This script file uses enviroment variable to create config of canal adapter. The format of config file `application.yml`
-# is only suitable for canal adapter release version v1.1.5-alpha-2, if you want build from lastest master branch, please rewrite the
+# is only suitable for canal adapter release version v1.1.5, if you want build from lastest master branch, please rewrite the
 # config file from canal/client-adapter/launcher/src/main/bin/conf/application.yml
 
 KAFKA_SERVER=${KAFKA_SERVER:-localhost:9092}
