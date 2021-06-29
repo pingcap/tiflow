@@ -271,7 +271,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 		case <-ticker.C:
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*10))
+				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 				req, err := http.NewRequestWithContext(
 					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
 				if err != nil {

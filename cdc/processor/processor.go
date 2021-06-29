@@ -288,7 +288,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
