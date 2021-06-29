@@ -313,6 +313,7 @@ type CanalEventBatchEncoderWithTxn struct {
 	txnCache   *common.UnresolvedTxnCache
 }
 
+// SetParams is no-op for now
 func (d *CanalEventBatchEncoderWithTxn) SetParams(_ map[string]string) error {
 	return nil
 }
@@ -527,7 +528,7 @@ func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
 
-	ret := NewMQMessage(ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
+	ret := NewMQMessage(ProtocolCanal, nil, value, commitTs, model.MqMessageTypeRow, nil, nil)
 	d.messages.Reset()
 	d.resetPacket()
 	return ret
