@@ -234,7 +234,6 @@ func testInsert(c *check.C) {
 	}
 
 	builder := NewCanalEntryBuilder()
-	builder.forceHkPk = true
 	entry, err := builder.FromRowEvent(testCaseInsert)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
@@ -302,16 +301,15 @@ func testUpdate(c *check.C) {
 			Table:  "person",
 		},
 		Columns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
-			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Bob"},
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: "Bob"},
 		},
 		PreColumns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 2},
-			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Nancy"},
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: "Nancy"},
 		},
 	}
 	builder := NewCanalEntryBuilder()
-	builder.forceHkPk = true
 
 	entry, err := builder.FromRowEvent(testCaseUpdate)
 	c.Assert(err, check.IsNil)
@@ -387,7 +385,6 @@ func testDelete(c *check.C) {
 	}
 
 	builder := NewCanalEntryBuilder()
-	builder.forceHkPk = true
 	entry, err := builder.FromRowEvent(testCaseDelete)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
@@ -429,7 +426,6 @@ func testDdl(c *check.C) {
 		Type:  mm.ActionCreateTable,
 	}
 	builder := NewCanalEntryBuilder()
-	builder.forceHkPk = true
 	entry, err := builder.FromDdlEvent(testCaseDdl)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
