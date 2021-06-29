@@ -329,6 +329,7 @@ services:
       DOWNSTREAM_DB_HOST: downstream-tidb
       DOWNSTREAM_DB_PORT: 4000
       USE_FLAT_MESSAGE: ${USE_FLAT_MESSAGE}
+      SUPPORT_TXN: ${SUPPORT_TXN}
     depends_on:
       - "zookeeper"
       - "kafka"

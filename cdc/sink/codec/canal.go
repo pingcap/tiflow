@@ -174,8 +174,6 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			sqlType = JavaSQLTypeVARCHAR
 		}
 	}
-	// alibaba canal server does not support the delete operation of table which does not have primary key, we can use handle key to hack it.
-	isKey := c.Flag.IsPrimaryKey() || (b.forceHkPk && c.Flag.IsHandleKey())
 	isNull := c.Value == nil
 	value := ""
 	if !isNull {
@@ -212,7 +210,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	canalColumn := &canal.Column{
 		SqlType:       int32(sqlType),
 		Name:          colName,
-		IsKey:         isKey,
+		IsKey:         c.Flag.IsPrimaryKey(),
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: isNull},
 		Value:         value,
@@ -317,18 +315,11 @@ func NewCanalEntryBuilder() *canalEntryBuilder {
 
 // CanalEventBatchEncoderWithTxn encodes the events into the byte by transaction.
 type CanalEventBatchEncoderWithTxn struct {
-	forceHkPk  bool
 	resolvedTs uint64
 	txnCache   *common.UnresolvedTxnCache
 }
 
-// SetForceHandleKeyPKey set forceHandleKeyPKey, then handle key will be regarded as primary key
-func (d *CanalEventBatchEncoderWithTxn) SetForceHandleKeyPKey(forceHkPk bool) {
-	d.forceHkPk = forceHkPk
-}
-
 func (d *CanalEventBatchEncoderWithTxn) SetParams(opts map[string]string) error {
-	d.forceHkPk = opts["force-handle-key-pkey"] == "true"
 	return nil
 }
 
@@ -356,9 +347,7 @@ func (d *CanalEventBatchEncoderWithTxn) AppendResolvedEvent(ts uint64) (EncoderR
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithTxn) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
-	canalMessageEncoder := newCanalMessageEncoder()
-	canalMessageEncoder.setForceHandleKeyPKey(d.forceHkPk)
-	return canalMessageEncoder.encodeDDLEvent(e)
+	return newCanalMessageEncoder().encodeDDLEvent(e)
 }
 
 // Build implements the EventBatchEncoder interface
@@ -370,7 +359,6 @@ func (d *CanalEventBatchEncoderWithTxn) Build() []*MQMessage {
 	}
 	messages := make([]*MQMessage, 0, len(resolvedTxns))
 	canalMessageEncoder := newCanalMessageEncoder()
-	canalMessageEncoder.setForceHandleKeyPKey(d.forceHkPk)
 	for _, txns := range resolvedTxns {
 		for _, txn := range txns {
 			for _, row := range txn.Rows {
@@ -397,7 +385,6 @@ func (d *CanalEventBatchEncoderWithTxn) MixedBuild(withVersion bool) []byte {
 
 //Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithTxn) Size() int {
-	// FIXME encoder with transaction support is hard to calculate the encoded buffer size
 	return -1
 }
 
@@ -473,10 +460,9 @@ func (d *CanalEventBatchEncoderWithoutTxn) Reset() {
 
 // NewCanalEventBatchEncoderWithoutTxn creates a new NewCanalEventBatchEncoderWithoutTxn.
 func NewCanalEventBatchEncoderWithoutTxn() *CanalEventBatchEncoderWithoutTxn {
-	encoder := &CanalEventBatchEncoderWithoutTxn{
+	return  &CanalEventBatchEncoderWithoutTxn{
 		encoder: newCanalMessageEncoder(),
 	}
-	return encoder
 }
 
 // NewCanalEventBatchEncoder creates a new NewCanalEventBatchEncoderWithoutTxn.

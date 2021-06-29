@@ -32,6 +32,7 @@ DOWNSTREAM_DB_HOST=127.0.0.1
 DOWNSTREAM_DB_PORT=5000
 DB_NAME=testdb
 TOPIC_NAME=${DB_NAME}
+SUPPORT_TXN=${SUPPORT_TXN:-"false"}
 cd "$(dirname "$0")"
 
 prepare_db() {
@@ -75,7 +76,7 @@ sub_help() {
 sub_init() {
   prepare_db
   sudo docker exec -it ticdc_controller_1 sh -c "
-  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/canal-test-config.toml\" --opts \"force-handle-key-pkey=true, support-txn=true\"
+  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/canal-test-config.toml\" --opts \"support-txn=${SUPPORT_TXN}\"
   "
 }
 
