@@ -273,7 +273,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	var partition int32 = -1
 	if k.protocol == codec.ProtocolCanal || k.protocol == codec.ProtocolCanalJSON{
 		// canal server always put ddl event into partition 0
-		// ref https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L257
+		// ref https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L274
 		partition = 0
 	}
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
