@@ -107,7 +107,6 @@ func isCanalDdl(t canal.EventType) bool {
 }
 
 type canalEntryBuilder struct {
-	forceHkPk    bool
 	bytesDecoder *encoding.Decoder // default charset is ISO-8859-1
 }
 
@@ -159,10 +158,6 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		sqlType = JavaSQLTypeBIGINT
 	case mysql.TypeLonglong:
 		sqlType = JavaSQLTypeDECIMAL
-	case mysql.TypeBit:
-		// canal adapter can not support bit(n), it uses byte to parser bit(n), use bigint to prevent overflow
-		// ref https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/util/JdbcTypeUtil.java#L94
-		sqlType = JavaSQLTypeBIGINT
 	}
 	switch sqlType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
@@ -309,7 +304,6 @@ func NewCanalEntryBuilder() *canalEntryBuilder {
 	d := charmap.ISO8859_1.NewDecoder()
 	return &canalEntryBuilder{
 		bytesDecoder: d,
-		forceHkPk:    false,
 	}
 }
 
@@ -319,7 +313,7 @@ type CanalEventBatchEncoderWithTxn struct {
 	txnCache   *common.UnresolvedTxnCache
 }
 
-func (d *CanalEventBatchEncoderWithTxn) SetParams(opts map[string]string) error {
+func (d *CanalEventBatchEncoderWithTxn) SetParams(_ map[string]string) error {
 	return nil
 }
 
@@ -406,11 +400,6 @@ type CanalEventBatchEncoderWithoutTxn struct {
 	encoder *canalMessageEncoder
 }
 
-// SetForceHandleKeyPKey set forceHandleKeyPKey, then handle key will be regarded as primary key
-func (d *CanalEventBatchEncoderWithoutTxn) SetForceHandleKeyPKey(forceHkPk bool) {
-	d.encoder.setForceHandleKeyPKey(forceHkPk)
-}
-
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithoutTxn) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
@@ -460,7 +449,7 @@ func (d *CanalEventBatchEncoderWithoutTxn) Reset() {
 
 // NewCanalEventBatchEncoderWithoutTxn creates a new NewCanalEventBatchEncoderWithoutTxn.
 func NewCanalEventBatchEncoderWithoutTxn() *CanalEventBatchEncoderWithoutTxn {
-	return  &CanalEventBatchEncoderWithoutTxn{
+	return &CanalEventBatchEncoderWithoutTxn{
 		encoder: newCanalMessageEncoder(),
 	}
 }
@@ -475,10 +464,6 @@ type canalMessageEncoder struct {
 	messages     *canal.Messages
 	packet       *canal.Packet
 	entryBuilder *canalEntryBuilder
-}
-
-func (d *canalMessageEncoder) setForceHandleKeyPKey(forceHkPk bool) {
-	d.entryBuilder.forceHkPk = forceHkPk
 }
 
 func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) error {
