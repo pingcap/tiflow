@@ -378,7 +378,7 @@ func (d *CanalEventBatchEncoderWithTxn) MixedBuild(withVersion bool) []byte {
 	panic("Mixed Build only use for JsonEncoder")
 }
 
-//Size implements the EventBatchEncoder interface
+// Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithTxn) Size() int {
 	return -1
 }
@@ -438,7 +438,7 @@ func (d *CanalEventBatchEncoderWithoutTxn) MixedBuild(withVersion bool) []byte {
 	panic("Mixed Build only use for JsonEncoder")
 }
 
-//Size implements the EventBatchEncoder interface
+// Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithoutTxn) Size() int {
 	return -1
 }

@@ -72,7 +72,7 @@ func testCanalWithTxn() {
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task), // canal-adapter use jdbc prepare sql, jdbc maps bit(n) to bool, so bit(64) case will always overflow
+		// tests.NewUnsignedCase(task), // canal-adapter use jdbc prepare sql, jdbc maps bit(n) to bool, so bit(64) case will always overflow
 		tests.NewCompositePKeyCase(task),
 		tests.NewAlterCase(task),
 	}
@@ -88,7 +88,7 @@ func testCanalJSON() {
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
-		//tests.NewUnsignedCase(task),
+		// tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
 		tests.NewAlterCase(task),
 	}

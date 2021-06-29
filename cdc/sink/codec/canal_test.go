@@ -29,6 +29,7 @@ type rowCaseExpect struct {
 	txnNumber    int
 	rowNumPerTxn []int
 }
+
 type canalBatchSuite struct {
 	rowCases            [][]*model.RowChangedEvent
 	ddlCases            [][]*model.DDLEvent
@@ -107,6 +108,7 @@ var _ = check.Suite(&canalBatchSuite{
 })
 
 func (s *canalBatchSuite) TestCanalEventBatchEncoderWithTxn(c *check.C) {
+	defer testleak.AfterTest(c)()
 	for i, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoderWithTxn()
 		var mxCommitTs uint64
@@ -136,7 +138,6 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoderWithTxn(c *check.C) {
 	}
 
 	for _, cs := range s.ddlCases {
-		defer testleak.AfterTest(c)()
 		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
@@ -158,6 +159,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoderWithTxn(c *check.C) {
 }
 
 func (s *canalBatchSuite) TestCanalEventBatchEncoderWithoutTxn(c *check.C) {
+	defer testleak.AfterTest(c)()
 	for _, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoderWithoutTxn()
 		for _, row := range cs {

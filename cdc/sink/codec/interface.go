@@ -14,9 +14,10 @@
 package codec
 
 import (
-	"github.com/tikv/client-go/v2/oracle"
 	"strings"
 	"time"
+
+	"github.com/tikv/client-go/v2/oracle"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"

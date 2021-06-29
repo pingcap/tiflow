@@ -156,7 +156,7 @@ func newMqSink(
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
 
-		resolvedReceiver:    resolvedReceiver,
+		resolvedReceiver: resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -271,7 +271,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 	var partition int32 = -1
-	if k.protocol == codec.ProtocolCanal || k.protocol == codec.ProtocolCanalJSON{
+	if k.protocol == codec.ProtocolCanal || k.protocol == codec.ProtocolCanalJSON {
 		// canal server always put ddl event into partition 0
 		// ref https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L274
 		partition = 0
