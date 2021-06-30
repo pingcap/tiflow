@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
-	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/tikv/client-go/v2/oracle"
@@ -76,42 +75,18 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	if config.NewReplicaImpl {
-		if s.captureV2 == nil {
-			// for test only
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
-		err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-			owner.AsyncStop()
-			return nil
-		})
-		handleOwnerResp(w, err)
-		return
-	}
-	s.ownerLock.RLock()
-	if s.owner == nil {
+
+	if s.captureV2 == nil {
+		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		s.ownerLock.RUnlock()
 		return
 	}
-	// Resign is a complex process that needs to be synchronized because
-	// it happens in two separate goroutines
-	//
-	// Imagine that we have goroutines A and B
-	// A1. Notify the owner to exit
-	// B1. The owner exits gracefully
-	// A2. Delete the leader key until the owner has exited
-	// B2. Restart to campaign
-	//
-	// A2 must occur between B1 and B2, so we register the Resign process
-	// as the stepDown function which is called when the owner exited.
-	s.owner.Close(req.Context(), func(ctx context.Context) error {
-		return s.capture.Resign(ctx)
+	err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+		owner.AsyncStop()
+		return nil
 	})
-	s.ownerLock.RUnlock()
-	s.setOwner(nil)
-	handleOwnerResp(w, nil)
+	handleOwnerResp(w, err)
+	return
 }
 
 func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
@@ -119,19 +94,11 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	if !config.NewReplicaImpl {
-		s.ownerLock.RLock()
-		defer s.ownerLock.RUnlock()
-		if s.owner == nil {
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
-	} else {
-		if s.captureV2 == nil {
-			// for test only
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
+
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -160,14 +127,12 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		Type: model.AdminJobType(typ),
 		Opts: opts,
 	}
-	if config.NewReplicaImpl {
-		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-			owner.EnqueueJob(job)
-			return nil
-		})
-	} else {
-		err = s.owner.EnqueueJob(job)
-	}
+
+	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+		owner.EnqueueJob(job)
+		return nil
+	})
+
 	handleOwnerResp(w, err)
 }
 
@@ -176,19 +141,11 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	if !config.NewReplicaImpl {
-		s.ownerLock.RLock()
-		defer s.ownerLock.RUnlock()
-		if s.owner == nil {
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
-	} else {
-		if s.captureV2 == nil {
-			// for test only
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
+
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -202,14 +159,12 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	if config.NewReplicaImpl {
-		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-			owner.TriggerRebalance(changefeedID)
-			return nil
-		})
-	} else {
-		s.owner.TriggerRebalance(changefeedID)
-	}
+
+	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+		owner.TriggerRebalance(changefeedID)
+		return nil
+	})
+
 	handleOwnerResp(w, err)
 }
 
@@ -218,19 +173,11 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	if !config.NewReplicaImpl {
-		s.ownerLock.RLock()
-		defer s.ownerLock.RUnlock()
-		if s.owner == nil {
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
-	} else {
-		if s.captureV2 == nil {
-			// for test only
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
+
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -257,14 +204,12 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid tableID: %s", tableIDStr))
 		return
 	}
-	if config.NewReplicaImpl {
-		err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-			owner.ManualSchedule(changefeedID, to, tableID)
-			return nil
-		})
-	} else {
-		s.owner.ManualSchedule(changefeedID, to, tableID)
-	}
+
+	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+		owner.ManualSchedule(changefeedID, to, tableID)
+		return nil
+	})
+
 	handleOwnerResp(w, err)
 }
 
@@ -273,19 +218,11 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
-	if !config.NewReplicaImpl {
-		s.ownerLock.RLock()
-		defer s.ownerLock.RUnlock()
-		if s.owner == nil {
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
-	} else {
-		if s.captureV2 == nil {
-			// for test only
-			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-			return
-		}
+
+	if s.captureV2 == nil {
+		// for test only
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
