@@ -127,14 +127,14 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 
 	task := &task{
 		handle: h,
-		f: func(ctx1 context.Context) error {
+		f: func(_ context.Context) error {
 			// Here we merge the context passed down from WorkerPool.Run,
 			// with the context supplied by AddEvent,
 			// because we want operations to be cancellable by both contexts.
-			mContext, cancel := MergeContexts(ctx, ctx1)
+			// mContext, cancel := MergeContexts(ctx, ctx1)
 			// this cancels the merged context only.
-			defer cancel()
-			return h.f(mContext, event)
+			// defer cancel()
+			return h.f(ctx, event)
 		},
 	}
 
