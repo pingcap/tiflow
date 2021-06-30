@@ -116,7 +116,6 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	s.captureV2.WriteDebugInfo(w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
 	s.writeEtcdInfo(req.Context(), s.etcdClient, w)
-	return
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
@@ -131,7 +130,6 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 		st.IsOwner = s.captureV2.IsOwner()
 	}
 	writeData(w, st)
-	return
 }
 
 func writeInternalServerError(w http.ResponseWriter, err error) {

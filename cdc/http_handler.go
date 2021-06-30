@@ -86,7 +86,6 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		return nil
 	})
 	handleOwnerResp(w, err)
-	return
 }
 
 func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
