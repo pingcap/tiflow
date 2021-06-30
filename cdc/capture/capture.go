@@ -41,10 +41,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const (
-	defaultCaptureSessionTTL = 10
-)
-
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	captureMu sync.Mutex
@@ -95,7 +91,7 @@ func (c *Capture) reset() error {
 		c.session.Close() //nolint:errcheck
 	}
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
-		concurrency.WithTTL(defaultCaptureSessionTTL))
+		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}

@@ -50,8 +50,6 @@ const (
 
 	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
 	DefaultCDCGCSafePointTTL = 24 * 60 * 60
-
-	defaultCaptureSessionTTL = 10
 )
 
 // Server is the capture server

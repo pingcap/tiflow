@@ -123,7 +123,7 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 	mockPDCli := &mockPDClient{}
 	mockOwner := Owner{
@@ -164,7 +164,7 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 		},
 	}
 
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 	mockOwner := Owner{
 		session:                 session,
@@ -217,7 +217,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 		},
 	}
 
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
@@ -299,7 +299,7 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(defaultCaptureSessionTTL))
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
@@ -393,7 +393,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(defaultCaptureSessionTTL))
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
