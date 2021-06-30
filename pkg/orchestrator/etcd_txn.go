@@ -79,9 +79,10 @@ func (o *txnObserver) addLock(modifiedKey util.EtcdKey, lock *EtcdWorkerLock) {
 func (o *txnObserver) deleteLock(modifiedKey util.EtcdKey) {
 	lock, ok := o.lockMap[modifiedKey]
 	if !ok {
-		return
+		log.Panic("Lock not found", zap.String("key", modifiedKey.String()))
 	}
 	heap.Remove(&o.heap, lock.heapIndex)
+	delete(o.lockMap, modifiedKey)
 }
 
 func (o *txnObserver) minLockRevision() int64 {
@@ -164,6 +165,8 @@ func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client,
 			isRollForward = true
 		} else if _, ok = rollBackList[lock.OwnerID]; ok {
 			isRollBack = true
+		} else if _, ok := o.TxnMap[lock.OwnerID]; !ok {
+			isRollBack = true
 		} else {
 			continue
 		}
@@ -186,7 +189,7 @@ func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client,
 				op = clientv3.OpDelete(key.String())
 			}
 
-			lockKey := o.prefix.FullKey(util.NewEtcdRelKey(fmt.Sprintf("%s/%s", etcdBigTxnLockPrefix, key)))
+			lockKey := lockKeyFromDataKey(o.prefix, key)
 			txnResp, err := client.
 				Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(lockKey.String()), "<", lock.lockRevision+1),
@@ -201,7 +204,7 @@ func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client,
 			}
 		} else if isRollForward {
 			// rolling forward
-			lockKey := o.prefix.FullKey(util.NewEtcdRelKey(fmt.Sprintf("%s/%s", etcdBigTxnLockPrefix, key)))
+			lockKey := lockKeyFromDataKey(o.prefix, key)
 			txnResp, err := client.
 				Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(lockKey.String()), "<", lock.lockRevision+1)).

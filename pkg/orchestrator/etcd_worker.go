@@ -82,7 +82,7 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 
 const (
 	etcdRequestProgressDuration = 2 * time.Second
-	etcdCleanUpBigTxnInterval   = 1 * time.Second
+	etcdCleanUpBigTxnInterval   = 15 * time.Second
 	etcdBigTxnMetaPrefix        = "/meta-txn"
 	etcdBigTxnLockPrefix        = "/meta-lock"
 )
@@ -191,6 +191,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		}
 
 		if worker.revision > worker.txnManager.minLockRevision() {
+			log.Info("waiting for big txn to finish", zap.Int("num-locks", len(worker.txnManager.lockMap)))
 			continue
 		}
 
@@ -228,11 +229,11 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
-	txnPrefix := worker.prefix.String() + etcdBigTxnMetaPrefix + "/"
-	lockPrefix := worker.prefix.String() + etcdBigTxnLockPrefix + "/"
+	txnPrefix := worker.prefix.String() + etcdBigTxnMetaPrefix
+	lockPrefix := worker.prefix.String() + etcdBigTxnLockPrefix
 
 	if strings.HasPrefix(string(event.Kv.Key), txnPrefix) {
-		ownerIDStr := strings.TrimPrefix(string(event.Kv.Key), txnPrefix)
+		ownerIDStr := strings.TrimPrefix(string(event.Kv.Key), txnPrefix+"/")
 		ownerID, err := strconv.Atoi(ownerIDStr)
 		if err != nil {
 			return errors.Trace(err)
@@ -251,7 +252,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 			worker.txnManager.upsertTxn(int64(ownerID), &txn)
 		}
 	} else if strings.HasPrefix(string(event.Kv.Key), lockPrefix) {
-		modifiedKeyStr := strings.TrimPrefix(string(event.Kv.Key), lockPrefix+"/")
+		modifiedKeyStr := strings.TrimPrefix(string(event.Kv.Key), lockPrefix)
 		modifiedKey := worker.prefix.FullKey(util.NewEtcdRelKey(modifiedKeyStr))
 
 		switch event.Type {
@@ -288,8 +289,8 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
-	txnPrefix := worker.prefix.String() + etcdBigTxnMetaPrefix + "/"
-	lockPrefix := worker.prefix.String() + etcdBigTxnLockPrefix + "/"
+	txnPrefix := worker.prefix.String() + etcdBigTxnMetaPrefix
+	lockPrefix := worker.prefix.String() + etcdBigTxnLockPrefix
 
 	resp, err := worker.client.Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
 	if err != nil {
@@ -302,7 +303,7 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 		worker.rawState[key] = kv.Value
 
 		if strings.HasPrefix(string(kv.Key), txnPrefix) {
-			ownerIDStr := strings.TrimPrefix(string(kv.Key), txnPrefix)
+			ownerIDStr := strings.TrimPrefix(string(kv.Key), txnPrefix+"/")
 			ownerID, err := strconv.Atoi(ownerIDStr)
 			if err != nil {
 				return errors.Trace(err)
@@ -316,7 +317,7 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 			txn.txnRevision = resp.Header.Revision
 			worker.txnManager.upsertTxn(int64(ownerID), &txn)
 		} else if strings.HasPrefix(string(kv.Key), lockPrefix) {
-			modifiedKeyStr := strings.TrimPrefix(string(kv.Key), lockPrefix+"/")
+			modifiedKeyStr := strings.TrimPrefix(string(kv.Key), lockPrefix)
 			modifiedKey := worker.prefix.FullKey(util.NewEtcdRelKey(modifiedKeyStr))
 
 			var lock EtcdWorkerLock
@@ -527,7 +528,7 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 
 	txnResp, err := worker.client.Txn(ctx).
 		If(clientv3.Compare(clientv3.ModRevision(newTxnKey.String()), "<", txnRevision+1)).
-		Then(clientv3.OpPut(newTxnKey.String(), string(newTxnBytes))).
+		Then(clientv3.OpPut(newTxnKey.String(), string(newTxnBytes), clientv3.WithLease(clientv3.NoLease))).
 		Commit()
 	if err != nil {
 		return errors.Trace(err)
