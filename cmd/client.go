@@ -258,7 +258,8 @@ func loop() {
 		command := newCliCommand()
 		command.SetArgs(args)
 		_ = command.ParseFlags(args)
-		command.SetOutput(os.Stdout)
+		command.SetOut(os.Stdout)
+		command.SetErr(os.Stdout)
 		if err = command.Execute(); err != nil {
 			command.Println(err)
 		}
