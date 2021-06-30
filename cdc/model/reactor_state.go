@@ -257,11 +257,15 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		} else {
 			realStatus := s.TaskStatuses[key.CaptureID]
 			realStatus.AdminJobType = shadowStatus.AdminJobType
-			if shadowStatus.Tables != nil {
-				realStatus.Tables = shadowStatus.Tables
+			for tableID, v := range shadowStatus.Tables {
+				if _, ok := realStatus.Tables[tableID]; !ok {
+					realStatus.Tables[tableID] = v
+				}
 			}
-			if shadowStatus.Operation != nil {
-				realStatus.Operation = shadowStatus.Operation
+			for tableID, v := range shadowStatus.Operation {
+				if _, ok := realStatus.Operation[tableID]; !ok {
+					realStatus.Operation[tableID] = v
+				}
 			}
 		}
 	}
