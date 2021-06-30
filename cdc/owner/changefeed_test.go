@@ -18,6 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
@@ -144,6 +147,26 @@ func (s *changefeedSuite) TestPreCheck(c *check.C) {
 		return make(model.TaskWorkload), true, nil
 	})
 	tester.MustApplyPatches()
+	for i := 1; i <= 10; i++ {
+		i := i
+		state.PatchTableStatus(offlineCaputreID, model.TableID(i), func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+			tableStatus := new(model.TableStatus)
+			if i%2 == 0 {
+				tableStatus.ReplicaInfo = &model.TableReplicaInfo{
+					StartTs:     0,
+					MarkTableID: 0,
+				}
+			}
+			if i%3 == 0 {
+				tableStatus.Operation = &model.TableOperation{
+					Status: model.OperDispatched,
+				}
+			}
+			return tableStatus, true, nil
+		})
+	}
+	tester.MustApplyPatches()
+	log.Info("states", zap.Reflect("kv", tester.KVEntries()))
 
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()

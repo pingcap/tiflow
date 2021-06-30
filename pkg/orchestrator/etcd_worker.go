@@ -146,7 +146,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				}
 			}
 			if time.Since(lastCleanedUpStaleBigTxn) > etcdCleanUpBigTxnInterval {
-				err := worker.txnManager.cleanUpLocks(ctx, worker.client.Unwrap(), true)
+				err := worker.txnManager.cleanUpLocks(ctx, worker.client.Unwrap())
 				if err != nil {
 					return errors.Trace(err)
 				}

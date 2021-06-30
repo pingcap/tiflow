@@ -167,9 +167,16 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 
 	// add table, in processing
 	// in current implementation of owner, the startTs and BoundaryTs of add table operation should be always equaled.
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.AddTable(66, &model.TableReplicaInfo{StartTs: 60}, 60)
-		return status, true, nil
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 66, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{
+				StartTs: 60,
+			},
+			Operation: &model.TableOperation{
+				BoundaryTs: 60,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -230,9 +237,15 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
 
 	// remove table, in processing
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.RemoveTable(66, 120, false)
-		return status, true, nil
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 66, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: nil,
+			Operation: &model.TableOperation{
+				Delete:     true,
+				BoundaryTs: 120,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -299,14 +312,37 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
 
-	// add table, in processing
-	// in current implementation of owner, the startTs and BoundaryTs of add table operation should be always equaled.
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.AddTable(1, &model.TableReplicaInfo{StartTs: 60}, 60)
-		status.AddTable(2, &model.TableReplicaInfo{StartTs: 50}, 50)
-		status.AddTable(3, &model.TableReplicaInfo{StartTs: 40}, 40)
-		status.Tables[4] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 60},
+			Operation: &model.TableOperation{
+				BoundaryTs: 60,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 2, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 50},
+			Operation: &model.TableOperation{
+				BoundaryTs: 50,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 3, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 40},
+			Operation: &model.TableOperation{
+				BoundaryTs: 40,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 4, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 30},
+		}, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -339,9 +375,14 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	table3.resolvedTs = 102
 	table4.resolvedTs = 103
 	// removed table 3
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.RemoveTable(3, 60, false)
-		return status, true, nil
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 3, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			Operation: &model.TableOperation{
+				Delete:     true,
+				BoundaryTs: 60,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -389,11 +430,26 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
 
 	// remove table, in processing
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.RemoveTable(1, 120, false)
-		status.RemoveTable(4, 120, false)
-		delete(status.Tables, 2)
-		return status, true, nil
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			Operation: &model.TableOperation{
+				Delete:     true,
+				BoundaryTs: 120,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 4, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			Operation: &model.TableOperation{
+				Delete:     true,
+				BoundaryTs: 120,
+				Status:     model.OperDispatched,
+			},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(p.captureInfo.ID, 2, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return nil, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -452,11 +508,15 @@ func (s *processorSuite) TestInitTable(c *check.C) {
 	_, err = p.Tick(ctx, p.changefeed)
 	c.Assert(err, check.IsNil)
 	tester.MustApplyPatches()
-
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 20},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 2, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 30},
+		}, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -544,10 +604,15 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	tester.MustApplyPatches()
 
 	// add tables
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 20},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 2, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 30},
+		}, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -589,10 +654,15 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	tester.MustApplyPatches()
 
 	// add tables
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 20},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 2, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 30},
+		}, true, nil
 	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
@@ -620,10 +690,15 @@ func (s *processorSuite) TestPositionDeleted(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, c)
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
-		return status, true, nil
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 30},
+		}, true, nil
+	})
+	p.changefeed.PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 2, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{StartTs: 40},
+		}, true, nil
 	})
 	var err error
 	// init tick
@@ -665,16 +740,21 @@ func (s *processorSuite) TestPositionDeleted(c *check.C) {
 }
 
 func cleanUpFinishedOpOperation(state *model.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
-	state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		if status == nil || status.Operation == nil {
-			return status, false, nil
-		}
-		for tableID, opt := range status.Operation {
-			if opt.Done && opt.Status == model.OperFinished {
-				delete(status.Operation, tableID)
-			}
-		}
-		return status, true, nil
-	})
+	taskStatus, ok := state.TaskStatuses[captureID]
+	if !ok {
+		return
+	}
+	cleanUpSet := make(map[model.TableID]struct{})
+	for tableID := range taskStatus.Tables {
+		cleanUpSet[tableID] = struct{}{}
+	}
+	for tableID := range taskStatus.Operation {
+		cleanUpSet[tableID] = struct{}{}
+	}
+	for tableID := range cleanUpSet {
+		state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+			return nil, status != nil, nil
+		})
+	}
 	tester.MustApplyPatches()
 }

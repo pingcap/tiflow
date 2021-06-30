@@ -87,8 +87,12 @@ func (s *managerSuite) TestChangefeed(c *check.C) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return &model.TaskStatus{
-			Tables: map[int64]*model.TableReplicaInfo{1: {}},
+		return &model.TaskStatus{}, true, nil
+	})
+	s.tester.MustApplyPatches()
+	s.state.Changefeeds["test-changefeed"].PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{},
 		}, true, nil
 	})
 	s.tester.MustApplyPatches()
@@ -138,8 +142,12 @@ func (s *managerSuite) TestDebugInfo(c *check.C) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return &model.TaskStatus{
-			Tables: map[int64]*model.TableReplicaInfo{1: {}},
+		return &model.TaskStatus{}, true, nil
+	})
+	s.tester.MustApplyPatches()
+	s.state.Changefeeds["test-changefeed"].PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{},
 		}, true, nil
 	})
 	s.tester.MustApplyPatches()
@@ -192,8 +200,12 @@ func (s *managerSuite) TestClose(c *check.C) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return &model.TaskStatus{
-			Tables: map[int64]*model.TableReplicaInfo{1: {}},
+		return &model.TaskStatus{}, true, nil
+	})
+	s.tester.MustApplyPatches()
+	s.state.Changefeeds["test-changefeed"].PatchTableStatus(ctx.GlobalVars().CaptureInfo.ID, 1, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+		return &model.TableStatus{
+			ReplicaInfo: &model.TableReplicaInfo{},
 		}, true, nil
 	})
 	s.tester.MustApplyPatches()

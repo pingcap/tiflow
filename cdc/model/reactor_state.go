@@ -192,6 +192,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		shadowStatus := new(TaskStatus)
 		e = shadowStatus
 	case etcd.CDCKeyTypeTableStatus:
+		log.Info("update table status", zap.Reflect("key", key), zap.ByteString("value", value))
 		if key.ChangefeedID != s.ID {
 			return nil
 		}
@@ -205,13 +206,18 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 				}
 			}
 		} else {
-			if _, ok := s.TaskStatuses[key.CaptureID]; !ok {
-				s.TaskStatuses[key.CaptureID] = new(TaskStatus)
-			}
 			var tableStatus TableStatus
 			err := json.Unmarshal(value, &tableStatus)
 			if err != nil {
 				return errors.Trace(err)
+			}
+
+			if tableStatus.ReplicaInfo == nil && tableStatus.Operation == nil {
+				return nil
+			}
+
+			if _, ok := s.TaskStatuses[key.CaptureID]; !ok {
+				s.TaskStatuses[key.CaptureID] = new(TaskStatus)
 			}
 
 			if tableStatus.ReplicaInfo != nil {
@@ -253,21 +259,9 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 	}
 	if shadowStatus, ok := e.(*TaskStatus); ok {
 		if _, ok := s.TaskStatuses[key.CaptureID]; !ok {
-			s.TaskStatuses[key.CaptureID] = shadowStatus
-		} else {
-			realStatus := s.TaskStatuses[key.CaptureID]
-			realStatus.AdminJobType = shadowStatus.AdminJobType
-			for tableID, v := range shadowStatus.Tables {
-				if _, ok := realStatus.Tables[tableID]; !ok {
-					realStatus.Tables[tableID] = v
-				}
-			}
-			for tableID, v := range shadowStatus.Operation {
-				if _, ok := realStatus.Operation[tableID]; !ok {
-					realStatus.Operation[tableID] = v
-				}
-			}
+			s.TaskStatuses[key.CaptureID] = new(TaskStatus)
 		}
+		s.TaskStatuses[key.CaptureID].AdminJobType = shadowStatus.AdminJobType
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
 		if err := s.Info.VerifyAndFix(); err != nil {
@@ -424,7 +418,14 @@ func (s *ChangefeedReactorState) PatchTableStatus(captureID CaptureID, tableID T
 		if e == nil {
 			return fn(nil)
 		}
-		return fn(e.(*TableStatus))
+		post, changed, err := fn(e.(*TableStatus))
+		if err != nil {
+			return nil, false, err
+		}
+		if post != nil && post.Operation == nil && post.ReplicaInfo == nil {
+			return nil, true, nil
+		}
+		return post, changed, err
 	})
 }
 
@@ -476,7 +477,7 @@ func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(i
 			if !changed {
 				return v, false, nil
 			}
-			if reflect.ValueOf(ne).IsNil() {
+			if ne == nil || reflect.ValueOf(ne).IsNil() {
 				return nil, true, nil
 			}
 			nv, err := json.Marshal(ne)

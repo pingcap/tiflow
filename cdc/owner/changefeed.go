@@ -287,20 +287,27 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		}
 	}
 	for captureID, taskStatus := range c.state.TaskStatuses {
+		captureID := captureID
 		if _, exist := captures[captureID]; !exist {
 			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 				return nil, status != nil, nil
 			})
+
+			log.Info("taskStatus", zap.String("capture-id", captureID), zap.Reflect("task-status", taskStatus))
 			if taskStatus.Tables != nil {
 				for tableID := range taskStatus.Tables {
+					tableID := tableID
 					c.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+						log.Info("cleaning up table key", zap.String("capture", captureID), zap.Int64("table", tableID))
 						return nil, status != nil, nil
 					})
 				}
 			}
 			if taskStatus.Operation != nil {
 				for tableID := range taskStatus.Operation {
+					tableID := tableID
 					c.state.PatchTableStatus(captureID, tableID, func(status *model.TableStatus) (*model.TableStatus, bool, error) {
+						log.Info("cleaning up table key", zap.String("capture", captureID), zap.Int64("table", tableID))
 						return nil, status != nil, nil
 					})
 				}

@@ -139,40 +139,34 @@ func (o *txnObserver) cleanUpOrphanTxns(ctx context.Context, client *clientv3.Cl
 	return nil
 }
 
-func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client, needCleanUpStaleTxns bool) error {
-	rollForwardList := make(map[int64]int64)
-	rollBackList := make(map[int64]int64)
-	if needCleanUpStaleTxns {
-		for ownerID, txn := range o.TxnMap {
-			if time.Since(txn.StartPhysicalTs) < txnStaleDuration {
-				// Txn not expired yet, skip
-				continue
-			}
-			if !txn.Committed {
-				rollBackList[ownerID] = txn.txnRevision
-				continue
-			}
-			// roll forward the committed transaction
-			rollForwardList[ownerID] = txn.txnRevision
-		}
-	}
+type cleanUpLockOp int
 
+const (
+	lockNoOp = cleanUpLockOp(iota)
+	lockOpRollBack
+	lockOpRollForward
+)
+
+func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client) error {
+	op := lockNoOp
 	for key, lock := range o.lockMap {
-		isRollForward := false
-		isRollBack := false
-		_, ok := rollForwardList[lock.OwnerID]
-		if ok {
-			isRollForward = true
-		} else if _, ok = rollBackList[lock.OwnerID]; ok {
-			isRollBack = true
-		} else if _, ok := o.TxnMap[lock.OwnerID]; !ok {
-			isRollBack = true
-		} else {
-			continue
+		txn, ok := o.TxnMap[lock.OwnerID]
+		if !ok {
+			op = lockOpRollBack
+		} else if time.Since(txn.StartPhysicalTs) > txnStaleDuration {
+			if txn.Committed {
+				op = lockOpRollForward
+			}
+			// If !txn.Committed, it implies that the transaction owner is still alive,
+			// so we should not interfere.
 		}
 
-		if isRollBack {
-			// We don't have a Txn record, so we regard the txn as aborted
+		lockKey := lockKeyFromDataKey(o.prefix, key)
+		switch op {
+		case lockOpRollBack:
+			log.Debug("etcd big txn: lock rollback",
+				zap.String("lock-key", lockKey.String()),
+				zap.Int64("owner-id", lock.OwnerID))
 			resp, err := client.Get(ctx, key.String(), clientv3.WithRev(lock.StartRevision))
 			if err != nil {
 				return errors.Trace(err)
@@ -189,7 +183,6 @@ func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client,
 				op = clientv3.OpDelete(key.String())
 			}
 
-			lockKey := lockKeyFromDataKey(o.prefix, key)
 			txnResp, err := client.
 				Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(lockKey.String()), "<", lock.lockRevision+1),
@@ -202,9 +195,10 @@ func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client,
 			if !txnResp.Succeeded {
 				log.Warn("Failed to roll back etcd key", zap.String("key", key.String()))
 			}
-		} else if isRollForward {
-			// rolling forward
-			lockKey := lockKeyFromDataKey(o.prefix, key)
+		case lockOpRollForward:
+			log.Debug("etcd big txn: lock roll-forward",
+				zap.String("lock-key", lockKey.String()),
+				zap.Int64("owner-id", lock.OwnerID))
 			txnResp, err := client.
 				Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(lockKey.String()), "<", lock.lockRevision+1)).

@@ -64,15 +64,6 @@ func (s *schedulerSuite) finishTableOperation(captureID model.CaptureID, tableID
 			return status, true, nil
 		})
 	}
-	/*
-		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			for _, tableID := range tableIDs {
-				status.Operation[tableID].Done = true
-				status.Operation[tableID].Status = model.OperFinished
-			}
-			return status, true, nil
-		})
-	*/
 	s.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		if workload == nil {
 			workload = make(model.TaskWorkload)
