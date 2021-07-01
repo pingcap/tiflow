@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"log"
+	"strconv"
 	"strings"
 
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -29,6 +30,7 @@ const (
 	taskWorkloadKey = taskKey + "/workload"
 	taskStatusKey   = taskKey + "/status"
 	taskPositionKey = taskKey + "/position"
+	tableStatusKey  = taskKey + "/table"
 
 	changefeedInfoKey = "/changefeed/info"
 	jobKey            = "/job"
@@ -46,6 +48,7 @@ const (
 	CDCKeyTypeChangeFeedStatus
 	CDCKeyTypeTaskPosition
 	CDCKeyTypeTaskStatus
+	CDCKeyTypeTableStatus
 	CDCKeyTypeTaskWorkload
 )
 
@@ -78,6 +81,7 @@ type CDCKey struct {
 	ChangefeedID string
 	CaptureID    string
 	OwnerLeaseID string
+	TableID      int64
 }
 
 // Parse parses the given etcd key
@@ -129,6 +133,19 @@ func (k *CDCKey) Parse(key string) error {
 		k.CaptureID = splitKey[0]
 		k.ChangefeedID = splitKey[1]
 		k.OwnerLeaseID = ""
+	case strings.HasPrefix(key, tableStatusKey):
+		splitKey := strings.SplitN(key[len(tableStatusKey)+1:], "/", 3)
+		if len(splitKey) != 3 {
+			return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
+		}
+		k.Tp = CDCKeyTypeTableStatus
+		k.CaptureID = splitKey[0]
+		k.ChangefeedID = splitKey[1]
+		tableID, err := strconv.Atoi(splitKey[2])
+		if err != nil {
+			return cerror.WrapError(cerror.ErrInvalidEtcdKey, err)
+		}
+		k.TableID = int64(tableID)
 	case strings.HasPrefix(key, taskWorkloadKey):
 		splitKey := strings.SplitN(key[len(taskWorkloadKey)+1:], "/", 2)
 		if len(splitKey) != 2 {
@@ -163,6 +180,8 @@ func (k *CDCKey) String() string {
 		return etcdKeyBase + taskStatusKey + "/" + k.CaptureID + "/" + k.ChangefeedID
 	case CDCKeyTypeTaskWorkload:
 		return etcdKeyBase + taskWorkloadKey + "/" + k.CaptureID + "/" + k.ChangefeedID
+	case CDCKeyTypeTableStatus:
+		return etcdKeyBase + tableStatusKey + "/" + k.CaptureID + "/" + k.ChangefeedID + "/" + strconv.Itoa(int(k.TableID))
 	}
 	log.Panic("unreachable")
 	return ""
