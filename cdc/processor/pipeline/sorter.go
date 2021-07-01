@@ -35,13 +35,10 @@ const (
 )
 
 type sorterNode struct {
-	sortEngine model.SortEngine
-	sortDir    string
-	sorter     puller.EventSorter
+	sorter puller.EventSorter
 
-	changeFeedID model.ChangeFeedID
-	tableID      model.TableID
-	tableName    string // quoted schema and table, used in metircs only
+	tableID   model.TableID
+	tableName string // quoted schema and table, used in metircs only
 
 	// for per-table flow control
 	flowController tableFlowController
@@ -50,36 +47,28 @@ type sorterNode struct {
 	cancel context.CancelFunc
 }
 
-func newSorterNode(
-	sortEngine model.SortEngine,
-	sortDir string,
-	changeFeedID model.ChangeFeedID,
-	tableName string, tableID model.TableID,
-	flowController tableFlowController) pipeline.Node {
+func newSorterNode(tableName string, tableID model.TableID, flowController tableFlowController) pipeline.Node {
 	return &sorterNode{
-		sortEngine: sortEngine,
-		sortDir:    sortDir,
-
-		changeFeedID: changeFeedID,
-		tableID:      tableID,
-		tableName:    tableName,
-
+		tableName:      tableName,
+		tableID:        tableID,
 		flowController: flowController,
 	}
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
-	stdCtx, cancel := context.WithCancel(ctx.StdContext())
+	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
 	var sorter puller.EventSorter
-	switch n.sortEngine {
+	sortEngine := ctx.ChangefeedVars().Info.Engine
+	switch sortEngine {
 	case model.SortInMemory:
 		sorter = puller.NewEntrySorter()
 	case model.SortInFile:
-		err := util.IsDirAndWritable(n.sortDir)
+		sortDir := ctx.ChangefeedVars().Info.SortDir
+		err := util.IsDirAndWritable(sortDir)
 		if err != nil {
 			if os.IsNotExist(errors.Cause(err)) {
-				err = os.MkdirAll(n.sortDir, 0o755)
+				err = os.MkdirAll(sortDir, 0o755)
 				if err != nil {
 					return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 				}
@@ -88,18 +77,19 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			}
 		}
 
-		sorter = puller.NewFileSorter(n.sortDir)
+		sorter = puller.NewFileSorter(sortDir)
 	case model.SortUnified:
-		err := psorter.UnifiedSorterCheckDir(n.sortDir)
+		sortDir := ctx.ChangefeedVars().Info.SortDir
+		err := psorter.UnifiedSorterCheckDir(sortDir)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		sorter, err = psorter.NewUnifiedSorter(n.sortDir, n.changeFeedID, n.tableName, n.tableID, ctx.Vars().CaptureAddr)
+		sorter, err = psorter.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	default:
-		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(n.sortEngine)
+		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
 	}
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(sorter.Run(stdCtx)))
@@ -118,7 +108,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(n.changeFeedID, ctx.Vars().CaptureAddr, n.tableName)
+		metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -197,7 +187,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
-		n.sorter.AddEntry(ctx.StdContext(), msg.PolymorphicEvent)
+		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 	default:
 		ctx.SendToNextNode(msg)
 	}
@@ -205,7 +195,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	defer tableMemoryGauge.DeleteLabelValues(n.changeFeedID, ctx.Vars().CaptureAddr, n.tableName)
+	defer tableMemoryGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
 }
