@@ -249,7 +249,7 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 	newPartitionIDs := make([]int64, 0, len(pi.Definitions))
 	for _, partition := range pi.Definitions {
 		pid := partition.ID
-		_, ok := c.orphanTables[pid]
+		_, ok := oldIDs[pid]
 		if !ok {
 			// new partition.
 			c.orphanTables[pid] = startTs
