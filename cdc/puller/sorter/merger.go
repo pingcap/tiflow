@@ -107,6 +107,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 	lastOutputTs := uint64(0)
 	lastOutputResolvedTs := uint64(0)
+	lastOutputTime := time.Now()
 	var lastEvent *model.PolymorphicEvent
 	var lastTask *flushTask
 
@@ -115,6 +116,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		if ts == 0 {
 			return nil
 		}
+		now := time.Now()
+		if now.Sub(lastOutputTime) < 60*time.Second {
+			return nil
+		}
+		lastOutputTime = now
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
