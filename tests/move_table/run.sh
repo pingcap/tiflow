@@ -41,7 +41,7 @@ function run() {
     check_table_exists "move_table.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     cd $CUR
-    GO111MODULE=on go run main.go 2>&1 | tee $WORK_DIR/tester.log &
+    GO111MODULE=on go run ./cmd/cdc/main.go 2>&1 | tee $WORK_DIR/tester.log &
     cd $WORK_DIR
 
     check_table_exists "move_table.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
