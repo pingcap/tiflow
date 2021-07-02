@@ -44,7 +44,6 @@ type EventHandle interface {
 	// SetTimer is used to provide a function that is periodic called, as long as the EventHandle has not been unregistered.
 	// The current implementation uses as the base clock source a ticker whose interval is the const workerPoolDefaultClockSourceInterval.
 	// DO NOT set an interval less than workerPoolDefaultClockSourceInterval.
-	// DO NOT set an interval less than workerPoolDefaultClockSourceInterval.
 	// Cancelling `ctx` here will cancel the on-going or next execution of `f`.
 	SetTimer(ctx context.Context, interval time.Duration, f func(ctx context.Context) error) EventHandle
 
