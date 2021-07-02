@@ -379,7 +379,7 @@ func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	go func() {
 		err := pool.Run(poolCtx)
-		c.Assert(err, check.IsNil)
+		c.Assert(err, check.ErrorMatches, ".*context canceled.*")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
