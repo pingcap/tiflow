@@ -386,14 +386,14 @@ func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 
-	for i := 0; i < 16; i++ {
+	for i := 0; i < 8; i++ {
 		handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
 			<-ctx.Done()
 			return ctx.Err()
 		})
 
 		errg.Go(func() error {
-			for j := 0; j < 256; j++ {
+			for j := 0; j < 64; j++ {
 				err := handler.AddEvent(ctx, j)
 				if err != nil {
 					return nil
@@ -411,7 +411,7 @@ func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
 		})
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 	cancel()
 
 	err := errg.Wait()
