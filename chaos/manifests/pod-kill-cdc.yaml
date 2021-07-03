@@ -12,8 +12,8 @@ spec:
     pods:
       playground:
         - cdc-0
-#        - upstream-tikv-0
-#        - upstream-pd-0
+        - upstream-tikv-0
+        - upstream-pd-0
 #        - downstream-tidb-0
   scheduler:
     cron: "@every 2m"
