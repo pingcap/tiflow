@@ -582,13 +582,13 @@ func (w *regionWorker) handleEventEntry(
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
-			select {
-			case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(state.sri.ts)}:
-			default:
-				// rtsUpdateCh block often means too many regions are suffering
-				// lock resolve, the kv client status is not very healthy.
-				log.Warn("region is not upsert into rts manager", zap.Uint64("region-id", regionID))
-			}
+			// select {
+			// case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(state.sri.ts)}:
+			// default:
+			// 	// rtsUpdateCh block often means too many regions are suffering
+			// 	// lock resolve, the kv client status is not very healthy.
+			// 	log.Warn("region is not upsert into rts manager", zap.Uint64("region-id", regionID))
+			// }
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
