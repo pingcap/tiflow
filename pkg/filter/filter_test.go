@@ -39,13 +39,16 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 	c.Assert(filter.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsFalse)
 	c.Assert(filter.ShouldIgnoreTable("sns", "user"), check.IsFalse)
 	c.Assert(filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"), check.IsFalse)
+	c.Assert(filter.ShouldIgnoreTable("mysql", "user"), check.IsFalse)
+	c.Assert(filter.ShouldIgnoreTable("mysql", "global_grants"), check.IsFalse)
+	c.Assert(filter.ShouldIgnoreTable("mysql", "tidb"), check.IsTrue)
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	defer testleak.AfterTest(c)()
 	filter, err := NewFilter(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
-			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
+			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test", "mysql.*", "!mysql.global_grants"},
 		},
 		Cyclic: &config.CyclicConfig{Enable: true},
 	})
@@ -62,6 +65,10 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	assertIgnore("sns", "log", check.IsTrue)
 	assertIgnore("information_schema", "", check.IsTrue)
 	assertIgnore("tidb_cdc", "repl_mark_a_a", check.IsFalse)
+	assertIgnore("mysql", "global_grants", check.IsTrue)
+	assertIgnore("mysql", "tidb", check.IsTrue)
+	assertIgnore("mysql", "GLOBAL_VARIABLES", check.IsTrue)
+	assertIgnore("mysql", "user", check.IsFalse)
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {

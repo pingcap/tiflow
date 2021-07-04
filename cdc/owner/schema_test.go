@@ -37,7 +37,7 @@ func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, getUserSystemTablesFilteredCfg())
 	c.Assert(err, check.IsNil)
 	c.Assert(schema.AllPhysicalTables(), check.HasLen, 0)
 	// add normal table
@@ -153,7 +153,7 @@ func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, getUserSystemTablesFilteredCfg())
 	c.Assert(err, check.IsNil)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
@@ -170,4 +170,12 @@ func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
 			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
 		},
 	})
+}
+
+// getUserSystemTablesFilteredCfg returns a configuration that filters user-related system tables.
+func getUserSystemTablesFilteredCfg() *config.ReplicaConfig {
+	cfg := config.GetDefaultReplicaConfig()
+	// Filter the tables related to user permission information.
+	cfg.Filter.Rules = append(cfg.Filter.Rules, "!mysql.*")
+	return cfg
 }
