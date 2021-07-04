@@ -144,7 +144,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				if err != nil {
 					log.Warn("Cannot remove temporary file for sorting", zap.String("file", backEnd.fileName), zap.Error(err))
 				} else {
-					log.Info("Temporary file removed", zap.String("file", backEnd.fileName))
+					log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
 					freedCount += 1
 				}
 				if freedCount >= 16 {
@@ -357,7 +357,7 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 	}
 
 	for _, toRemoveFilePath := range files {
-		log.Info("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
+		log.Debug("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
 		err := os.Remove(toRemoveFilePath)
 		if err != nil {
 			// In production, we do not want an error here to interfere with normal operation,
