@@ -169,6 +169,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			// 1/3 of session ttl that `session.Done` can't be triggered even
 			// the lease is already revoked.
 			if cerror.ErrEtcdSessionDone.Equal(err) {
+				log.Warn("session is disconnected", zap.Error(err))
 				return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 			}
 			lease, inErr := c.etcdClient.Client.TimeToLive(ctx, c.session.Lease())
