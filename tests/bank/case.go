@@ -552,13 +552,13 @@ func run(
 					atomic.AddInt64(&valid, 1)
 
 					for _, test := range tests {
-						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*20)
+						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*30)
 						if err := test.verify(verifyCtx, upstreamDB, accounts, tableID, upstream, ""); err != nil {
 							log.Panic("upstream verify failed", zap.Error(err))
 						}
 						verifyCancel()
 
-						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*20)
+						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*30)
 						if err := test.verify(verifyCtx, downstreamDB, accounts, tableID, downstream, endTs); err != nil {
 							log.Panic("downstream verify failed", zap.Error(err))
 						}
