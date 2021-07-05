@@ -467,3 +467,33 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	case <-finishedCh:
 	}
 }
+
+func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	sorter, err := NewUnifiedSorter("/tmp/sorter",
+		"test-cf",
+		"test",
+		0,
+		"0.0.0.0:0")
+	c.Assert(err, check.IsNil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+	defer cancel()
+	err = sorter.Run(ctx)
+	c.Assert(err, check.ErrorMatches, ".*deadline.*")
+
+	ctx1, cancel1 := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel1()
+	for i := 0; i < 10000; i++ {
+		sorter.AddEntry(ctx1, model.NewPolymorphicEvent(generateMockRawKV(uint64(i))))
+	}
+
+	select {
+	case <-ctx1.Done():
+		c.Fatal("TestSortClosedAddEntry timed out")
+	default:
+	}
+	cancel1()
+}

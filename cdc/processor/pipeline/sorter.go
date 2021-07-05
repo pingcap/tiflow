@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
@@ -44,15 +45,18 @@ type sorterNode struct {
 	// for per-table flow control
 	flowController tableFlowController
 
+	mounter entry.Mounter
+
 	wg     errgroup.Group
 	cancel context.CancelFunc
 }
 
-func newSorterNode(tableName string, tableID model.TableID, flowController tableFlowController) pipeline.Node {
+func newSorterNode(tableName string, tableID model.TableID, flowController tableFlowController, mounter entry.Mounter) pipeline.Node {
 	return &sorterNode{
 		tableName:      tableName,
 		tableID:        tableID,
 		flowController: flowController,
+		mounter:        mounter,
 	}
 }
 
@@ -170,6 +174,15 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						return nil
 					}
 					lastCRTs = commitTs
+
+					// DESIGN NOTE: We send the messages to the mounter in this separate goroutine to prevent
+					// blocking the whole pipeline.
+					msg.SetUpFinishedChan()
+					select {
+					case <-ctx.Done():
+						return nil
+					case n.mounter.Input() <- msg:
+					}
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {

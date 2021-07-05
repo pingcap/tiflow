@@ -19,8 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -133,18 +131,6 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			}
 
-			if memPressure := ret.memoryPressure(); memPressure > 50 {
-				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
-					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
-				// Increase GC frequency to avoid unnecessary OOMs
-				debug.SetGCPercent(10)
-				if memPressure > 80 {
-					runtime.GC()
-				}
-			} else {
-				debug.SetGCPercent(50)
-			}
-
 			// garbage collect temporary files in batches
 			freedCount := 0
 			for i := range ret.cache {
@@ -158,7 +144,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				if err != nil {
 					log.Warn("Cannot remove temporary file for sorting", zap.String("file", backEnd.fileName), zap.Error(err))
 				} else {
-					log.Info("Temporary file removed", zap.String("file", backEnd.fileName))
+					log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
 					freedCount += 1
 				}
 				if freedCount >= 16 {
@@ -371,7 +357,7 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 	}
 
 	for _, toRemoveFilePath := range files {
-		log.Info("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
+		log.Debug("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
 		err := os.Remove(toRemoveFilePath)
 		if err != nil {
 			// In production, we do not want an error here to interfere with normal operation,
