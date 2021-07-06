@@ -76,12 +76,12 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if s.captureV2 == nil {
+	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
-	err := s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err := s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.AsyncStop()
 		return nil
 	})
@@ -94,7 +94,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	if s.captureV2 == nil {
+	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
@@ -127,7 +127,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		Opts: opts,
 	}
 
-	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err = s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.EnqueueJob(job)
 		return nil
 	})
@@ -141,7 +141,7 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	if s.captureV2 == nil {
+	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
@@ -159,7 +159,7 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err = s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.TriggerRebalance(changefeedID)
 		return nil
 	})
@@ -173,7 +173,7 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if s.captureV2 == nil {
+	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
@@ -204,7 +204,7 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = s.captureV2.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err = s.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
 		owner.ManualSchedule(changefeedID, to, tableID)
 		return nil
 	})
@@ -218,7 +218,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	if s.captureV2 == nil {
+	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return

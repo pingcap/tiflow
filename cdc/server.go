@@ -53,7 +53,7 @@ const (
 
 // Server is the capture server
 type Server struct {
-	captureV2    *capture.Capture
+	capture      *capture.Capture
 	statusServer *http.Server
 	pdClient     pd.Client
 	etcdClient   *kv.CDCEtcdClient
@@ -164,7 +164,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.captureV2 = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
 	return s.run(ctx)
 }
 
@@ -217,7 +217,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	wg, cctx := errgroup.WithContext(ctx)
 
 	wg.Go(func() error {
-		return s.captureV2.Run(cctx)
+		return s.capture.Run(cctx)
 	})
 
 	wg.Go(func() error {
@@ -237,8 +237,8 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 // Close closes the server.
 func (s *Server) Close() {
-	if s.captureV2 != nil {
-		s.captureV2.AsyncClose()
+	if s.capture != nil {
+		s.capture.AsyncClose()
 	}
 	if s.statusServer != nil {
 		err := s.statusServer.Close()
