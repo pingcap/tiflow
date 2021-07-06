@@ -64,11 +64,15 @@ func BarrierMessage(barrierTs model.Ts) *Message {
 	}
 }
 
+// TickMessage is called frequently,
+// to ease GC pressure we return a global variable.
+var tickMsg *Message = &Message{
+	Tp: MessageTypeTick,
+}
+
 // TickMessage creates the message of Tick
 func TickMessage() *Message {
-	return &Message{
-		Tp: MessageTypeTick,
-	}
+	return tickMsg
 }
 
 // CommandType is the type of Command
