@@ -116,13 +116,9 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	err := os.MkdirAll(sortDir, 0o311)
 	c.Assert(err, check.IsNil)
 
-<<<<<<< HEAD
-	conf := config.GetDefaultServerConfig()
-=======
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = dataDir
 	conf.Sorter.SortDir = sortDir
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 	conf.Sorter.MaxMemoryPressure = 0 // force using files
 
 	backEndPool, err := newBackEndPool(sortDir, "")

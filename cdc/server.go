@@ -44,17 +44,14 @@ import (
 
 const (
 	ownerRunInterval = time.Millisecond * 500
-<<<<<<< HEAD
 
 	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
 	DefaultCDCGCSafePointTTL = 24 * 60 * 60
 
 	defaultCaptureSessionTTL = 10
-=======
 	defaultDataDir   = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 )
 
 // Server is the capture server

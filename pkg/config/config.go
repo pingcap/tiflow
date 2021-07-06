@@ -29,11 +29,6 @@ import (
 	"go.uber.org/zap"
 )
 
-<<<<<<< HEAD
-// NewReplicaImpl is true if we using new processor
-// new owner should be also switched on after it implemented
-const NewReplicaImpl = false
-=======
 const (
 	// NewReplicaImpl is true if we using new processor
 	// new owner should be also switched on after it implemented
@@ -45,7 +40,6 @@ const (
 func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
@@ -153,14 +147,6 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 type SecurityConfig = security.Credential
 
 var defaultServerConfig = &ServerConfig{
-<<<<<<< HEAD
-	Addr:                   "127.0.0.1:8300",
-	AdvertiseAddr:          "",
-	LogFile:                "",
-	LogLevel:               "info",
-	GcTTL:                  24 * 60 * 60, // 24H
-	TZ:                     "System",
-=======
 	Addr:          "127.0.0.1:8300",
 	AdvertiseAddr: "",
 	LogFile:       "",
@@ -173,7 +159,6 @@ var defaultServerConfig = &ServerConfig{
 	// default capture session ttl to 10s to increase robust to PD jitter,
 	// however it will decrease RTO when single TiCDC node error happens.
 	CaptureSessionTTL:      10,
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
