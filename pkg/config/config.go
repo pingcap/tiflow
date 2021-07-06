@@ -161,7 +161,6 @@ var defaultServerConfig = &ServerConfig{
 	LogLevel:      "info",
 	GcTTL:         24 * 60 * 60, // 24H
 	TZ:            "System",
-
 	Log: &LogConfig{
 		File: &LogFileConfig{
 			MaxSize:    300,
@@ -169,7 +168,6 @@ var defaultServerConfig = &ServerConfig{
 			MaxBackups: 0,
 		},
 	},
-
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
 	// default capture session ttl to 10s to increase robust to PD jitter,
@@ -272,6 +270,12 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.GcTTL == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
+	}
+
+	// 5s is minimum lease ttl in etcd(PD)
+	if c.CaptureSessionTTL < 5 {
+		log.Warn("capture session ttl too small, set to default value 10s")
+		c.CaptureSessionTTL = 10
 	}
 
 	if c.Security != nil && c.Security.IsTLSEnabled() {

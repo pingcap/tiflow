@@ -861,9 +861,31 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
 func (o *Owner) calcResolvedTs(ctx context.Context) error {
-	for _, cf := range o.changeFeeds {
+	for id, cf := range o.changeFeeds {
 		if err := cf.calcResolvedTs(ctx); err != nil {
-			return errors.Trace(err)
+			log.Error("fail to calculate checkpoint ts, so it will be stopped", zap.String("changefeed", cf.id), zap.Error(err))
+			// error may cause by sink.EmitCheckpointTs`, just stop the changefeed at the moment
+			// todo: make the method mentioned above more robust.
+			var code string
+			if rfcCode, ok := cerror.RFCCode(err); ok {
+				code = string(rfcCode)
+			} else {
+				code = string(cerror.ErrOwnerUnknown.RFCCode())
+			}
+
+			job := model.AdminJob{
+				CfID: id,
+				Type: model.AdminStop,
+				Error: &model.RunningError{
+					Addr:    util.CaptureAddrFromCtx(ctx),
+					Code:    code,
+					Message: err.Error(),
+				},
+			}
+
+			if err := o.EnqueueJob(job); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 	return nil
@@ -939,7 +961,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
 	if job.Type == model.AdminStop {
-		log.Debug("put changfeed into stoppedFeeds queue", zap.String("changefeed", job.CfID))
+		log.Debug("put changefeed into stoppedFeeds queue", zap.String("changefeed", job.CfID))
 		o.stoppedFeeds[job.CfID] = cf.status
 	}
 	for captureID := range cf.taskStatus {
@@ -1653,7 +1675,7 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures map[model.Cap
 	//    the step-2 may meet an error such as ErrCompacted, and we will continue
 	//    from step-1, however other capture may crash just after step-2 returns
 	//    and before step-1 starts, the longer time gap between step-2 to step-1,
-	//    missing a crashed capture is more likey to happen.
+	//    missing a crashed capture is more likely to happen.
 	o.l.Lock()
 	defer o.l.Unlock()
 	return errors.Trace(o.cleanUpStaleTasks(ctx))
@@ -1686,7 +1708,7 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 					return
 				}
 				log.Warn("watch capture returned", zap.Error(err))
-				// Otherwise, a temporary error occured(ErrCompact),
+				// Otherwise, a temporary error occurred(ErrCompact),
 				// restart the watching routine.
 			}
 		}
@@ -1697,15 +1719,15 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 // By setting the AdminJob type to AdminStop and the Error code to indicate that the changefeed is stagnant.
 func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[model.ChangeFeedID]*model.ChangeFeedStatus, minGCSafePoint uint64) error {
 	for id, status := range staleChangeFeeds {
-		message := cerror.ErrSnapshotLostByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint).Error()
-		log.Warn("changefeed checkpoint is lagging too much, so it will be stopped.", zap.String("changefeed", id), zap.String("Error message", message))
+		err := cerror.ErrSnapshotLostByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint)
+		log.Warn("changefeed checkpoint is lagging too much, so it will be stopped.", zap.String("changefeed", id), zap.Error(err))
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changfeed is stagnant
-			Message: message,
+			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changefeed is stagnant
+			Message: err.Error(),
 		}
 
-		err := o.EnqueueJob(model.AdminJob{
+		err = o.EnqueueJob(model.AdminJob{
 			CfID:  id,
 			Type:  model.AdminStop,
 			Error: runningError,
