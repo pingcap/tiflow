@@ -242,11 +242,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
-<<<<<<< HEAD
-func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential) (*model.ChangeFeedInfo, error) {
-=======
 func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 	if isCreate {
 		if sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -330,12 +326,8 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 	switch sortEngine {
 	case model.SortUnified, model.SortInMemory, model.SortInFile:
 	default:
-<<<<<<< HEAD
-		return nil, errors.Errorf("Creating chengfeed without a invaild sort engine(%s), `%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
-=======
 		return nil, errors.Errorf("Creating changefeed with an invalid sort engine(%s), "+
 			"`%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
@@ -454,15 +446,11 @@ func newCreateChangefeedCommand() *cobra.Command {
 				id = uuid.New().String()
 			}
 
-<<<<<<< HEAD
-			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential())
-=======
 			_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
 			if err != nil {
 				return err
 			}
 			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), captureInfos)
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 			if err != nil {
 				return err
 			}

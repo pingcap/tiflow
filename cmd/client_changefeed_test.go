@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/spf13/cobra"
 )
@@ -32,6 +33,7 @@ func (s *clientChangefeedSuite) TestVerifyChangefeedParams(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := &cobra.Command{}
+	changefeedConfigVariables(cmd)
 
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
@@ -42,22 +44,12 @@ enable-old-value = false
 	c.Assert(err, check.IsNil)
 
 	sinkURI = "blackhole:///?protocol=maxwell"
-<<<<<<< HEAD
-	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
-=======
 	info, err := verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil, nil)
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 	c.Assert(info.SortDir, check.Equals, "")
 
 	sinkURI = ""
-<<<<<<< HEAD
-	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil)
-	c.Assert(err, check.NotNil)
-
-	c.Assert(info.Config.EnableOldValue, check.IsTrue)
-=======
 	_, err = verifyChangefeedParameters(ctx, cmd, true /* isCreate */, nil, nil)
 	c.Assert(err, check.NotNil)
 
@@ -78,5 +70,4 @@ enable-old-value = false
 	sortDir = ""
 	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
 	c.Assert(err, check.IsNil)
->>>>>>> 9135351d (CDC Server support data-dir (#1879))
 }
