@@ -169,6 +169,7 @@ var defaultServerConfig = &ServerConfig{
 			MaxBackups: 0,
 		},
 	},
+
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
 	// default capture session ttl to 10s to increase robust to PD jitter,
