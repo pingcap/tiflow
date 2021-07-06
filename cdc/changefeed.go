@@ -677,6 +677,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("schema", todoDDLJob.SchemaName),
 		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("start-ts", todoDDLJob.StartTS),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
 	ddlEvent := new(model.DDLEvent)
@@ -936,6 +937,9 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		// some DDL is waiting to executed, we can't ensure whether the DDL has been executed.
 		// so we can't emit checkpoint to sink
 		if c.ddlState != model.ChangeFeedWaitToExecDDL {
+			failpoint.Inject("InjectEmitCheckpointTsError", func() {
+				failpoint.Return(cerror.ErrEmitCheckpointTsFailed.GenWithStackByArgs())
+			})
 			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
 			if err != nil {
 				return errors.Trace(err)

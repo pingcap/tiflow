@@ -366,6 +366,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	case <-finishedCh:
 	}
 
+	UnifiedSorterCleanUp()
 	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
 	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite", "return(true)")
@@ -373,6 +374,10 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite")
 	}()
+
+	// recreate the sorter
+	sorter, err = NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	finishedCh = make(chan struct{})
 	go func() {
