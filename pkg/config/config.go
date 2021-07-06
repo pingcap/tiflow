@@ -168,6 +168,11 @@ var defaultServerConfig = &ServerConfig{
 	},
 	GcTTL:                  24 * 60 * 60, // 24H
 	TZ:                     "System",
+	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
+	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
+	// default capture session ttl to 10s to increase robust to PD jitter,
+	// however it will decrease RTO when single TiCDC node error happens.
+	CaptureSessionTTL:      10,
 	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
@@ -193,6 +198,8 @@ type ServerConfig struct {
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
+
+	CaptureSessionTTL int `toml:"capture-session-ttl" json:"capture-session-ttl"`
 
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
