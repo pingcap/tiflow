@@ -155,14 +155,6 @@ type LogConfig struct {
 }
 
 var defaultServerConfig = &ServerConfig{
-<<<<<<< HEAD
-	Addr:                   "127.0.0.1:8300",
-	AdvertiseAddr:          "",
-	LogFile:                "",
-	LogLevel:               "info",
-	GcTTL:                  24 * 60 * 60, // 24H
-	TZ:                     "System",
-=======
 	Addr:          "127.0.0.1:8300",
 	AdvertiseAddr: "",
 	LogFile:       "",
@@ -174,15 +166,8 @@ var defaultServerConfig = &ServerConfig{
 			MaxBackups: 0,
 		},
 	},
-	DataDir: "",
-	GcTTL:   24 * 60 * 60, // 24H
-	TZ:      "System",
-	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
-	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
-	// default capture session ttl to 10s to increase robust to PD jitter,
-	// however it will decrease RTO when single TiCDC node error happens.
-	CaptureSessionTTL:      10,
->>>>>>> 284dd557 (config: Add log configuration items to the config file (#2182))
+	GcTTL:                  24 * 60 * 60, // 24H
+	TZ:                     "System",
 	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
@@ -202,16 +187,9 @@ type ServerConfig struct {
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
-<<<<<<< HEAD
-	LogFile  string `toml:"log-file" json:"log-file"`
-	LogLevel string `toml:"log-level" json:"log-level"`
-=======
 	LogFile  string     `toml:"log-file" json:"log-file"`
 	LogLevel string     `toml:"log-level" json:"log-level"`
 	Log      *LogConfig `toml:"log" json:"log"`
-
-	DataDir string `toml:"data-dir" json:"data-dir"`
->>>>>>> 284dd557 (config: Add log configuration items to the config file (#2182))
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
