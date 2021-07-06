@@ -114,6 +114,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> 5632ce4476290da9a9ebc056cb5da90c0188b2b1
 	if config.NewReplicaImpl {
 		tlsConfig, err := conf.Security.ToTLSConfig()
 		if err != nil {
@@ -151,6 +156,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := s.initDataDir(ctx); err != nil {
 		return errors.Trace(err)
 	}
+<<<<<<< HEAD
+=======
+>>>>>>> 9135351d (CDC Server support data-dir (#1879))
+>>>>>>> 5632ce4476290da9a9ebc056cb5da90c0188b2b1
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
