@@ -527,6 +527,8 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(queryLeases, check.DeepEquals, leases)
 
+	// make sure the RevokeAllLeases function can ignore the lease not exist
+	leases["/fake/capture/info"] = 200
 	err = s.client.RevokeAllLeases(ctx, leases)
 	c.Assert(err, check.IsNil)
 	queryLeases, err = s.client.GetCaptureLeases(ctx)
