@@ -176,7 +176,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
-	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
+
+	p := pipeline.NewPipeline(ctx, 2*time.Second)
 	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
 	p.AppendNode(ctx, "mounter", newMounterNode())
