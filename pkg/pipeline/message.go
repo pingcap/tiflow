@@ -71,6 +71,7 @@ var tickMsg *Message = &Message{
 }
 
 // TickMessage creates the message of Tick
+// Note: the returned message is READ-ONLY.
 func TickMessage() *Message {
 	return tickMsg
 }
