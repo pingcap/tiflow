@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"encoding/json"
-	"github.com/pingcap/ticdc/pkg/config"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -288,8 +287,8 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
-	} 
-  
+	}
+
 	err := req.ParseForm()
 	if err != nil {
 		writeInternalServerError(w, err)
