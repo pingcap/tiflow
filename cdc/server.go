@@ -271,7 +271,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 		case <-ticker.C:
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*10))
+				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 				req, err := http.NewRequestWithContext(
 					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
 				if err != nil {
@@ -392,15 +392,32 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
+	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
+	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
+	cli := s.etcdClient
+	if cli == nil {
+		client, err := clientv3.New(clientv3.Config{
+			Endpoints:   s.pdEndpoints,
+			Context:     ctx,
+			DialTimeout: 5 * time.Second,
+		})
+		if err != nil {
+			return err
+		}
+		etcdClient := kv.NewCDCEtcdClient(ctx, client)
+		cli = &etcdClient
+		defer cli.Close()
+	}
+
 	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	allStatus, err := cli.GetAllChangeFeedStatus(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	candidates := make([]string, 0, len(allStatus))
 	for id := range allStatus {
-		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
+		info, err := cli.GetChangeFeedInfo(ctx, id)
 		if err != nil {
 			return errors.Trace(err)
 		}

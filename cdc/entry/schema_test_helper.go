@@ -22,8 +22,8 @@ import (
 	timeta "github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/testkit"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 // SchemaTestHelper is a test helper for schema which creates an internal tidb instance to generate DDL jobs with meta information

@@ -38,7 +38,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -148,7 +148,7 @@ const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	GCSafepointUpdateInterval = 2 * time.Second
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
 	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )

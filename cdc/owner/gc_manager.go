@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 

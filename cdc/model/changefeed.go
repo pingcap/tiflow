@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -131,7 +131,7 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 		return info.StartTs
 	}
 
-	return oracle.EncodeTSO(info.CreateTime.Unix() * 1000)
+	return oracle.GoTimeToTS(info.CreateTime)
 }
 
 // GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
@@ -170,7 +170,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 			return errors.Annotatef(
 				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
-		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	return nil
 }

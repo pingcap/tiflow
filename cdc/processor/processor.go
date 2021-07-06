@@ -40,8 +40,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -288,7 +288,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
