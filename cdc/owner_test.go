@@ -121,9 +121,92 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 	return safePoint, nil
 }
 
+type mockSink struct {
+	sink.Sink
+	checkpointTs model.Ts
+
+	checkpointMu    sync.Mutex
+	checkpointError error
+}
+
+func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+	m.checkpointMu.Lock()
+	defer m.checkpointMu.Unlock()
+	atomic.StoreUint64(&m.checkpointTs, ts)
+	return m.checkpointError
+}
+
+func (m *mockSink) Close() error {
+	return nil
+}
+
+// Test whether the owner can tolerate sink caused error, it won't be killed.
+// also set the specific changefeed to stop
+func (s *ownerSuite) TestOwnerCalcResolvedTs(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDCli := &mockPDClient{}
+
+	sink := &mockSink{checkpointError: cerror.ErrKafkaSendMessage}
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
+		"test_change_feed_1": {
+			info:    &model.ChangeFeedInfo{State: model.StateNormal},
+			etcdCli: s.client,
+			status: &model.ChangeFeedStatus{
+				CheckpointTs: 0,
+			},
+			targetTs:      2000,
+			ddlResolvedTs: 2000,
+			ddlState:      model.ChangeFeedSyncDML,
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
+				"capture_1": {
+					CheckPointTs: 2333,
+					ResolvedTs:   2333,
+				},
+				"capture_2": {
+					CheckPointTs: 2333,
+					ResolvedTs:   2333,
+				},
+			},
+			sink: sink,
+		},
+	}
+
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
+	c.Assert(err, check.IsNil)
+	mockOwner := Owner{
+		session:                 session,
+		pdClient:                mockPDCli,
+		etcdClient:              s.client,
+		lastFlushChangefeeds:    time.Now(),
+		flushChangefeedInterval: 1 * time.Hour,
+		changeFeeds:             changeFeeds,
+		cfRWriter:               s.client,
+		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		minGCSafePointCache:     minGCSafePointCacheEntry{},
+	}
+
+	err = mockOwner.calcResolvedTs(s.ctx)
+	c.Assert(err, check.IsNil)
+
+	err = mockOwner.handleAdminJob(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockOwner.stoppedFeeds["test_change_feed_1"], check.NotNil)
+
+	err = mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+
+	s.TearDownTest(c)
+}
+
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 	mockPDCli := &mockPDClient{}
 	mockOwner := Owner{
@@ -164,7 +247,7 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfosFailed(c *check.C) {
 		},
 	}
 
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 	mockOwner := Owner{
 		session:                 session,
@@ -217,7 +300,7 @@ func (s *ownerSuite) TestTiKVGCLifeTimeLargeThanGCTTL(c *check.C) {
 		},
 	}
 
-	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(defaultCaptureSessionTTL))
+	session, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
@@ -299,7 +382,7 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(defaultCaptureSessionTTL))
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
@@ -393,7 +476,7 @@ func (s *ownerSuite) TestOwnerUploadGCSafePointOutdated(c *check.C) {
 	}
 
 	session, err := concurrency.NewSession(s.client.Client.Unwrap(),
-		concurrency.WithTTL(defaultCaptureSessionTTL))
+		concurrency.WithTTL(config.GetDefaultServerConfig().CaptureSessionTTL))
 	c.Assert(err, check.IsNil)
 
 	mockOwner := Owner{
