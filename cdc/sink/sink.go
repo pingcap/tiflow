@@ -60,7 +60,7 @@ var sinkIniterMap = make(map[string]sinkInitFunc)
 type sinkInitFunc func(context.Context, model.ChangeFeedID, *url.URL, *filter.Filter, *config.ReplicaConfig, map[string]string, chan error) (Sink, error)
 
 func init() {
-	// register blockhole sink
+	// register blackhole sink
 	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newBlackHoleSink(ctx, opts), nil

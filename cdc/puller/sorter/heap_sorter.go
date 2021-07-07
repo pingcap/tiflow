@@ -34,6 +34,7 @@ import (
 const (
 	flushRateLimitPerSecond = 10
 	sortHeapCapacity        = 32
+	sortHeapInputChSize     = 1024
 )
 
 type flushTask struct {
@@ -85,7 +86,7 @@ type heapSorter struct {
 func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 	return &heapSorter{
 		id:        id,
-		inputCh:   make(chan *model.PolymorphicEvent, 1024*1024),
+		inputCh:   make(chan *model.PolymorphicEvent, sortHeapInputChSize),
 		outputCh:  out,
 		heap:      make(sortHeap, 0, sortHeapCapacity),
 		canceller: new(asyncCanceller),
