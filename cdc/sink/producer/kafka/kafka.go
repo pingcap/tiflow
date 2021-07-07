@@ -44,8 +44,7 @@ type Config struct {
 	Compression     string
 	ClientID        string
 	Credential      *security.Credential
-	// TODO support SASL authentication
-
+	SaslScram       *security.SaslScram
 	// control whether to create topic and verify partition number
 	TopicPreProcess bool
 }
@@ -58,6 +57,7 @@ func NewKafkaConfig() Config {
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
+		SaslScram:         &security.SaslScram{},
 		TopicPreProcess:   true,
 	}
 }
@@ -461,6 +461,20 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+	}
+
+	if c.SaslScram != nil && len(c.SaslScram.SaslUser) != 0 {
+		config.Net.SASL.Enable = true
+		config.Net.SASL.User = c.SaslScram.SaslUser
+		config.Net.SASL.Password = c.SaslScram.SaslPassword
+		config.Net.SASL.Mechanism = sarama.SASLMechanism(c.SaslScram.SaslMechanism)
+		if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-256") {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256} }
+		} else if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-512") {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512} }
+		} else {
+			return nil, errors.New("Unsupported sasl-mechanism, should be SCRAM-SHA-256 or SCRAM-SHA-512")
 		}
 	}
 
