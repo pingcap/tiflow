@@ -11,26 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package security
 
-import (
-	"os"
-
-	"github.com/spf13/cobra"
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "cdc",
-	Short: "CDC",
-	Long:  `Change Data Capture`,
+// SaslScram holds necessary path parameter to support sasl-scram
+type SaslScram struct {
+	SaslUser      string `toml:"sasl-user" json:"sasl-user"`
+	SaslPassword  string `toml:"sasl-password" json:"sasl-password"`
+	SaslMechanism string `toml:"sasl-mechanism" json:"sasl-mechanism"`
 }
 
-// Execute runs the root command
-func Execute() {
-	// Outputs cmd.Print to stdout.
-	rootCmd.SetOut(os.Stdout)
-	if err := rootCmd.Execute(); err != nil {
-		rootCmd.Println(err)
-		os.Exit(1)
-	}
+// IsSaslScramEnabled checks whether SASL SCRAM is enabled or not.
+func (s *SaslScram) IsSaslScramEnabled() bool {
+	return len(s.SaslUser) != 0
 }
