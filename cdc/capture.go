@@ -108,7 +108,7 @@ func NewCapture(
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 	sess, err := concurrency.NewSession(etcdCli,
-		concurrency.WithTTL(defaultCaptureSessionTTL))
+		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
