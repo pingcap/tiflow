@@ -429,8 +429,6 @@ func findBestDataDir(candidates []string) (result string, ok bool) {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, err
 		}
-		defer os.RemoveAll(dir)
-
 		if err := util.IsDirReadWritable(dir); err != nil {
 			return nil, err
 		}
