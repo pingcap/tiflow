@@ -356,7 +356,7 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	options := &storage.BackendOptions{}
 	storage.ExtractQueryParameters(sinkURI, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialize, err)
 	}
 	// we should set this to true, since br set it by default in parseBackend
 	s3.ForcePathStyle = true
@@ -369,7 +369,7 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 		HTTPClient:      nil,
 	})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialize, err)
 	}
 
 	s := &s3Sink{
