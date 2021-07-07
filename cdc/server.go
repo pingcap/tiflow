@@ -375,10 +375,8 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if diskInfo.Avail < dataDirThreshold {
-		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
-			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
-	}
+	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
+		"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
 
 	return nil
 }
