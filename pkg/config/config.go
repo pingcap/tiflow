@@ -142,6 +142,18 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
+// LogFileConfig represents log file config for server
+type LogFileConfig struct {
+	MaxSize    int `toml:"max-size" json:"max-size"`
+	MaxDays    int `toml:"max-days" json:"max-days"`
+	MaxBackups int `toml:"max-backups" json:"max-backups"`
+}
+
+// LogConfig represents log config for server
+type LogConfig struct {
+	File *LogFileConfig `toml:"file" json:"file"`
+}
+
 var defaultServerConfig = &ServerConfig{
 	Addr:          "127.0.0.1:8300",
 	AdvertiseAddr: "",
@@ -149,6 +161,13 @@ var defaultServerConfig = &ServerConfig{
 	LogLevel:      "info",
 	GcTTL:         24 * 60 * 60, // 24H
 	TZ:            "System",
+	Log: &LogConfig{
+		File: &LogFileConfig{
+			MaxSize:    300,
+			MaxDays:    0,
+			MaxBackups: 0,
+		},
+	},
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
 	// default capture session ttl to 10s to increase robust to PD jitter,
@@ -173,8 +192,9 @@ type ServerConfig struct {
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
-	LogFile  string `toml:"log-file" json:"log-file"`
-	LogLevel string `toml:"log-level" json:"log-level"`
+	LogFile  string     `toml:"log-file" json:"log-file"`
+	LogLevel string     `toml:"log-level" json:"log-level"`
+	Log      *LogConfig `toml:"log" json:"log"`
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
