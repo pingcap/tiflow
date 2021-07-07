@@ -14,7 +14,7 @@
 package pipeline
 
 import (
-	stdContext "context"
+	"context"
 	"time"
 
 	"github.com/pingcap/log"
@@ -24,11 +24,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/security"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"go.uber.org/zap"
 )
 
@@ -51,7 +49,7 @@ type TablePipeline interface {
 	// UpdateBarrierTs updates the barrier ts in this table pipeline
 	UpdateBarrierTs(ts model.Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-	AsyncStop(targetTs model.Ts)
+	AsyncStop(targetTs model.Ts) bool
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
 	// Status returns the status of this table pipeline
@@ -70,7 +68,7 @@ type tablePipelineImpl struct {
 	tableName   string // quoted schema and table, used in metircs only
 
 	sinkNode *sinkNode
-	cancel   stdContext.CancelFunc
+	cancel   context.CancelFunc
 }
 
 // TODO find a better name or avoid using an interface
@@ -95,21 +93,28 @@ func (t *tablePipelineImpl) CheckpointTs() model.Ts {
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
-	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
+	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) && !cerror.ErrPipelineTryAgain.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
 }
 
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) {
+func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
 	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
 		Tp:        pipeline.CommandTypeStopAtTs,
 		StoppedTs: targetTs,
 	}))
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
-	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) {
+	if err != nil {
+		if cerror.ErrPipelineTryAgain.Equal(err) {
+			return false
+		}
+		if cerror.ErrSendToClosedPipeline.Equal(err) {
+			return true
+		}
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
+	return true
 }
 
 var workload = model.WorkloadInfo{Workload: 1}
@@ -147,22 +152,16 @@ func (t *tablePipelineImpl) Wait() {
 }
 
 // NewTablePipeline creates a table pipeline
-// TODO(leoppro): the parameters in this function are too much, try to move some parameters into ctx.Vars().
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
-func NewTablePipeline(ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	credential *security.Credential,
-	kvStorage tidbkv.Storage,
+func NewTablePipeline(ctx cdcContext.Context,
 	limitter *puller.BlurResourceLimitter,
 	mounter entry.Mounter,
-	sortEngine model.SortEngine,
-	sortDir string,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts) TablePipeline {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := cdcContext.WithCancel(ctx)
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
@@ -172,16 +171,16 @@ func NewTablePipeline(ctx context.Context,
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
 	log.Debug("creating table flow controller",
-		zap.String("changefeed-id", changefeedID),
+		zap.String("changefeed-id", ctx.ChangefeedVars().ID),
 		zap.String("table-name", tableName),
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
-	p.AppendNode(ctx, "puller", newPullerNode(changefeedID, credential, kvStorage, limitter, tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "sorter", newSorterNode(sortEngine, sortDir, changefeedID, tableName, tableID, flowController))
+	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
+	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
-	config := ctx.Vars().Config
+	config := ctx.ChangefeedVars().Info.Config
 	if config.Cyclic != nil && config.Cyclic.IsEnabled() {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}

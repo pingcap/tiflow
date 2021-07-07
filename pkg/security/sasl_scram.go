@@ -11,15 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package filter
+package security
 
-import (
-	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-)
+// SaslScram holds necessary path parameter to support sasl-scram
+type SaslScram struct {
+	SaslUser      string `toml:"sasl-user" json:"sasl-user"`
+	SaslPassword  string `toml:"sasl-password" json:"sasl-password"`
+	SaslMechanism string `toml:"sasl-mechanism" json:"sasl-mechanism"`
+}
 
-// ChangefeedFastFailError checks the error, returns true if it is meaningless
-// to retry on this error
-func ChangefeedFastFailError(err error) bool {
-	return cerror.ErrStartTsBeforeGC.Equal(errors.Cause(err))
+// IsSaslScramEnabled checks whether SASL SCRAM is enabled or not.
+func (s *SaslScram) IsSaslScramEnabled() bool {
+	return len(s.SaslUser) != 0
 }
