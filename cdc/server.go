@@ -458,7 +458,7 @@ func findBestDataDir(candidates []string) (result string, ok bool) {
 	for _, dir := range candidates {
 		info, err := checker(dir)
 		if err != nil {
-			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
+			log.Warn("check the availability of dir", zap.String("dir", dir), zap.Error(err))
 			continue
 		}
 		if info.Avail > low {
