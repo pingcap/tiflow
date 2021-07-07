@@ -24,10 +24,6 @@ See a detailed introduction to [the TiCDC architecture](https://docs.pingcap.com
 - [English](https://pingcap.com/blog/)
 - [Chinese](https://pingcap.com/blog-cn/)
 
-## TiDB Monthly
-
-[TiDB Monthly](https://pingcap.com/weekly/)
-
 ## Building
 
 To check the source code, run test cases and build binaries, you can simply run:

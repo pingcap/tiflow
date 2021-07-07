@@ -46,7 +46,7 @@ function prepare() {
     TOPIC_NAME="ticdc-simple-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=cdc_test_simple&kafka-version=${KAFKA_VERSION}";;
-        *) SINK_URI="mysql+ssl://root@127.0.0.1:3306/";;
+        *) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/";;
     esac
     changefeedid=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     if [ "$SINK_TYPE" == "kafka" ]; then

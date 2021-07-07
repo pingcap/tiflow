@@ -637,6 +637,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 				select {
 				case s.errCh <- err:
 				default:
+					log.Info("mysql sink receives redundant error", zap.Error(err))
 				}
 			}
 		}()
@@ -1333,7 +1334,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1341,7 +1342,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1349,7 +1350,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to create syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1370,7 +1371,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 		log.Info("sync table: get tidb_current_ts err")
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -1378,7 +1379,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+			log.Error("failed to write syncpoint table", zap.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2)))
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
