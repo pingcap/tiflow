@@ -85,8 +85,9 @@ func (m *mockTablePipeline) UpdateBarrierTs(ts model.Ts) {
 	m.barrierTs = ts
 }
 
-func (m *mockTablePipeline) AsyncStop(targetTs model.Ts) {
+func (m *mockTablePipeline) AsyncStop(targetTs model.Ts) bool {
 	m.stopTs = targetTs
+	return true
 }
 
 func (m *mockTablePipeline) Workload() model.WorkloadInfo {
