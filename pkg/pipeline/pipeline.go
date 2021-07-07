@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -59,7 +60,11 @@ func NewPipeline(ctx context.Context, tickDuration time.Duration) *Pipeline {
 		for {
 			select {
 			case <-tickCh:
-				p.SendToFirstNode(TickMessage()) //nolint:errcheck
+				err := p.SendToFirstNode(TickMessage()) //nolint:errcheck
+				if err != nil {
+					// Errors here are innocent. It's okay for tick messages to get lost.
+					log.Debug("Error encountered when calling SendToFirstNode", zap.Error(err))
+				}
 			case <-ctx.Done():
 				p.close()
 				return
@@ -103,8 +108,16 @@ func (p *Pipeline) SendToFirstNode(msg *Message) error {
 	if p.isClosed {
 		return cerror.ErrSendToClosedPipeline.GenWithStackByArgs()
 	}
-	// The header channel should never be blocked
-	p.header <- msg
+
+	failpoint.Inject("PipelineSendToFirstNodeTryAgain", func() {
+		failpoint.Return(cerror.ErrPipelineTryAgain.GenWithStackByArgs())
+	})
+
+	select {
+	case p.header <- msg:
+	default:
+		return cerror.ErrPipelineTryAgain.GenWithStackByArgs()
+	}
 	return nil
 }
 
