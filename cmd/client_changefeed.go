@@ -447,6 +447,10 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if id == "" {
 				id = uuid.New().String()
 			}
+			// validate the changefeedID first
+			if err := model.ValidateChangefeedID(id); err != nil {
+				return err
+			}
 
 			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential())
 			if err != nil {
