@@ -17,6 +17,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/cenkalti/backoff"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	"google.golang.org/grpc/codes"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -122,6 +126,12 @@ func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.Revoke(ctx, id)
+		if inErr == nil {
+			return nil
+		} else if etcdErr := inErr.(rpctypes.EtcdError); etcdErr.Code() == codes.NotFound {
+			// it means the etcd lease is already expired or revoked
+			return backoff.Permanent(inErr)
+		}
 		return inErr
 	})
 	return
