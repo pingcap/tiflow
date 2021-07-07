@@ -1015,13 +1015,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, defaultDMLMaxRetryTime, bucket); err != nil {
-		ts := make([]uint64, 0, len(rows))
-		for _, row := range rows {
-			if len(ts) == 0 || ts[len(ts)-1] != row.CommitTs {
-				ts = append(ts, row.CommitTs)
-			}
-		}
-		log.Error("execute DMLs failed", zap.String("err", err.Error()), zap.Uint64s("ts", ts))
+		log.Error("execute DMLs failed", zap.String("err", err.Error()))
 		return errors.Trace(err)
 	}
 	return nil
