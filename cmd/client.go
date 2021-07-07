@@ -176,7 +176,7 @@ func newCliCommand() *cobra.Command {
 			})
 			if err != nil {
 				// PD embeds an etcd server.
-				return errors.Annotatef(err, "fail to open PD etcd client, pd-addr=\"%s\"", cliPdAddr)
+				return errors.Annotatef(err, "fail to open PD etcd client, pd=\"%s\"", cliPdAddr)
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(defaultContext, etcdCli)
 			pdCli, err = pd.NewClientWithContext(
