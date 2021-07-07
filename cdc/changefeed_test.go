@@ -132,6 +132,7 @@ func (s *changefeedSuite) TestHandleMoveTableJobs(c *check.C) {
 
 func (s *changefeedSuite) TestUpdatePartition(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 
 	cf := changeFeed{
 		partitions: map[model.TableID][]int64{
