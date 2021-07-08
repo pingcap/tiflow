@@ -63,7 +63,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	pendingSet := make(map[*flushTask]*model.PolymorphicEvent)
 
 	defer func() {
-		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
+		log.Debug("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
 		taskBuf.setClosed()
 		// cancel pending async IO operations.
 		onExit()
