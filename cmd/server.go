@@ -93,8 +93,11 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	}
 
 	cancel := initCmd(cmd, &logutil.Config{
-		File:  conf.LogFile,
-		Level: conf.LogLevel,
+		File:           conf.LogFile,
+		Level:          conf.LogLevel,
+		FileMaxSize:    conf.Log.File.MaxSize,
+		FileMaxDays:    conf.Log.File.MaxDays,
+		FileMaxBackups: conf.Log.File.MaxBackups,
 	})
 	defer cancel()
 	tz, err := util.GetTimezone(conf.TZ)

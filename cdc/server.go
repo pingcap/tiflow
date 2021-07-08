@@ -152,6 +152,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	kv.InitWorkerPool()
 	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
 	if err != nil {
 		return errors.Trace(err)
@@ -231,7 +232,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			}
 			err2 := s.capture.Resign(ctx)
 			if err2 != nil {
-				// if regisn owner failed, return error to let capture exits
+				// if resign owner failed, return error to let capture exits
 				return errors.Annotatef(err2, "resign owner failed, capture: %s", captureID)
 			}
 			log.Warn("run owner failed", zap.Error(err))
@@ -316,6 +317,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return sorter.RunWorkerPool(cctx)
+	})
+
+	wg.Go(func() error {
+		return kv.RunWorkerPool(cctx)
 	})
 
 	return wg.Wait()
