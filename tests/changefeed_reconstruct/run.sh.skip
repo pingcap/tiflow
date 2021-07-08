@@ -66,10 +66,11 @@ function run() {
     echo "capture_id:" $capture_id
 
     # check table has been dispatched to new capture
-    ensure $MAX_RETRIES check_processor_table_count $pd_addr $changefeed_id $capture_id 1
+    # NOTICE: Since we have synchronized 8 tables related to user information, the total here is 9 tables.
+    ensure $MAX_RETRIES check_processor_table_count $pd_addr $changefeed_id $capture_id 9
     run_sql "DROP DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # check table has been removed from processor
-    ensure $MAX_RETRIES check_processor_table_count $pd_addr $changefeed_id $capture_id 0
+    ensure $MAX_RETRIES check_processor_table_count $pd_addr $changefeed_id $capture_id 8
 
     run_sql "CREATE DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_reconstruct
