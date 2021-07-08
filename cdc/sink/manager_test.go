@@ -92,8 +92,15 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
-		tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+		}()
 	}
+	wg.Wait()
+	wg = sync.WaitGroup{}
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		tableSink := tableSinks[i]
