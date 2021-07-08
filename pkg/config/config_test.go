@@ -88,7 +88,7 @@ func (s *serverConfigSuite) TestMarshal(c *check.C) {
 	conf.Sorter.ChunkSizeLimit = 999
 	b, err := conf.Marshal()
 	c.Assert(err, check.IsNil)
-  
+
 	c.Assert(b, check.Equals, rawConfig)
 	conf2 := new(ServerConfig)
 	err = conf2.Unmarshal([]byte(rawConfig))
