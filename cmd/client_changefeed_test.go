@@ -62,7 +62,7 @@ enable-old-value = false
 	c.Assert(err, check.NotNil)
 
 	sortDir = ""
-	sinkURI = "blackhole:///?protocol=maxwell"
+	sinkURI = "blackhole:///"
 	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
 	c.Assert(err, check.IsNil)
 }
