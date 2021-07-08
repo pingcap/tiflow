@@ -22,6 +22,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/failpoint"
+
+	"go.uber.org/zap/zapcore"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -121,6 +125,15 @@ func (b *bankReactor) Tick(ctx context.Context, state ReactorState) (nextState R
 
 func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 	defer testleak.AfterTest(c)()
+	c.Skip("skip bank for now")
+	defer testleak.AfterTest(c)()
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
+	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/orchestrator/injectForceUseBigTxn", "50%return(true)")
+	c.Assert(err, check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/ticdc/pkg/orchestrator/injectForceUseBigTxn") //nolint:errcheck
+
 	totalAccountNumber := 25
 	workerNumber := 10
 	var wg sync.WaitGroup

@@ -199,6 +199,7 @@ var (
 	ErrEtcdSessionDone = errors.Normalize("the etcd session is done", errors.RFCCodeText("CDC:ErrEtcdSessionDone"))
 	// ErrReactorFinished is used by reactor to signal a **normal** exit.
 	ErrReactorFinished = errors.Normalize("the reactor has done its job and should no longer be executed", errors.RFCCodeText("CDC:ErrReactorFinished"))
+	ErrEtcdMockCrash   = errors.Normalize("used to mock a process crash while executing EtcdWorker. Internal use only", errors.RFCCodeText("CDC:ErrEtcdMockCrash"))
 	ErrLeaseTimeout    = errors.Normalize("owner lease timeout", errors.RFCCodeText("CDC:ErrLeaseTimeout"))
 	ErrLeaseExpired    = errors.Normalize("owner lease expired ", errors.RFCCodeText("CDC:ErrLeaseExpired"))
 
