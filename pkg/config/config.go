@@ -200,7 +200,7 @@ type ServerConfig struct {
 	LogFile  string     `toml:"log-file" json:"log-file"`
 	LogLevel string     `toml:"log-level" json:"log-level"`
 	Log      *LogConfig `toml:"log" json:"log"`
-  DataDir  string `toml:"data-dir" json:"data-dir"`
+	DataDir  string     `toml:"data-dir" json:"data-dir"`
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
