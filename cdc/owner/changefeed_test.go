@@ -214,7 +214,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockAsyncSink := cf.sink.(*mockAsyncSink)
 	// three tick to make sure all barriers set in initialize is handled
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs-1)
 
 	// handle create database
 	job := helper.DDL2Job("create database test1")
@@ -222,14 +222,14 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs-1)
 	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "create database test1")
 
 	// executing the ddl finished
 	mockAsyncSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs-1)
 
 	// handle create table
 	job = helper.DDL2Job("create table test1.test1(id int primary key)")
@@ -237,7 +237,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs-1)
 	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "create table test1.test1(id int primary key)")
 
 	// executing the ddl finished
