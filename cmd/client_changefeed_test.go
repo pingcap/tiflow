@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/spf13/cobra"
 )
@@ -52,12 +51,6 @@ enable-old-value = false
 	sinkURI = ""
 	_, err = verifyChangefeedParameters(ctx, cmd, true /* isCreate */, nil, nil)
 	c.Assert(err, check.NotNil)
-
-	sinkURI = "blackhole:///"
-	info, err = verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil, []*model.CaptureInfo{{Version: "4.0.0"}})
-	c.Assert(err, check.IsNil)
-	c.Assert(info.Config.EnableOldValue, check.IsFalse)
-	c.Assert(info.Engine, check.Equals, model.SortInMemory)
 
 	sortDir = "/tidb/data"
 	pdCli = &mockPDClient{}
