@@ -344,6 +344,12 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 	return &clone
 }
 
+// TableStatus records the task information of a table
+type TableStatus struct {
+	ReplicaInfo *TableReplicaInfo `json:"replica-info"`
+	Operation   *TableOperation   `json:"operation,omitempty"`
+}
+
 // CaptureID is the type for capture ID
 type CaptureID = string
 

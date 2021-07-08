@@ -91,6 +91,14 @@ func (s *etcdkeySuite) TestEtcdKey(c *check.C) {
 			ChangefeedID: "test-changefeed",
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
+	}, {
+		key: "/tidb/cdc/task/table/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed/2",
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeTableStatus,
+			ChangefeedID: "test-changefeed",
+			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
+			TableID:      2,
+		},
 	}}
 	for _, tc := range testcases {
 		k := new(CDCKey)

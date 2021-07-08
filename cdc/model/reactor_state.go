@@ -77,6 +77,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		etcd.CDCKeyTypeChangeFeedStatus,
 		etcd.CDCKeyTypeTaskPosition,
 		etcd.CDCKeyTypeTaskStatus,
+		etcd.CDCKeyTypeTableStatus,
 		etcd.CDCKeyTypeTaskWorkload:
 		changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 		if !exist {
@@ -118,6 +119,17 @@ type ChangefeedReactorState struct {
 	TaskStatuses  map[CaptureID]*TaskStatus
 	Workloads     map[CaptureID]TaskWorkload
 
+	// Physical statuses represent the actual data stored in Etcd.
+	physicalTaskStatuses  map[CaptureID]*TaskStatus
+	physicalTableStatuses map[CaptureID]map[TableID]*TableStatus
+
+	// shadowTaskStatuses are temporary data structures used to emulate the in-memory
+	// cache of KV pairs in EtcdWorker. They are cleared after each tick.
+	shadowTaskStatuses map[CaptureID]*TaskStatus
+	// To save computations, shadowTaskStatusesInUse is used to track which CaptureID has a valid
+	// shadowTaskStatus.
+	shadowTaskStatusesInUse map[CaptureID]struct{}
+
 	pendingPatches        []orchestrator.DataPatch
 	skipPatchesInThisTick bool
 }
@@ -129,6 +141,12 @@ func NewChangefeedReactorState(id ChangeFeedID) *ChangefeedReactorState {
 		TaskPositions: make(map[CaptureID]*TaskPosition),
 		TaskStatuses:  make(map[CaptureID]*TaskStatus),
 		Workloads:     make(map[CaptureID]TaskWorkload),
+
+		physicalTaskStatuses:  make(map[CaptureID]*TaskStatus),
+		physicalTableStatuses: make(map[CaptureID]map[TableID]*TableStatus),
+
+		shadowTaskStatuses:      make(map[CaptureID]*TaskStatus),
+		shadowTaskStatusesInUse: make(map[CaptureID]struct{}),
 	}
 }
 
@@ -146,7 +164,7 @@ func (s *ChangefeedReactorState) Update(key util.EtcdKey, value []byte, _ bool) 
 }
 
 // UpdateCDCKey updates the state by a parsed etcd key
-func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) error {
+func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) (err error) {
 	var e interface{}
 	switch key.Tp {
 	case etcd.CDCKeyTypeChangefeedInfo:
@@ -184,13 +202,46 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		if key.ChangefeedID != s.ID {
 			return nil
 		}
+		defer func() {
+			if err == nil {
+				s.refreshTaskStatusAdminJob(key.CaptureID)
+			}
+		}()
 		if value == nil {
-			delete(s.TaskStatuses, key.CaptureID)
+			delete(s.physicalTaskStatuses, key.CaptureID)
 			return nil
 		}
 		status := new(TaskStatus)
-		s.TaskStatuses[key.CaptureID] = status
+		s.physicalTaskStatuses[key.CaptureID] = status
 		e = status
+	case etcd.CDCKeyTypeTableStatus:
+		if key.ChangefeedID != s.ID {
+			return nil
+		}
+		if key.TableID == 0 {
+			log.Panic("unexpected tableID 0")
+		}
+		defer func() {
+			if err == nil {
+				s.refreshTaskStatus(key.CaptureID, key.TableID)
+			}
+		}()
+		if value == nil {
+			if s.physicalTableStatuses[key.CaptureID] == nil {
+				log.Panic("unexpected reactor internal state")
+			}
+			delete(s.physicalTableStatuses[key.CaptureID], key.TableID)
+			if len(s.physicalTableStatuses) == 0 {
+				s.physicalTableStatuses = nil
+			}
+			return nil
+		}
+		if s.physicalTableStatuses[key.CaptureID] == nil {
+			s.physicalTableStatuses[key.CaptureID] = make(map[TableID]*TableStatus)
+		}
+		tableStatus := new(TableStatus)
+		s.physicalTableStatuses[key.CaptureID][key.TableID] = tableStatus
+		e = tableStatus
 	case etcd.CDCKeyTypeTaskWorkload:
 		if key.ChangefeedID != s.ID {
 			return nil
@@ -216,6 +267,58 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 	return nil
 }
 
+func (s *ChangefeedReactorState) refreshTaskStatusAdminJob(captureID CaptureID) {
+	if s.physicalTaskStatuses[captureID] == nil {
+		delete(s.TaskStatuses, captureID)
+		return
+	}
+
+	if s.TaskStatuses[captureID] == nil {
+		s.TaskStatuses[captureID] = new(TaskStatus)
+	}
+	s.TaskStatuses[captureID].AdminJobType = s.physicalTaskStatuses[captureID].AdminJobType
+}
+
+func (s *ChangefeedReactorState) refreshTaskStatus(captureID CaptureID, tableID TableID) {
+	log.Debug("refreshTaskStatus", zap.String("capture-id", captureID), zap.Int64("table-id", tableID))
+	// handle deletion
+	if s.physicalTableStatuses[captureID] == nil || s.physicalTableStatuses[captureID][tableID] == nil {
+		if s.TaskStatuses[captureID] != nil {
+			if s.TaskStatuses[captureID].Tables != nil {
+				delete(s.TaskStatuses[captureID].Tables, tableID)
+			}
+			if s.TaskStatuses[captureID].Operation != nil {
+				delete(s.TaskStatuses[captureID].Operation, tableID)
+			}
+		}
+		return
+	}
+	tableStatus := s.physicalTableStatuses[captureID][tableID]
+	if s.TaskStatuses[captureID] == nil {
+		s.TaskStatuses[captureID] = new(TaskStatus)
+	}
+	if tableStatus.ReplicaInfo != nil {
+		if s.TaskStatuses[captureID].Tables == nil {
+			s.TaskStatuses[captureID].Tables = make(map[TableID]*TableReplicaInfo)
+		}
+		s.TaskStatuses[captureID].Tables[tableID] = tableStatus.ReplicaInfo.Clone()
+	} else {
+		if s.TaskStatuses[captureID].Tables != nil {
+			delete(s.TaskStatuses[captureID].Tables, tableID)
+		}
+	}
+	if tableStatus.Operation != nil {
+		if s.TaskStatuses[captureID].Operation == nil {
+			s.TaskStatuses[captureID].Operation = make(map[TableID]*TableOperation)
+		}
+		s.TaskStatuses[captureID].Operation[tableID] = tableStatus.Operation.Clone()
+	} else {
+		if s.TaskStatuses[captureID].Operation != nil {
+			delete(s.TaskStatuses[captureID].Operation, tableID)
+		}
+	}
+}
+
 // Exist returns false if all keys of this changefeed in ETCD is not exist
 func (s *ChangefeedReactorState) Exist() bool {
 	return s.Info != nil || s.Status != nil || len(s.TaskPositions) != 0 || len(s.TaskStatuses) != 0 || len(s.Workloads) != 0
@@ -234,6 +337,10 @@ func (s *ChangefeedReactorState) GetPatches() [][]orchestrator.DataPatch {
 func (s *ChangefeedReactorState) getPatches() []orchestrator.DataPatch {
 	pendingPatches := s.pendingPatches
 	s.pendingPatches = nil
+	if len(s.shadowTaskStatusesInUse) != 0 {
+		s.shadowTaskStatusesInUse = make(map[CaptureID]struct{})
+		s.shadowTaskStatuses = make(map[CaptureID]*TaskStatus)
+	}
 	return pendingPatches
 }
 
@@ -332,18 +439,146 @@ func (s *ChangefeedReactorState) PatchTaskPosition(captureID CaptureID, fn func(
 
 // PatchTaskStatus appends a DataPatch which can modify the TaskStatus of a specified capture
 func (s *ChangefeedReactorState) PatchTaskStatus(captureID CaptureID, fn func(*TaskStatus) (*TaskStatus, bool, error)) {
-	key := &etcd.CDCKey{
-		Tp:           etcd.CDCKeyTypeTaskStatus,
-		CaptureID:    captureID,
-		ChangefeedID: s.ID,
-	}
-	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, bool, error) {
-		// e == nil means that the key is not exist before this patch
-		if e == nil {
-			return fn(nil)
+	if _, ok := s.shadowTaskStatusesInUse[captureID]; !ok {
+		if s.TaskStatuses[captureID] != nil {
+			s.shadowTaskStatuses[captureID] = s.TaskStatuses[captureID].Clone()
 		}
-		return fn(e.(*TaskStatus))
-	})
+		s.shadowTaskStatusesInUse[captureID] = struct{}{}
+	}
+	pre := s.shadowTaskStatuses[captureID]
+	var preCloned *TaskStatus
+	if pre != nil {
+		preCloned = pre.Clone()
+	}
+	post, changed, err := fn(pre)
+	pre = preCloned
+	s.shadowTaskStatuses[captureID] = post
+	if err != nil {
+		// Throws error in this complicated way for backward compatibility
+		key := &etcd.CDCKey{
+			Tp:           etcd.CDCKeyTypeTaskStatus,
+			CaptureID:    captureID,
+			ChangefeedID: s.ID,
+		}
+		patch := &orchestrator.SingleDataPatch{
+			Key: util.NewEtcdKey(key.String()),
+			Func: func(v []byte) ([]byte, bool, error) {
+				return nil, false, err
+			},
+		}
+		s.pendingPatches = append(s.pendingPatches, patch)
+		return
+	}
+
+	if !changed {
+		return
+	}
+
+	if (pre == nil && post != nil) || (pre != nil && (post == nil || post.AdminJobType != pre.AdminJobType)) {
+		key := &etcd.CDCKey{
+			Tp:           etcd.CDCKeyTypeTaskStatus,
+			CaptureID:    captureID,
+			ChangefeedID: s.ID,
+		}
+		s.patchAny(key.String(), taskStatusTPI, func(i interface{}) (interface{}, bool, error) {
+			if post == nil {
+				return post, pre != nil, nil
+			}
+			if pre == nil {
+				return &TaskStatus{
+					AdminJobType: post.AdminJobType,
+				}, true, nil
+			}
+			pre := i.(*TaskStatus)
+			changed := pre.AdminJobType != post.AdminJobType
+			pre.AdminJobType = post.AdminJobType
+			return pre, changed, nil
+		})
+	}
+
+	updatedTableStatuses := make(map[TableID]struct{})
+	if pre != nil {
+		// Checks for updates and deletions
+		for tableID, preStatus := range pre.Tables {
+			if post == nil || post.Tables == nil || post.Tables[tableID] == nil {
+				// deleted
+				updatedTableStatuses[tableID] = struct{}{}
+				continue
+			}
+			if post.Tables[tableID].StartTs != preStatus.StartTs || post.Tables[tableID].MarkTableID != preStatus.MarkTableID {
+				// updated
+				updatedTableStatuses[tableID] = struct{}{}
+				continue
+			}
+		}
+		for tableID, preOperation := range pre.Operation {
+			if post == nil || post.Operation == nil || post.Operation[tableID] == nil {
+				// deleted
+				updatedTableStatuses[tableID] = struct{}{}
+				continue
+			}
+			if post.Operation[tableID].Delete != preOperation.Delete ||
+				post.Operation[tableID].Done != preOperation.Done ||
+				post.Operation[tableID].Status != preOperation.Status ||
+				post.Operation[tableID].BoundaryTs != preOperation.BoundaryTs ||
+				post.Operation[tableID].Flag != preOperation.Flag {
+
+				// updated
+				updatedTableStatuses[tableID] = struct{}{}
+				continue
+			}
+		}
+	}
+
+	if post != nil {
+		// Checks for additions
+		for tableID := range post.Tables {
+			if pre == nil || pre.Tables == nil {
+				updatedTableStatuses[tableID] = struct{}{}
+				continue
+			}
+			if _, ok := pre.Tables[tableID]; !ok {
+				updatedTableStatuses[tableID] = struct{}{}
+			}
+		}
+		for tableID := range post.Operation {
+			if pre == nil || pre.Operation == nil {
+				updatedTableStatuses[tableID] = struct{}{}
+				continue
+			}
+			if _, ok := pre.Operation[tableID]; !ok {
+				updatedTableStatuses[tableID] = struct{}{}
+			}
+		}
+	}
+
+	for tableID := range updatedTableStatuses {
+		tableID := tableID
+		key := &etcd.CDCKey{
+			Tp:           etcd.CDCKeyTypeTableStatus,
+			ChangefeedID: s.ID,
+			CaptureID:    captureID,
+			TableID:      tableID,
+		}
+		s.patchAny(key.String(), tableStatusTPI, func(i interface{}) (interface{}, bool, error) {
+			var preStatus *TableStatus
+			if i != nil {
+				preStatus = i.(*TableStatus)
+			}
+
+			postStatus := new(TableStatus)
+			if post != nil && post.Tables != nil && post.Tables[tableID] != nil {
+				postStatus.ReplicaInfo = post.Tables[tableID].Clone()
+			}
+			if post != nil && post.Operation != nil && post.Operation[tableID] != nil {
+				postStatus.Operation = post.Operation[tableID].Clone()
+			}
+			if postStatus.Operation == nil && postStatus.ReplicaInfo == nil {
+				postStatus = nil
+			}
+			return postStatus, !reflect.DeepEqual(postStatus, preStatus), nil
+		})
+	}
 }
 
 // PatchTaskWorkload appends a DataPatch which can modify the TaskWorkload of a specified capture
@@ -365,6 +600,7 @@ func (s *ChangefeedReactorState) PatchTaskWorkload(captureID CaptureID, fn func(
 var (
 	taskPositionTPI     *TaskPosition
 	taskStatusTPI       *TaskStatus
+	tableStatusTPI      *TableStatus
 	taskWorkloadTPI     *TaskWorkload
 	changefeedStatusTPI *ChangeFeedStatus
 	changefeedInfoTPI   *ChangeFeedInfo
