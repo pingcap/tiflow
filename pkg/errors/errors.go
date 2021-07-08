@@ -53,6 +53,7 @@ var (
 	ErrCachedTSONotExists     = errors.Normalize("GetCachedCurrentVersion: cache entry does not exist", errors.RFCCodeText("CDC:ErrCachedTSONotExists"))
 	ErrGetStoreSnapshot       = errors.Normalize("get snapshot failed", errors.RFCCodeText("CDC:ErrGetStoreSnapshot"))
 	ErrNewStore               = errors.Normalize("new store failed", errors.RFCCodeText("CDC:ErrNewStore"))
+	ErrRegionWorkerExit       = errors.Normalize("region worker exited", errors.RFCCodeText("CDC:ErrRegionWorkerExit"))
 
 	// rule related errors
 	ErrEncodeFailed      = errors.Normalize("encode failed: %s", errors.RFCCodeText("CDC:ErrEncodeFailed"))
