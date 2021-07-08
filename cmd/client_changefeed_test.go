@@ -32,7 +32,6 @@ func (s *clientChangefeedSuite) TestVerifyChangefeedParams(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := &cobra.Command{}
-	changefeedConfigVariables(cmd)
 
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
@@ -52,6 +51,8 @@ enable-old-value = false
 	_, err = verifyChangefeedParameters(ctx, cmd, true /* isCreate */, nil, nil)
 	c.Assert(err, check.NotNil)
 
+	c.Assert(info.Config.EnableOldValue, check.IsTrue)
+
 	sortDir = "/tidb/data"
 	pdCli = &mockPDClient{}
 	disableGCSafePointCheck = true
@@ -61,6 +62,7 @@ enable-old-value = false
 	c.Assert(err, check.NotNil)
 
 	sortDir = ""
+	sinkURI = "blackhole:///?protocol=maxwell"
 	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, nil)
 	c.Assert(err, check.IsNil)
 }
