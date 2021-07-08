@@ -119,8 +119,8 @@ func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool, err error) {
 		s.moveTableTargets[job.tableID] = job.target
 		job := job
 		shouldUpdateState = false
-		// for all move table job, this just remove the table from the source capture.
-		// and the removed table by this function will be added to target function by syncTablesWithCurrentTables in the next tick.
+		// for all move table job, here just remove the table from the source capture.
+		// and the table removed by this function will be added to target capture by syncTablesWithCurrentTables in the next tick.
 		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
 				// the capture may be down, just skip remove this table
