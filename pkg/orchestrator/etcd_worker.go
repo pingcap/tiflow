@@ -75,7 +75,7 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 		prefix:      prefixNormalied,
 		barrierRev:  -1, // -1 indicates no barrier
 		txnManager:  newTxnObserver(prefixNormalied),
-		forceBigTxn: true, // for running CI only, TODO revert to false
+		forceBigTxn: false,
 	}, nil
 }
 
