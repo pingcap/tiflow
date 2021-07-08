@@ -18,7 +18,10 @@ import (
 	"fmt"
 	"math"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
@@ -238,6 +241,7 @@ func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts, isMoveTable bool) (
 		return nil, false
 	}
 	delete(ts.Tables, id)
+	log.Info("remove a table", zap.Int64("table-id", id))
 	if ts.Operation == nil {
 		ts.Operation = make(map[TableID]*TableOperation)
 	}
@@ -262,6 +266,7 @@ func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs T
 		return
 	}
 	ts.Tables[id] = table
+	log.Info("add a table", zap.Int64("table-id", id))
 	if ts.Operation == nil {
 		ts.Operation = make(map[TableID]*TableOperation)
 	}

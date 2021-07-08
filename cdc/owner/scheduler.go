@@ -147,13 +147,13 @@ func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, err
 	for captureID, taskStatus := range s.state.TaskStatuses {
 		for tableID := range taskStatus.Tables {
 			if preCaptureID, exist := table2CaptureIndex[tableID]; exist && preCaptureID != captureID {
-				return nil, cerror.ErrTableListenReplicated.GenWithStackByArgs(preCaptureID, captureID)
+				return nil, cerror.ErrTableListenReplicated.GenWithStackByArgs(tableID, preCaptureID, captureID)
 			}
 			table2CaptureIndex[tableID] = captureID
 		}
 		for tableID := range taskStatus.Operation {
 			if preCaptureID, exist := table2CaptureIndex[tableID]; exist && preCaptureID != captureID {
-				return nil, cerror.ErrTableListenReplicated.GenWithStackByArgs(preCaptureID, captureID)
+				return nil, cerror.ErrTableListenReplicated.GenWithStackByArgs(tableID, preCaptureID, captureID)
 			}
 			table2CaptureIndex[tableID] = captureID
 		}
@@ -253,7 +253,6 @@ func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
 			// the table is being removed, skip
 			continue
 		}
-		log.Info("")
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:            schedulerJobTypeRemoveTable,
 			TableID:       tableID,
