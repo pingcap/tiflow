@@ -214,7 +214,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
 	}
