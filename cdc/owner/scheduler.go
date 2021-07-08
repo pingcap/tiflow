@@ -224,8 +224,8 @@ func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 	}
 }
 
-// syncTablesWithCurrentTables iterates all current tables and check whether all the table has been listened.
-// if not, this function will return scheduler jobs to make sure all the table will be listened.
+// syncTablesWithCurrentTables iterates all current tables to check whether it should be listened or not.
+// this function will return schedulerJob to make sure all tables will be listened.
 func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
 	var pendingJob []*schedulerJob
 	allTableListeningNow, err := s.table2CaptureIndex()
@@ -239,11 +239,10 @@ func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
 			continue
 		}
 		// For each table which should be listened but is not, add an adding-table job to the pending job list
-		boundaryTs := globalCheckpointTs
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:         schedulerJobTypeAddTable,
 			TableID:    tableID,
-			BoundaryTs: boundaryTs,
+			BoundaryTs: globalCheckpointTs,
 		})
 	}
 	// The remaining tables are the tables which should be not listened
@@ -254,6 +253,7 @@ func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
 			// the table is being removed, skip
 			continue
 		}
+		log.Info("")
 		pendingJob = append(pendingJob, &schedulerJob{
 			Tp:            schedulerJobTypeRemoveTable,
 			TableID:       tableID,
