@@ -281,12 +281,12 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 			return
 		}
-	}
-
-	if s.captureV2 == nil {
-		// for test only
-		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
-		return
+	} else {
+		if s.captureV2 == nil {
+			// for test only
+			handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+			return
+		}
 	}
 
 	err := req.ParseForm()
