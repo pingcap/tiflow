@@ -166,7 +166,7 @@ func (s *changefeedSuite) TestInitialize(c *check.C) {
 	// initialize
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs-1)
+	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
 }
 
 func (s *changefeedSuite) TestHandleError(c *check.C) {
@@ -186,7 +186,7 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	// handle error
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs-1)
+	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
 	c.Assert(state.Info.Error.Message, check.Equals, "fake error")
 }
 

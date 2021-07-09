@@ -71,7 +71,7 @@ func (d *termDictionary) encodeNullable(s *string) int64 {
 	if s == nil {
 		return nullInt64
 	}
-	return int64(d.encode(*s))
+	return d.encode(*s)
 }
 
 func (d *termDictionary) encode(s string) int64 {
@@ -424,7 +424,7 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) 
 		groups[idx] = group
 		estimatedSize += size
 	}
-	return estimatedSize, rowChangedEvent(groups)
+	return estimatedSize, groups
 }
 
 // RowChangedEventBuffer is a buffer to save row changed events in batch
