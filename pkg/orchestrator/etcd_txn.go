@@ -49,8 +49,9 @@ type EtcdWorkerTxn struct {
 // EtcdWorkerLock is the struct for Etcd metadata used to record locks used
 // to implement Etcd big transactions.
 type EtcdWorkerLock struct {
-	StartRevision int64 `json:"start_revision"`
-	OwnerID       int64 `json:"owner_id"`
+	StartRevision int64  `json:"start_revision"`
+	OwnerID       int64  `json:"owner_id"`
+	OldValue      []byte `json:"old_value"`
 
 	// for internal use only
 	heapIndex    int
@@ -81,7 +82,8 @@ func (o *txnObserver) addLock(modifiedKey util.EtcdKey, lock *EtcdWorkerLock) {
 func (o *txnObserver) deleteLock(modifiedKey util.EtcdKey) {
 	lock, ok := o.lockMap[modifiedKey]
 	if !ok {
-		log.Panic("Lock not found", zap.String("key", modifiedKey.String()))
+		log.Warn("Lock not found", zap.String("key", modifiedKey.String()))
+		return
 	}
 	heap.Remove(&o.heap, lock.heapIndex)
 	delete(o.lockMap, modifiedKey)
@@ -176,15 +178,7 @@ func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client)
 			log.Debug("etcd big txn: lock rollback",
 				zap.String("lock-key", lockKey.String()),
 				zap.Int64("owner-id", lock.OwnerID))
-			resp, err := client.Get(ctx, key.String(), clientv3.WithRev(lock.StartRevision))
-			if err != nil {
-				return errors.Trace(err)
-			}
-			var oldValue []byte
-			if len(resp.Kvs) == 1 {
-				oldValue = resp.Kvs[0].Value
-			}
-
+			oldValue := lock.OldValue
 			var op clientv3.Op
 			if oldValue != nil {
 				op = clientv3.OpPut(key.String(), string(oldValue))

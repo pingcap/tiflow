@@ -518,6 +518,7 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 		lock := &EtcdWorkerLock{
 			StartRevision: worker.revision,
 			OwnerID:       worker.clientID,
+			OldValue:      prev,
 		}
 		newLockBytes, err := json.Marshal(lock)
 		if err != nil {
