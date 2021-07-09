@@ -100,7 +100,6 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 		}()
 	}
 	wg.Wait()
-	wg = sync.WaitGroup{}
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		tableSink := tableSinks[i]
