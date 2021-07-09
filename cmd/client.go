@@ -137,13 +137,11 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
-			if tlsConfig != nil {
-				if strings.Contains(cliPdAddr, "http://") {
-					return errors.New("PD endpoint scheme should be https")
-				}
-			} else if !strings.Contains(cliPdAddr, "http://") {
-				return errors.New("PD endpoint scheme should be http")
+
+			if err := verifyPdEndpoint(cliPdAddr, tlsConfig != nil); err != nil {
+				return errors.Trace(err)
 			}
+
 			grpcTLSOption, err := credential.ToGRPCDialOption()
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
