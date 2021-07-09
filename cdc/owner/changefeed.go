@@ -316,8 +316,8 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
-		if ddlJob == nil || ddlResolvedTs != barrierTs+1 {
-			c.barriers.Update(ddlJobBarrier, ddlResolvedTs-1)
+		if ddlJob == nil || ddlResolvedTs != barrierTs {
+			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}
 		if !blocked {
@@ -332,7 +332,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		}
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
-		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs-1)
+		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
 
 	case syncPointBarrier:
 		if !blocked {
