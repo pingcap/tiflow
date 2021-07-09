@@ -96,8 +96,11 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	}
 
 	cancel := initCmd(cmd, &logutil.Config{
-		File:  conf.LogFile,
-		Level: conf.LogLevel,
+		File:           conf.LogFile,
+		Level:          conf.LogLevel,
+		FileMaxSize:    conf.Log.File.MaxSize,
+		FileMaxDays:    conf.Log.File.MaxDays,
+		FileMaxBackups: conf.Log.File.MaxBackups,
 	})
 	defer cancel()
 	tz, err := util.GetTimezone(conf.TZ)
@@ -203,12 +206,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		return nil, cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
 	for _, ep := range strings.Split(serverPdAddr, ",") {
-		if conf.Security.IsTLSEnabled() {
-			if strings.Index(ep, "http://") == 0 {
-				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
-			}
-		} else if strings.Index(ep, "http://") != 0 {
-			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
+		if err := verifyPdEndpoint(ep, conf.Security.IsTLSEnabled()); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
 		}
 	}
 
