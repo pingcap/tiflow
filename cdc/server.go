@@ -391,15 +391,32 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
+	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
+	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
+	cli := s.etcdClient
+	if cli == nil {
+		client, err := clientv3.New(clientv3.Config{
+			Endpoints:   s.pdEndpoints,
+			Context:     ctx,
+			DialTimeout: 5 * time.Second,
+		})
+		if err != nil {
+			return err
+		}
+		etcdClient := kv.NewCDCEtcdClient(ctx, client)
+		cli = &etcdClient
+		defer cli.Close()
+	}
+
 	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := s.owner.etcdClient.GetAllChangeFeedStatus(ctx)
+	allStatus, err := cli.GetAllChangeFeedStatus(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	candidates := make([]string, 0, len(allStatus))
 	for id := range allStatus {
-		info, err := s.owner.etcdClient.GetChangeFeedInfo(ctx, id)
+		info, err := cli.GetChangeFeedInfo(ctx, id)
 		if err != nil {
 			return errors.Trace(err)
 		}
