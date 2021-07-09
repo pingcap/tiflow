@@ -16,6 +16,8 @@ package model
 import (
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/pingcap/ticdc/pkg/etcd"
 
 	"github.com/pingcap/log"
@@ -49,6 +51,8 @@ func (s *stateSuite) TestCheckCaptureAlive(c *check.C) {
 
 func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 	defer testleak.AfterTest(c)()
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
 	createTime, err := time.Parse("2006-01-02", "2020-02-02")
 	c.Assert(err, check.IsNil)
 	testCases := []struct {
@@ -303,6 +307,64 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 					"666777888": {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
 				},
 				Workloads: map[CaptureID]TaskWorkload{},
+			},
+		},
+		{ // test the shim layer for task statuses under edge cases
+			changefeedID: "test1",
+			updateKey: []string{
+				"/tidb/cdc/changefeed/info/test1",
+				"/tidb/cdc/job/test1",
+				"/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				"/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				"/tidb/cdc/task/table/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1/45",
+				"/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				"/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				"/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				"/tidb/cdc/task/table/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1/45",
+				"/tidb/cdc/task/table/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1/45",
+				"/tidb/cdc/task/table/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1/45",
+			},
+			updateValue: []string{
+				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
+				`{"tables":null,"operation":null,"admin-job-type":0}`,
+				`{"replica-info":{"start-ts":421980685886554116,"mark-table-id":0},"operation":null}`,
+				`{"45":{"workload":1}}`,
+				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
+				``,
+				``,
+				`{"replica-info":{"start-ts":421980685886554116,"mark-table-id":0},"operation":null}`,
+				``,
+			},
+			expected: ChangefeedReactorState{
+				ID: "test1",
+				Info: &ChangeFeedInfo{
+					SinkURI:           "blackhole://",
+					Opts:              map[string]string{},
+					CreateTime:        createTime,
+					StartTs:           421980685886554116,
+					Engine:            SortInMemory,
+					State:             "normal",
+					SyncPointInterval: time.Minute * 10,
+					Config: &config.ReplicaConfig{
+						CaseSensitive:    true,
+						CheckGCSafePoint: true,
+						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
+						Mounter:          &config.MounterConfig{WorkerNum: 16},
+						Sink:             &config.SinkConfig{Protocol: "default"},
+						Cyclic:           &config.CyclicConfig{},
+						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
+					},
+				},
+				Status:       &ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+				TaskStatuses: map[CaptureID]*TaskStatus{},
+				TaskPositions: map[CaptureID]*TaskPosition{
+					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
+				},
+				Workloads: map[CaptureID]TaskWorkload{
+					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
+				},
 			},
 		},
 	}

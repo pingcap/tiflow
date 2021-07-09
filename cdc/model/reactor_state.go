@@ -275,6 +275,11 @@ func (s *ChangefeedReactorState) refreshTaskStatusAdminJob(captureID CaptureID) 
 
 	if s.TaskStatuses[captureID] == nil {
 		s.TaskStatuses[captureID] = new(TaskStatus)
+		if len(s.physicalTableStatuses[captureID]) > 0 {
+			for tableID := range s.physicalTableStatuses[captureID] {
+				s.refreshTaskStatus(captureID, tableID)
+			}
+		}
 	}
 	s.TaskStatuses[captureID].AdminJobType = s.physicalTaskStatuses[captureID].AdminJobType
 }
@@ -290,6 +295,9 @@ func (s *ChangefeedReactorState) refreshTaskStatus(captureID CaptureID, tableID 
 			if s.TaskStatuses[captureID].Operation != nil {
 				delete(s.TaskStatuses[captureID].Operation, tableID)
 			}
+		}
+		if len(s.physicalTableStatuses[captureID]) == 0 && s.physicalTaskStatuses[captureID] == nil {
+			delete(s.TaskStatuses, captureID)
 		}
 		return
 	}
