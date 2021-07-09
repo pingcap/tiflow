@@ -30,8 +30,8 @@ type Filter struct {
 	isCyclicEnabled  bool
 }
 
-// NewFilter creates a filter
-func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
+// VerifyRules ...
+func VerifyRules(cfg *config.ReplicaConfig) (filterV2.Filter, error) {
 	var f filterV2.Filter
 	var err error
 	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
@@ -46,6 +46,17 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
+
+	return f, nil
+}
+
+// NewFilter creates a filter
+func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
+	f, err := VerifyRules(cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+	}
+
 	if !cfg.CaseSensitive {
 		f = filterV2.CaseInsensitive(f)
 	}

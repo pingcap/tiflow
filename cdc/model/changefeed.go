@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +48,7 @@ const (
 	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
-	StateRemoved  FeedState = "removed"
+	StateRemoved  FeedState = "removed" // deprecated, will be removed in the next version
 	StateFinished FeedState = "finished"
 )
 
@@ -62,7 +62,7 @@ const (
 	// ErrorHistoryThreshold represents failure upper limit in time window.
 	// Before a changefeed is initialized, check the the failure count of this
 	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
-	ErrorHistoryThreshold = 5
+	ErrorHistoryThreshold = 3
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -78,7 +78,9 @@ type ChangeFeedInfo struct {
 	AdminJobType AdminJobType `json:"admin-job-type"`
 	Engine       SortEngine   `json:"sort-engine"`
 	// SortDir is deprecated
-	SortDir string `json:"-"`
+	// it cannot be set by user in changefeed level, any assignment to it should be ignored.
+	// but can be fetched for backward compatibility
+	SortDir string `json:"sort-dir"`
 
 	Config   *config.ReplicaConfig `json:"config"`
 	State    FeedState             `json:"state"`
@@ -90,13 +92,15 @@ type ChangeFeedInfo struct {
 	CreatorVersion    string        `json:"creator-version"`
 }
 
-var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
+const changeFeedIDMaxLen = 128
+
+var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
 // ValidateChangefeedID returns true if the changefeed ID matches
-// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
-	if !changeFeedIDRe.MatchString(changefeedID) {
-		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs()
+	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
 	}
 	return nil
 }
@@ -129,7 +133,7 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 		return info.StartTs
 	}
 
-	return oracle.EncodeTSO(info.CreateTime.Unix() * 1000)
+	return oracle.GoTimeToTS(info.CreateTime)
 }
 
 // GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
@@ -168,7 +172,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 			return errors.Annotatef(
 				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
-		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	return nil
 }

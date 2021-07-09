@@ -42,9 +42,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
@@ -59,6 +59,12 @@ var (
 var errOwnerNotFound = liberrors.New("owner not found")
 
 var tsGapWarnning int64 = 86400 * 1000 // 1 day in milliseconds
+
+// Endpoint schemes.
+const (
+	HTTP  = "http"
+	HTTPS = "https"
+)
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
@@ -217,11 +223,11 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	return nil
 }
 
-func verifyStartTs(ctx context.Context, startTs uint64) error {
+func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) error {
 	if disableGCSafePointCheck {
 		return nil
 	}
-	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
+	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
 }
 
 func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
@@ -252,9 +258,9 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 	}
 
 	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(int64(tID))
+		tableInfo, exist := snap.TableByID(tID)
 		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", int64(tID))
+			return nil, nil, errors.NotFoundf("table %d", tID)
 		}
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
@@ -292,6 +298,16 @@ func verifySink(
 	default:
 	}
 	return nil
+}
+
+// verifyReplicaConfig do strictDecodeFile check and only verify the rules for now
+func verifyReplicaConfig(path, component string, cfg *config.ReplicaConfig) error {
+	err := strictDecodeFile(path, component, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = filter.VerifyRules(cfg)
+	return err
 }
 
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
@@ -361,6 +377,29 @@ func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64
 		}
 		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 			return errors.NewNoStackError("abort changefeed create or resume")
+		}
+	}
+	return nil
+}
+
+// verifyPdEndpoint verifies whether the pd endpoint is a valid http or https URL.
+// The certificate is required when using https.
+func verifyPdEndpoint(pdEndpoint string, useTLS bool) error {
+	u, err := url.Parse(pdEndpoint)
+	if err != nil {
+		return errors.Annotate(err, "parse PD endpoint")
+	}
+	if (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
+		return errors.New("PD endpoint should be a valid http or https URL")
+	}
+
+	if useTLS {
+		if u.Scheme == HTTP {
+			return errors.New("PD endpoint scheme should be https")
+		}
+	} else {
+		if u.Scheme == HTTPS {
+			return errors.New("PD endpoint scheme is https, please provide certificate")
 		}
 	}
 	return nil

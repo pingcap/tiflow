@@ -18,10 +18,13 @@ import (
 	"log"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/version"
+
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -178,13 +181,15 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 		CaptureInfo: &model.CaptureInfo{
 			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
+			Version:       version.ReleaseVersion,
 		},
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
 			ID: "changefeed-id-test",
 			Info: &model.ChangeFeedInfo{
-				Config: config.GetDefaultReplicaConfig(),
+				StartTs: oracle.GoTimeToTS(time.Now()),
+				Config:  config.GetDefaultReplicaConfig(),
 			},
 		})
 	}

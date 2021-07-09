@@ -41,13 +41,19 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 	c.Assert(err, check.IsNil)
 	s.clientURL = curl
 	s.etcd = e
-	go func() {
-		c.Log(<-e.Err())
-	}()
 }
 
 func (s *etcdSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
+logEtcdError:
+	for {
+		select {
+		case err := <-s.etcd.Err():
+			c.Logf("etcd server error: %v", err)
+		default:
+			break logEtcdError
+		}
+	}
 }
 
 func (s *etcdSuite) TestEmbedEtcd(c *check.C) {

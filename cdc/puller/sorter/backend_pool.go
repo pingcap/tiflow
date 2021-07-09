@@ -112,16 +112,26 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 
 			// update memPressure
 			m, err := memory.Get()
+
+			failpoint.Inject("getMemoryPressureFails", func() {
+				m = nil
+				err = errors.New("injected get memory pressure failure")
+			})
+
 			if err != nil {
 				failpoint.Inject("sorterDebug", func() {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
 				})
 
 				log.Warn("unified sorter: getting system memory usage failed", zap.Error(err))
+				// Reports a 100% memory pressure, so that the backEndPool will allocate fileBackEnds.
+				// We default to fileBackEnds because they are unlikely to cause OOMs. If IO errors are
+				// encountered, we can fail gracefully.
+				atomic.StoreInt32(&ret.memPressure, 100)
+			} else {
+				memPressure := m.Used * 100 / m.Total
+				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			}
-
-			memPressure := m.Used * 100 / m.Total
-			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 
 			if memPressure := ret.memoryPressure(); memPressure > 50 {
 				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
@@ -148,7 +158,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				if err != nil {
 					log.Warn("Cannot remove temporary file for sorting", zap.String("file", backEnd.fileName), zap.Error(err))
 				} else {
-					log.Info("Temporary file removed", zap.String("file", backEnd.fileName))
+					log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
 					freedCount += 1
 				}
 				if freedCount >= 16 {
@@ -192,6 +202,10 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		zap.String("filename", fname),
 		zap.Int64("table-id", tableID),
 		zap.String("table-name", tableName))
+
+	if err := util.CheckDataDirSatisfied(); err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
@@ -357,7 +371,7 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 	}
 
 	for _, toRemoveFilePath := range files {
-		log.Info("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
+		log.Debug("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
 		err := os.Remove(toRemoveFilePath)
 		if err != nil {
 			// In production, we do not want an error here to interfere with normal operation,

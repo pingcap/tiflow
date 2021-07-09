@@ -28,8 +28,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -160,12 +160,18 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
+			// even after https://github.com/pingcap/ticdc/pull/2038, kv client
+			// could still miss region change notification, which leads to resolved
+			// ts update missing in puller, however resolved ts fallback here can
+			// be ignored since no late data is received and the guarantee of
+			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Panic("The CRTs must be greater than the resolvedTs",
+				log.Warn("The CRTs is fallen back in pulelr",
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
 					zap.Int64("tableID", tableID))
+				return nil
 			}
 			select {
 			case <-ctx.Done():

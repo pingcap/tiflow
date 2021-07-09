@@ -16,8 +16,8 @@ package cmd
 import (
 	"os"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func newTsoCommand() *cobra.Command {
@@ -45,6 +45,7 @@ func newQueryTsoCommand() *cobra.Command {
 			return nil
 		},
 	}
-	command.SetOutput(os.Stdout)
+	command.SetOut(os.Stdout)
+	command.SetErr(os.Stdout)
 	return command
 }

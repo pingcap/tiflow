@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
@@ -34,7 +33,7 @@ import (
 type bankReactorState struct {
 	c            *check.C
 	account      []int
-	pendingPatch []DataPatch
+	pendingPatch [][]DataPatch
 	index        int
 	notFirstTick bool
 }
@@ -48,7 +47,7 @@ func (b *bankReactorState) Update(key util.EtcdKey, value []byte, isInit bool) e
 	return nil
 }
 
-func (b *bankReactorState) GetPatches() []DataPatch {
+func (b *bankReactorState) GetPatches() [][]DataPatch {
 	pendingPatches := b.pendingPatch
 	b.pendingPatch = nil
 	return pendingPatches
@@ -71,8 +70,8 @@ func (b *bankReactorState) atoi(value string) int {
 	return i
 }
 
-func (b *bankReactorState) patchAccount(index int, fn func(int) int) {
-	b.pendingPatch = append(b.pendingPatch, &SingleDataPatch{
+func (b *bankReactorState) patchAccount(index int, fn func(int) int) DataPatch {
+	return &SingleDataPatch{
 		Key: util.NewEtcdKey(fmt.Sprintf("%s%d", bankTestPrefix, index)),
 		Func: func(old []byte) (newValue []byte, changed bool, err error) {
 			oldMoney := b.atoi(string(old))
@@ -83,7 +82,7 @@ func (b *bankReactorState) patchAccount(index int, fn func(int) int) {
 			log.Debug("change money", zap.Int("account", index), zap.Int("from", oldMoney), zap.Int("to", newMoney))
 			return []byte(strconv.Itoa(newMoney)), true, nil
 		},
-	})
+	}
 }
 
 func (b *bankReactorState) TransferRandomly(transferNumber int) {
@@ -91,11 +90,13 @@ func (b *bankReactorState) TransferRandomly(transferNumber int) {
 		accountA := rand.Intn(len(b.account))
 		accountB := rand.Intn(len(b.account))
 		transferMoney := rand.Intn(100)
-		b.patchAccount(accountA, func(money int) int {
-			return money - transferMoney
-		})
-		b.patchAccount(accountB, func(money int) int {
-			return money + transferMoney
+		b.pendingPatch = append(b.pendingPatch, []DataPatch{
+			b.patchAccount(accountA, func(money int) int {
+				return money - transferMoney
+			}),
+			b.patchAccount(accountB, func(money int) int {
+				return money + transferMoney
+			}),
 		})
 		log.Debug("transfer money", zap.Int("accountA", accountA), zap.Int("accountB", accountB), zap.Int("money", transferMoney))
 	}
@@ -136,7 +137,7 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 
 	for i := 0; i < totalAccountNumber; i++ {
 		_, err := cli.Put(ctx, fmt.Sprintf("%s%d", bankTestPrefix, i), "0")
-		c.Check(err, check.IsNil)
+		c.Assert(err, check.IsNil)
 	}
 
 	for i := 0; i < workerNumber; i++ {
@@ -148,12 +149,12 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 				worker, err := NewEtcdWorker(cli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
 				}, &bankReactorState{c: c, index: i, account: make([]int, totalAccountNumber)})
-				c.Check(err, check.IsNil)
+				c.Assert(err, check.IsNil)
 				err = worker.Run(ctx, nil, 100*time.Millisecond)
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}
-				c.Check(errors.Cause(err), check.Equals, context.DeadlineExceeded)
+				c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 				return
 			}
 		}()
