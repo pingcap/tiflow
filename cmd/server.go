@@ -203,12 +203,8 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		return nil, cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
 	for _, ep := range strings.Split(serverPdAddr, ",") {
-		if conf.Security.IsTLSEnabled() {
-			if strings.Index(ep, "http://") == 0 {
-				return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
-			}
-		} else if strings.Index(ep, "http://") != 0 {
-			return nil, cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
+		if err := verifyPdEndpoint(ep, conf.Security.IsTLSEnabled()); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
 		}
 	}
 
