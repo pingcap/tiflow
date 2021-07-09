@@ -78,7 +78,9 @@ type ChangeFeedInfo struct {
 	AdminJobType AdminJobType `json:"admin-job-type"`
 	Engine       SortEngine   `json:"sort-engine"`
 	// SortDir is deprecated
-	SortDir string `json:"-"`
+	// it cannot be set by user in changefeed level, any assignment to it should be ignored.
+	// but can be fetched for backward compatibility
+	SortDir string `json:"sort-dir"`
 
 	Config   *config.ReplicaConfig `json:"config"`
 	State    FeedState             `json:"state"`
