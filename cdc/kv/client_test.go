@@ -71,7 +71,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	pdCli := mocktikv.NewPDClient(cluster)
 	defer pdCli.Close() //nolint:errcheck
 
-	cli := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
+	cli := NewCDCClient(context.Background(), pdCli, nil, NewConnArray(&security.Credential{}, 2))
 	err := cli.Close()
 	c.Assert(err, check.IsNil)
 }
@@ -331,7 +331,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	defer cdcClient.Close() //nolint:errcheck
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -422,7 +422,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -513,7 +513,7 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -670,7 +670,7 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -732,7 +732,7 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1181,7 +1181,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1292,7 +1292,7 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 40)
 	wg.Add(1)
 	go func() {
@@ -1420,7 +1420,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1645,7 +1645,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1692,14 +1692,15 @@ func (s *etcdSuite) TestConnArray(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	addr := "127.0.0.1:2379"
-	ca, err := newConnArray(context.TODO(), 2, addr, &security.Credential{})
-	c.Assert(err, check.IsNil)
+	ca := NewConnArray(&security.Credential{}, 2)
 
-	conn1 := ca.Get()
-	conn2 := ca.Get()
+	conn1, err := ca.Get(context.TODO(), addr)
+	c.Assert(err, check.IsNil)
+	conn2, err := ca.Get(context.TODO(), addr)
+	c.Assert(err, check.IsNil)
 	c.Assert(conn1, check.Not(check.Equals), conn2)
 
-	conn3 := ca.Get()
+	conn3, err := ca.Get(context.TODO(), addr)
 	c.Assert(conn1, check.Equals, conn3)
 
 	ca.Close()
@@ -1739,7 +1740,7 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -1798,7 +1799,7 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1907,7 +1908,7 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2006,7 +2007,7 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
@@ -2143,7 +2144,7 @@ func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2289,7 +2290,7 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2519,7 +2520,7 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2613,7 +2614,7 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2700,7 +2701,7 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2768,7 +2769,7 @@ func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2843,7 +2844,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -3001,7 +3002,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	// The buffer size of event channel must be large enough because in the test
 	// case we send events first, and then retrive all events from this channel.
 	eventCh := make(chan *model.RegionFeedEvent, 100)
@@ -3120,7 +3121,7 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), NewConnArray(&security.Credential{}, 2))
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {

@@ -22,10 +22,10 @@ import (
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	pd "github.com/tikv/pd/client"
 	"golang.org/x/sync/errgroup"
@@ -42,10 +42,10 @@ type ddlHandler struct {
 	cancel func()
 }
 
-func newDDLHandler(pdCli pd.Client, credential *security.Credential, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
+func newDDLHandler(pdCli pd.Client, conns *kv.ConnArray, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
 	// TODO: context should be passed from outter caller
 	ctx, cancel := context.WithCancel(context.Background())
-	plr := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
+	plr := puller.NewPuller(ctx, pdCli, conns, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
 	h := &ddlHandler{
 		puller: plr,
 		cancel: cancel,

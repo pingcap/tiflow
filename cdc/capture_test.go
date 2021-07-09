@@ -79,7 +79,7 @@ func (s *captureSuite) TestCaptureSuicide(c *check.C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil, kv.NewConnArray(&security.Credential{}, 2))
 	c.Assert(err, check.IsNil)
 
 	var wg sync.WaitGroup
@@ -110,7 +110,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil, kv.NewConnArray(nil, 2))
 	c.Assert(err, check.IsNil)
 
 	runProcessorCount := 0
@@ -121,7 +121,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	}()
 	runProcessorBackup := runProcessorImpl
 	runProcessorImpl = func(
-		ctx context.Context, _ pd.Client, _ *security.Credential,
+		ctx context.Context, _ pd.Client, _ *kv.ConnArray,
 		session *concurrency.Session, info model.ChangeFeedInfo, changefeedID string,
 		captureInfo model.CaptureInfo, checkpointTs uint64, flushCheckpointInterval time.Duration,
 	) (*oldProcessor, error) {

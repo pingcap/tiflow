@@ -237,38 +237,51 @@ func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
 	return state
 }
 
-type connArray struct {
+type ConnArray struct {
+	mu sync.Mutex
+
 	credential *security.Credential
-	target     string
-	index      uint32
-	v          []*grpc.ClientConn
+	maxSize    uint
+	v          map[string]*struct {
+		conns []*grpc.ClientConn
+		index int
+	}
 }
 
-func newConnArray(ctx context.Context, maxSize uint, addr string, credential *security.Credential) (*connArray, error) {
-	a := &connArray{
-		target:     addr,
+func NewConnArray(credential *security.Credential, maxSize uint) *ConnArray {
+	a := &ConnArray{
 		credential: credential,
-		index:      0,
-		v:          make([]*grpc.ClientConn, maxSize),
+		maxSize:    maxSize,
+		v: make(map[string]*struct {
+			conns []*grpc.ClientConn
+			index int
+		}),
 	}
-	err := a.Init(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return a, nil
+	return a
 }
 
-func (a *connArray) Init(ctx context.Context) error {
+// The ctx does not act against the connection. It only controls the dail steps.
+func (a *ConnArray) initLocked(ctx context.Context, target string) error {
+	if _, ok := a.v[target]; ok {
+		return nil
+	}
+	a.v[target] = &struct {
+		conns []*grpc.ClientConn
+		index int
+	}{
+		conns: make([]*grpc.ClientConn, a.maxSize),
+	}
+
 	grpcTLSOption, err := a.credential.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for i := range a.v {
+	for i := range a.v[target].conns {
 		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 
 		conn, err := grpc.DialContext(
 			ctx,
-			a.target,
+			target,
 			grpcTLSOption,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
@@ -296,22 +309,35 @@ func (a *connArray) Init(ctx context.Context) error {
 			a.Close()
 			return cerror.WrapError(cerror.ErrGRPCDialFailed, err)
 		}
-		a.v[i] = conn
+		a.v[target].conns[i] = conn
 	}
 	return nil
 }
 
-func (a *connArray) Get() *grpc.ClientConn {
-	next := atomic.AddUint32(&a.index, 1) % uint32(len(a.v))
-	return a.v[next]
+func (a *ConnArray) Get(ctx context.Context, target string) (*grpc.ClientConn, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if err := a.initLocked(ctx, target); err != nil {
+		return nil, err
+	}
+	v := a.v[target]
+	v.index++
+	v.index = v.index % len(v.conns)
+	return v.conns[v.index], nil
 }
 
-func (a *connArray) Close() {
+func (a *ConnArray) Close() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	for i, c := range a.v {
 		if c != nil {
-			err := c.Close()
-			if err != nil {
-				log.Warn("close grpc conn", zap.Error(err))
+			for _, conn := range c.conns {
+				err := conn.Close()
+				if err != nil {
+					log.Warn("close grpc conn", zap.Error(err))
+				}
 			}
 		}
 		a.v[i] = nil
@@ -363,20 +389,16 @@ var NewCDCKVClient func(
 	ctx context.Context,
 	pd pd.Client,
 	kvStorage tikv.Storage,
-	credential *security.Credential,
+	conns *ConnArray,
 ) CDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
-	pd         pd.Client
-	credential *security.Credential
+	pd pd.Client
 
 	clusterID uint64
 
-	mu struct {
-		sync.Mutex
-		conns map[string]*connArray
-	}
+	conns *ConnArray
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
@@ -385,21 +407,15 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c CDCKVClient) {
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, conns *ConnArray) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
 	c = &CDCClient{
-		clusterID:   clusterID,
-		pd:          pd,
-		credential:  credential,
-		kvStorage:   kvStorage,
-		regionCache: tikv.NewRegionCache(pd),
-		mu: struct {
-			sync.Mutex
-			conns map[string]*connArray
-		}{
-			conns: make(map[string]*connArray),
-		},
+		clusterID:      clusterID,
+		pd:             pd,
+		kvStorage:      kvStorage,
+		regionCache:    tikv.NewRegionCache(pd),
+		conns:          conns,
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
@@ -407,29 +423,13 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 
 // Close CDCClient
 func (c *CDCClient) Close() error {
-	c.mu.Lock()
-	for _, conn := range c.mu.conns {
-		conn.Close()
-	}
-	c.mu.Unlock()
 	c.regionCache.Close()
 
 	return nil
 }
 
 func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if conns, ok := c.mu.conns[addr]; ok {
-		return conns.Get(), nil
-	}
-	ca, err := newConnArray(ctx, grpcConnCount, addr, c.credential)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	c.mu.conns[addr] = ca
-	return ca.Get(), nil
+	return c.conns.Get(ctx, addr)
 }
 
 func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {

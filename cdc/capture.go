@@ -29,7 +29,6 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -49,7 +48,7 @@ type Capture struct {
 	etcdClient kv.CDCEtcdClient
 	pdCli      pd.Client
 	kvStorage  tidbkv.Storage
-	credential *security.Credential
+	conns      *kv.ConnArray
 
 	processorManager *processor.Manager
 
@@ -71,6 +70,7 @@ func NewCapture(
 	pdEndpoints []string,
 	pdCli pd.Client,
 	kvStorage tidbkv.Storage,
+	conns *kv.ConnArray,
 ) (c *Capture, err error) {
 	conf := config.GetGlobalServerConfig()
 	credential := conf.Security
@@ -126,7 +126,7 @@ func NewCapture(
 	c = &Capture{
 		processors:       make(map[string]*oldProcessor),
 		etcdClient:       cli,
-		credential:       credential,
+		conns:            conns,
 		session:          sess,
 		election:         elec,
 		info:             info,
@@ -150,6 +150,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		PDClient:    c.pdCli,
 		KVStorage:   c.kvStorage,
 		CaptureInfo: c.info,
+		Conns:       c.conns,
 	})
 	err = c.register(ctx)
 	if err != nil {
@@ -310,7 +311,7 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*oldProcessor, er
 		zap.String("changefeed", task.ChangeFeedID))
 	conf := config.GetGlobalServerConfig()
 	p, err := runProcessorImpl(
-		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, time.Duration(conf.ProcessorFlushInterval))
+		ctx, c.pdCli, c.conns, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, time.Duration(conf.ProcessorFlushInterval))
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeed", task.ChangeFeedID),

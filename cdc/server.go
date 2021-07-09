@@ -67,6 +67,7 @@ type Server struct {
 	ownerLock    sync.RWMutex
 	statusServer *http.Server
 	pdClient     pd.Client
+	conns        *kv.ConnArray
 	etcdClient   *kv.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
@@ -113,6 +114,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
+	s.conns = kv.NewConnArray(conf.Security, 2)
 	if config.NewReplicaImpl {
 		tlsConfig, err := conf.Security.ToTLSConfig()
 		if err != nil {
@@ -177,7 +179,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 	if config.NewReplicaImpl {
-		s.captureV2 = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+		s.captureV2 = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.conns)
 		return s.run(ctx)
 	}
 	// When a capture suicided, restart it
@@ -223,7 +225,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 		captureID := s.capture.info.ID
 		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := NewOwner(ctx, s.pdClient, conf.Security, s.capture.session, conf.GcTTL, time.Duration(conf.OwnerFlushInterval))
+		owner, err := NewOwner(ctx, s.pdClient, s.conns, s.capture.session, conf.GcTTL, time.Duration(conf.OwnerFlushInterval))
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -298,7 +300,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
 		kvStorage := util.KVStorageFromCtx(ctx)
-		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
+		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage, s.conns)
 		if err != nil {
 			return err
 		}
@@ -353,6 +355,7 @@ func (s *Server) Close() {
 	if s.captureV2 != nil {
 		s.captureV2.AsyncClose()
 	}
+	s.conns.Close()
 	if s.statusServer != nil {
 		err := s.statusServer.Close()
 		if err != nil {
