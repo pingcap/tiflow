@@ -5133,11 +5133,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdc\"}[1m])) by (instance)",
-=======
               "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdc_.*|cdc\"}[1m])) by (instance)",
->>>>>>> 526d5de6 (metrics: update tikv metrics (#2189))
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
