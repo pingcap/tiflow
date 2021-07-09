@@ -62,7 +62,7 @@ function prepare() {
     # starts the first second server instance. It should fail, and bring down the changefeed, due to sort-dir conflict
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix 1 --data-dir "${WORK_DIR}"/cdc_data1
 
-    ensure $MAX_RETRIES check_changefeed_mark_error_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*ErrConflictingFileLocks.*"
+    ensure $MAX_RETRIES check_changefeed_mark_stopped_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*ErrConflictingFileLocks.*"
     kill $capture_pid
     sleep 10 # wait for re-election in case of the owner having been killed
     run_cdc_cli changefeed resume -c ${changefeedid}
