@@ -78,7 +78,9 @@ type ChangeFeedInfo struct {
 	AdminJobType AdminJobType `json:"admin-job-type"`
 	Engine       SortEngine   `json:"sort-engine"`
 	// SortDir is deprecated
-	SortDir string `json:"-"`
+	// it cannot be set by user in changefeed level, any assignment to it should be ignored.
+	// but can be fetched for backward compatibility
+	SortDir string `json:"sort-dir"`
 
 	Config   *config.ReplicaConfig `json:"config"`
 	State    FeedState             `json:"state"`
@@ -170,7 +172,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 			return errors.Annotatef(
 				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
-		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	return nil
 }
