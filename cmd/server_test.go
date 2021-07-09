@@ -138,10 +138,17 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "127.5.5.1:8833",
-		AdvertiseAddr:          "127.5.5.1:7777",
-		LogFile:                "/root/cdc.log",
-		LogLevel:               "debug",
+		Addr:          "127.5.5.1:8833",
+		AdvertiseAddr: "127.5.5.1:7777",
+		LogFile:       "/root/cdc.log",
+		LogLevel:      "debug",
+		Log: &config.LogConfig{
+			File: &config.LogFileConfig{
+				MaxSize:    300,
+				MaxDays:    0,
+				MaxBackups: 0,
+			},
+		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
@@ -179,6 +186,7 @@ advertise-addr = "127.0.0.1:1111"
 
 log-file = "/root/cdc1.log"
 log-level = "warn"
+
 data-dir = "%+v"
 gc-ttl = 500
 tz = "US"
@@ -186,6 +194,11 @@ capture-session-ttl = 10
 
 owner-flush-interval = "600ms"
 processor-flush-interval = "600ms"
+
+[log.file]
+max-size = 200
+max-days = 1
+max-backups = 1
 
 [sorter]
 chunk-size-limit = 10000000
@@ -203,10 +216,17 @@ sort-dir = "/tmp/just_a_test"
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "128.0.0.1:1234",
-		AdvertiseAddr:          "127.0.0.1:1111",
-		LogFile:                "/root/cdc1.log",
-		LogLevel:               "warn",
+		Addr:          "128.0.0.1:1234",
+		AdvertiseAddr: "127.0.0.1:1111",
+		LogFile:       "/root/cdc1.log",
+		LogLevel:      "warn",
+		Log: &config.LogConfig{
+			File: &config.LogFileConfig{
+				MaxSize:    200,
+				MaxDays:    1,
+				MaxBackups: 1,
+			},
+		},
 		DataDir:                dataDir,
 		GcTTL:                  500,
 		TZ:                     "US",
@@ -260,10 +280,17 @@ cert-allowed-cn = ["dd","ee"]
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "127.5.5.1:8833",
-		AdvertiseAddr:          "127.0.0.1:1111",
-		LogFile:                "/root/cdc.log",
-		LogLevel:               "debug",
+		Addr:          "127.5.5.1:8833",
+		AdvertiseAddr: "127.0.0.1:1111",
+		LogFile:       "/root/cdc.log",
+		LogLevel:      "debug",
+		Log: &config.LogConfig{
+			File: &config.LogFileConfig{
+				MaxSize:    200,
+				MaxDays:    1,
+				MaxBackups: 1,
+			},
+		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
