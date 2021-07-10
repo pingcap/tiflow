@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"os"
 	"os/signal"
@@ -93,4 +94,13 @@ func proxyFields() []zap.Field {
 		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
 	}
 	return fields
+}
+
+func JsonPrint(cmd *cobra.Command, v interface{}) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	cmd.Printf("%s\n", data)
+	return nil
 }

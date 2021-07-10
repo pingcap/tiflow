@@ -11,4 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package capture
+
+import (
+	"github.com/pingcap/ticdc/pkg/cmd/util"
+	"github.com/spf13/cobra"
+)
+
+func NewCmdCapture(f util.Factory) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "capture",
+		Short: "Manage capture (capture is a CDC server instance)",
+	}
+	command.AddCommand(
+		NewCmdListCapture(f),
+		// TODO: add resign owner command
+	)
+	return command
+}

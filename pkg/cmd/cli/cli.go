@@ -15,6 +15,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/cmd/cli/capture"
 	"io"
 	"os"
 
@@ -70,7 +71,8 @@ func NewCmdCli() *cobra.Command {
 	cf := util.NewCredentialFlags()
 	cf.AddFlags(flags, false)
 
-	_ = util.NewFactory(cf)
+	f := util.NewFactory(cf)
+	cmds.AddCommand(capture.NewCmdCapture(f))
 
 	return cmds
 }
