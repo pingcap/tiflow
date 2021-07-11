@@ -24,8 +24,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// capture holds capture information
-type capture struct {
+// Capture holds capture information
+type Capture struct {
 	ID            string `json:"id"`
 	IsOwner       bool   `json:"is-owner"`
 	AdvertiseAddr string `json:"address"`
@@ -47,7 +47,7 @@ func NewCmdListCapture(f util.Factory) *cobra.Command {
 	return command
 }
 
-func ListCaptures(f util.Factory, ctx context.Context) ([]*capture, error) {
+func ListCaptures(f util.Factory, ctx context.Context) ([]*Capture, error) {
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return nil, err
@@ -60,11 +60,11 @@ func ListCaptures(f util.Factory, ctx context.Context) ([]*capture, error) {
 	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
 		return nil, err
 	}
-	captures := make([]*capture, 0, len(raw))
+	captures := make([]*Capture, 0, len(raw))
 	for _, c := range raw {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			&capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
+			&Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
 	}
 	return captures, nil
 }
