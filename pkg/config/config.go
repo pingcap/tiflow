@@ -43,7 +43,7 @@ func init() {
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
-	EnableOldValue:   true,
+	EnableOldValue:   false,
 	CheckGCSafePoint: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
@@ -161,8 +161,8 @@ type LogConfig struct {
 var defaultServerConfig = &ServerConfig{
 	Addr:          "127.0.0.1:8300",
 	AdvertiseAddr: "",
-	LogFile:       "",
-	LogLevel:      "info",
+	LogFile:       "./ticdc.log",
+	LogLevel:      "debug",
 	Log: &LogConfig{
 		File: &LogFileConfig{
 			MaxSize:    300,

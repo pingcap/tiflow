@@ -118,11 +118,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	eventCh := make(chan *model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
+
+	enableOldValue := true
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, enableOldValue, lockresolver, p, eventCh)
+			//return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
 		})
 	}
 

@@ -151,7 +151,8 @@ func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool)
 		schemaStorage:    schemaStorage,
 		rawRowChangedChs: chs,
 		workerNum:        workerNum,
-		enableOldValue:   enableOldValue,
+		//enableOldValue:   enableOldValue,
+		enableOldValue: true,
 	}
 }
 
@@ -245,6 +246,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	row, err := func() (*model.RowChangedEvent, error) {
 		if snap.IsIneligibleTableID(physicalTableID) {
 			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))

@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/pkg/config"
 	"math"
 	"sort"
 	"sync"
@@ -230,6 +231,15 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				continue
 			}
 			start := time.Now()
+			for i := 0; i<len(e.rows); i++{
+				if !config.GetDefaultReplicaConfig().EnableOldValue{
+					if e.rows[i].Columns == nil && len(e.rows[i].PreColumns) == 2{
+						e.rows[i].PreColumns[1] = nil
+					}else{
+						e.rows[i].PreColumns = nil
+					}
+				}
+			}
 			err := b.Sink.EmitRowChangedEvents(ctx, e.rows...)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
