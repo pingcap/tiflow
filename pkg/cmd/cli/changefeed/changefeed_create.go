@@ -207,7 +207,7 @@ func (o *CreateChangefeedOptions) Validate(f util.Factory, commonOptions *Common
 		if err := o.validateStartTs(f, ctx, commonOptions.changefeedID); err != nil {
 			return nil, err
 		}
-		if err := util.ConfirmLargeDataGap(f, ctx, cmd, commonOptions, o.createCommonOptions.startTs); err != nil {
+		if err := ConfirmLargeDataGap(f, ctx, cmd, commonOptions, o.createCommonOptions.startTs); err != nil {
 			return nil, err
 		}
 		if err := o.validateTargetTs(); err != nil {

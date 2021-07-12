@@ -4,17 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	liberrors "errors"
-	"fmt"
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/changefeed"
-	"github.com/tikv/client-go/v2/oracle"
-	"net/url"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
@@ -22,6 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
+	"net/url"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 )
 
 // Endpoint schemes.
@@ -31,8 +26,6 @@ const (
 )
 
 var ErrOwnerNotFound = liberrors.New("owner not found")
-
-var tsGapWarning int64 = 86400 * 1000 // 1 day in milliseconds
 
 // InitCmd initializes the logger, the default context and returns its cancel function.
 func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
@@ -113,37 +106,6 @@ func JsonPrint(cmd *cobra.Command, v interface{}) error {
 		return err
 	}
 	cmd.Printf("%s\n", data)
-	return nil
-}
-
-func ConfirmLargeDataGap(f Factory, ctx context.Context, cmd *cobra.Command, commonOptions *changefeed.CommonOptions, startTs uint64) error {
-	if commonOptions.NoConfirm {
-		return nil
-	}
-	pdClient, err := f.PdClient()
-	if err != nil {
-		return err
-	}
-	currentPhysical, _, err := pdClient.GetTS(ctx)
-	if err != nil {
-		return err
-	}
-	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
-	if tsGap > tsGapWarning {
-		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
-			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
-			time.Duration(tsGap)*time.Millisecond,
-		)
-		var yOrN string
-		_, err := fmt.Scan(&yOrN)
-		if err != nil {
-			return err
-		}
-		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-			return errors.NewNoStackError("abort changefeed create or resume")
-		}
-	}
-
 	return nil
 }
 

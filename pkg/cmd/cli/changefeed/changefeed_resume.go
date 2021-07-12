@@ -40,5 +40,5 @@ func resumeChangefeedCheck(f util.Factory, ctx context.Context, cmd *cobra.Comma
 	if err != nil {
 		return err
 	}
-	return util.ConfirmLargeDataGap(f, ctx, cmd, commonOptions, info.TSO)
+	return ConfirmLargeDataGap(f, ctx, cmd, commonOptions, info.TSO)
 }

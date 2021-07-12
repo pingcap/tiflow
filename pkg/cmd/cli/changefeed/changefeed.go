@@ -12,10 +12,15 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"io/ioutil"
 	"net/url"
+	"strings"
+	"time"
 )
+
+var tsGapWarning int64 = 86400 * 1000 // 1 day in milliseconds
 
 type CommonOptions struct {
 	changefeedID string
@@ -154,5 +159,36 @@ func ApplyAdminChangefeed(f util.Factory, ctx context.Context, job model.AdminJo
 		}
 		return errors.BadRequestf("%s", string(body))
 	}
+	return nil
+}
+
+func ConfirmLargeDataGap(f util.Factory, ctx context.Context, cmd *cobra.Command, commonOptions *CommonOptions, startTs uint64) error {
+	if commonOptions.NoConfirm {
+		return nil
+	}
+	pdClient, err := f.PdClient()
+	if err != nil {
+		return err
+	}
+	currentPhysical, _, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return err
+	}
+	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
+	if tsGap > tsGapWarning {
+		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
+			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
+			time.Duration(tsGap)*time.Millisecond,
+		)
+		var yOrN string
+		_, err := fmt.Scan(&yOrN)
+		if err != nil {
+			return err
+		}
+		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+			return errors.NewNoStackError("abort changefeed create or resume")
+		}
+	}
+
 	return nil
 }
