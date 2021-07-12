@@ -43,7 +43,7 @@ func init() {
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
-	EnableOldValue:   false,
+	EnableOldValue:   true,
 	CheckGCSafePoint: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},

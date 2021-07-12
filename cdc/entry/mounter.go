@@ -151,7 +151,8 @@ func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool)
 		schemaStorage:    schemaStorage,
 		rawRowChangedChs: chs,
 		workerNum:        workerNum,
-		//enableOldValue:   enableOldValue,
+		// TODO: this field enableOldValue is only temporarily set to true.
+		//  It needs to be changed according to the new_collation_enable field of mysql.tidb in the upstream cluster.
 		enableOldValue: true,
 	}
 }

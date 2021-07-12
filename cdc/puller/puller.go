@@ -119,13 +119,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
 
+	// TODO: this variable enableOldValue is only temporarily set to true.
+	//  It needs to be changed according to the new_collation_enable field of mysql.tidb in the upstream cluster.
 	enableOldValue := true
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
 			return p.kvCli.EventFeed(ctx, span, checkpointTs, enableOldValue, lockresolver, p, eventCh)
-			//return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
 		})
 	}
 
