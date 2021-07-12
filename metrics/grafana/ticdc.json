@@ -97,7 +97,7 @@
         "hide": false,
         "iconColor": "#B877D9",
         "limit": 100,
-        "name": "All TiCDC alerts",
+        "name": "All TiCDC Alerts",
         "showIn": 0,
         "tagKeys": "alertname",
         "tags": [],
@@ -106,9 +106,9 @@
       },
       {
         "datasource": "${DS_TEST-CLUSTER}",
-        "enable": false,
+        "enable": true,
         "expr": "delta(tikv_cdc_region_resolve_status{status=\"resolved\"}[30s]) < BOOL -800",
-        "hide": false,
+        "hide": true,
         "iconColor": "rgba(255, 96, 96, 1)",
         "limit": 100,
         "name": "Resolved region drop",
@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1626103101887,
+  "iteration": 1626104647236,
   "links": [],
   "panels": [
     {
@@ -1722,13 +1722,12 @@
       "legend": {
         "alignAsTable": true,
         "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "rightSide": true,
+        "current": true,
+        "max": true,
+        "min": true,
         "show": true,
         "total": false,
-        "values": false
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
@@ -1744,10 +1743,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "ticdc_owner_status{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}\t",
+          "expr": "ticdc_owner_status{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", job=\"cdc\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{changefeed}}",
           "refId": "A"
         }
       ],
