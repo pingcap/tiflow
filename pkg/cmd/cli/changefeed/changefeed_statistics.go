@@ -2,11 +2,12 @@ package changefeed
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
-	"time"
 )
 
 type profileStatus struct {
@@ -16,16 +17,19 @@ type profileStatus struct {
 	ReplicationGap string `json:"replication_gap"`
 }
 
-type StatisticsChangefeedOptions struct {
+// statisticsChangefeedOptions defines flags for the `cli changefeed statistics` command.
+type statisticsChangefeedOptions struct {
 	interval uint
 }
 
-func NewStatisticsChangefeedOptions() *StatisticsChangefeedOptions {
-	return &StatisticsChangefeedOptions{}
+// newStatisticsChangefeedOptions creates new options for the `cli changefeed statistics` command.
+func newStatisticsChangefeedOptions() *statisticsChangefeedOptions {
+	return &statisticsChangefeedOptions{}
 }
 
-func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
-	o := NewStatisticsChangefeedOptions()
+// newCmdStatisticsChangefeed creates the `cli changefeed statistics` command.
+func newCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+	o := newStatisticsChangefeedOptions()
 
 	command := &cobra.Command{
 		Use:   "statistics",
@@ -35,6 +39,14 @@ func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *c
 			tick := time.NewTicker(time.Duration(o.interval) * time.Second)
 			lastTime := time.Now()
 			var lastCount uint64
+			etcdClient, err := f.EtcdClient()
+			if err != nil {
+				return err
+			}
+			pdClient, err := f.PdClient()
+			if err != nil {
+				return err
+			}
 			for {
 				select {
 				case <-ctx.Done():
@@ -43,10 +55,6 @@ func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *c
 					}
 				case <-tick.C:
 					now := time.Now()
-					etcdClient, err := f.EtcdClient()
-					if err != nil {
-						return err
-					}
 					status, _, err := etcdClient.GetChangeFeedStatus(ctx, commonOptions.changefeedID)
 					if err != nil {
 						return err
@@ -58,10 +66,6 @@ func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *c
 					var count uint64
 					for _, pinfo := range taskPositions {
 						count += pinfo.Count
-					}
-					pdClient, err := f.PdClient()
-					if err != nil {
-						return err
 					}
 					ts, _, err := pdClient.GetTS(ctx)
 					if err != nil {
@@ -82,6 +86,7 @@ func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *c
 			}
 		},
 	}
+
 	command.PersistentFlags().UintVarP(&o.interval, "interval", "I", 10, "Interval for outputing the latest statistics")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
