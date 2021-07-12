@@ -1111,6 +1111,9 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 
+			changefeedStatusGauge.WithLabelValues(string(feedState)).Dec()
+			changefeedStatusGauge.WithLabelValues(string(model.StateStopped)).Inc()
+
 			err = o.dispatchJob(ctx, job)
 			if err != nil {
 				return errors.Trace(err)
@@ -1166,6 +1169,8 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 			}
+			changefeedStatusGauge.WithLabelValues(string(feedState)).Dec()
+			changefeedStatusGauge.WithLabelValues(string(model.StateFinished)).Inc()
 		case model.AdminResume:
 			// resume changefeed must read checkpoint from ChangeFeedStatus
 			if cerror.ErrChangeFeedNotExists.Equal(err) {
@@ -1192,6 +1197,9 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			cfInfo.AdminJobType = model.AdminResume
 			// clear last running error
 			cfInfo.State = model.StateNormal
+			changefeedStatusGauge.WithLabelValues(string(feedState)).Dec()
+			changefeedStatusGauge.WithLabelValues(string(model.StateNormal)).Inc()
+
 			cfInfo.Error = nil
 			err = o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, cfInfo, job.CfID, o.session.Lease())
 			if err != nil {
