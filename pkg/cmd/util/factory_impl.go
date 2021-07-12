@@ -85,7 +85,7 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	return &client, nil
 }
 
-func (f factoryImpl) PdClient() (*pd.Client, error) {
+func (f factoryImpl) PdClient() (pd.Client, error) {
 	credential := f.GetCredential()
 	grpcTLSOption, err := f.ToGRPCDialOption()
 	if err != nil {
@@ -118,5 +118,5 @@ func (f factoryImpl) PdClient() (*pd.Client, error) {
 		return nil, err
 	}
 
-	return &pdClient, nil
+	return pdClient, nil
 }

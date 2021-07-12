@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cmd/cli/capture"
 	"github.com/pingcap/ticdc/pkg/cmd/cli/changefeed"
 	"github.com/pingcap/ticdc/pkg/cmd/cli/processor"
+	"github.com/pingcap/ticdc/pkg/cmd/cli/tso"
 	"io"
 	"os"
 
@@ -77,6 +78,7 @@ func NewCmdCli() *cobra.Command {
 	cmds.AddCommand(capture.NewCmdCapture(f))
 	cmds.AddCommand(changefeed.NewCmdChangefeed(f))
 	cmds.AddCommand(processor.NewCmdProcessor(f))
+	cmds.AddCommand(tso.NewCmdTso(f))
 
 	return cmds
 }
