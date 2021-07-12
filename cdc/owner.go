@@ -547,8 +547,6 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	changefeedStatusGauge.Reset()
 	errorFeeds := make(map[model.ChangeFeedID]*model.RunningError)
 	for changeFeedID, cfInfoRawValue := range details {
 		taskStatus, err := o.cfRWriter.GetAllTaskStatus(ctx, changeFeedID)
@@ -584,7 +582,6 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			}
 			log.Warn("changefeed is not in normal state", zap.String("changefeed", changeFeedID))
 			o.failInitFeeds[changeFeedID] = struct{}{}
-			changefeedStatusGauge.WithLabelValues(string(model.StateFailed)).Inc()
 			continue
 		}
 		if _, ok := o.failInitFeeds[changeFeedID]; ok {
@@ -618,7 +615,6 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			if status.AdminJobType == model.AdminStop {
 				if _, ok := o.stoppedFeeds[changeFeedID]; !ok {
 					o.stoppedFeeds[changeFeedID] = status
-					changefeedStatusGauge.WithLabelValues(string(model.StateStopped)).Inc()
 				}
 			}
 			continue
@@ -659,7 +655,6 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
 					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
-				changefeedStatusGauge.WithLabelValues(string(model.StateFailed)).Inc()
 				err := o.etcdClient.LeaseGuardSaveChangeFeedInfo(ctx, cfInfo, changeFeedID, o.session.Lease())
 				if err != nil {
 					return err
@@ -691,11 +686,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 
 		o.changeFeeds[changeFeedID] = newCf
-		changefeedStatusGauge.WithLabelValues(string(model.StateNormal)).Inc()
-		if _, ok := o.stoppedFeeds[changeFeedID]; ok {
-			delete(o.stoppedFeeds, changeFeedID)
-			changefeedStatusGauge.WithLabelValues(string(model.StateStopped)).Dec()
-		}
+		delete(o.stoppedFeeds, changeFeedID)
 	}
 	o.adminJobsLock.Lock()
 	for cfID, err := range errorFeeds {
