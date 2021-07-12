@@ -1120,7 +1120,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			}
 			log.Debug("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas))
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
+		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(100), retry.WithIsRetryableErr(cerror.IsRetryableError))
 		if retryErr != nil {
 			return retryErr
 		}
