@@ -214,6 +214,9 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// Since we wait for checkpoint == ddlJob.FinishTs before executing the DDL,
+	// when there is a recovery, there is no guarantee that the DDL at the checkpoint
+	// has been executed. So we need to start the DDL puller from (checkpoint-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
