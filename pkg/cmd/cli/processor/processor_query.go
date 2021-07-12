@@ -13,20 +13,20 @@ type processorMeta struct {
 	Position *model.TaskPosition `json:"position"`
 }
 
-type QueryProcessorOptions struct {
+// queryProcessorOptions defines flags for the `cli processor query` command.
+type queryProcessorOptions struct {
 	changefeedID string
 	captureID    string
 }
 
-func NewQueryProcessorOptions() *QueryProcessorOptions {
-	return &QueryProcessorOptions{
-		changefeedID: "",
-		captureID:    "",
-	}
+// newQueryProcessorOptions creates new options for the `cli changefeed query` command.
+func newQueryProcessorOptions() *queryProcessorOptions {
+	return &queryProcessorOptions{}
 }
 
-func NewCmdQueryProcessor(f util.Factory) *cobra.Command {
-	o := NewQueryProcessorOptions()
+// newCmdQueryProcessor creates the `cli processor query` command.
+func newCmdQueryProcessor(f util.Factory) *cobra.Command {
+	o := newQueryProcessorOptions()
 
 	command := &cobra.Command{
 		Use:   "query",
@@ -49,6 +49,7 @@ func NewCmdQueryProcessor(f util.Factory) *cobra.Command {
 			return util.JsonPrint(cmd, meta)
 		},
 	}
+
 	command.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	command.PersistentFlags().StringVarP(&o.captureID, "capture-id", "p", "", "Capture ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
