@@ -7,17 +7,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCmdPauseChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+// newCmdPauseChangefeed creates the `cli changefeed pause` command.
+func newCmdPauseChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "pause",
 		Short: "Pause a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.GetDefaultContext()
-
 			job := model.AdminJob{
 				CfID: commonOptions.changefeedID,
 				Type: model.AdminStop,
 			}
+
+			ctx := context.GetDefaultContext()
 
 			etcdClient, err := f.EtcdClient()
 			if err != nil {
