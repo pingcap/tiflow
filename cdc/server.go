@@ -56,6 +56,11 @@ const (
 	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
+
+	// The default max number of connections to a TiKV node.
+	// 150 means a TiCDC node can at most open 153600 streams,
+	// 153600 = 150 * 1024 (the default max number of TiKV concurrent streams).
+	defaultConnMaxSize = 150
 )
 
 // Server is the capture server
@@ -114,7 +119,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
-	s.conns = kv.NewConnArray(conf.Security, 2)
+	s.conns = kv.NewConnArray(conf.Security, defaultConnMaxSize)
 	if config.NewReplicaImpl {
 		tlsConfig, err := conf.Security.ToTLSConfig()
 		if err != nil {
