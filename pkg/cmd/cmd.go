@@ -9,6 +9,7 @@ import (
 	"os"
 )
 
+// NewCmd creates the root command.
 func NewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "cdc",
@@ -17,15 +18,18 @@ func NewCmd() *cobra.Command {
 	}
 }
 
-// Execute runs the root command
+// Execute runs the root command.
 func Execute() {
 	cmd := NewCmd()
+
 	// Outputs cmd.Print to stdout.
 	cmd.SetOut(os.Stdout)
+
 	cmd.AddCommand(cli.NewCmdCli())
 	cmd.AddCommand(server.NewCmdServer())
 	cmd.AddCommand(test.NewCmdTest())
 	cmd.AddCommand(version.NewCmdVersion())
+
 	if err := cmd.Execute(); err != nil {
 		cmd.Println(err)
 		os.Exit(1)
