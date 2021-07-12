@@ -14,12 +14,13 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/pingcap/ticdc/pkg/cmd/cli"
 	"github.com/pingcap/ticdc/pkg/cmd/server"
 	"github.com/pingcap/ticdc/pkg/cmd/test"
 	"github.com/pingcap/ticdc/pkg/cmd/version"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 // NewCmd creates the root command.

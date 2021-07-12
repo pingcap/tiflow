@@ -15,6 +15,7 @@ package version
 
 import (
 	"fmt"
+
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 )

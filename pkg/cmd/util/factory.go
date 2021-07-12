@@ -15,6 +15,7 @@ package util
 
 import (
 	"crypto/tls"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/security"

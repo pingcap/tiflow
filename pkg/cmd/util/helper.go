@@ -17,6 +17,12 @@ import (
 	"context"
 	"encoding/json"
 	liberrors "errors"
+	"net/url"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,11 +31,6 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
-	"net/url"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 )
 
 // Endpoint schemes.

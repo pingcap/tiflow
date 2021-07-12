@@ -15,6 +15,9 @@ package server
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/fatih/color"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -33,8 +36,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 // options defines flags for the `server` command.
