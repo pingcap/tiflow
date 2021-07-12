@@ -158,6 +158,34 @@ func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
 	c.Assert(err, check.ErrorMatches, ".*unknown config.*")
 }
 
+func (s *decodeFileSuite) TestVerifyReplicaConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	dir := c.MkDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+	[filter]
+	rules = ['*.*', '!test.*']`
+	err := ioutil.WriteFile(path, []byte(content), 0o644)
+	c.Assert(err, check.IsNil)
+
+	cfg := config.GetDefaultReplicaConfig()
+	err = verifyReplicaConfig(path, "cdc", cfg)
+	c.Assert(err, check.IsNil)
+
+	path = filepath.Join(dir, "config1.toml")
+	content = `
+	[filter]
+	rules = ['*.*', '!test.*','rtest1']`
+	err = ioutil.WriteFile(path, []byte(content), 0o644)
+	c.Assert(err, check.IsNil)
+
+	cfg = config.GetDefaultReplicaConfig()
+	err = verifyReplicaConfig(path, "cdc", cfg)
+	c.Assert(err, check.NotNil)
+	c.Assert(err, check.ErrorMatches, ".*CDC:ErrFilterRuleInvalid.*")
+}
+
 type mockPDClient struct {
 	pd.Client
 	ts uint64

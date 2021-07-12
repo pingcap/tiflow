@@ -121,6 +121,21 @@ error = '''
 failed to request PD
 '''
 
+["CDC:ErrCheckDataDirSatisfied"]
+error = '''
+check data dir satisfied failed
+'''
+
+["CDC:ErrCheckDirReadable"]
+error = '''
+check dir readable failed
+'''
+
+["CDC:ErrCheckDirValid"]
+error = '''
+check dir valid failed
+'''
+
 ["CDC:ErrCheckDirWritable"]
 error = '''
 check dir writable failed
@@ -274,6 +289,11 @@ grpc dial failed
 ["CDC:ErrGetAllStoresFailed"]
 error = '''
 get stores from pd failed
+'''
+
+["CDC:ErrGetDiskInfo"]
+error = '''
+get dir disk info failed
 '''
 
 ["CDC:ErrGetRegionFailed"]
@@ -616,9 +636,19 @@ error = '''
 pulsar send message failed
 '''
 
+["CDC:ErrReachMaxTry"]
+error = '''
+reach maximum try: %d
+'''
+
 ["CDC:ErrReactorFinished"]
 error = '''
 the reactor has done its job and should no longer be executed
+'''
+
+["CDC:ErrRegionWorkerExit"]
+error = '''
+region worker exited
 '''
 
 ["CDC:ErrRegionsNotCoverSpan"]
@@ -724,6 +754,11 @@ table %d not found in schema snapshot
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
+'''
+
+["CDC:ErrSupportGetOnly"]
+error = '''
+this api supports GET method only
 '''
 
 ["CDC:ErrSupportPostOnly"]
