@@ -89,7 +89,7 @@ func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 				return err
 			}
 
-			resp, err := applyOwnerChangefeedQuery(etcdClient, ctx, commonOptions.changefeedID, f.GetCredential())
+			resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, commonOptions.changefeedID, f.GetCredential())
 			// if no cdc owner exists, allow user to update changefeed config
 			if err != nil && errors.Cause(err) != util.ErrOwnerNotFound {
 				return err

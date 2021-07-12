@@ -16,6 +16,7 @@ package changefeed
 import (
 	"context"
 	"fmt"
+	pd "github.com/tikv/pd/client"
 	"io/ioutil"
 	"strings"
 	"time"
@@ -61,7 +62,7 @@ func NewCmdChangefeed(f util.Factory) *cobra.Command {
 	cmds.AddCommand(NewCmdListChangefeeds(f))
 	cmds.AddCommand(NewCmdQueryChangefeed(f, o))
 	cmds.AddCommand(NewCmdPauseChangefeed(f, o))
-	cmds.AddCommand(NewCmdResumeChangefeed(f, o))
+	cmds.AddCommand(newCmdResumeChangefeed(f, o))
 	cmds.AddCommand(NewCmdRemoveChangefeed(f, o))
 	cmds.AddCommand(NewCmdCreateChangefeed(f, o))
 	cmds.AddCommand(NewCmdUpdateChangefeed(f, o))
@@ -75,8 +76,8 @@ func NewCmdChangefeed(f util.Factory) *cobra.Command {
 	return cmds
 }
 
-func applyOwnerChangefeedQuery(etcdClient *kv.CDCEtcdClient,
-	ctx context.Context, cid model.ChangeFeedID, credential *security.Credential,
+func applyOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
+	cid model.ChangeFeedID, credential *security.Credential,
 ) (string, error) {
 	owner, err := capture.GetOwnerCapture(etcdClient, ctx)
 	if err != nil {
@@ -110,7 +111,7 @@ func applyOwnerChangefeedQuery(etcdClient *kv.CDCEtcdClient,
 	return string(body), nil
 }
 
-func applyAdminChangefeed(etcdClient *kv.CDCEtcdClient, ctx context.Context, job model.AdminJob, credential *security.Credential) error {
+func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
 	owner, err := capture.GetOwnerCapture(etcdClient, ctx)
 	if err != nil {
 		return err
@@ -149,13 +150,9 @@ func applyAdminChangefeed(etcdClient *kv.CDCEtcdClient, ctx context.Context, job
 	return nil
 }
 
-func confirmLargeDataGap(f util.Factory, ctx context.Context, cmd *cobra.Command, commonOptions *commonOptions, startTs uint64) error {
+func confirmLargeDataGap(ctx context.Context, pdClient pd.Client, cmd *cobra.Command, commonOptions *commonOptions, startTs uint64) error {
 	if commonOptions.NoConfirm {
 		return nil
-	}
-	pdClient, err := f.PdClient()
-	if err != nil {
-		return err
 	}
 
 	currentPhysical, _, err := pdClient.GetTS(ctx)

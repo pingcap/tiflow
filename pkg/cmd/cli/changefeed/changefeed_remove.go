@@ -39,7 +39,7 @@ func NewCmdRemoveChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 				return err
 			}
 
-			return applyAdminChangefeed(etcdClient, ctx, job, f.GetCredential())
+			return applyAdminChangefeed(ctx, etcdClient, job, f.GetCredential())
 		},
 	}
 

@@ -51,7 +51,7 @@ func NewCmdQueryChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.
 			}
 
 			if o.simplified {
-				resp, err := applyOwnerChangefeedQuery(etcdClient, ctx, o.commonOptions.changefeedID, f.GetCredential())
+				resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, o.commonOptions.changefeedID, f.GetCredential())
 				if err != nil {
 					return err
 				}

@@ -57,7 +57,7 @@ func NewCmdListChangefeeds(f util.Factory) *cobra.Command {
 			cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
 			for id := range changefeedIDs {
 				cfci := &changefeedCommonInfo{ID: id}
-				resp, err := applyOwnerChangefeedQuery(etcdClient, ctx, id, f.GetCredential())
+				resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, id, f.GetCredential())
 				if err != nil {
 					// if no capture is available, the query will fail, just add a warning here
 					log.Warn("query changefeed info failed", zap.String("error", err.Error()))
