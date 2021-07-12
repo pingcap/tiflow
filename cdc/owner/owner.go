@@ -244,7 +244,7 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 			}
 			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
 			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
-			changefeedStatusGauge.WithLabelValues(changefeedID, string(changefeedState.Info.State)).Inc()
+			changefeedStatusGauge.WithLabelValues(changefeedID).Set(float64(changefeedState.Info.State.ToInt()))
 		}
 	}
 }

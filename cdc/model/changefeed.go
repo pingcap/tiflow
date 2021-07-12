@@ -52,6 +52,25 @@ const (
 	StateFinished FeedState = "finished"
 )
 
+func (s FeedState) ToInt() int {
+	switch s {
+	case StateNormal:
+		return 0
+	case StateError:
+		return 1
+	case StateFailed:
+		return 2
+	case StateStopped:
+		return 3
+	case StateFinished:
+		return 4
+	case StateRemoved:
+		return 5
+	}
+	// -1 for unknown feed state
+	return -1
+}
+
 const (
 	// errorHistoryGCInterval represents how long we keep error record in changefeed info
 	errorHistoryGCInterval = time.Minute * 10
