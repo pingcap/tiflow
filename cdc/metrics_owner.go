@@ -44,13 +44,6 @@ var (
 			Name:      "maintain_table_num",
 			Help:      "number of replicated tables maintained in owner",
 		}, []string{"changefeed", "capture", "type"})
-	changefeedStatusGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "owner",
-			Name:      "status",
-			Help:      "changefeed status",
-		}, []string{"feedstate"})
 )
 
 const (
@@ -66,5 +59,4 @@ func initOwnerMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedCheckpointTsLagGauge)
 	registry.MustRegister(ownershipCounter)
 	registry.MustRegister(ownerMaintainTableNumGauge)
-	registry.MustRegister(changefeedStatusGauge)
 }
