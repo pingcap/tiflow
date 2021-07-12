@@ -53,6 +53,7 @@ func NewCmdChangefeed(f util.Factory) *cobra.Command {
 	return cmds
 }
 
+// TODO: move to a better place.
 func getAllCaptures(f util.Factory, ctx context.Context) ([]*capture.Capture, error) {
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
