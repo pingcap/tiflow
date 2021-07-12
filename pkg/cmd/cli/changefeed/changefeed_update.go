@@ -1,20 +1,36 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package changefeed
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/cmd/cli"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
-	"strings"
 )
 
-func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
-	o := newCommonChangefeedOptions()
+// newCmdPauseChangefeed creates the `cli changefeed update` command.
+func newCmdUpdateChangefeed(f util.Factory, options *cli.Options, commonOptions *commonOptions) *cobra.Command {
+	o := newCommonChangefeedOptions(options)
 
 	command := &cobra.Command{
 		Use:   "update",
@@ -31,6 +47,7 @@ func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 			if err != nil {
 				return err
 			}
+
 			info, err := old.Clone()
 			if err != nil {
 				return err
@@ -137,11 +154,12 @@ func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 			cmd.Printf("Update changefeed config successfully! "+
 				"Will take effect only if the changefeed has been paused before this command"+
 				"\nID: %s\nInfo: %s\n", commonOptions.changefeedID, infoStr)
+
 			return nil
 		},
 	}
 
-	o.addFlags(command.PersistentFlags())
+	o.addFlags(command)
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
