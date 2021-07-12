@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -37,12 +36,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -56,11 +53,7 @@ const (
 
 // Server is the capture server
 type Server struct {
-	captureV2 *capture.Capture
-
-	capture      *Capture
-	owner        *Owner
-	ownerLock    sync.RWMutex
+	capture      *capture.Capture
 	statusServer *http.Server
 	pdClient     pd.Client
 	etcdClient   *kv.CDCEtcdClient
@@ -109,40 +102,38 @@ func (s *Server) Run(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
-	if config.NewReplicaImpl {
-		tlsConfig, err := conf.Security.ToTLSConfig()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		logConfig := logutil.DefaultZapLoggerConfig
-		logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-		etcdCli, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			TLS:         tlsConfig,
-			Context:     ctx,
-			LogConfig:   &logConfig,
-			DialTimeout: 5 * time.Second,
-			DialOptions: []grpc.DialOption{
-				grpcTLSOption,
-				grpc.WithBlock(),
-				grpc.WithConnectParams(grpc.ConnectParams{
-					Backoff: backoff.Config{
-						BaseDelay:  time.Second,
-						Multiplier: 1.1,
-						Jitter:     0.1,
-						MaxDelay:   3 * time.Second,
-					},
-					MinConnectTimeout: 3 * time.Second,
-				}),
-			},
-		})
-		if err != nil {
-			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
-		}
-		etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
-		s.etcdClient = &etcdClient
-	}
 
+	tlsConfig, err := conf.Security.ToTLSConfig()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   s.pdEndpoints,
+		TLS:         tlsConfig,
+		Context:     ctx,
+		LogConfig:   &logConfig,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
+	if err != nil {
+		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+	}
+	etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+	s.etcdClient = &etcdClient
 	if err := s.initDataDir(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -172,81 +163,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
-	if config.NewReplicaImpl {
-		s.captureV2 = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
-		return s.run(ctx)
-	}
-	// When a capture suicided, restart it
-	for {
-		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
-			return err
-		}
-		log.Info("server recovered", zap.String("capture-id", s.capture.info.ID))
-	}
-}
 
-func (s *Server) setOwner(owner *Owner) {
-	s.ownerLock.Lock()
-	defer s.ownerLock.Unlock()
-	s.owner = owner
-}
-
-func (s *Server) campaignOwnerLoop(ctx context.Context) error {
-	// In most failure cases, we don't return error directly, just run another
-	// campaign loop. We treat campaign loop as a special background routine.
-
-	conf := config.GetGlobalServerConfig()
-	rl := rate.NewLimiter(0.05, 2)
-	for {
-		err := rl.Wait(ctx)
-		if err != nil {
-			if errors.Cause(err) == context.Canceled {
-				return nil
-			}
-			return errors.Trace(err)
-		}
-
-		// Campaign to be an owner, it blocks until it becomes the owner
-		if err := s.capture.Campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
-				return nil
-			case mvcc.ErrCompacted:
-				continue
-			}
-			log.Warn("campaign owner failed", zap.Error(err))
-			continue
-		}
-		captureID := s.capture.info.ID
-		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := NewOwner(ctx, s.pdClient, conf.Security, s.capture.session, conf.GcTTL, time.Duration(conf.OwnerFlushInterval))
-		if err != nil {
-			log.Warn("create new owner failed", zap.Error(err))
-			continue
-		}
-
-		s.setOwner(owner)
-		if err := owner.Run(ctx, ownerRunInterval); err != nil {
-			if errors.Cause(err) == context.Canceled {
-				log.Info("owner exited", zap.String("capture-id", captureID))
-				select {
-				case <-ctx.Done():
-					// only exits the campaignOwnerLoop if parent context is done
-					return ctx.Err()
-				default:
-				}
-				log.Info("owner exited", zap.String("capture-id", captureID))
-			}
-			err2 := s.capture.Resign(ctx)
-			if err2 != nil {
-				// if resign owner failed, return error to let capture exits
-				return errors.Annotatef(err2, "resign owner failed, capture: %s", captureID)
-			}
-			log.Warn("run owner failed", zap.Error(err))
-		}
-		// owner is resigned by API, reset owner and continue the campaign loop
-		s.setOwner(nil)
-	}
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+	return s.run(ctx)
 }
 
 func (s *Server) etcdHealthChecker(ctx context.Context) error {
@@ -271,7 +190,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 		case <-ticker.C:
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, time.Duration(time.Second*10))
+				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 				req, err := http.NewRequestWithContext(
 					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
 				if err != nil {
@@ -292,35 +211,15 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	if !config.NewReplicaImpl {
-		kvStorage, err := util.KVStorageFromCtx(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
-		if err != nil {
-			return err
-		}
-		s.capture = capture
-		s.etcdClient = &capture.etcdClient
-	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	wg, cctx := errgroup.WithContext(ctx)
-	if config.NewReplicaImpl {
-		wg.Go(func() error {
-			return s.captureV2.Run(cctx)
-		})
-	} else {
-		wg.Go(func() error {
-			return s.campaignOwnerLoop(cctx)
-		})
 
-		wg.Go(func() error {
-			return s.capture.Run(cctx)
-		})
-	}
+	wg.Go(func() error {
+		return s.capture.Run(cctx)
+	})
+
 	wg.Go(func() error {
 		return s.etcdHealthChecker(cctx)
 	})
@@ -339,18 +238,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 // Close closes the server.
 func (s *Server) Close() {
 	if s.capture != nil {
-		if !config.NewReplicaImpl {
-			s.capture.Cleanup()
-		}
-		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
-		err := s.capture.Close(closeCtx)
-		if err != nil {
-			log.Error("close capture", zap.Error(err))
-		}
-		closeCancel()
-	}
-	if s.captureV2 != nil {
-		s.captureV2.AsyncClose()
+		s.capture.AsyncClose()
 	}
 	if s.statusServer != nil {
 		err := s.statusServer.Close()
@@ -375,10 +263,8 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if diskInfo.Avail < dataDirThreshold {
-		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
-			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
-	}
+	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
+		"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
 
 	return nil
 }
@@ -441,14 +327,25 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 // at the moment, only consider available disk space
 func findBestDataDir(candidates []string) (result string, ok bool) {
 	var low uint64 = 0
-	for _, dir := range candidates {
+
+	checker := func(dir string) (*util.DiskInfo, error) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
 		if err := util.IsDirReadWritable(dir); err != nil {
-			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
-			continue
+			return nil, err
 		}
 		info, err := util.GetDiskInfo(dir)
 		if err != nil {
-			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
+			return nil, err
+		}
+		return info, err
+	}
+
+	for _, dir := range candidates {
+		info, err := checker(dir)
+		if err != nil {
+			log.Warn("check the availability of dir", zap.String("dir", dir), zap.Error(err))
 			continue
 		}
 		if info.Avail > low {

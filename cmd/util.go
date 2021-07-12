@@ -60,6 +60,12 @@ var errOwnerNotFound = liberrors.New("owner not found")
 
 var tsGapWarnning int64 = 86400 * 1000 // 1 day in milliseconds
 
+// Endpoint schemes.
+const (
+	HTTP  = "http"
+	HTTPS = "https"
+)
+
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
@@ -252,9 +258,9 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 	}
 
 	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(int64(tID))
+		tableInfo, exist := snap.TableByID(tID)
 		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", int64(tID))
+			return nil, nil, errors.NotFoundf("table %d", tID)
 		}
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
@@ -371,6 +377,29 @@ func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64
 		}
 		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 			return errors.NewNoStackError("abort changefeed create or resume")
+		}
+	}
+	return nil
+}
+
+// verifyPdEndpoint verifies whether the pd endpoint is a valid http or https URL.
+// The certificate is required when using https.
+func verifyPdEndpoint(pdEndpoint string, useTLS bool) error {
+	u, err := url.Parse(pdEndpoint)
+	if err != nil {
+		return errors.Annotate(err, "parse PD endpoint")
+	}
+	if (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
+		return errors.New("PD endpoint should be a valid http or https URL")
+	}
+
+	if useTLS {
+		if u.Scheme == HTTP {
+			return errors.New("PD endpoint scheme should be https")
+		}
+	} else {
+		if u.Scheme == HTTPS {
+			return errors.New("PD endpoint scheme is https, please provide certificate")
 		}
 	}
 	return nil
