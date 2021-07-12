@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -127,4 +128,40 @@ func (s *changefeedSuite) TestHandleMoveTableJobs(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(changefeed.orphanTables, check.HasKey, model.TableID(1))
 	c.Assert(changefeed.moveTableJobs, check.HasLen, 0)
+}
+
+func (s *changefeedSuite) TestUpdatePartition(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	cf := changeFeed{
+		partitions: map[model.TableID][]int64{
+			51: {53, 55, 57},
+		},
+		orphanTables:  make(map[model.TableID]model.Ts),
+		toCleanTables: make(map[model.TableID]model.Ts),
+	}
+	tblInfo := &timodel.TableInfo{
+		ID: 51,
+		Partition: &timodel.PartitionInfo{
+			Enable: true,
+			Definitions: []timodel.PartitionDefinition{
+				{ID: 57}, {ID: 59}, {ID: 61},
+			},
+		},
+	}
+	startTs := uint64(100)
+
+	cf.updatePartition(tblInfo, startTs)
+	c.Assert(cf.orphanTables, check.DeepEquals, map[model.TableID]model.Ts{
+		59: startTs,
+		61: startTs,
+	})
+	c.Assert(cf.toCleanTables, check.DeepEquals, map[model.TableID]model.Ts{
+		53: startTs,
+		55: startTs,
+	})
+	c.Assert(cf.partitions, check.DeepEquals, map[model.TableID][]int64{
+		51: {57, 59, 61},
+	})
 }
