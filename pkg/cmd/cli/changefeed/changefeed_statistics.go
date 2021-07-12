@@ -83,6 +83,7 @@ func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *c
 		},
 	}
 	command.PersistentFlags().UintVarP(&o.interval, "interval", "I", 10, "Interval for outputing the latest statistics")
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }

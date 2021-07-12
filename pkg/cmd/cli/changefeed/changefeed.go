@@ -60,18 +60,17 @@ func NewCmdChangefeed(f util.Factory) *cobra.Command {
 	}
 
 	cmds.AddCommand(newCmdListChangefeed(f))
-	cmds.AddCommand(NewCmdQueryChangefeed(f, o))
+	cmds.AddCommand(newCmdQueryChangefeed(f, o))
 	cmds.AddCommand(newCmdPauseChangefeed(f, o))
 	cmds.AddCommand(newCmdResumeChangefeed(f, o))
 	cmds.AddCommand(newCmdRemoveChangefeed(f, o))
 	cmds.AddCommand(NewCmdCreateChangefeed(f, o))
 	cmds.AddCommand(NewCmdUpdateChangefeed(f, o))
 	cmds.AddCommand(NewCmdStatisticsChangefeed(f, o))
-	cmds.AddCommand(NewCmdCyclicChangefeed(f, o))
+	cmds.AddCommand(NewCmdCyclicChangefeed(f))
 
 	cmds.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmds.PersistentFlags().BoolVar(&o.NoConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
-	_ = cmds.MarkPersistentFlagRequired("changefeed-id")
 
 	return cmds
 }

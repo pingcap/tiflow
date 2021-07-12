@@ -42,5 +42,7 @@ func newCmdPauseChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.
 		},
 	}
 
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
+
 	return command
 }

@@ -57,6 +57,7 @@ func newCmdRemoveChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 	}
 
 	command.PersistentFlags().BoolVarP(&o.optForceRemove, "force", "f", false, "remove all information of the changefeed")
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }

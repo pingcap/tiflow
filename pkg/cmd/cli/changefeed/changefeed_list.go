@@ -98,6 +98,7 @@ func newCmdListChangefeed(f util.Factory) *cobra.Command {
 	}
 
 	command.PersistentFlags().BoolVarP(&o.changefeedListAll, "all", "a", false, "List all replication tasks(including removed and finished)")
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }

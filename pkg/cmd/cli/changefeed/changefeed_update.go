@@ -142,6 +142,7 @@ func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 	}
 
 	o.AddFlags(command.PersistentFlags())
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }
