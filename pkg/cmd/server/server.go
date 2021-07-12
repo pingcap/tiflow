@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package server
 
 import (
@@ -24,7 +37,8 @@ import (
 	"time"
 )
 
-type Options struct {
+// options defines flags for the `server` command.
+type options struct {
 	serverPdAddr         string
 	serverConfigFilePath string
 	caPath               string
@@ -35,42 +49,45 @@ type Options struct {
 	serverConfig *config.ServerConfig
 }
 
-func NewOptions() *Options {
-	return &Options{}
+// newOptions creates new options for the `server` command.
+func newOptions() *options {
+	return &options{}
 }
 
-func (o *Options) AddFlags(flags *pflag.FlagSet) {
+// addFlags receives a *cobra.Command reference and binds
+// flags related to template printing to it.
+func (o *options) addFlags(cmd *cobra.Command) {
 	defaultServerConfig := config.GetDefaultServerConfig()
-	flags.StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
-	flags.StringVar(&o.serverConfig.Addr, "addr", defaultServerConfig.Addr, "Set the listening address")
-	flags.StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", defaultServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
-	flags.StringVar(&o.serverConfig.TZ, "tz", defaultServerConfig.TZ, "Specify time zone of TiCDC cluster")
-	flags.Int64Var(&o.serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
-	flags.StringVar(&o.serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
-	flags.StringVar(&o.serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
-	flags.StringVar(&o.serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
-	flags.DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
-	flags.DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
+	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
+	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", defaultServerConfig.Addr, "Set the listening address")
+	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", defaultServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
+	cmd.Flags().StringVar(&o.serverConfig.TZ, "tz", defaultServerConfig.TZ, "Specify time zone of TiCDC cluster")
+	cmd.Flags().Int64Var(&o.serverConfig.GcTTL, "gc-ttl", defaultServerConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
+	cmd.Flags().StringVar(&o.serverConfig.LogFile, "log-file", defaultServerConfig.LogFile, "log file path")
+	cmd.Flags().StringVar(&o.serverConfig.LogLevel, "log-level", defaultServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().StringVar(&o.serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
+	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
+	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
 
-	flags.IntVar(&o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", defaultServerConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
-	flags.IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", defaultServerConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
-	flags.Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", defaultServerConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", defaultServerConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", defaultServerConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
+	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", defaultServerConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
 	// 80 is safe on most systems.
-	flags.IntVar(&o.serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", defaultServerConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", defaultServerConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
 	// We use 8GB as a safe default before we support local configuration file.
-	flags.Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", defaultServerConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
-	flags.StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", defaultServerConfig.Sorter.SortDir, "sorter's temporary file directory")
+	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", defaultServerConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
+	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", defaultServerConfig.Sorter.SortDir, "sorter's temporary file directory")
 
-	flags.StringVar(&o.caPath, "ca", "", "CA certificate path for TLS connection")
-	flags.StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
-	flags.StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
-	flags.StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
+	cmd.Flags().StringVar(&o.caPath, "ca", "", "CA certificate path for TLS connection")
+	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
+	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
+	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 
-	flags.StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
-	_ = flags.MarkHidden("sort-dir") //nolint:errcheck
+	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
+	_ = cmd.Flags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
-func (o *Options) Run(cmd *cobra.Command) error {
+func (o *options) run(cmd *cobra.Command) error {
 	conf, err := o.loadAndVerifyServerConfig(cmd)
 	if err != nil {
 		return errors.Trace(err)
@@ -120,7 +137,7 @@ func (o *Options) Run(cmd *cobra.Command) error {
 	return nil
 }
 
-func (o *Options) loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error) {
+func (o *options) loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error) {
 	o.serverConfig.Security = o.getCredential()
 
 	conf := config.GetDefaultServerConfig()
@@ -200,11 +217,12 @@ func (o *Options) loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerC
 	return conf, nil
 }
 
-func (o *Options) getCredential() *security.Credential {
+func (o *options) getCredential() *security.Credential {
 	var certAllowedCN []string
 	if len(o.allowedCertCN) != 0 {
 		certAllowedCN = strings.Split(o.allowedCertCN, ",")
 	}
+
 	return &security.Credential{
 		CAPath:        o.caPath,
 		CertPath:      o.certPath,
@@ -213,19 +231,20 @@ func (o *Options) getCredential() *security.Credential {
 	}
 }
 
+// NewCmdServer creates the `server` command.
 func NewCmdServer() *cobra.Command {
-	o := NewOptions()
+	o := newOptions()
 
 	command := &cobra.Command{
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return o.Run(cmd)
+			return o.run(cmd)
 		},
 	}
 
 	patchTiDBConf()
-	o.AddFlags(command.Flags())
+	o.addFlags(command)
 
 	return command
 }
