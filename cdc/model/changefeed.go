@@ -172,7 +172,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 			return errors.Annotatef(
 				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
-		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	return nil
 }
