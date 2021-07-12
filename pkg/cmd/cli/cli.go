@@ -30,25 +30,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// options defines flags for the `cli` command.
-type options struct {
+// Options defines flags for the `cli` command.
+type Options struct {
 	interact    bool
 	cliLogLevel string
-	cliPdAddr   string
+	CliPdAddr   string
 }
 
-// newOptions creates new options for the `cli` command.
-func newOptions() *options {
-	return &options{}
+// newOptions creates new Options for the `cli` command.
+func newOptions() *Options {
+	return &Options{}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *options) addFlags(c *cobra.Command) {
+func (o *Options) addFlags(c *cobra.Command) {
 	if o == nil {
 		return
 	}
-	c.PersistentFlags().StringVar(&o.cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
+	c.PersistentFlags().StringVar(&o.CliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
 	c.PersistentFlags().BoolVarP(&o.interact, "interact", "i", false, " cdc cli with readline")
 	c.PersistentFlags().StringVar(&o.cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 }
@@ -78,14 +78,14 @@ func NewCmdCli() *cobra.Command {
 	// Binding the `cmd` command flags.
 	o.addFlags(cmds)
 
-	// Bind the certificate options and construct the client construction factory.
+	// Bind the certificate Options and construct the client construction factory.
 	cf := util.NewCredentialFlags()
 	cf.AddFlags(cmds)
 	f := util.NewFactory(cf)
 
 	// Add subcommands.
 	cmds.AddCommand(capture.NewCmdCapture(f))
-	cmds.AddCommand(changefeed.NewCmdChangefeed(f))
+	cmds.AddCommand(changefeed.NewCmdChangefeed(f, o))
 	cmds.AddCommand(processor.NewCmdProcessor(f))
 	cmds.AddCommand(tso.NewCmdTso(f))
 	cmds.AddCommand(unsafe.NewCmdUnsafe(f))

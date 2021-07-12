@@ -11,7 +11,7 @@ import (
 )
 
 type CyclicChangefeedOptions struct {
-	createCommonOptions CreateCommonOptions
+	createCommonOptions commonChangefeedOptions
 
 	cyclicUpstreamDSN   string
 	upstreamSslCaPath   string

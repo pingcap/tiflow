@@ -14,7 +14,7 @@ import (
 )
 
 func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
-	o := NewCreateCommonOptions()
+	o := newCommonChangefeedOptions()
 
 	command := &cobra.Command{
 		Use:   "update",
@@ -141,7 +141,7 @@ func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 		},
 	}
 
-	o.AddFlags(command.PersistentFlags())
+	o.addFlags(command.PersistentFlags())
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command

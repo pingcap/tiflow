@@ -16,6 +16,7 @@ package changefeed
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/cmd/cli"
 	pd "github.com/tikv/pd/client"
 	"io/ioutil"
 	"strings"
@@ -51,8 +52,8 @@ func newCommonOptions() *commonOptions {
 }
 
 // NewCmdChangefeed creates the `cli changefeed` command.
-func NewCmdChangefeed(f util.Factory) *cobra.Command {
-	o := newCommonOptions()
+func NewCmdChangefeed(f util.Factory, options *cli.Options) *cobra.Command {
+	changefeedCommonOptions := newCommonOptions()
 
 	cmds := &cobra.Command{
 		Use:   "changefeed",
@@ -60,17 +61,17 @@ func NewCmdChangefeed(f util.Factory) *cobra.Command {
 	}
 
 	cmds.AddCommand(newCmdListChangefeed(f))
-	cmds.AddCommand(newCmdQueryChangefeed(f, o))
-	cmds.AddCommand(newCmdPauseChangefeed(f, o))
-	cmds.AddCommand(newCmdResumeChangefeed(f, o))
-	cmds.AddCommand(newCmdRemoveChangefeed(f, o))
-	cmds.AddCommand(NewCmdCreateChangefeed(f, o))
-	cmds.AddCommand(NewCmdUpdateChangefeed(f, o))
-	cmds.AddCommand(NewCmdStatisticsChangefeed(f, o))
+	cmds.AddCommand(newCmdQueryChangefeed(f, changefeedCommonOptions))
+	cmds.AddCommand(newCmdPauseChangefeed(f, changefeedCommonOptions))
+	cmds.AddCommand(newCmdResumeChangefeed(f, changefeedCommonOptions))
+	cmds.AddCommand(newCmdRemoveChangefeed(f, changefeedCommonOptions))
+	cmds.AddCommand(newCmdCreateChangefeed(f, options, changefeedCommonOptions))
+	cmds.AddCommand(NewCmdUpdateChangefeed(f, changefeedCommonOptions))
+	cmds.AddCommand(NewCmdStatisticsChangefeed(f, changefeedCommonOptions))
 	cmds.AddCommand(NewCmdCyclicChangefeed(f))
 
-	cmds.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
-	cmds.PersistentFlags().BoolVar(&o.NoConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
+	cmds.PersistentFlags().StringVarP(&changefeedCommonOptions.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
+	cmds.PersistentFlags().BoolVar(&changefeedCommonOptions.NoConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 
 	return cmds
 }
