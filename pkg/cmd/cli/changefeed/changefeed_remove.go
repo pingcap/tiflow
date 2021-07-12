@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// removeChangefeedOptions defines flags for the `cli changefeed remove` command.
 type removeChangefeedOptions struct {
 	optForceRemove bool
 }

@@ -59,7 +59,7 @@ func NewCmdChangefeed(f util.Factory) *cobra.Command {
 		Short: "Manage changefeed (changefeed is a replication task)",
 	}
 
-	cmds.AddCommand(NewCmdListChangefeeds(f))
+	cmds.AddCommand(newCmdListChangefeed(f))
 	cmds.AddCommand(NewCmdQueryChangefeed(f, o))
 	cmds.AddCommand(newCmdPauseChangefeed(f, o))
 	cmds.AddCommand(newCmdResumeChangefeed(f, o))
