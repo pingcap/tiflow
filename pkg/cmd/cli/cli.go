@@ -15,16 +15,16 @@ package cli
 
 import (
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/capture"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/changefeed"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/processor"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/tso"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/unsafe"
 	"io"
 	"os"
 
 	"github.com/chzyer/readline"
 	"github.com/mattn/go-shellwords"
+	"github.com/pingcap/ticdc/pkg/cmd/cli/capture"
+	"github.com/pingcap/ticdc/pkg/cmd/cli/changefeed"
+	"github.com/pingcap/ticdc/pkg/cmd/cli/processor"
+	"github.com/pingcap/ticdc/pkg/cmd/cli/tso"
+	"github.com/pingcap/ticdc/pkg/cmd/cli/unsafe"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/spf13/cobra"
