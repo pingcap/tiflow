@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"time"
@@ -36,6 +37,30 @@ func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
 	c.Assert(cfg.TiKVClient.MaxBatchSize, check.Equals, uint(0))
 }
 
+func (s *serverSuite) TestDataDirServerConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cmd := new(cobra.Command)
+	initServerCmd(cmd)
+	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
+	cfg, err := loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	// data dir default to ""
+	c.Assert(cfg.DataDir, check.Equals, "")
+	c.Assert(cfg.Sorter.SortDir, check.Equals, filepath.Join("", "/tmp/sorter"))
+
+	dataDir := c.MkDir()
+	cmd = new(cobra.Command)
+	initServerCmd(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--data-dir=" + dataDir}), check.IsNil)
+	cfg, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	c.Assert(cfg.DataDir, check.Equals, dataDir)
+	// sorter-dir is not set yet
+	c.Assert(cfg.Sorter.SortDir, check.Equals, "/tmp/sorter")
+}
+
 func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	// test default flag values
@@ -44,6 +69,8 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
 	cfg, err := loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+
 	defcfg := config.GetDefaultServerConfig()
 	c.Assert(defcfg.ValidateAndAdjust(), check.IsNil)
 	c.Assert(cfg, check.DeepEquals, defcfg)
@@ -71,6 +98,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// test flags without config file
+	dataDir := c.MkDir()
 	cmd = new(cobra.Command)
 	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{
@@ -78,6 +106,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		"--advertise-addr", "127.5.5.1:7777",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
+		"--data-dir", dataDir,
 		"--gc-ttl", "10",
 		"--tz", "UTC",
 		"--owner-flush-interval", "150ms",
@@ -95,12 +124,21 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "127.5.5.1:8833",
-		AdvertiseAddr:          "127.5.5.1:7777",
-		LogFile:                "/root/cdc.log",
-		LogLevel:               "debug",
+		Addr:          "127.5.5.1:8833",
+		AdvertiseAddr: "127.5.5.1:7777",
+		LogFile:       "/root/cdc.log",
+		LogLevel:      "debug",
+		Log: &config.LogConfig{
+			File: &config.LogFileConfig{
+				MaxSize:    300,
+				MaxDays:    0,
+				MaxBackups: 0,
+			},
+		},
+		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
@@ -109,7 +147,7 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
-			SortDir:                "/tmp/just_a_test",
+			SortDir:                config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -117,23 +155,35 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			CertAllowedCN: []string{"dd", "ee"},
 		},
 		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+			RegionScanLimit:  6,
+		},
 	})
 
 	// test decode config file
+	dataDir = c.MkDir()
 	tmpDir := c.MkDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
-	configContent := `
+	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
 advertise-addr = "127.0.0.1:1111"
 
 log-file = "/root/cdc1.log"
 log-level = "warn"
-
+data-dir = "%+v"
 gc-ttl = 500
 tz = "US"
+capture-session-ttl = 10
 
 owner-flush-interval = "600ms"
 processor-flush-interval = "600ms"
+
+[log.file]
+max-size = 200
+max-days = 1
+max-backups = 1
 
 [sorter]
 chunk-size-limit = 10000000
@@ -142,7 +192,7 @@ max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
-`
+`, dataDir)
 	err = ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 	cmd = new(cobra.Command)
@@ -151,12 +201,21 @@ sort-dir = "/tmp/just_a_test"
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "128.0.0.1:1234",
-		AdvertiseAddr:          "127.0.0.1:1111",
-		LogFile:                "/root/cdc1.log",
-		LogLevel:               "warn",
+		Addr:          "128.0.0.1:1234",
+		AdvertiseAddr: "127.0.0.1:1111",
+		LogFile:       "/root/cdc1.log",
+		LogLevel:      "warn",
+		Log: &config.LogConfig{
+			File: &config.LogFileConfig{
+				MaxSize:    200,
+				MaxDays:    1,
+				MaxBackups: 1,
+			},
+		},
+		DataDir:                dataDir,
 		GcTTL:                  500,
 		TZ:                     "US",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
@@ -165,10 +224,15 @@ sort-dir = "/tmp/just_a_test"
 			MaxMemoryPressure:      3,
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                "/tmp/just_a_test",
+			SortDir:                config.DefaultSortDir,
 		},
 		Security:            &config.SecurityConfig{},
 		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+			RegionScanLimit:  6,
+		},
 	})
 
 	configContent = configContent + `
@@ -186,6 +250,7 @@ cert-allowed-cn = ["dd","ee"]
 		"--addr", "127.5.5.1:8833",
 		"--log-file", "/root/cdc.log",
 		"--log-level", "debug",
+		"--data-dir", dataDir,
 		"--gc-ttl", "10",
 		"--tz", "UTC",
 		"--owner-flush-interval", "150ms",
@@ -200,12 +265,21 @@ cert-allowed-cn = ["dd","ee"]
 	cfg, err = loadAndVerifyServerConfig(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
-		Addr:                   "127.5.5.1:8833",
-		AdvertiseAddr:          "127.0.0.1:1111",
-		LogFile:                "/root/cdc.log",
-		LogLevel:               "debug",
+		Addr:          "127.5.5.1:8833",
+		AdvertiseAddr: "127.0.0.1:1111",
+		LogFile:       "/root/cdc.log",
+		LogLevel:      "debug",
+		Log: &config.LogConfig{
+			File: &config.LogFileConfig{
+				MaxSize:    200,
+				MaxDays:    1,
+				MaxBackups: 1,
+			},
+		},
+		DataDir:                dataDir,
 		GcTTL:                  10,
 		TZ:                     "UTC",
+		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
@@ -214,7 +288,7 @@ cert-allowed-cn = ["dd","ee"]
 			MaxMemoryPressure:      70,
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
-			SortDir:                "/tmp/just_a_test",
+			SortDir:                config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -222,5 +296,10 @@ cert-allowed-cn = ["dd","ee"]
 			CertAllowedCN: []string{"dd", "ee"},
 		},
 		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		KVClient: &config.KVClientConfig{
+			WorkerConcurrent: 8,
+			WorkerPoolSize:   0,
+			RegionScanLimit:  6,
+		},
 	})
 }

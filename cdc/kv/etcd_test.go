@@ -225,6 +225,7 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
+		SortDir: "/old-version/sorter",
 	}
 	cfID := "test-op-cf"
 
@@ -236,6 +237,7 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	d, err := s.client.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(d.SinkURI, check.Equals, detail.SinkURI)
+	c.Assert(d.SortDir, check.Equals, detail.SortDir)
 
 	err = s.client.LeaseGuardDeleteChangeFeedInfo(ctx, cfID, sess.Lease())
 	c.Assert(err, check.IsNil)
@@ -471,10 +473,7 @@ func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
-	err := s.client.CreateChangefeedInfo(ctx, detail, "bad.id👻")
-	c.Assert(err, check.ErrorMatches, ".*bad changefeed id.*")
-
-	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
+	err := s.client.CreateChangefeedInfo(ctx, detail, "test-id")
 	c.Assert(err, check.IsNil)
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
