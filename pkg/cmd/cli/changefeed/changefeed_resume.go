@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCmdResumeChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdResumeChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "resume",
 		Short: "Resume a paused replication task (changefeed)",
@@ -23,15 +23,25 @@ func NewCmdResumeChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 			if err := resumeChangefeedCheck(f, ctx, cmd, commonOptions); err != nil {
 				return err
 			}
-			return ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
+
+			etcdClient, err := f.EtcdClient()
+			if err != nil {
+				return err
+			}
+
+			return applyAdminChangefeed(etcdClient, ctx, job, f.GetCredential())
 		},
 	}
 
 	return command
 }
 
-func resumeChangefeedCheck(f util.Factory, ctx context.Context, cmd *cobra.Command, commonOptions *CommonOptions) error {
-	resp, err := ApplyOwnerChangefeedQuery(f, ctx, commonOptions.changefeedID, f.GetCredential())
+func resumeChangefeedCheck(f util.Factory, ctx context.Context, cmd *cobra.Command, commonOptions *commonOptions) error {
+	etcdClient, err := f.EtcdClient()
+	if err != nil {
+		return err
+	}
+	resp, err := applyOwnerChangefeedQuery(etcdClient, ctx, commonOptions.changefeedID, f.GetCredential())
 	if err != nil {
 		return err
 	}
@@ -40,5 +50,5 @@ func resumeChangefeedCheck(f util.Factory, ctx context.Context, cmd *cobra.Comma
 	if err != nil {
 		return err
 	}
-	return ConfirmLargeDataGap(f, ctx, cmd, commonOptions, info.TSO)
+	return confirmLargeDataGap(f, ctx, cmd, commonOptions, info.TSO)
 }

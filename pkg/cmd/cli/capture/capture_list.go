@@ -15,7 +15,6 @@ package capture
 
 import (
 	"context"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
@@ -74,4 +73,20 @@ func listCaptures(etcdClient *kv.CDCEtcdClient, ctx context.Context) ([]*Capture
 	}
 
 	return captures, nil
+}
+
+// GetOwnerCapture returns the owner capture.
+func GetOwnerCapture(etcdClient *kv.CDCEtcdClient, ctx context.Context) (*Capture, error) {
+	captures, err := listCaptures(etcdClient, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, c := range captures {
+		if c.IsOwner {
+			return c, nil
+		}
+	}
+
+	return nil, errors.Trace(util.ErrOwnerNotFound)
 }

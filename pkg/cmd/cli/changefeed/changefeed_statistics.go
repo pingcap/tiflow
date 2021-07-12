@@ -24,7 +24,7 @@ func NewStatisticsChangefeedOptions() *StatisticsChangefeedOptions {
 	return &StatisticsChangefeedOptions{}
 }
 
-func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	o := NewStatisticsChangefeedOptions()
 
 	command := &cobra.Command{

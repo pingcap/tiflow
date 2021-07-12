@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// options defines flags and other configuration parameters for the `cli` command.
+// options defines flags for the `cli` command.
 type options struct {
 	interact    bool
 	cliLogLevel string

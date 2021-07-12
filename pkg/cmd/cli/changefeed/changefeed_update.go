@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-func NewCmdUpdateChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdUpdateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	o := NewCreateCommonOptions()
 
 	command := &cobra.Command{
@@ -89,7 +89,7 @@ func NewCmdUpdateChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 				return err
 			}
 
-			resp, err := ApplyOwnerChangefeedQuery(f, ctx, commonOptions.changefeedID, f.GetCredential())
+			resp, err := applyOwnerChangefeedQuery(etcdClient, ctx, commonOptions.changefeedID, f.GetCredential())
 			// if no cdc owner exists, allow user to update changefeed config
 			if err != nil && errors.Cause(err) != util.ErrOwnerNotFound {
 				return err

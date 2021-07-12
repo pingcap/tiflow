@@ -31,7 +31,7 @@ func (o *CyclicChangefeedOptions) getUpstreamCredential() *security.Credential {
 	}
 }
 
-func NewCmdCyclicChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdCyclicChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	o := NewCyclicChangefeedOptions()
 
 	command := &cobra.Command{

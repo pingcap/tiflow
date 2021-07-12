@@ -1,8 +1,25 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package changefeed
 
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"strings"
+	"time"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -13,29 +30,29 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"io/ioutil"
-	"net/url"
-	"strings"
-	"time"
 )
 
-var tsGapWarning int64 = 86400 * 1000 // 1 day in milliseconds
+const (
+	// tsGapWarning specifies the OOM threshold.
+	// 1 day in milliseconds
+	tsGapWarning = 86400 * 1000
+)
 
-type CommonOptions struct {
+// commonOptions defines common flags for the `changefeed` command.
+type commonOptions struct {
 	changefeedID string
 	NoConfirm    bool
 }
 
-func NewCommonOptions() *CommonOptions {
-	return &CommonOptions{
-		changefeedID: "",
-		NoConfirm:    false,
-	}
+// newCommonOptions creates new common options for the `changefeed` command.
+func newCommonOptions() *commonOptions {
+	return &commonOptions{}
 }
 
+// NewCmdChangefeed creates the `cli changefeed` command.
 func NewCmdChangefeed(f util.Factory) *cobra.Command {
-	o := NewCommonOptions()
+	o := newCommonOptions()
+
 	cmds := &cobra.Command{
 		Use:   "changefeed",
 		Short: "Manage changefeed (changefeed is a replication task)",
@@ -53,66 +70,32 @@ func NewCmdChangefeed(f util.Factory) *cobra.Command {
 
 	cmds.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmds.PersistentFlags().BoolVar(&o.NoConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
-
 	_ = cmds.MarkPersistentFlagRequired("changefeed-id")
+
 	return cmds
 }
 
-// TODO: move to a better place.
-func getAllCaptures(f util.Factory, ctx context.Context) ([]*capture.Capture, error) {
-	etcdClient, err := f.EtcdClient()
-	if err != nil {
-		return nil, err
-	}
-	_, raw, err := etcdClient.GetCaptures(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ownerID, err := etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
-	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
-		return nil, err
-	}
-	captures := make([]*capture.Capture, 0, len(raw))
-	for _, c := range raw {
-		isOwner := c.ID == ownerID
-		captures = append(captures,
-			&capture.Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
-	}
-	return captures, nil
-}
-
-func getOwnerCapture(f util.Factory, ctx context.Context) (*capture.Capture, error) {
-	captures, err := getAllCaptures(f, ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, c := range captures {
-		if c.IsOwner {
-			return c, nil
-		}
-	}
-	return nil, errors.Trace(util.ErrOwnerNotFound)
-}
-
-func ApplyOwnerChangefeedQuery(f util.Factory,
+func applyOwnerChangefeedQuery(etcdClient *kv.CDCEtcdClient,
 	ctx context.Context, cid model.ChangeFeedID, credential *security.Credential,
 ) (string, error) {
-	owner, err := getOwnerCapture(f, ctx)
+	owner, err := capture.GetOwnerCapture(etcdClient, ctx)
 	if err != nil {
 		return "", err
 	}
-	scheme := "http"
+
+	scheme := util.HTTP
 	if credential.IsTLSEnabled() {
-		scheme = "https"
+		scheme = util.HTTPS
 	}
+
 	addr := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
 	cli, err := httputil.NewClient(credential)
 	if err != nil {
 		return "", err
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarChangefeedID: {cid},
-	}))
+	})
 	if err != nil {
 		return "", err
 	}
@@ -123,18 +106,21 @@ func ApplyOwnerChangefeedQuery(f util.Factory,
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", errors.BadRequestf("%s", string(body))
 	}
+
 	return string(body), nil
 }
 
-func ApplyAdminChangefeed(f util.Factory, ctx context.Context, job model.AdminJob, credential *security.Credential) error {
-	owner, err := getOwnerCapture(f, ctx)
+func applyAdminChangefeed(etcdClient *kv.CDCEtcdClient, ctx context.Context, job model.AdminJob, credential *security.Credential) error {
+	owner, err := capture.GetOwnerCapture(etcdClient, ctx)
 	if err != nil {
 		return err
 	}
-	scheme := "http"
+
+	scheme := util.HTTP
 	if credential.IsTLSEnabled() {
-		scheme = "https"
+		scheme = util.HTTPS
 	}
+
 	addr := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
 	cli, err := httputil.NewClient(credential)
 	if err != nil {
@@ -159,10 +145,11 @@ func ApplyAdminChangefeed(f util.Factory, ctx context.Context, job model.AdminJo
 		}
 		return errors.BadRequestf("%s", string(body))
 	}
+
 	return nil
 }
 
-func ConfirmLargeDataGap(f util.Factory, ctx context.Context, cmd *cobra.Command, commonOptions *CommonOptions, startTs uint64) error {
+func confirmLargeDataGap(f util.Factory, ctx context.Context, cmd *cobra.Command, commonOptions *commonOptions, startTs uint64) error {
 	if commonOptions.NoConfirm {
 		return nil
 	}
@@ -170,10 +157,12 @@ func ConfirmLargeDataGap(f util.Factory, ctx context.Context, cmd *cobra.Command
 	if err != nil {
 		return err
 	}
+
 	currentPhysical, _, err := pdClient.GetTS(ctx)
 	if err != nil {
 		return err
 	}
+
 	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
 	if tsGap > tsGapWarning {
 		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+

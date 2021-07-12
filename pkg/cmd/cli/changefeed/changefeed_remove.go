@@ -17,7 +17,7 @@ func NewRemoveChangefeedOptions() *RemoveChangefeedOptions {
 	}
 }
 
-func NewCmdRemoveChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdRemoveChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	o := NewRemoveChangefeedOptions()
 
 	command := &cobra.Command{
@@ -25,6 +25,7 @@ func NewCmdRemoveChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 		Short: "Remove a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.GetDefaultContext()
+
 			job := model.AdminJob{
 				CfID: commonOptions.changefeedID,
 				Type: model.AdminRemove,
@@ -32,7 +33,13 @@ func NewCmdRemoveChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 					ForceRemove: o.optForceRemove,
 				},
 			}
-			return ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
+
+			etcdClient, err := f.EtcdClient()
+			if err != nil {
+				return err
+			}
+
+			return applyAdminChangefeed(etcdClient, ctx, job, f.GetCredential())
 		},
 	}
 

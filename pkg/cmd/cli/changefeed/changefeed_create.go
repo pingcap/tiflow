@@ -135,7 +135,7 @@ var forceEnableOldValueProtocols = []string{
 	"maxwell",
 }
 
-func NewCmdCreateChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdCreateChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	o := NewCreateChangefeedOptions()
 
 	command := &cobra.Command{
@@ -188,7 +188,7 @@ func NewCmdCreateChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 	return command
 }
 
-func (o *CreateChangefeedOptions) Validate(f util.Factory, commonOptions *CommonOptions, ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func (o *CreateChangefeedOptions) Validate(f util.Factory, commonOptions *commonOptions, ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if o.createCommonOptions.sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -207,7 +207,7 @@ func (o *CreateChangefeedOptions) Validate(f util.Factory, commonOptions *Common
 		if err := o.validateStartTs(f, ctx, commonOptions.changefeedID); err != nil {
 			return nil, err
 		}
-		if err := ConfirmLargeDataGap(f, ctx, cmd, commonOptions, o.createCommonOptions.startTs); err != nil {
+		if err := confirmLargeDataGap(f, ctx, cmd, commonOptions, o.createCommonOptions.startTs); err != nil {
 			return nil, err
 		}
 		if err := o.validateTargetTs(); err != nil {

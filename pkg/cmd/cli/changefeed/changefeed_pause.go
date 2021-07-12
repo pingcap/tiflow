@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCmdPauseChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdPauseChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "pause",
 		Short: "Pause a replication task (changefeed)",
@@ -18,7 +18,13 @@ func NewCmdPauseChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.
 				CfID: commonOptions.changefeedID,
 				Type: model.AdminStop,
 			}
-			return ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
+
+			etcdClient, err := f.EtcdClient()
+			if err != nil {
+				return err
+			}
+
+			return applyAdminChangefeed(etcdClient, ctx, job, f.GetCredential())
 		},
 	}
 

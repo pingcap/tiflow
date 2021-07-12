@@ -24,19 +24,19 @@ type cfMeta struct {
 }
 
 type QueryChangefeedOptions struct {
-	commonOptions *CommonOptions
+	commonOptions *commonOptions
 
 	simplified bool
 }
 
-func NewQueryChangefeedOptions(commonOptions *CommonOptions) *QueryChangefeedOptions {
+func NewQueryChangefeedOptions(commonOptions *commonOptions) *QueryChangefeedOptions {
 	return &QueryChangefeedOptions{
 		simplified:    false,
 		commonOptions: commonOptions,
 	}
 }
 
-func NewCmdQueryChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.Command {
+func NewCmdQueryChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
 	o := NewQueryChangefeedOptions(commonOptions)
 
 	command := &cobra.Command{
@@ -45,17 +45,18 @@ func NewCmdQueryChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.GetDefaultContext()
 
+			etcdClient, err := f.EtcdClient()
+			if err != nil {
+				return err
+			}
+
 			if o.simplified {
-				resp, err := ApplyOwnerChangefeedQuery(f, ctx, o.commonOptions.changefeedID, f.GetCredential())
+				resp, err := applyOwnerChangefeedQuery(etcdClient, ctx, o.commonOptions.changefeedID, f.GetCredential())
 				if err != nil {
 					return err
 				}
 				cmd.Println(resp)
 				return nil
-			}
-			etcdClient, err := f.EtcdClient()
-			if err != nil {
-				return err
 			}
 
 			info, err := etcdClient.GetChangeFeedInfo(ctx, o.commonOptions.changefeedID)
