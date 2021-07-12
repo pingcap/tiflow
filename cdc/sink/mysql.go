@@ -134,6 +134,11 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 }
 
 func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
+	defer func() {
+		for _, worker := range s.workers {
+			worker.closedCh <- struct{}{}
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -640,6 +645,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 					log.Info("mysql sink receives redundant error", zap.Error(err))
 				}
 			}
+			worker.cleanup()
 		}()
 	}
 	return nil
@@ -712,6 +718,7 @@ type mysqlSinkWorker struct {
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
 	checkpointTs     uint64
+	closedCh         chan struct{}
 }
 
 func newMySQLSinkWorker(
@@ -728,6 +735,7 @@ func newMySQLSinkWorker(
 		metricBucketSize: metricBucketSize,
 		execDMLs:         execDMLs,
 		receiver:         receiver,
+		closedCh:         make(chan struct{}, 1),
 	}
 }
 
@@ -829,6 +837,25 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			if err := flushRows(); err != nil {
 				return errors.Trace(err)
 			}
+		}
+	}
+}
+
+// cleanup waits for notification from closedCh and consumes all txns from txnCh.
+// The exit sequence is
+// 1. producer(sink.flushRowChangedEvents goroutine) of txnCh exits
+// 2. goroutine in 1 sends notification to closedCh of each sink worker
+// 3. each sink worker receives the notification from closedCh and mark FinishWg as Done
+func (w *mysqlSinkWorker) cleanup() {
+	<-w.closedCh
+	for {
+		select {
+		case txn := <-w.txnCh:
+			if txn.FinishWg != nil {
+				txn.FinishWg.Done()
+			}
+		default:
+			return
 		}
 	}
 }
@@ -1015,13 +1042,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, defaultDMLMaxRetryTime, bucket); err != nil {
-		ts := make([]uint64, 0, len(rows))
-		for _, row := range rows {
-			if len(ts) == 0 || ts[len(ts)-1] != row.CommitTs {
-				ts = append(ts, row.CommitTs)
-			}
-		}
-		log.Error("execute DMLs failed", zap.String("err", err.Error()), zap.Uint64s("ts", ts))
+		log.Error("execute DMLs failed", zap.String("err", err.Error()))
 		return errors.Trace(err)
 	}
 	return nil
