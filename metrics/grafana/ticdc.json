@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1626104647236,
+  "iteration": 1626106784214,
   "links": [],
   "panels": [
     {
@@ -1746,6 +1746,7 @@
           "expr": "ticdc_owner_status{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", job=\"cdc\"}",
           "format": "time_series",
           "intervalFactor": 1,
+          "legendFormat": "{{changefeed}}",
           "refId": "A"
         }
       ],
