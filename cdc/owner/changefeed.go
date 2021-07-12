@@ -183,11 +183,9 @@ LOOP:
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
-
 	failpoint.Inject("NewChangefeedRetryError", func() {
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
-
 	if c.state.Info.Config.CheckGCSafePoint {
 		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
 		if err != nil {
@@ -262,10 +260,8 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			if status == nil {
 				status = &model.ChangeFeedStatus{
 					// the changefeed status is nil when the changefeed is just created.
-					// the txn in start ts is not replicated at that time,
-					// so the checkpoint ts and resolved ts should less than start ts.
-					ResolvedTs:   c.state.Info.StartTs - 1,
-					CheckpointTs: c.state.Info.StartTs - 1,
+					ResolvedTs:   c.state.Info.StartTs,
+					CheckpointTs: c.state.Info.StartTs,
 					AdminJobType: model.AdminNone,
 				}
 				return status, true, nil
