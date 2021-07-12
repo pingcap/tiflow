@@ -50,7 +50,7 @@ var (
 			Subsystem: "owner",
 			Name:      "status",
 			Help:      "The status of changefeeds",
-		}, []string{"changefeed", "status"})
+		}, []string{"changefeed"})
 )
 
 const (
