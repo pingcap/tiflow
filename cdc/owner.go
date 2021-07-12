@@ -52,7 +52,7 @@ type ownership struct {
 	tickTime     time.Duration
 }
 
-func newOwnersip(tickTime time.Duration) ownership {
+func newOwnership(tickTime time.Duration) ownership {
 	minTickTime := 5 * time.Second
 	if tickTime > minTickTime {
 		log.Panic("ownership counter must be incearsed every 5 seconds")
@@ -1276,7 +1276,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
-	ownership := newOwnersip(tickTime)
+	ownership := newOwnership(tickTime)
 loop:
 	for {
 		select {
