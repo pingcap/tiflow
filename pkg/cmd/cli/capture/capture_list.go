@@ -15,56 +15,63 @@ package capture
 
 import (
 	"context"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"go.etcd.io/etcd/clientv3/concurrency"
-
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
+	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
-// Capture holds capture information
+// Capture holds capture information.
 type Capture struct {
 	ID            string `json:"id"`
 	IsOwner       bool   `json:"is-owner"`
 	AdvertiseAddr string `json:"address"`
 }
 
+// NewCmdListCapture creates the `capture list` command.
 func NewCmdListCapture(f util.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List all captures in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
-			captures, err := ListCaptures(f, ctx)
+			etcdClient, err := f.EtcdClient()
 			if err != nil {
 				return err
 			}
+
+			captures, err := listCaptures(etcdClient, ctx)
+			if err != nil {
+				return err
+			}
+
 			return util.JsonPrint(cmd, captures)
 		},
 	}
 	return command
 }
 
-func ListCaptures(f util.Factory, ctx context.Context) ([]*Capture, error) {
-	etcdClient, err := f.EtcdClient()
-	if err != nil {
-		return nil, err
-	}
+// listCaptures list all the captures from the etcd.
+func listCaptures(etcdClient *kv.CDCEtcdClient, ctx context.Context) ([]*Capture, error) {
 	_, raw, err := etcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	ownerID, err := etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
 	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
 		return nil, err
 	}
+
 	captures := make([]*Capture, 0, len(raw))
 	for _, c := range raw {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
 			&Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
 	}
+
 	return captures, nil
 }

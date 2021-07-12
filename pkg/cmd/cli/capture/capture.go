@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewCmdCapture creates the `cli capture` command.
 func NewCmdCapture(f util.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "capture",
@@ -27,5 +28,6 @@ func NewCmdCapture(f util.Factory) *cobra.Command {
 		NewCmdListCapture(f),
 		// TODO: add resign owner command
 	)
+
 	return command
 }
