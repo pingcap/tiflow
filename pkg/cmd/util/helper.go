@@ -50,7 +50,9 @@ func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 		log.Info("got signal to exit", zap.Stringer("signal", sig))
 		cancel()
 	}()
+
 	cmdconetxt.SetDefaultContext(ctx)
+
 	return cancel
 }
 

@@ -1,13 +1,11 @@
 package util
 
 import (
-	"strings"
-
 	"crypto/tls"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/spf13/pflag"
+	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 	"google.golang.org/grpc"
 )
@@ -26,11 +24,10 @@ type ClientGetter interface {
 }
 
 type ClientFlags struct {
-	cliPdAddr     string
-	caPath        string
-	certPath      string
-	keyPath       string
-	allowedCertCN string
+	cliPdAddr string
+	caPath    string
+	certPath  string
+	keyPath   string
 }
 
 var _ ClientGetter = &ClientFlags{}
@@ -59,28 +56,20 @@ func (c *ClientFlags) GetPdAddr() string {
 }
 
 func NewCredentialFlags() *ClientFlags {
-	return &ClientFlags{
-		caPath:        "",
-		certPath:      "",
-		keyPath:       "",
-		allowedCertCN: "",
-	}
+	return &ClientFlags{}
 }
 
-func (c *ClientFlags) AddFlags(flags *pflag.FlagSet, isServer bool) {
-	flags.StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection")
-	flags.StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection")
-	flags.StringVar(&c.keyPath, "key", "", "Private key path for TLS connection")
-	if isServer {
-		flags.StringVar(&c.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
-	}
+// AddFlags receives a *cobra.Command reference and binds
+// flags related to template printing to it.
+func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection")
+	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection")
+	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection")
 }
 
 func (c *ClientFlags) GetCredential() *security.Credential {
 	var certAllowedCN []string
-	if len(c.allowedCertCN) != 0 {
-		certAllowedCN = strings.Split(c.allowedCertCN, ",")
-	}
+
 	return &security.Credential{
 		CAPath:        c.caPath,
 		CertPath:      c.certPath,

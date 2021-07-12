@@ -28,54 +28,62 @@ import (
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
-// Options defines flags and other configuration parameters for the `cli` command.
-type Options struct {
+// options defines flags and other configuration parameters for the `cli` command.
+type options struct {
 	interact    bool
 	cliLogLevel string
 	cliPdAddr   string
 }
 
-// NewOptions creates new Options for the `cli` command.
-func NewOptions() *Options {
-	return &Options{
-		interact:    false,
-		cliLogLevel: "",
-		cliPdAddr:   "",
+// newOptions creates new options for the `cli` command.
+func newOptions() *options {
+	return &options{}
+}
+
+// addFlags receives a *cobra.Command reference and binds
+// flags related to template printing to it.
+func (o *options) addFlags(c *cobra.Command) {
+	if o == nil {
+		return
 	}
+	c.PersistentFlags().StringVar(&o.cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
+	c.PersistentFlags().BoolVarP(&o.interact, "interact", "i", false, " cdc cli with readline")
+	c.PersistentFlags().StringVar(&o.cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 }
 
-func (o *Options) AddFlags(flags *pflag.FlagSet) {
-	flags.StringVar(&o.cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
-	flags.BoolVarP(&o.interact, "interact", "i", false, "Run cdc cli with readline")
-	flags.StringVar(&o.cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
-}
-
+// NewCmdCli creates the `cli` command.
 func NewCmdCli() *cobra.Command {
-	o := NewOptions()
+	o := newOptions()
 
 	cmds := &cobra.Command{
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Here we will initialize the logging configuration and set the current default context.
 			util.InitCmd(cmd, &logutil.Config{Level: o.cliLogLevel})
+			util.LogHTTPProxies()
+
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			// Whether to run interactively or not.
 			if o.interact {
-				loop()
+				run()
 			}
 		},
 	}
 
-	flags := cmds.PersistentFlags()
-	o.AddFlags(flags)
-	cf := util.NewCredentialFlags()
-	cf.AddFlags(flags, false)
+	// Binding the `cmd` command flags.
+	o.addFlags(cmds)
 
+	// Bind the certificate options and construct the client construction factory.
+	cf := util.NewCredentialFlags()
+	cf.AddFlags(cmds)
 	f := util.NewFactory(cf)
+
+	// Add subcommands.
 	cmds.AddCommand(capture.NewCmdCapture(f))
 	cmds.AddCommand(changefeed.NewCmdChangefeed(f))
 	cmds.AddCommand(processor.NewCmdProcessor(f))
@@ -85,7 +93,7 @@ func NewCmdCli() *cobra.Command {
 	return cmds
 }
 
-func loop() {
+func run() {
 	l, err := readline.NewEx(&readline.Config{
 		Prompt:            "\033[31m»\033[0m ",
 		HistoryFile:       "/tmp/readline.tmp",
