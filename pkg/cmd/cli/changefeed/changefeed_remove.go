@@ -7,25 +7,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type RemoveChangefeedOptions struct {
+type removeChangefeedOptions struct {
 	optForceRemove bool
 }
 
-func NewRemoveChangefeedOptions() *RemoveChangefeedOptions {
-	return &RemoveChangefeedOptions{
-		optForceRemove: false,
-	}
+// newRemoveChangefeedOptions creates new options for the `cli changefeed remove` command.
+func newRemoveChangefeedOptions() *removeChangefeedOptions {
+	return &removeChangefeedOptions{}
 }
 
-func NewCmdRemoveChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
-	o := NewRemoveChangefeedOptions()
+// newCmdRemoveChangefeed creates the `cli changefeed remove` command.
+func newCmdRemoveChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+	o := newRemoveChangefeedOptions()
 
 	command := &cobra.Command{
 		Use:   "remove",
 		Short: "Remove a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.GetDefaultContext()
-
 			job := model.AdminJob{
 				CfID: commonOptions.changefeedID,
 				Type: model.AdminRemove,
@@ -34,6 +32,7 @@ func NewCmdRemoveChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 				},
 			}
 
+			ctx := context.GetDefaultContext()
 			etcdClient, err := f.EtcdClient()
 			if err != nil {
 				return err
