@@ -6,16 +6,8 @@ import (
 	liberrors "errors"
 	"fmt"
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/capture"
 	"github.com/pingcap/ticdc/pkg/cmd/cli/changefeed"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"os/signal"
@@ -121,109 +113,6 @@ func JsonPrint(cmd *cobra.Command, v interface{}) error {
 		return err
 	}
 	cmd.Printf("%s\n", data)
-	return nil
-}
-
-func getAllCaptures(f Factory, ctx context.Context) ([]*capture.Capture, error) {
-	etcdClient, err := f.EtcdClient()
-	if err != nil {
-		return nil, err
-	}
-	_, raw, err := etcdClient.GetCaptures(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ownerID, err := etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
-	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
-		return nil, err
-	}
-	captures := make([]*capture.Capture, 0, len(raw))
-	for _, c := range raw {
-		isOwner := c.ID == ownerID
-		captures = append(captures,
-			&capture.Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
-	}
-	return captures, nil
-}
-
-func getOwnerCapture(f Factory, ctx context.Context) (*capture.Capture, error) {
-	captures, err := getAllCaptures(f, ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, c := range captures {
-		if c.IsOwner {
-			return c, nil
-		}
-	}
-	return nil, errors.Trace(ErrOwnerNotFound)
-}
-
-func ApplyOwnerChangefeedQuery(f Factory,
-	ctx context.Context, cid model.ChangeFeedID, credential *security.Credential,
-) (string, error) {
-	owner, err := getOwnerCapture(f, ctx)
-	if err != nil {
-		return "", err
-	}
-	scheme := "http"
-	if credential.IsTLSEnabled() {
-		scheme = "https"
-	}
-	addr := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
-	cli, err := httputil.NewClient(credential)
-	if err != nil {
-		return "", err
-	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
-		cdc.APIOpVarChangefeedID: {cid},
-	}))
-	if err != nil {
-		return "", err
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.BadRequestf("query changefeed simplified status")
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", errors.BadRequestf("%s", string(body))
-	}
-	return string(body), nil
-}
-
-func ApplyAdminChangefeed(f Factory, ctx context.Context, job model.AdminJob, credential *security.Credential) error {
-	owner, err := getOwnerCapture(f, ctx)
-	if err != nil {
-		return err
-	}
-	scheme := "http"
-	if credential.IsTLSEnabled() {
-		scheme = "https"
-	}
-	addr := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
-	cli, err := httputil.NewClient(credential)
-	if err != nil {
-		return err
-	}
-	forceRemoveOpt := "false"
-	if job.Opts != nil && job.Opts.ForceRemove {
-		forceRemoveOpt = "true"
-	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
-		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID:       {job.CfID},
-		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
-	}))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return errors.BadRequestf("admin changefeed failed")
-		}
-		return errors.BadRequestf("%s", string(body))
-	}
 	return nil
 }
 

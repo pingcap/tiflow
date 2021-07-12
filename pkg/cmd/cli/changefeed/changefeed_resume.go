@@ -23,7 +23,7 @@ func NewCmdResumeChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 			if err := resumeChangefeedCheck(f, ctx, cmd, commonOptions); err != nil {
 				return err
 			}
-			return util.ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
+			return ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
 		},
 	}
 
@@ -31,7 +31,7 @@ func NewCmdResumeChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 }
 
 func resumeChangefeedCheck(f util.Factory, ctx context.Context, cmd *cobra.Command, commonOptions *CommonOptions) error {
-	resp, err := util.ApplyOwnerChangefeedQuery(f, ctx, commonOptions.changefeedID, f.GetCredential())
+	resp, err := ApplyOwnerChangefeedQuery(f, ctx, commonOptions.changefeedID, f.GetCredential())
 	if err != nil {
 		return err
 	}

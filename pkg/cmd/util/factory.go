@@ -15,7 +15,7 @@ import (
 type Factory interface {
 	ClientGetter
 	EtcdClient() (*kv.CDCEtcdClient, error)
-	PdClient() (pd.Client, error)
+	PdClient() (*pd.Client, error)
 }
 
 type ClientGetter interface {

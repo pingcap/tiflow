@@ -32,7 +32,7 @@ func NewCmdRemoveChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra
 					ForceRemove: o.optForceRemove,
 				},
 			}
-			return util.ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
+			return ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
 		},
 	}
 

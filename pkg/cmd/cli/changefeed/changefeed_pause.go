@@ -18,7 +18,7 @@ func NewCmdPauseChangefeed(f util.Factory, commonOptions *CommonOptions) *cobra.
 				CfID: commonOptions.changefeedID,
 				Type: model.AdminStop,
 			}
-			return util.ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
+			return ApplyAdminChangefeed(f, ctx, job, f.GetCredential())
 		},
 	}
 
