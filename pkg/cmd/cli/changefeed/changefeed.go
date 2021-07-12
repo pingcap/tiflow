@@ -68,7 +68,7 @@ func NewCmdChangefeed(f util.Factory, options *cli.Options) *cobra.Command {
 	cmds.AddCommand(newCmdCreateChangefeed(f, options, changefeedCommonOptions))
 	cmds.AddCommand(newCmdUpdateChangefeed(f, options, changefeedCommonOptions))
 	cmds.AddCommand(newCmdStatisticsChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(NewCmdCyclicChangefeed(f))
+	cmds.AddCommand(newCmdCyclicChangefeed(f))
 
 	cmds.PersistentFlags().StringVarP(&changefeedCommonOptions.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmds.PersistentFlags().BoolVar(&changefeedCommonOptions.NoConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")

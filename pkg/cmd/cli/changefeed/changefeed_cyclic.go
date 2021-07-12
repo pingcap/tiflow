@@ -1,3 +1,16 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package changefeed
 
 import (
@@ -10,7 +23,8 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-type CyclicChangefeedOptions struct {
+// cyclicChangefeedOptions defines flags for the `cli changefeed cyclic` command.
+type cyclicChangefeedOptions struct {
 	createCommonOptions commonChangefeedOptions
 
 	cyclicUpstreamDSN   string
@@ -19,11 +33,12 @@ type CyclicChangefeedOptions struct {
 	upstreamSslKeyPath  string
 }
 
-func NewCyclicChangefeedOptions() *CyclicChangefeedOptions {
-	return &CyclicChangefeedOptions{}
+// newCyclicChangefeedOptions creates new options for the `cli changefeed cyclic` command.
+func newCyclicChangefeedOptions() *cyclicChangefeedOptions {
+	return &cyclicChangefeedOptions{}
 }
 
-func (o *CyclicChangefeedOptions) getUpstreamCredential() *security.Credential {
+func (o *cyclicChangefeedOptions) getUpstreamCredential() *security.Credential {
 	return &security.Credential{
 		CAPath:   o.upstreamSslCaPath,
 		CertPath: o.upstreamSslCertPath,
@@ -31,8 +46,8 @@ func (o *CyclicChangefeedOptions) getUpstreamCredential() *security.Credential {
 	}
 }
 
-func NewCmdCyclicChangefeed(f util.Factory) *cobra.Command {
-	o := NewCyclicChangefeedOptions()
+func newCmdCyclicChangefeed(f util.Factory) *cobra.Command {
+	o := newCyclicChangefeedOptions()
 
 	command := &cobra.Command{
 		Use:   "cyclic",
@@ -53,10 +68,12 @@ func NewCmdCyclicChangefeed(f util.Factory) *cobra.Command {
 						return err
 					}
 				}
+
 				pdClient, err := f.PdClient()
 				if err != nil {
 					return err
 				}
+
 				ts, logical, err := pdClient.GetTS(ctx)
 				if err != nil {
 					return err
@@ -71,14 +88,17 @@ func NewCmdCyclicChangefeed(f util.Factory) *cobra.Command {
 				for i := range eligibleTables {
 					tables[i] = &eligibleTables[i]
 				}
+
 				err = mark.CreateMarkTables(ctx, o.cyclicUpstreamDSN, o.getUpstreamCredential(), tables...)
 				if err != nil {
 					return err
 				}
 				cmd.Printf("Create cyclic replication mark tables successfully! Total tables: %d\n", len(eligibleTables))
+
 				return nil
 			},
 		})
+
 	command.PersistentFlags().StringVar(&o.cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upsteam TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
 	command.PersistentFlags().StringVar(&o.upstreamSslCaPath, "cyclic-upstream-ssl-ca", "", "CA certificate path for TLS connection")
 	command.PersistentFlags().StringVar(&o.upstreamSslCertPath, "cyclic-upstream-ssl-cert", "", "Certificate path for TLS connection")
