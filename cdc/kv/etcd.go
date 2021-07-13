@@ -61,8 +61,8 @@ const (
 )
 
 const (
-	backoffBaseDelayInMs = 100
-	maxTries             = 3
+	putTaskStatusBackoffBaseDelayInMs = 100
+	putTaskStatusMaxTries             = 3
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -669,7 +669,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		}
 		newModRevision = resp.Header.GetRevision()
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(putTaskStatusBackoffBaseDelayInMs), retry.WithMaxTries(putTaskStatusMaxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if err != nil {
 		return nil, newModRevision, errors.Trace(err)
 	}

@@ -702,7 +702,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
 		// Retry to find mark table ID
 		var markTableID model.TableID
-		err := retry.Run(50*time.Millisecond, 20, func() error {
+		err := retry.Do(context.Background(), func() error {
 			if tableName == nil {
 				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
 				if !exist {
@@ -710,14 +710,14 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 				}
 				tableName = &name
 			}
-			markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchameName, markTableTableName)
+			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchemaName, markTableTableName)
 			if !exist {
 				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
 			}
 			markTableID = tableInfo.ID
 			return nil
-		})
+		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
