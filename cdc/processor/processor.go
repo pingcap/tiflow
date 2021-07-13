@@ -777,7 +777,6 @@ func (p *processor) doGCSchemaStorage() error {
 func (p *processor) Close() error {
 	for _, tbl := range p.tables {
 		tbl.Cancel()
-		tbl.Wait()
 	}
 	for _, tbl := range p.tables {
 		tbl.Wait()
