@@ -52,6 +52,7 @@ const (
 	StateFinished FeedState = "finished"
 )
 
+// ToInt return a int for each `FeedState`
 func (s FeedState) ToInt() int {
 	switch s {
 	case StateNormal:
