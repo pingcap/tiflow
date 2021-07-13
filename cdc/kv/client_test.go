@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1243,6 +1245,13 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
 	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
+	// a hack way to check the goroutine count of region worker is 1
+	buf := make([]byte, 1<<20)
+	stacklen := runtime.Stack(buf, true)
+	stack := string(buf[:stacklen])
+	c.Assert(strings.Count(stack, "resolveLock"), check.Equals, 1)
+	c.Assert(strings.Count(stack, "collectWorkpoolError"), check.Equals, 1)
+
 	cancel()
 }
 
@@ -1534,9 +1543,14 @@ func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	// test client v2
-	// s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
+	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 
 	// test client v1
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = false
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
 	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 }
 
@@ -1547,9 +1561,14 @@ func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	// test client v2
-	// s.testStreamRecvWithError(c, "1*return(\"EOF\")")
+	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 
 	// test client v1
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = false
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 }
 
@@ -2642,6 +2661,12 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = false
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
@@ -2697,9 +2722,15 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 
 // TestClientErrNoPendingRegion has the similar procedure with TestClientV1UnlockRangeReentrant
 // The difference is the delay injected point for region 2
-func (s *etcdSuite) TestClientV1ErrNoPendingRegion(c *check.C) {
+func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
+
+	clientv2 := enableKVClientV2
+	enableKVClientV2 = false
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -2905,12 +2936,17 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
+	clientv2 := enableKVClientV2
+	defer func() {
+		enableKVClientV2 = clientv2
+	}()
+
 	// test kv client v1
+	enableKVClientV2 = false
 	s.testKVClientForceReconnect(c)
 
-	// test kv client v2
-	// enableKVClientV2 = true
-	// s.testKVClientForceReconnect(c)
+	enableKVClientV2 = true
+	s.testKVClientForceReconnect(c)
 }
 
 // TestConcurrentProcessRangeRequest when region range request channel is full,
