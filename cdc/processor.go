@@ -827,7 +827,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		}
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
 			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
-			enableOldValue)
+			true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
