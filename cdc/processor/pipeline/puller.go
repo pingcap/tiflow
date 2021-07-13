@@ -65,12 +65,11 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	globalConfig := config.GetGlobalServerConfig()
-	config := ctx.ChangefeedVars().Info.Config
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, globalConfig.Security, ctx.GlobalVars().KVStorage,
-		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, config.EnableOldValue)
+		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil
