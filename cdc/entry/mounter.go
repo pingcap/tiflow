@@ -470,7 +470,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		// NOTICE: When the old Value feature is off,
 		// the Delete event only needs to keep the handle key column.
 		if row.Delete && !m.enableOldValue {
-			for i, _ := range preCols {
+			for i := range preCols {
 				col := preCols[i]
 				if col.Flag.IsHandleKey() {
 					preCols[i] = nil
