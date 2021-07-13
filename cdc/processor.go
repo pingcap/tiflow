@@ -825,6 +825,8 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 			p.sendError(err)
 			return nil
 		}
+		// NOTICE: always pull the old value internally
+		// See also: TODO(hi-rustin): add issue link here.
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
 			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
 			true)
