@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1626145511669,
+  "iteration": 1626146149357,
   "links": [],
   "panels": [
     {
@@ -1722,6 +1722,7 @@
             "current": true,
             "max": true,
             "min": true,
+            "rightSide": false,
             "show": true,
             "total": false,
             "values": true
@@ -1743,7 +1744,7 @@
               "expr": "ticdc_owner_status{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", job=\"cdc\"}",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
+              "legendFormat": "{{ changefeed }}",
               "refId": "A"
             }
           ],
@@ -7152,5 +7153,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 1
+  "version": 17
 }
