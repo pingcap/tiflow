@@ -21,6 +21,7 @@ require (
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.5
+	github.com/google/pprof v0.0.0-20210609004039-a478d1d731e9 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/grpc-ecosystem/grpc-gateway v1.14.3 // indirect
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
@@ -63,6 +64,7 @@ require (
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 	golang.org/x/text v0.3.6
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	google.golang.org/grpc v1.27.1

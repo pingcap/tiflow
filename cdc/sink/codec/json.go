@@ -356,7 +356,7 @@ func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
 
 // AppendResolvedEvent is no-op
 func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNeedAsyncWrite, nil
+	return EncoderNoOperation, nil
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface

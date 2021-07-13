@@ -17,10 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tikv/client-go/v2/oracle"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 

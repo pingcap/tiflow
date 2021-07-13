@@ -155,8 +155,7 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-
-		resolvedReceiver: resolvedReceiver,
+		resolvedReceiver:    resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 	}
@@ -315,9 +314,6 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 
 	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
-			if op == codec.EncoderNoOperation {
-				return 0, nil
-			}
 			messages := encoder.Build()
 			thisBatchSize := len(messages)
 			if thisBatchSize == 0 {
@@ -385,8 +381,10 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			op = codec.EncoderNeedAsyncWrite
 		}
 
-		if err := flushToProducer(op); err != nil {
-			return errors.Trace(err)
+		if encoder.Size() >= batchSizeLimit || op != codec.EncoderNoOperation {
+			if err := flushToProducer(op); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 }
