@@ -31,6 +31,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	inputChSize       = 128
+	outputChSize      = 128
+	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
+	// maxOpenHeapNum is the maximum number of allowed pending chunks in memory OR on-disk.
+	// This constant is a worst case upper limit, and setting a large number DOES NOT imply actually
+	// allocating these resources. This constant is PER TABLE.
+	// TODO refactor this out
+	maxOpenHeapNum = 1280000
+)
+
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
 	inputCh     chan *model.PolymorphicEvent
@@ -38,6 +49,8 @@ type UnifiedSorter struct {
 	dir         string
 	pool        *backEndPool
 	metricsInfo *metricsInfo
+
+	closeCh chan struct{}
 }
 
 type metricsInfo struct {
@@ -103,8 +116,8 @@ func NewUnifiedSorter(
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:  make(chan *model.PolymorphicEvent, 128000),
-		outputCh: make(chan *model.PolymorphicEvent, 128000),
+		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
+		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
 		pool:     pool,
 		metricsInfo: &metricsInfo{
@@ -113,6 +126,7 @@ func NewUnifiedSorter(
 			tableID:      tableID,
 			captureAddr:  captureAddr,
 		},
+		closeCh: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -134,6 +148,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		log.Info("sorterDebug: Running Unified Sorter in debug mode")
 	})
 
+	defer close(s.closeCh)
+
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
@@ -146,7 +162,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
 	errg, subctx := errgroup.WithContext(ctx)
-	heapSorterCollectCh := make(chan *flushTask, 4096)
+	heapSorterCollectCh := make(chan *flushTask, heapCollectChSize)
 	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
 	defer mergerCleanUp(heapSorterCollectCh)
 
@@ -207,8 +223,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
-			// tentative value 1280000
-			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
+			for atomic.LoadInt64(&mergerBufLen) > maxOpenHeapNum {
 				after := time.After(1 * time.Second)
 				select {
 				case <-subctx.Done():
@@ -272,6 +287,7 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 	select {
 	case <-ctx.Done():
 		return
+	case <-s.closeCh:
 	case s.inputCh <- entry:
 	}
 }

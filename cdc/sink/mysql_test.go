@@ -272,6 +272,8 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
 	for _, txn := range txns1 {
 		w.appendTxn(cctx, txn)
 	}
+
+	// simulate notify sink worker to flush existing txns
 	var wg sync.WaitGroup
 	w.appendFinishTxn(&wg)
 	time.Sleep(time.Millisecond * 100)
@@ -280,7 +282,78 @@ func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
 		w.appendTxn(cctx, txn)
 	}
 	notifier.Notify()
+
+	// simulate sink shutdown and send closed singal to sink worker
+	w.closedCh <- struct{}{}
+	w.cleanup()
+
+	// the flush notification wait group should be done
 	wg.Wait()
+
+	cancel()
+	c.Assert(errg.Wait(), check.Equals, errExecFailed)
+}
+
+func (s MySQLSinkSuite) TestMySQLSinkWorkerExitCleanup(c *check.C) {
+	defer testleak.AfterTest(c)()
+	txns1 := []*model.SingleTableTxn{
+		{
+			CommitTs: 1,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+		},
+		{
+			CommitTs: 2,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+		},
+	}
+	txns2 := []*model.SingleTableTxn{
+		{
+			CommitTs: 5,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+		},
+	}
+
+	maxTxnRow := 1
+	ctx := context.Background()
+
+	errExecFailed := errors.New("sink worker exec failed")
+	notifier := new(notify.Notifier)
+	cctx, cancel := context.WithCancel(ctx)
+	receiver, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
+		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		receiver,
+		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+			return errExecFailed
+		})
+	errg, cctx := errgroup.WithContext(cctx)
+	errg.Go(func() error {
+		err := w.run(cctx)
+		return err
+	})
+	for _, txn := range txns1 {
+		w.appendTxn(cctx, txn)
+	}
+
+	// sleep to let txns flushed by tick
+	time.Sleep(time.Millisecond * 100)
+
+	// simulate more txns are sent to txnCh after the sink worker run has exited
+	for _, txn := range txns2 {
+		w.appendTxn(cctx, txn)
+	}
+	var wg sync.WaitGroup
+	w.appendFinishTxn(&wg)
+	notifier.Notify()
+
+	// simulate sink shutdown and send closed singal to sink worker
+	w.closedCh <- struct{}{}
+	w.cleanup()
+
+	// the flush notification wait group should be done
+	wg.Wait()
+
 	cancel()
 	c.Assert(errg.Wait(), check.Equals, errExecFailed)
 }

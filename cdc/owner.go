@@ -85,6 +85,15 @@ func (o *Owner) getMinGCSafePointCache(ctx context.Context) model.Ts {
 			return o.minGCSafePointCache.ts
 		}
 		o.minGCSafePointCache.ts = oracle.ComposeTS(physicalTs-(o.gcTTL*1000), logicalTs)
+
+		// o.pdGCSafePoint pd is the smallest gcSafePoint across all services.
+		// If tikv_gc_life_time > gcTTL, means that tikv_gc_safe_point < o.minGCSafePointCache.ts here.
+		// It also means that pd.pdGCSafePoint < o.minGCSafePointCache.ts here, we should use its value as the min value.
+		// This ensures that when tikv_gc_life_time > gcTTL , cdc will not advance the gcSafePoint.
+		if o.pdGCSafePoint < o.minGCSafePointCache.ts {
+			o.minGCSafePointCache.ts = o.pdGCSafePoint
+		}
+
 		o.minGCSafePointCache.lastUpdated = time.Now()
 	}
 	return o.minGCSafePointCache.ts
@@ -127,6 +136,8 @@ type Owner struct {
 	gcSafepointLastUpdate time.Time
 	// stores the ts obtained from PD and is updated every MinGCSafePointCacheUpdateInterval.
 	minGCSafePointCache minGCSafePointCacheEntry
+	// stores the actual gcSafePoint stored in pd
+	pdGCSafePoint model.Ts
 	// record last time that flushes all changefeeds' replication status
 	lastFlushChangefeeds    time.Time
 	flushChangefeedInterval time.Duration
@@ -137,7 +148,7 @@ const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	GCSafepointUpdateInterval = 2 * time.Second
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
 	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )
@@ -290,7 +301,7 @@ func (o *Owner) newChangeFeed(
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
+		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, id, checkpointTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -640,7 +651,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			}
 			cfInfo.ErrorHis = append(cfInfo.ErrorHis, time.Now().UnixNano()/1e6)
 
-			if filter.ChangefeedFastFailError(err) {
+			if cerror.ChangefeedFastFailError(err) {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
 					zap.Error(err), zap.String("changefeed", changeFeedID))
 				cfInfo.State = model.StateFailed
@@ -750,12 +761,18 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			if changefeed.status.CheckpointTs < gcSafePoint {
 				gcSafePoint = changefeed.status.CheckpointTs
 			}
-			// If changefeed's appliedCheckpoinTs < minGCSafePoint, it means this changefeed is stagnant.
+			// 1. If changefeed's appliedCheckpoinTs <= minGCSafePoint, it means this changefeed is stagnant.
 			// They are collected into this map, and then handleStaleChangeFeed() is called to deal with these stagnant changefeed.
 			// A changefeed will not enter the map twice, because in run(),
 			// handleAdminJob() will always be executed before flushChangeFeedInfos(),
 			// ensuring that the previous changefeed in staleChangeFeeds has been stopped and removed from o.changeFeeds.
-			if changefeed.status.CheckpointTs < minGCSafePoint {
+			// 2. We need the `<=` check here is because when a changefeed is stagnant, its checkpointTs will be updated to pd,
+			// and it would be the minimum gcSafePoint across all services.
+			// So as described above(line 92) minGCSafePoint = gcSafePoint = CheckpointTs would happens.
+			// In this case, if we check `<` here , this changefeed will not be put into staleChangeFeeds, and its checkpoints will be updated to pd again and again.
+			// This will cause the cdc's gcSafePoint never advance.
+			// If we check `<=` here, when we encounter the changefeed again, we will put it into staleChangeFeeds.
+			if changefeed.status.CheckpointTs <= minGCSafePoint {
 				staleChangeFeeds[id] = changefeed.status
 			}
 
@@ -778,10 +795,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	}
 
 	for _, status := range o.stoppedFeeds {
-		// If a stopped changefeed's CheckpoinTs < minGCSafePoint, means this changefeed is stagnant.
+		// If a stopped changefeed's CheckpoinTs <= minGCSafePoint, means this changefeed is stagnant.
 		// It should never be resumed. This part of the logic is in newChangeFeed()
 		// So here we can skip it.
-		if status.CheckpointTs < minGCSafePoint {
+		if status.CheckpointTs <= minGCSafePoint {
 			continue
 		}
 
@@ -807,6 +824,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 				return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
 			}
 		} else {
+			o.pdGCSafePoint = actual
 			o.gcSafepointLastUpdate = time.Now()
 		}
 
@@ -843,9 +861,31 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
 func (o *Owner) calcResolvedTs(ctx context.Context) error {
-	for _, cf := range o.changeFeeds {
+	for id, cf := range o.changeFeeds {
 		if err := cf.calcResolvedTs(ctx); err != nil {
-			return errors.Trace(err)
+			log.Error("fail to calculate checkpoint ts, so it will be stopped", zap.String("changefeed", cf.id), zap.Error(err))
+			// error may cause by sink.EmitCheckpointTs`, just stop the changefeed at the moment
+			// todo: make the method mentioned above more robust.
+			var code string
+			if rfcCode, ok := cerror.RFCCode(err); ok {
+				code = string(rfcCode)
+			} else {
+				code = string(cerror.ErrOwnerUnknown.RFCCode())
+			}
+
+			job := model.AdminJob{
+				CfID: id,
+				Type: model.AdminStop,
+				Error: &model.RunningError{
+					Addr:    util.CaptureAddrFromCtx(ctx),
+					Code:    code,
+					Message: err.Error(),
+				},
+			}
+
+			if err := o.EnqueueJob(job); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 	return nil
@@ -921,7 +961,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
 	if job.Type == model.AdminStop {
-		log.Debug("put changfeed into stoppedFeeds queue", zap.String("changefeed", job.CfID))
+		log.Debug("put changefeed into stoppedFeeds queue", zap.String("changefeed", job.CfID))
 		o.stoppedFeeds[job.CfID] = cf.status
 	}
 	for captureID := range cf.taskStatus {
@@ -1635,7 +1675,7 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures map[model.Cap
 	//    the step-2 may meet an error such as ErrCompacted, and we will continue
 	//    from step-1, however other capture may crash just after step-2 returns
 	//    and before step-1 starts, the longer time gap between step-2 to step-1,
-	//    missing a crashed capture is more likey to happen.
+	//    missing a crashed capture is more likely to happen.
 	o.l.Lock()
 	defer o.l.Unlock()
 	return errors.Trace(o.cleanUpStaleTasks(ctx))
@@ -1668,7 +1708,7 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 					return
 				}
 				log.Warn("watch capture returned", zap.Error(err))
-				// Otherwise, a temporary error occured(ErrCompact),
+				// Otherwise, a temporary error occurred(ErrCompact),
 				// restart the watching routine.
 			}
 		}
@@ -1679,15 +1719,15 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 // By setting the AdminJob type to AdminStop and the Error code to indicate that the changefeed is stagnant.
 func (o *Owner) handleStaleChangeFeed(ctx context.Context, staleChangeFeeds map[model.ChangeFeedID]*model.ChangeFeedStatus, minGCSafePoint uint64) error {
 	for id, status := range staleChangeFeeds {
-		message := cerror.ErrSnapshotLostByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint).Error()
-		log.Warn("changefeed checkpoint is lagging too much, so it will be stopped.", zap.String("changefeed", id), zap.String("Error message", message))
+		err := cerror.ErrSnapshotLostByGC.GenWithStackByArgs(status.CheckpointTs, minGCSafePoint)
+		log.Warn("changefeed checkpoint is lagging too much, so it will be stopped.", zap.String("changefeed", id), zap.Error(err))
 		runningError := &model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
-			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changfeed is stagnant
-			Message: message,
+			Code:    string(cerror.ErrSnapshotLostByGC.RFCCode()), // changefeed is stagnant
+			Message: err.Error(),
 		}
 
-		err := o.EnqueueJob(model.AdminJob{
+		err = o.EnqueueJob(model.AdminJob{
 			CfID:  id,
 			Type:  model.AdminStop,
 			Error: runningError,
