@@ -472,7 +472,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		if row.Delete && !m.enableOldValue {
 			for i := range preCols {
 				col := preCols[i]
-				if col.Flag.IsHandleKey() {
+				if !col.Flag.IsHandleKey() {
 					preCols[i] = nil
 				}
 			}
