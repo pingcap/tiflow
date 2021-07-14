@@ -102,6 +102,11 @@ func (rsm *regionStateManager) setState(regionID uint64, state *regionFeedState)
 	rsm.states[bucket].Store(regionID, state)
 }
 
+func (rsm *regionStateManager) delState(regionID uint64) {
+	bucket := rsm.getBucket(regionID)
+	rsm.states[bucket].Delete(regionID)
+}
+
 type regionWorkerMetrics struct {
 	// kv events related metrics
 	metricEventSize                   prometheus.Observer
@@ -198,6 +203,26 @@ func (w *regionWorker) setRegionState(regionID uint64, state *regionFeedState) {
 	w.statesManager.setState(regionID, state)
 }
 
+func (w *regionWorker) delRegionState(regionID uint64) {
+	w.statesManager.delState(regionID)
+}
+
+// checkRegionStateEmpty returns true if there is not region state maintained
+// note this function is not thread-safe
+func (w *regionWorker) checkRegionStateEmpty() bool {
+	for _, states := range w.statesManager.states {
+		empty := true
+		states.Range(func(_, _ interface{}) bool {
+			empty = false
+			return false
+		})
+		if !empty {
+			return false
+		}
+	}
+	return true
+}
+
 func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, state *regionFeedState) error {
 	if state.lastResolvedTs > state.sri.ts {
 		state.sri.ts = state.lastResolvedTs
@@ -215,6 +240,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
+	w.delRegionState(regionID)
 	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
 	now := time.Now()
 	delay := w.limiter.ReserveN(now, 1).Delay()
@@ -241,11 +267,31 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		}
 	})
 
+	var retErr error
+	// If there is not region maintained by this region worker, exit it.
+	// cancel gRPC stream before reconnecting region, in case of the scenario
+	// that region connects to the same TiKV store again and reuses resource in
+	// this region worker by accident.
+	if w.checkRegionStateEmpty() {
+		cancel, ok := w.session.getStreamCancel(state.sri.rpcCtx.Addr)
+		if ok {
+			// cancel the gRPC stream
+			cancel()
+		}
+		// if stream is already deleted, do nothing
+		retErr = cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+	}
+
 	revokeToken := !state.initialized
-	return w.session.onRegionFail(ctx, regionErrorInfo{
+	err2 := w.session.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
 	}, revokeToken)
+	if err2 != nil {
+		return err2
+	}
+
+	return retErr
 }
 
 func (w *regionWorker) resolveLock(ctx context.Context) error {
