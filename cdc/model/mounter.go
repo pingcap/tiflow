@@ -83,3 +83,8 @@ func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Finished returns a channel that is closed when the event has finished being mounted.
+func (e *PolymorphicEvent) Finished() chan struct{} {
+	return e.finished
+}
