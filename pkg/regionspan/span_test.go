@@ -104,6 +104,7 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 }
 
 func (s *spanSuite) TestGetTableSpan(c *check.C) {
+	defer testleak.AfterTest(c)()
 	span := GetTableSpan(123)
 	c.Assert(span.Start, check.Less, span.End)
 	prefix := []byte(tablecodec.GenTableRecordPrefix(123))
