@@ -151,11 +151,6 @@ func (t *tablePipelineImpl) Wait() {
 	t.p.Wait()
 }
 
-// TODO: processor output chan size, the accumulated data is determined by
-// the count of sorted data and unmounted data. In current benchmark a single
-// processor can reach 50k-100k QPS, and accumulated data is around
-// 200k-400k in most cases. We need a better chan cache mechanism.
-//
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
 // replicating 1024 tables in the worst case.
 const defaultOutputChannelSize = 64
