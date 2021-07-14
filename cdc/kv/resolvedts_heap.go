@@ -22,6 +22,7 @@ type tsItem struct {
 	sortByEvTime bool
 	resolvedTs   uint64
 	eventTime    time.Time
+	penalty      int
 }
 
 func newResolvedTsItem(ts uint64) tsItem {
@@ -92,9 +93,14 @@ func (rm *regionTsManager) Upsert(item *regionTsInfo) {
 	if old, ok := rm.m[item.regionID]; ok {
 		// in a single resolved ts manager, the resolved ts of a region should not be fallen back
 		if !item.ts.sortByEvTime {
-			if item.ts.resolvedTs > old.ts.resolvedTs || item.ts.eventTime.After(old.ts.eventTime) {
+			if item.ts.resolvedTs == old.ts.resolvedTs && item.ts.eventTime.After(old.ts.eventTime) {
+				old.ts.penalty++
+				old.ts.eventTime = item.ts.eventTime
+				heap.Fix(&rm.h, old.index)
+			} else if item.ts.resolvedTs > old.ts.resolvedTs {
 				old.ts.resolvedTs = item.ts.resolvedTs
 				old.ts.eventTime = item.ts.eventTime
+				old.ts.penalty = 0
 				heap.Fix(&rm.h, old.index)
 			}
 		} else {
