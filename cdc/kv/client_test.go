@@ -1780,6 +1780,18 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 		ev := <-eventCh
 		c.Assert(ev.Resolved, check.NotNil)
 		c.Assert(ev.Resolved.ResolvedTs, check.Equals, uint64(100))
+
+		resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+			{
+				RegionId:  3,
+				RequestId: currentRequestID(),
+				Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 200},
+			},
+		}}
+		ch1 <- resolved
+		ev = <-eventCh
+		c.Assert(ev.Resolved, check.NotNil)
+		c.Assert(ev.Resolved.ResolvedTs, check.Equals, uint64(200))
 	}
 	wg2.Wait()
 	cancel()
@@ -2118,6 +2130,7 @@ func (s *etcdSuite) TestDuplicateRequest(c *check.C) {
 
 // testEventAfterFeedStop tests kv client can drop events sent after region feed is stopped
 // TODO: testEventAfterFeedStop is not stable, re-enable it after it is stable
+// nolint:unused
 func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
