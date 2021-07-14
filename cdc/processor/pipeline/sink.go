@@ -144,50 +144,45 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	colLen := len(event.Row.Columns)
 	preColLen := len(event.Row.PreColumns)
+	config := ctx.ChangefeedVars().Info.Config
 
 	// This indicates that it is an update event,
 	// and after turning on old value internally by default,
 	// we need to handle the update event to be compatible with the old format.
-	if colLen != 0 && preColLen != 0 && colLen == preColLen {
-		config := ctx.ChangefeedVars().Info.Config
-		if config.EnableOldValue {
-			// TODO: Need to test if the behavior is correct.
+	if !config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+		handleKeyCount := 0
+		equivalentHandleKeyCount := 0
+		for i := range event.Row.Columns {
+			if event.Row.Columns[i].Flag.IsHandleKey() && event.Row.PreColumns[i].Flag.IsHandleKey() {
+				handleKeyCount++
+				colValueString := model.ColumnValueString(event.Row.Columns[i].Value)
+				preColValueString := model.ColumnValueString(event.Row.PreColumns[i].Value)
+				if colValueString == preColValueString {
+					equivalentHandleKeyCount++
+				}
+			}
+		}
+		// If the handle key columns are not updated, PreColumns is directly ignored.
+		if handleKeyCount == equivalentHandleKeyCount {
+			event.Row.PreColumns = nil
 			n.eventBuffer = append(n.eventBuffer, event)
 		} else {
-			handleKeyCount := 0
-			equivalentHandleKeyCount := 0
-			for i := range event.Row.Columns {
-				if event.Row.Columns[i].Flag.IsHandleKey() && event.Row.PreColumns[i].Flag.IsHandleKey() {
-					handleKeyCount++
-					colValueString := model.ColumnValueString(event.Row.Columns[i].Value)
-					preColValueString := model.ColumnValueString(event.Row.PreColumns[i].Value)
-					if colValueString == preColValueString {
-						equivalentHandleKeyCount++
-					}
+			// If there is an update to handle key columns,
+			// we need to split the event into two events to be compatible with the old format.
+			deleteEvent := event.Clone()
+			deleteEvent.Row.Columns = nil
+			for i := range deleteEvent.Row.PreColumns {
+				// Only the handle key column is retained in the delete event.
+				if !deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+					deleteEvent.Row.PreColumns[i] = nil
 				}
 			}
-			// If the handle key columns are not updated, PreColumns is directly ignored.
-			if handleKeyCount == equivalentHandleKeyCount {
-				event.Row.PreColumns = nil
-				n.eventBuffer = append(n.eventBuffer, event)
-			} else {
-				// If there is an update to handle key columns,
-				// we need to split the event into two events to be compatible with the old format.
-				deleteEvent := event.Clone()
-				deleteEvent.Row.Columns = nil
-				for i := range deleteEvent.Row.PreColumns {
-					// Only the handle key column is retained in the delete event.
-					if !deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
-						deleteEvent.Row.PreColumns[i] = nil
-					}
-				}
-				deleteEvent.Row.TableInfoVersion = 0
-				n.eventBuffer = append(n.eventBuffer, deleteEvent)
+			deleteEvent.Row.TableInfoVersion = 0
+			n.eventBuffer = append(n.eventBuffer, deleteEvent)
 
-				replaceEvent := event.Clone()
-				replaceEvent.Row.PreColumns = nil
-				n.eventBuffer = append(n.eventBuffer, replaceEvent)
-			}
+			replaceEvent := event.Clone()
+			replaceEvent.Row.PreColumns = nil
+			n.eventBuffer = append(n.eventBuffer, replaceEvent)
 		}
 	} else {
 		n.eventBuffer = append(n.eventBuffer, event)
