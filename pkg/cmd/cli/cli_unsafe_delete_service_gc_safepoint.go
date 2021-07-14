@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package unsafe
+package cli
 
 import (
 	"github.com/pingcap/errors"
@@ -22,7 +22,7 @@ import (
 )
 
 // newCmdDeleteServiceGcSafepoint creates the `cli unsafe delete-service-gc-safepoint` command.
-func newCmdDeleteServiceGcSafepoint(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+func newCmdDeleteServiceGcSafepoint(f util.Factory, commonOptions *unsafeCommonOptions) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "delete-service-gc-safepoint",
 		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",

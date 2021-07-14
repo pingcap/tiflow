@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"github.com/pingcap/ticdc/cdc/model"
@@ -31,7 +31,7 @@ func newRemoveChangefeedOptions() *removeChangefeedOptions {
 }
 
 // newCmdRemoveChangefeed creates the `cli changefeed remove` command.
-func newCmdRemoveChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+func newCmdRemoveChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
 	o := newRemoveChangefeedOptions()
 
 	command := &cobra.Command{

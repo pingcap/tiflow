@@ -11,23 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package capture
+package cli
 
 import (
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
-// NewCmdCapture creates the `cli capture` command.
-func NewCmdCapture(f util.Factory) *cobra.Command {
+// newCmdProcessor creates the `cli processor` command.
+func newCmdProcessor(f util.Factory) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "capture",
-		Short: "Manage capture (capture is a CDC server instance)",
+		Use:   "processor",
+		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
 	}
-	command.AddCommand(
-		NewCmdListCapture(f),
-		// TODO: add resign owner command
-	)
+	command.AddCommand(newCmdListProcessor(f))
+	command.AddCommand(newCmdQueryProcessor(f))
 
 	return command
 }

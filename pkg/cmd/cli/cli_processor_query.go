@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package cli
 
 import (
 	"github.com/pingcap/ticdc/cdc/model"
@@ -59,12 +59,12 @@ func newCmdQueryProcessor(f util.Factory) *cobra.Command {
 				return err
 			}
 			meta := &processorMeta{Status: status, Position: position}
-			return util.JsonPrint(cmd, meta)
+			return util.JSONPrint(cmd, meta)
 		},
 	}
 
 	command.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
-	command.PersistentFlags().StringVarP(&o.captureID, "capture-id", "p", "", "Capture ID")
+	command.PersistentFlags().StringVarP(&o.captureID, "capture-id", "p", "", "capture ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	_ = command.MarkPersistentFlagRequired("capture-id")
 

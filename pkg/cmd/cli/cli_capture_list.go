@@ -11,10 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package capture
+package cli
 
 import (
 	"context"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
@@ -23,15 +24,15 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
-// Capture holds capture information.
-type Capture struct {
+// capture holds capture information.
+type capture struct {
 	ID            string `json:"id"`
 	IsOwner       bool   `json:"is-owner"`
 	AdvertiseAddr string `json:"address"`
 }
 
-// NewCmdListCapture creates the `capture list` command.
-func NewCmdListCapture(f util.Factory) *cobra.Command {
+// newCmdListCapture creates the `capture list` command.
+func newCmdListCapture(f util.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List all captures in TiCDC cluster",
@@ -42,19 +43,19 @@ func NewCmdListCapture(f util.Factory) *cobra.Command {
 				return err
 			}
 
-			captures, err := listCaptures(etcdClient, ctx)
+			captures, err := listCaptures(ctx, etcdClient)
 			if err != nil {
 				return err
 			}
 
-			return util.JsonPrint(cmd, captures)
+			return util.JSONPrint(cmd, captures)
 		},
 	}
 	return command
 }
 
 // listCaptures list all the captures from the etcd.
-func listCaptures(etcdClient *kv.CDCEtcdClient, ctx context.Context) ([]*Capture, error) {
+func listCaptures(ctx context.Context, etcdClient *kv.CDCEtcdClient) ([]*capture, error) {
 	_, raw, err := etcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
@@ -65,19 +66,19 @@ func listCaptures(etcdClient *kv.CDCEtcdClient, ctx context.Context) ([]*Capture
 		return nil, err
 	}
 
-	captures := make([]*Capture, 0, len(raw))
+	captures := make([]*capture, 0, len(raw))
 	for _, c := range raw {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			&Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
+			&capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
 	}
 
 	return captures, nil
 }
 
-// GetOwnerCapture returns the owner capture.
-func GetOwnerCapture(etcdClient *kv.CDCEtcdClient, ctx context.Context) (*Capture, error) {
-	captures, err := listCaptures(etcdClient, ctx)
+// getOwnerCapture returns the owner capture.
+func getOwnerCapture(ctx context.Context, etcdClient *kv.CDCEtcdClient) (*capture, error) {
+	captures, err := listCaptures(ctx, etcdClient)
 	if err != nil {
 		return nil, err
 	}

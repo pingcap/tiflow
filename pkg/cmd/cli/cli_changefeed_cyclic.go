@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"github.com/pingcap/ticdc/pkg/cmd/context"
@@ -25,7 +25,7 @@ import (
 
 // cyclicChangefeedOptions defines flags for the `cli changefeed cyclic` command.
 type cyclicChangefeedOptions struct {
-	createCommonOptions commonChangefeedOptions
+	createCommonOptions createChangefeedCommonOptions
 
 	cyclicUpstreamDSN   string
 	upstreamSslCaPath   string

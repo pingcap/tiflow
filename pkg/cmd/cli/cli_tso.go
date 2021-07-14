@@ -11,21 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package cli
 
 import (
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
-// NewCmdProcessor creates the `cli processor` command.
-func NewCmdProcessor(f util.Factory) *cobra.Command {
+// newCmdTso creates the `cli tso` command.
+func newCmdTso(f util.Factory) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "processor",
-		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
+		Use:   "tso",
+		Short: "Manage tso",
 	}
-	command.AddCommand(newCmdListProcessor(f))
-	command.AddCommand(newCmdQueryProcessor(f))
+	command.AddCommand(newCmdQueryTso(f))
 
 	return command
 }

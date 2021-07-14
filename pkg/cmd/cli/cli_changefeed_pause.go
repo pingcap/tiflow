@@ -11,38 +11,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tso
+package cli
 
 import (
-	"os"
-
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
-	"github.com/tikv/client-go/v2/oracle"
 )
 
-// newCmdQueryTso creates the `cli tso query` command.
-func newCmdQueryTso(f util.Factory) *cobra.Command {
+// newCmdPauseChangefeed creates the `cli changefeed pause` command.
+func newCmdPauseChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "query",
-		Short: "Get tso from PD",
+		Use:   "pause",
+		Short: "Pause a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			job := model.AdminJob{
+				CfID: commonOptions.changefeedID,
+				Type: model.AdminStop,
+			}
+
 			ctx := context.GetDefaultContext()
-			pdClient, err := f.PdClient()
+
+			etcdClient, err := f.EtcdClient()
 			if err != nil {
 				return err
 			}
-			ts, logic, err := pdClient.GetTS(ctx)
-			if err != nil {
-				return err
-			}
-			cmd.Println(oracle.ComposeTS(ts, logic))
-			return nil
+
+			return applyAdminChangefeed(ctx, etcdClient, job, f.GetCredential())
 		},
 	}
-	command.SetOut(os.Stdout)
-	command.SetErr(os.Stdout)
+
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }

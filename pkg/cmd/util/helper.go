@@ -39,6 +39,7 @@ const (
 	HTTPS = "https"
 )
 
+// ErrOwnerNotFound specifies the error that the owner could not be found.
 var ErrOwnerNotFound = liberrors.New("owner not found")
 
 // InitCmd initializes the logger, the default context and returns its cancel function.
@@ -116,7 +117,8 @@ func proxyFields() []zap.Field {
 	return fields
 }
 
-func JsonPrint(cmd *cobra.Command, v interface{}) error {
+// JSONPrint will output the data in JSON format.
+func JSONPrint(cmd *cobra.Command, v interface{}) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err

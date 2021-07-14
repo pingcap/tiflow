@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"fmt"
@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/cmd/cli"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/r3labs/diff"
@@ -29,8 +28,8 @@ import (
 )
 
 // newCmdPauseChangefeed creates the `cli changefeed update` command.
-func newCmdUpdateChangefeed(f util.Factory, options *cli.Options, commonOptions *commonOptions) *cobra.Command {
-	o := newCommonChangefeedOptions(options)
+func newCmdUpdateChangefeed(f util.Factory, options *options, commonOptions *changefeedCommonOptions) *cobra.Command {
+	o := newCreateChangefeedCommonOptions(options)
 
 	command := &cobra.Command{
 		Use:   "update",

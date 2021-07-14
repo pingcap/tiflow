@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 )
 
 // newCmdResumeChangefeed creates the `cli changefeed resume` command.
-func newCmdResumeChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+func newCmdResumeChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "resume",
 		Short: "Resume a paused replication task (changefeed)",
@@ -65,7 +65,7 @@ func newCmdResumeChangefeed(f util.Factory, commonOptions *commonOptions) *cobra
 }
 
 func resumeChangefeedCheck(ctx context.Context, etcdClient *kv.CDCEtcdClient, pdClient pd.Client,
-	cmd *cobra.Command, commonOptions *commonOptions, credential *security.Credential) error {
+	cmd *cobra.Command, commonOptions *changefeedCommonOptions, credential *security.Credential) error {
 	resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, commonOptions.changefeedID, credential)
 	if err != nil {
 		return err

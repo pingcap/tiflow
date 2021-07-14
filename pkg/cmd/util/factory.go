@@ -24,12 +24,14 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Factory defines the client-side construction factory.
 type Factory interface {
 	ClientGetter
 	EtcdClient() (*kv.CDCEtcdClient, error)
 	PdClient() (pd.Client, error)
 }
 
+// ClientGetter defines the client getter.
 type ClientGetter interface {
 	ToTLSConfig() (*tls.Config, error)
 	ToGRPCDialOption() (grpc.DialOption, error)
@@ -37,6 +39,7 @@ type ClientGetter interface {
 	GetCredential() *security.Credential
 }
 
+// ClientFlags specifies the parameters needed to construct the client.
 type ClientFlags struct {
 	cliPdAddr string
 	caPath    string
@@ -46,6 +49,7 @@ type ClientFlags struct {
 
 var _ ClientGetter = &ClientFlags{}
 
+// ToTLSConfig returns the configuration of tls.
 func (c *ClientFlags) ToTLSConfig() (*tls.Config, error) {
 	credential := c.GetCredential()
 	tlsConfig, err := credential.ToTLSConfig()
@@ -55,6 +59,7 @@ func (c *ClientFlags) ToTLSConfig() (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
+// ToGRPCDialOption returns the option of GRPC dial.
 func (c *ClientFlags) ToGRPCDialOption() (grpc.DialOption, error) {
 	credential := c.GetCredential()
 	grpcTLSOption, err := credential.ToGRPCDialOption()
@@ -65,10 +70,12 @@ func (c *ClientFlags) ToGRPCDialOption() (grpc.DialOption, error) {
 	return grpcTLSOption, nil
 }
 
+// GetPdAddr returns pd address.
 func (c *ClientFlags) GetPdAddr() string {
 	return c.cliPdAddr
 }
 
+// NewCredentialFlags creates new client flags.
 func NewCredentialFlags() *ClientFlags {
 	return &ClientFlags{}
 }
@@ -81,6 +88,7 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection")
 }
 
+// GetCredential returns credential.
 func (c *ClientFlags) GetCredential() *security.Credential {
 	var certAllowedCN []string
 

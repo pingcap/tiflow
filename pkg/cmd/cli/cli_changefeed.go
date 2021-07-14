@@ -11,13 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/cmd/cli"
-	pd "github.com/tikv/pd/client"
 	"io/ioutil"
 	"strings"
 	"time"
@@ -26,12 +24,12 @@ import (
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/capture"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 )
 
 const (
@@ -40,20 +38,20 @@ const (
 	tsGapWarning = 86400 * 1000
 )
 
-// commonOptions defines common flags for the `changefeed` command.
-type commonOptions struct {
+// changefeedCommonOptions defines common flags for the `changefeed` command.
+type changefeedCommonOptions struct {
 	changefeedID string
 	NoConfirm    bool
 }
 
-// newCommonOptions creates new common options for the `changefeed` command.
-func newCommonOptions() *commonOptions {
-	return &commonOptions{}
+// newChangefeedCommonOptions creates new common options for the `changefeed` command.
+func newChangefeedCommonOptions() *changefeedCommonOptions {
+	return &changefeedCommonOptions{}
 }
 
-// NewCmdChangefeed creates the `cli changefeed` command.
-func NewCmdChangefeed(f util.Factory, options *cli.Options) *cobra.Command {
-	changefeedCommonOptions := newCommonOptions()
+// newCmdChangefeed creates the `cli changefeed` command.
+func newCmdChangefeed(f util.Factory, options *options) *cobra.Command {
+	changefeedCommonOptions := newChangefeedCommonOptions()
 
 	cmds := &cobra.Command{
 		Use:   "changefeed",
@@ -79,7 +77,7 @@ func NewCmdChangefeed(f util.Factory, options *cli.Options) *cobra.Command {
 func applyOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
 	cid model.ChangeFeedID, credential *security.Credential,
 ) (string, error) {
-	owner, err := capture.GetOwnerCapture(etcdClient, ctx)
+	owner, err := getOwnerCapture(ctx, etcdClient)
 	if err != nil {
 		return "", err
 	}
@@ -112,7 +110,7 @@ func applyOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient
 }
 
 func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
-	owner, err := capture.GetOwnerCapture(etcdClient, ctx)
+	owner, err := getOwnerCapture(ctx, etcdClient)
 	if err != nil {
 		return err
 	}
@@ -150,7 +148,7 @@ func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job
 	return nil
 }
 
-func confirmLargeDataGap(ctx context.Context, pdClient pd.Client, cmd *cobra.Command, commonOptions *commonOptions, startTs uint64) error {
+func confirmLargeDataGap(ctx context.Context, pdClient pd.Client, cmd *cobra.Command, commonOptions *changefeedCommonOptions, startTs uint64) error {
 	if commonOptions.NoConfirm {
 		return nil
 	}

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"github.com/pingcap/log"
@@ -39,13 +39,13 @@ type cfMeta struct {
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
-	commonOptions *commonOptions
+	commonOptions *changefeedCommonOptions
 
 	simplified bool
 }
 
 // newQueryChangefeedOptions creates new options for the `cli changefeed query` command.
-func newQueryChangefeedOptions(commonOptions *commonOptions) *queryChangefeedOptions {
+func newQueryChangefeedOptions(commonOptions *changefeedCommonOptions) *queryChangefeedOptions {
 	return &queryChangefeedOptions{
 		commonOptions: commonOptions,
 		simplified:    false,
@@ -53,7 +53,7 @@ func newQueryChangefeedOptions(commonOptions *commonOptions) *queryChangefeedOpt
 }
 
 // newCmdQueryChangefeed creates the `cli changefeed query` command.
-func newCmdQueryChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+func newCmdQueryChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
 	o := newQueryChangefeedOptions(commonOptions)
 
 	command := &cobra.Command{
@@ -113,7 +113,7 @@ func newCmdQueryChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.
 				log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.commonOptions.changefeedID))
 			}
 
-			return util.JsonPrint(cmd, meta)
+			return util.JSONPrint(cmd, meta)
 		},
 	}
 

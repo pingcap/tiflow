@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package unsafe
+package cli
 
 import (
 	"fmt"
@@ -25,7 +25,7 @@ import (
 )
 
 // newCmdReset creates the `cli unsafe reset` command.
-func newCmdReset(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+func newCmdReset(f util.Factory, commonOptions *unsafeCommonOptions) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "reset",
 		Short: "Reset the status of the TiCDC cluster, delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",

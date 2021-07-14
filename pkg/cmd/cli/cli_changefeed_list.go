@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"encoding/json"
@@ -93,7 +93,7 @@ func newCmdListChangefeed(f util.Factory) *cobra.Command {
 				cfs = append(cfs, cfci)
 			}
 
-			return util.JsonPrint(cmd, cfs)
+			return util.JSONPrint(cmd, cfs)
 		},
 	}
 

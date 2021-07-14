@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"context"
@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/cmd/cli"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -49,9 +48,9 @@ var forceEnableOldValueProtocols = []string{
 	"maxwell",
 }
 
-// commonChangefeedOptions defines common changefeed flags.
-type commonChangefeedOptions struct {
-	options *cli.Options
+// createChangefeedCommonOptions defines common changefeed flags.
+type createChangefeedCommonOptions struct {
+	options *options
 
 	startTs                uint64
 	targetTs               uint64
@@ -68,16 +67,16 @@ type commonChangefeedOptions struct {
 	syncPointInterval      time.Duration
 }
 
-// newCommonChangefeedOptions creates new common changefeed options.
-func newCommonChangefeedOptions(options *cli.Options) *commonChangefeedOptions {
-	return &commonChangefeedOptions{
+// newCreateChangefeedCommonOptions creates new create changefeed common options.
+func newCreateChangefeedCommonOptions(options *options) *createChangefeedCommonOptions {
+	return &createChangefeedCommonOptions{
 		options: options,
 	}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *commonChangefeedOptions) addFlags(cmd *cobra.Command) {
+func (o *createChangefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	if o == nil {
 		return
 	}
@@ -99,7 +98,7 @@ func (o *commonChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 // validateReplicaConfig do strictDecodeFile check and only verify the rules for now.
-func (o *commonChangefeedOptions) validateReplicaConfig(component string, cfg *config.ReplicaConfig) error {
+func (o *createChangefeedCommonOptions) validateReplicaConfig(component string, cfg *config.ReplicaConfig) error {
 	err := util.StrictDecodeFile(o.configFile, component, cfg)
 	if err != nil {
 		return err
@@ -108,7 +107,7 @@ func (o *commonChangefeedOptions) validateReplicaConfig(component string, cfg *c
 	return err
 }
 
-func (o *commonChangefeedOptions) validateTables(credential *security.Credential, cfg *config.ReplicaConfig) (ineligibleTables, eligibleTables []model.TableName, err error) {
+func (o *createChangefeedCommonOptions) validateTables(credential *security.Credential, cfg *config.ReplicaConfig) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(o.options.CliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
@@ -149,11 +148,11 @@ func (o *commonChangefeedOptions) validateTables(credential *security.Credential
 type createChangefeedOptions struct {
 	disableGCSafePointCheck bool
 
-	commonChangefeedOptions *commonChangefeedOptions
+	commonChangefeedOptions *createChangefeedCommonOptions
 }
 
 // newCreateChangefeedOptions creates new options for the `cli changefeed create` command.
-func newCreateChangefeedOptions(commonChangefeedOptions *commonChangefeedOptions) *createChangefeedOptions {
+func newCreateChangefeedOptions(commonChangefeedOptions *createChangefeedCommonOptions) *createChangefeedOptions {
 	return &createChangefeedOptions{
 		commonChangefeedOptions: commonChangefeedOptions,
 	}
@@ -171,8 +170,8 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 // newCmdCreateChangefeed creates the `cli changefeed create` command.
-func newCmdCreateChangefeed(f util.Factory, options *cli.Options, commonOptions *commonOptions) *cobra.Command {
-	commonChangefeedOptions := newCommonChangefeedOptions(options)
+func newCmdCreateChangefeed(f util.Factory, options *options, commonOptions *changefeedCommonOptions) *cobra.Command {
+	commonChangefeedOptions := newCreateChangefeedCommonOptions(options)
 	o := newCreateChangefeedOptions(commonChangefeedOptions)
 
 	command := &cobra.Command{
@@ -236,7 +235,7 @@ func newCmdCreateChangefeed(f util.Factory, options *cli.Options, commonOptions 
 	return command
 }
 
-func (o *createChangefeedOptions) validate(ctx context.Context, pdClient pd.Client, commonOptions *commonOptions, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func (o *createChangefeedOptions) validate(ctx context.Context, pdClient pd.Client, commonOptions *changefeedCommonOptions, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if o.commonChangefeedOptions.sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")

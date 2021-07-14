@@ -36,6 +36,7 @@ type factoryImpl struct {
 	clientGetter ClientGetter
 }
 
+// NewFactory creates a client build factory.
 func NewFactory(clientGetter ClientGetter) Factory {
 	if clientGetter == nil {
 		panic("attempt to instantiate factory with nil clientGetter")
@@ -58,6 +59,7 @@ func (f *factoryImpl) ToGRPCDialOption() (grpc.DialOption, error) {
 func (f *factoryImpl) GetPdAddr() string {
 	return f.clientGetter.GetPdAddr()
 }
+
 func (f *factoryImpl) GetCredential() *security.Credential {
 	return f.clientGetter.GetCredential()
 }
@@ -94,6 +96,9 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 			}),
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
 	client := kv.NewCDCEtcdClient(cmdconetxt.GetDefaultContext(), etcdClient)
 	return &client, nil
 }

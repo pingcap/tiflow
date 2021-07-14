@@ -11,32 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package cli
 
 import (
-	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
-// newCmdListProcessor creates the `cli processor list` command.
-func newCmdListProcessor(f util.Factory) *cobra.Command {
+// newCmdCapture creates the `cli capture` command.
+func newCmdCapture(f util.Factory) *cobra.Command {
 	command := &cobra.Command{
-		Use:   "list",
-		Short: "List all processors in TiCDC cluster",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.GetDefaultContext()
-			etcdClient, err := f.EtcdClient()
-			if err != nil {
-				return err
-			}
-			info, err := etcdClient.GetProcessors(ctx)
-			if err != nil {
-				return err
-			}
-			return util.JsonPrint(cmd, info)
-		},
+		Use:   "capture",
+		Short: "Manage capture (capture is a CDC server instance)",
 	}
+	command.AddCommand(
+		newCmdListCapture(f),
+		// TODO: add resign owner command
+	)
 
 	return command
 }

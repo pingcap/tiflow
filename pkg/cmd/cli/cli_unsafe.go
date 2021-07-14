@@ -11,28 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package unsafe
+package cli
 
 import (
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
-// commonOptions defines common for the `cli unsafe` command.
-type commonOptions struct {
+// unsafeCommonOptions defines common for the `cli unsafe` command.
+type unsafeCommonOptions struct {
 	noConfirm bool
 }
 
-// newCommonOptions creates new common options for the `cli unsafe` command.
-func newCommonOptions() *commonOptions {
-	return &commonOptions{
+// newUnsafeCommonOptions creates new common options for the `cli unsafe` command.
+func newUnsafeCommonOptions() *unsafeCommonOptions {
+	return &unsafeCommonOptions{
 		noConfirm: false,
 	}
 }
 
-// NewCmdUnsafe creates the `cli unsafe` command.
-func NewCmdUnsafe(f util.Factory) *cobra.Command {
-	commonOptions := newCommonOptions()
+// newCmdUnsafe creates the `cli unsafe` command.
+func newCmdUnsafe(f util.Factory) *cobra.Command {
+	commonOptions := newUnsafeCommonOptions()
 
 	command := &cobra.Command{
 		Use:    "unsafe",

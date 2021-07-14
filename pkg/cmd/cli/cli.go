@@ -20,31 +20,26 @@ import (
 
 	"github.com/chzyer/readline"
 	"github.com/mattn/go-shellwords"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/capture"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/changefeed"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/processor"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/tso"
-	"github.com/pingcap/ticdc/pkg/cmd/cli/unsafe"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/spf13/cobra"
 )
 
-// Options defines flags for the `cli` command.
-type Options struct {
+// options defines flags for the `cli` command.
+type options struct {
 	interact    bool
 	cliLogLevel string
 	CliPdAddr   string
 }
 
-// newOptions creates new Options for the `cli` command.
-func newOptions() *Options {
-	return &Options{}
+// newOptions creates new options for the `cli` command.
+func newOptions() *options {
+	return &options{}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *Options) addFlags(c *cobra.Command) {
+func (o *options) addFlags(c *cobra.Command) {
 	if o == nil {
 		return
 	}
@@ -78,17 +73,17 @@ func NewCmdCli() *cobra.Command {
 	// Binding the `cmd` command flags.
 	o.addFlags(cmds)
 
-	// Bind the certificate Options and construct the client construction factory.
+	// Bind the certificate options and construct the client construction factory.
 	cf := util.NewCredentialFlags()
 	cf.AddFlags(cmds)
 	f := util.NewFactory(cf)
 
 	// Add subcommands.
-	cmds.AddCommand(capture.NewCmdCapture(f))
-	cmds.AddCommand(changefeed.NewCmdChangefeed(f, o))
-	cmds.AddCommand(processor.NewCmdProcessor(f))
-	cmds.AddCommand(tso.NewCmdTso(f))
-	cmds.AddCommand(unsafe.NewCmdUnsafe(f))
+	cmds.AddCommand(newCmdCapture(f))
+	cmds.AddCommand(newCmdChangefeed(f, o))
+	cmds.AddCommand(newCmdProcessor(f))
+	cmds.AddCommand(newCmdTso(f))
+	cmds.AddCommand(newCmdUnsafe(f))
 
 	return cmds
 }

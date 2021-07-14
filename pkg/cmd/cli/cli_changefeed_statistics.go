@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package changefeed
+package cli
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ func newStatisticsChangefeedOptions() *statisticsChangefeedOptions {
 }
 
 // newCmdStatisticsChangefeed creates the `cli changefeed statistics` command.
-func newCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *cobra.Command {
+func newCmdStatisticsChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
 	o := newStatisticsChangefeedOptions()
 
 	command := &cobra.Command{
@@ -92,7 +92,7 @@ func newCmdStatisticsChangefeed(f util.Factory, commonOptions *commonOptions) *c
 						ReplicationGap: fmt.Sprintf("%dms", replicationGap),
 						Count:          count,
 					}
-					_ = util.JsonPrint(cmd, &statistics)
+					_ = util.JSONPrint(cmd, &statistics)
 					lastCount = count
 					lastTime = now
 				}
