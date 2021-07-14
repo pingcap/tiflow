@@ -375,7 +375,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	}
 
 	var tableInfoVersion uint64
-	//
+	// Align with the old format if old value disabled.
 	if row.Delete && !m.enableOldValue {
 		tableInfoVersion = 0
 	} else {
