@@ -51,8 +51,10 @@ type options struct {
 }
 
 // newOptions creates new options for the `server` command.
-func newOptions() *options {
-	return &options{}
+func newOptions(serverConfig *config.ServerConfig) *options {
+	return &options{
+		serverConfig: serverConfig,
+	}
 }
 
 // addFlags receives a *cobra.Command reference and binds
@@ -234,7 +236,7 @@ func (o *options) getCredential() *security.Credential {
 
 // NewCmdServer creates the `server` command.
 func NewCmdServer() *cobra.Command {
-	o := newOptions()
+	o := newOptions(config.GetDefaultServerConfig())
 
 	command := &cobra.Command{
 		Use:   "server",
