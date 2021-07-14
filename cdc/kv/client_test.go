@@ -504,9 +504,16 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
+	region3 := uint64(3)
+	region4 := uint64(4)
+	region5 := uint64(5)
 	cluster.AddStore(1, addr1)
 	cluster.AddStore(2, addr2)
-	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
+	cluster.Bootstrap(region3, []uint64{1, 2}, []uint64{4, 5}, 4)
+	// split two regions with leader on different TiKV nodes to avoid region
+	// worker exits because of empty maintained region
+	cluster.SplitRaw(region3, region4, []byte("b"), []uint64{6, 7}, 6)
+	cluster.SplitRaw(region4, region5, []byte("c"), []uint64{8, 9}, 9)
 
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
@@ -516,7 +523,7 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
 	}()
@@ -2088,22 +2095,32 @@ func (s *etcdSuite) TestDuplicateRequest(c *check.C) {
 	s.testEventCommitTsFallback(c, events)
 }
 
-// TestEventAfterFeedStop tests kv client can drop events sent after region feed is stopped
-func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
+// testEventAfterFeedStop tests kv client can drop events sent after region feed is stopped
+// TODO: testEventAfterFeedStop is not stable, re-enable it after it is stable
+func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
+	server1Stopped := make(chan struct{})
 	ch1 := make(chan *cdcpb.ChangeDataEvent, 10)
 	srv1 := newMockChangeDataService(c, ch1)
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
-
-	defer func() {
-		close(ch1)
-		server1.Stop()
-		wg.Wait()
-	}()
+	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		defer func() {
+			close(ch1)
+			server1.Stop()
+			server1Stopped <- struct{}{}
+		}()
+		for {
+			_, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				break
+			}
+		}
+	}
 
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
@@ -2189,13 +2206,45 @@ func (s *etcdSuite) TestEventAfterFeedStop(c *check.C) {
 	ch1 <- initialized
 	ch1 <- resolved
 
+	<-server1Stopped
+
+	var requestID uint64
+	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	srv2 := newMockChangeDataService(c, ch2)
+	// Reuse the same listen addresss as server 1 to simulate TiKV handles the
+	// gRPC stream terminate and reconnect.
+	server2, _ := newMockServiceSpecificAddr(ctx, c, srv2, addr1, wg)
+	srv2.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
+		for {
+			req, err := server.Recv()
+			if err != nil {
+				log.Error("mock server error", zap.Error(err))
+				return
+			}
+			atomic.StoreUint64(&requestID, req.RequestId)
+		}
+	}
+	defer func() {
+		close(ch2)
+		server2.Stop()
+		wg.Wait()
+	}()
+
+	err = retry.Run(time.Millisecond*500, 10, func() error {
+		if atomic.LoadUint64(&requestID) > 0 {
+			return nil
+		}
+		return errors.New("waiting for kv client requests received by server")
+	})
+	log.Info("retry check request id", zap.Error(err))
+	c.Assert(err, check.IsNil)
+
 	// wait request id allocated with: new session, 2 * new request
-	waitRequestID(c, baseAllocatedID+2)
 	committedClone.Events[0].RequestId = currentRequestID()
 	initializedClone.Events[0].RequestId = currentRequestID()
-	ch1 <- committedClone
-	ch1 <- initializedClone
-	ch1 <- resolvedClone
+	ch2 <- committedClone
+	ch2 <- initializedClone
+	ch2 <- resolvedClone
 
 	expected := []*model.RegionFeedEvent{
 		{
