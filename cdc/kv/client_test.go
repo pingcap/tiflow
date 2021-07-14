@@ -1742,13 +1742,27 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	var wg2 sync.WaitGroup
-	wg2.Add(1)
-	go func() {
-		defer wg2.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(cerror.ErrNoPendingRegion.Equal(err), check.IsTrue)
-		cdcClient.Close() //nolint:errcheck
-	}()
+	if enableKVClientV2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+			c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+			cdcClient.Close() //nolint:errcheck
+		}()
+	} else {
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+			err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+			if enableKVClientV2 {
+				c.Assert(err, check.IsNil)
+			} else {
+				c.Assert(cerror.ErrNoPendingRegion.Equal(err), check.IsTrue)
+			}
+			cdcClient.Close() //nolint:errcheck
+		}()
+	}
 
 	// wait request id allocated with: new session, new request
 	waitRequestID(c, baseAllocatedID+1)
@@ -1760,6 +1774,13 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 		},
 	}}
 	ch1 <- noPendingRegionEvent
+	if enableKVClientV2 {
+		initialized := mockInitializedEvent(3, currentRequestID())
+		ch1 <- initialized
+		ev := <-eventCh
+		c.Assert(ev.Resolved, check.NotNil)
+		c.Assert(ev.Resolved.ResolvedTs, check.Equals, uint64(100))
+	}
 	wg2.Wait()
 	cancel()
 }
