@@ -172,15 +172,17 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 			deleteEvent := event.Clone()
 			deleteEvent.Row.Columns = nil
 			for i := range deleteEvent.Row.PreColumns {
-				// Only the handle key column is retained in the delete event.
+				// NOTICE: Only the handle key column is retained in the delete event.
 				if !deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
 					deleteEvent.Row.PreColumns[i] = nil
 				}
 			}
+			// Align with the old format if old value disabled.
 			deleteEvent.Row.TableInfoVersion = 0
 			n.eventBuffer = append(n.eventBuffer, deleteEvent)
 
 			replaceEvent := event.Clone()
+			// NOTICE: clean up pre cols for replace event.
 			replaceEvent.Row.PreColumns = nil
 			n.eventBuffer = append(n.eventBuffer, replaceEvent)
 		}
