@@ -20,9 +20,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/store/tikv"
-	tikverr "github.com/pingcap/tidb/store/tikv/error"
-	"github.com/pingcap/tidb/store/tikv/tikvrpc"
+	tikverr "github.com/tikv/client-go/v2/error"
+	"github.com/tikv/client-go/v2/tikv"
+	"github.com/tikv/client-go/v2/tikvrpc"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +52,7 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		Limit:      scanLockLimit,
 	})
 
-	bo := tikv.NewBackoffer(ctx, tikv.GcResolveLockMaxBackoff)
+	bo := tikv.NewGcResolveLockMaxBackoffer(ctx)
 	var loc *tikv.KeyLocation
 	var key []byte
 	flushRegion := func() error {
@@ -83,7 +83,7 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 			return errors.Trace(err)
 		}
 		if regionErr != nil {
-			err = bo.Backoff(tikv.BoRegionMiss, errors.New(regionErr.String()))
+			err = bo.Backoff(tikv.BoRegionMiss(), errors.New(regionErr.String()))
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -118,7 +118,7 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		if len(key) == 0 || (len(loc.EndKey) != 0 && bytes.Compare(key, loc.EndKey) >= 0) {
 			break
 		}
-		bo = tikv.NewBackoffer(ctx, tikv.GcResolveLockMaxBackoff)
+		bo = tikv.NewGcResolveLockMaxBackoffer(ctx)
 	}
 	log.Info("resolve lock successfully", zap.Uint64("regionID", regionID), zap.Uint64("maxVersion", maxVersion))
 	return nil

@@ -34,10 +34,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -279,7 +279,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		log.Warn("The TiCDC cluster is built from 4.0-release branch, the old-value and unified-sorter are disabled by default.")
 	}
 	if len(configFile) > 0 {
-		if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+		if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -522,7 +522,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SinkURI = sinkURI
 				case "config":
 					cfg := info.Config
-					if err = strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+					if err = verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 						log.Error("decode config file error", zap.Error(err))
 					}
 				case "opts":
@@ -695,7 +695,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 
 				cfg := config.GetDefaultReplicaConfig()
 				if len(configFile) > 0 {
-					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+					if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 						return err
 					}
 				}
