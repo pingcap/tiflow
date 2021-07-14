@@ -37,10 +37,10 @@ type Pipeline struct {
 
 // NewPipeline creates a new pipeline
 func NewPipeline(
-	ctx context.Context, tickDuration time.Duration, runnerSize, outputChSize int,
+	ctx context.Context, tickDuration time.Duration, initRunnerSize, outputChSize int,
 ) *Pipeline {
 	header := make(headRunner, 4)
-	runners := make([]runner, 0, runnerSize)
+	runners := make([]runner, 0, initRunnerSize)
 	runners = append(runners, header)
 	p := &Pipeline{
 		header:       header,

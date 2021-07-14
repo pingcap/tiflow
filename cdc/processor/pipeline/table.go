@@ -159,7 +159,10 @@ func (t *tablePipelineImpl) Wait() {
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
 // replicating 1024 tables in the worst case.
 const defaultOutputChannelSize = 64
-const defaultRunnersSize = 4
+
+// There are 5 or 6 runners in table pipeline: header, puller, sorter, mounter,
+// sink, cyclic if cyclic replication is enabled
+const defaultRunnersSize = 5
 
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
