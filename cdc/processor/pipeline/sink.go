@@ -147,8 +147,8 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 	config := ctx.ChangefeedVars().Info.Config
 
 	// This indicates that it is an update event,
-	// and after turning on old value internally by default,
-	// we need to handle the update event to be compatible with the old format.
+	// and after enable old value internally by default(but disable in the configuration).
+	// We need to handle the update event to be compatible with the old format.
 	if !config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
 		handleKeyCount := 0
 		equivalentHandleKeyCount := 0
@@ -162,6 +162,7 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 				}
 			}
 		}
+
 		// If the handle key columns are not updated, PreColumns is directly ignored.
 		if handleKeyCount == equivalentHandleKeyCount {
 			event.Row.PreColumns = nil
@@ -172,7 +173,7 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 			deleteEvent := event.Clone()
 			deleteEvent.Row.Columns = nil
 			for i := range deleteEvent.Row.PreColumns {
-				// NOTICE: Only the handle key column is retained in the delete event.
+				// NOTICE: Only the handle key pre column is retained in the delete event.
 				if !deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
 					deleteEvent.Row.PreColumns[i] = nil
 				}
