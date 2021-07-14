@@ -339,7 +339,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	// Normally old value is output when only enableOldValue is on,
 	// but for the Delete event, when the old value feature is off,
 	// the HandleKey column needs to be included as well. So we need to do the following filtering.
-	if (row.PreRowExist && m.enableOldValue) || (row.PreRowExist && row.Delete) {
+	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
 		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
@@ -373,11 +373,19 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	if row.RecordID.IsInt() {
 		intRowID = row.RecordID.IntValue()
 	}
+
+	var tableInfoVersion uint64
+	if row.Delete {
+		tableInfoVersion = 0
+	} else {
+		tableInfoVersion = tableInfo.TableInfoVersion
+	}
+
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
 		RowID:            intRowID,
-		TableInfoVersion: tableInfo.TableInfoVersion,
+		TableInfoVersion: tableInfoVersion,
 		Table: &model.TableName{
 			Schema:      schemaName,
 			Table:       tableName,
