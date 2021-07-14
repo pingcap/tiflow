@@ -455,7 +455,7 @@ func run(
 	// DDL is a strong sync point in TiCDC. Once finishmark table is replicated to downstream
 	// all previous DDL and DML are replicated too.
 	mustExec(ctx, upstreamDB, `CREATE TABLE IF NOT EXISTS finishmark (foo BIGINT PRIMARY KEY)`)
-	waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Minute)
+	waitCtx, waitCancel := context.WithTimeout(ctx, 15*time.Minute)
 	endTs, err := getDownStreamSyncedEndTs(waitCtx, downstreamDB, "finishmark")
 	waitCancel()
 	if err != nil {
@@ -535,7 +535,7 @@ func run(
 					return ctx.Err()
 				case tblName := <-tblChan:
 					log.Info("downstream start wait for table", zap.String("tblName", tblName))
-					waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Minute)
+					waitCtx, waitCancel := context.WithTimeout(ctx, 15*time.Minute)
 					endTs, err := getDownStreamSyncedEndTs(waitCtx, downstreamDB, tblName)
 					waitCancel()
 					log.Info("ddl synced", zap.String("table", tblName))
