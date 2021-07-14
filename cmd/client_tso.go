@@ -45,6 +45,7 @@ func newQueryTsoCommand() *cobra.Command {
 			return nil
 		},
 	}
-	command.SetOutput(os.Stdout)
+	command.SetOut(os.Stdout)
+	command.SetErr(os.Stdout)
 	return command
 }
