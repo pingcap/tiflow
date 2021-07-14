@@ -818,7 +818,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
-		span := regionspan.GetTableSpan(tableID, true)
+		span := regionspan.GetTableSpan(tableID)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
 			p.sendError(err)
