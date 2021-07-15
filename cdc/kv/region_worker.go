@@ -203,11 +203,11 @@ func (w *regionWorker) delRegionState(regionID uint64) {
 	w.statesManager.delState(regionID)
 }
 
-// checkRegionStateEmpty returns true if there is not region state maintained
-// note this function is not thread-safe
+// checkRegionStateEmpty returns true if there is no region state maintained.
+// Note this function is not thread-safe
 func (w *regionWorker) checkRegionStateEmpty() bool {
+	empty := true
 	for _, states := range w.statesManager.states {
-		empty := true
 		states.Range(func(_, _ interface{}) bool {
 			empty = false
 			return false
@@ -217,6 +217,24 @@ func (w *regionWorker) checkRegionStateEmpty() bool {
 		}
 	}
 	return true
+}
+
+// checkShouldExit checks whether the region worker should exit
+func (w *regionWorker) checkShouldExit(addr string) bool {
+	empty := w.checkRegionStateEmpty()
+	// If there is not region maintained by this region worker, exit it and
+	// cancel the gRPC stream.
+	if empty {
+		cancel, ok := w.session.getStreamCancel(addr)
+		if ok {
+			// cancel the gRPC stream
+			cancel()
+		}
+		// if stream is already deleted, do nothing
+
+		return true
+	}
+	return false
 }
 
 func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, state *regionFeedState) error {
@@ -232,6 +250,9 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		zap.String("error", err.Error()))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
+		if w.checkShouldExit(state.sri.rpcCtx.Addr) {
+			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+		}
 		return nil
 	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
@@ -263,20 +284,10 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		}
 	})
 
-	var retErr error
-	// If there is not region maintained by this region worker, exit it.
-	// cancel gRPC stream before reconnecting region, in case of the scenario
-	// that region connects to the same TiKV store again and reuses resource in
-	// this region worker by accident.
-	if w.checkRegionStateEmpty() {
-		cancel, ok := w.session.getStreamCancel(state.sri.rpcCtx.Addr)
-		if ok {
-			// cancel the gRPC stream
-			cancel()
-		}
-		// if stream is already deleted, do nothing
-		retErr = cerror.ErrRegionWorkerExit.GenWithStackByArgs()
-	}
+	// check and cancel gRPC stream before reconnecting region, in case of the
+	// scenario that region connects to the same TiKV store again and reuses
+	// resource in this region worker by accident.
+	toExit := w.checkShouldExit(state.sri.rpcCtx.Addr)
 
 	revokeToken := !state.initialized
 	err2 := w.session.onRegionFail(ctx, regionErrorInfo{
@@ -287,7 +298,10 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		return err2
 	}
 
-	return retErr
+	if toExit {
+		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+	}
+	return nil
 }
 
 func (w *regionWorker) resolveLock(ctx context.Context) error {
@@ -775,6 +789,7 @@ func (w *regionWorker) evictAllRegions(ctx context.Context) error {
 				return true
 			}
 			state.markStopped()
+			w.delRegionState(state.sri.verID.GetID())
 			singleRegionInfo := state.sri.partialClone()
 			if state.lastResolvedTs > singleRegionInfo.ts {
 				singleRegionInfo.ts = state.lastResolvedTs
