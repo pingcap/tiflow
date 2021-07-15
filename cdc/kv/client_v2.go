@@ -186,6 +186,10 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, limiter, addr)
 
+	defer func() {
+		worker.evictAllRegions(ctx) //nolint:errcheck
+	}()
+
 	g.Go(func() error {
 		return worker.run(ctx)
 	})
