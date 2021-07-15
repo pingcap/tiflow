@@ -852,10 +852,7 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			limiter := s.client.getRegionLimiter(regionID)
 			g.Go(func() error {
-				defer func() {
-					streamCancel()
-					s.deleteStream(rpcCtx.Addr)
-				}()
+				defer s.deleteStream(rpcCtx.Addr)
 				if !s.enableKVClientV2 {
 					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				}
@@ -1694,7 +1691,10 @@ func (s *eventFeedSession) deleteStream(storeAddr string) {
 	s.streamsLock.Lock()
 	defer s.streamsLock.Unlock()
 	delete(s.streams, storeAddr)
-	delete(s.streamsCanceller, storeAddr)
+	if cancel, ok := s.streamsCanceller[storeAddr]; ok {
+		cancel()
+		delete(s.streamsCanceller, storeAddr)
+	}
 }
 
 func (s *eventFeedSession) getStream(storeAddr string) (stream cdcpb.ChangeData_EventFeedClient, ok bool) {

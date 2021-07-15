@@ -205,18 +205,18 @@ func (w *regionWorker) delRegionState(regionID uint64) {
 
 // checkRegionStateEmpty returns true if there is no region state maintained.
 // Note this function is not thread-safe
-func (w *regionWorker) checkRegionStateEmpty() bool {
-	empty := true
+func (w *regionWorker) checkRegionStateEmpty() (empty bool) {
+	empty = true
 	for _, states := range w.statesManager.states {
 		states.Range(func(_, _ interface{}) bool {
 			empty = false
 			return false
 		})
 		if !empty {
-			return false
+			return
 		}
 	}
-	return true
+	return
 }
 
 // checkShouldExit checks whether the region worker should exit
