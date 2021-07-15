@@ -142,6 +142,10 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 }
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
+	if event == nil || event.Row == nil {
+		return nil
+	}
+
 	colLen := len(event.Row.Columns)
 	preColLen := len(event.Row.PreColumns)
 	config := ctx.ChangefeedVars().Info.Config
