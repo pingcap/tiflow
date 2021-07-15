@@ -2980,11 +2980,27 @@
               "refId": "A"
             },
             {
-              "expr": "sum(grpc_client_started_total{tidb_cluster=\"$tidb_cluster\", grpc_method=\"EventFeed\"}) by (instance)",
+              "expr": "sum(grpc_client_started_total{tidb_cluster=\"$tidb_cluster\", grpc_method=\"EventFeed\"}) by (instance) - sum(grpc_client_handled_total{tidb_cluster=\"$tidb_cluster\", grpc_method=\"EventFeed\"}) by (instance)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-rpc",
               "refId": "B"
+            },
+            {
+              "expr": "sum(grpc_client_started_total{tidb_cluster=\"$tidb_cluster\", grpc_method=\"EventFeed\"}) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}-rpc-started",
+              "refId": "C"
+            },
+            {
+              "expr": "sum(grpc_client_handled_total{tidb_cluster=\"$tidb_cluster\", grpc_method=\"EventFeed\"}) by (instance)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}-rpc-handled",
+              "refId": "D"
             }
           ],
           "thresholds": [],
