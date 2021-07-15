@@ -193,15 +193,15 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 			deleteEvent.Row.TableInfoVersion = 0
 			n.eventBuffer = append(n.eventBuffer, &deleteEvent)
 
-			replaceEvent := *event
-			replaceEventRow := *event.Row
-			replaceEventRowKV := *event.RawKV
-			replaceEvent.Row = &replaceEventRow
-			replaceEvent.RawKV = &replaceEventRowKV
+			insertEvent := *event
+			insertEventRow := *event.Row
+			insertEventRowKV := *event.RawKV
+			insertEvent.Row = &insertEventRow
+			insertEvent.RawKV = &insertEventRowKV
 
-			// NOTICE: clean up pre cols for replace event.
-			replaceEvent.Row.PreColumns = nil
-			n.eventBuffer = append(n.eventBuffer, &replaceEvent)
+			// NOTICE: clean up pre cols for insert event.
+			insertEvent.Row.PreColumns = nil
+			n.eventBuffer = append(n.eventBuffer, &insertEvent)
 		}
 	} else {
 		n.eventBuffer = append(n.eventBuffer, event)
