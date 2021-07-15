@@ -245,7 +245,7 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	c.Assert(node.CheckpointTs(), check.Equals, uint64(2))
 }
 
-func (s *outputSuite) TestSplitUpdateEventWithEnableOldValue(c *check.C) {
+func (s *outputSuite) TestSplitUpdateEventWhenEnableOldValue(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
@@ -302,7 +302,7 @@ func (s *outputSuite) TestSplitUpdateEventWithEnableOldValue(c *check.C) {
 	c.Assert(node.eventBuffer[0].Row.PreColumns, check.HasLen, 2)
 }
 
-func (s *outputSuite) TestSplitUpdateEventWithDisableOldValue(c *check.C) {
+func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	cfg := config.GetDefaultReplicaConfig()
