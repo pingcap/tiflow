@@ -15,17 +15,17 @@ package pipeline
 
 import (
 	"context"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/tikv/client-go/v2/oracle"
 	"testing"
 	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func TestSuite(t *testing.T) {
