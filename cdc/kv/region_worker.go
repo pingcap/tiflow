@@ -232,12 +232,6 @@ func (w *regionWorker) checkShouldExit(ctx context.Context, addr string) error {
 		} else {
 			log.Warn("gRPC stream cancel func not found", zap.String("addr", addr))
 		}
-		// Double check here, since checkRegionStateEmpty is not thread-safe
-		// more region states could be added into region worker.
-		err := w.evictAllRegions(ctx)
-		if err != nil {
-			return err
-		}
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
 	return nil
@@ -464,10 +458,6 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if !ok || event == nil {
 			log.Info("region worker closed by error")
 			exitEventHandler = true
-			err := w.evictAllRegions(ctx)
-			if err != nil {
-				log.Warn("region worker evict all regions error", zap.Error(err))
-			}
 			return
 		}
 		if event.state.isStopped() {
