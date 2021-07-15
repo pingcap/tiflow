@@ -170,7 +170,14 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 		} else {
 			// If there is an update to handle key columns,
 			// we need to split the event into two events to be compatible with the old format.
-			deleteEvent := event.Clone()
+			// NOTICE: Here we don't need a full deep copy because our two events need Columns and PreColumns respectively,
+			// so it won't have an impact and no more full deep copy wastes memory.
+			deleteEvent := *event
+			deleteEventRow := *event.Row
+			deleteEventRowKV := *event.RawKV
+			deleteEvent.Row = &deleteEventRow
+			deleteEvent.RawKV = &deleteEventRowKV
+
 			deleteEvent.Row.Columns = nil
 			for i := range deleteEvent.Row.PreColumns {
 				// NOTICE: Only the handle key pre column is retained in the delete event.
@@ -180,12 +187,17 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 			}
 			// Align with the old format if old value disabled.
 			deleteEvent.Row.TableInfoVersion = 0
-			n.eventBuffer = append(n.eventBuffer, deleteEvent)
+			n.eventBuffer = append(n.eventBuffer, &deleteEvent)
 
-			replaceEvent := event.Clone()
+			replaceEvent := *event
+			replaceEventRow := *event.Row
+			replaceEventRowKV := *event.RawKV
+			replaceEvent.Row = &replaceEventRow
+			replaceEvent.RawKV = &replaceEventRowKV
+
 			// NOTICE: clean up pre cols for replace event.
 			replaceEvent.Row.PreColumns = nil
-			n.eventBuffer = append(n.eventBuffer, replaceEvent)
+			n.eventBuffer = append(n.eventBuffer, &replaceEvent)
 		}
 	} else {
 		n.eventBuffer = append(n.eventBuffer, event)

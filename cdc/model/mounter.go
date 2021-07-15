@@ -83,16 +83,3 @@ func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
 	}
 	return nil
 }
-
-// Clone returns a deep-clone of the struct.
-func (e *PolymorphicEvent) Clone() *PolymorphicEvent {
-	clone := *e
-
-	row := *e.Row
-	clone.Row = &row
-
-	rowKV := *e.RawKV
-	clone.RawKV = &rowKV
-
-	return &clone
-}
