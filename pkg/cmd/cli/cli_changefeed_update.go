@@ -27,9 +27,37 @@ import (
 	"go.uber.org/zap"
 )
 
+// updateChangefeedOptions defines common flags for the `cli changefeed update` command.
+type updateChangefeedOptions struct {
+	commonChangefeedOptions *createChangefeedCommonOptions
+	changefeedID            string
+	disableGCSafePointCheck bool
+}
+
+// newUpdateChangefeedOptions creates new options for the `cli changefeed update` command.
+func newUpdateChangefeedOptions(commonChangefeedOptions *createChangefeedCommonOptions) *updateChangefeedOptions {
+	return &updateChangefeedOptions{
+		commonChangefeedOptions: commonChangefeedOptions,
+	}
+}
+
+// addFlags receives a *cobra.Command reference and binds
+// flags related to template printing to it.
+func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
+	if o == nil {
+		return
+	}
+
+	o.commonChangefeedOptions.addFlags(cmd)
+	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
+	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
+	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
+}
+
 // newCmdPauseChangefeed creates the `cli changefeed update` command.
-func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
-	o := newCreateChangefeedCommonOptions()
+func newCmdUpdateChangefeed(f util.Factory) *cobra.Command {
+	commonChangefeedOptions := newCreateChangefeedCommonOptions()
+	o := newUpdateChangefeedOptions(commonChangefeedOptions)
 
 	command := &cobra.Command{
 		Use:   "update",
@@ -42,7 +70,7 @@ func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 				return err
 			}
 
-			old, err := etcdClient.GetChangeFeedInfo(ctx, commonOptions.changefeedID)
+			old, err := etcdClient.GetChangeFeedInfo(ctx, o.changefeedID)
 			if err != nil {
 				return err
 			}
@@ -55,16 +83,16 @@ func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 			cmd.Flags().Visit(func(flag *pflag.Flag) {
 				switch flag.Name {
 				case "target-ts":
-					info.TargetTs = o.targetTs
+					info.TargetTs = o.commonChangefeedOptions.targetTs
 				case "sink-uri":
-					info.SinkURI = o.sinkURI
+					info.SinkURI = o.commonChangefeedOptions.sinkURI
 				case "config":
 					cfg := info.Config
-					if err = o.validateReplicaConfig("TiCDC changefeed", cfg); err != nil {
+					if err = o.commonChangefeedOptions.validateReplicaConfig("TiCDC changefeed", cfg); err != nil {
 						log.Error("decode config file error", zap.Error(err))
 					}
 				case "opts":
-					for _, opt := range o.opts {
+					for _, opt := range o.commonChangefeedOptions.opts {
 						s := strings.SplitN(opt, "=", 2)
 						if len(s) <= 0 {
 							cmd.Printf("omit opt: %s", opt)
@@ -81,19 +109,19 @@ func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 					}
 
 				case "sort-engine":
-					info.Engine = o.sortEngine
+					info.Engine = o.commonChangefeedOptions.sortEngine
 				case "cyclic-replica-id":
-					filter := make([]uint64, 0, len(o.cyclicFilterReplicaIDs))
-					for _, id := range o.cyclicFilterReplicaIDs {
+					filter := make([]uint64, 0, len(o.commonChangefeedOptions.cyclicFilterReplicaIDs))
+					for _, id := range o.commonChangefeedOptions.cyclicFilterReplicaIDs {
 						filter = append(filter, uint64(id))
 					}
 					info.Config.Cyclic.FilterReplicaID = filter
 				case "cyclic-sync-ddl":
-					info.Config.Cyclic.SyncDDL = o.cyclicSyncDDL
+					info.Config.Cyclic.SyncDDL = o.commonChangefeedOptions.cyclicSyncDDL
 				case "sync-point":
-					info.SyncPointEnabled = o.syncPointEnabled
+					info.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 				case "sync-interval":
-					info.SyncPointInterval = o.syncPointInterval
+					info.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
 				case "pd", "tz", "start-ts", "changefeed-id", "no-confirm":
 					// do nothing
 				default:
@@ -105,7 +133,7 @@ func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 				return err
 			}
 
-			resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, commonOptions.changefeedID, f.GetCredential())
+			resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, o.changefeedID, f.GetCredential())
 			// if no cdc owner exists, allow user to update changefeed config
 			if err != nil && errors.Cause(err) != util.ErrOwnerNotFound {
 				return err
@@ -129,7 +157,7 @@ func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 				cmd.Printf("%+v\n", change)
 			}
 
-			if !commonOptions.NoConfirm {
+			if !o.commonChangefeedOptions.noConfirm {
 				cmd.Printf("Could you agree to apply changes above to changefeed [Y/N]\n")
 				var yOrN string
 				_, err = fmt.Scan(&yOrN)
@@ -142,7 +170,7 @@ func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 				}
 			}
 
-			err = etcdClient.SaveChangeFeedInfo(ctx, info, commonOptions.changefeedID)
+			err = etcdClient.SaveChangeFeedInfo(ctx, info, o.changefeedID)
 			if err != nil {
 				return err
 			}
@@ -152,7 +180,7 @@ func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 			}
 			cmd.Printf("Update changefeed config successfully! "+
 				"Will take effect only if the changefeed has been paused before this command"+
-				"\nID: %s\nInfo: %s\n", commonOptions.changefeedID, infoStr)
+				"\nID: %s\nInfo: %s\n", o.changefeedID, infoStr)
 
 			return nil
 		},

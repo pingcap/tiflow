@@ -20,14 +20,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// pauseChangefeedOptions defines flags for the `cli changefeed pause` command.
+type pauseChangefeedOptions struct {
+	changefeedID string
+}
+
+// newPauseChangefeedOptions creates new options for the `cli changefeed pause` command.
+func newPauseChangefeedOptions() *pauseChangefeedOptions {
+	return &pauseChangefeedOptions{}
+}
+
 // newCmdPauseChangefeed creates the `cli changefeed pause` command.
-func newCmdPauseChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
+func newCmdPauseChangefeed(f util.Factory) *cobra.Command {
+	o := newPauseChangefeedOptions()
+
 	command := &cobra.Command{
 		Use:   "pause",
 		Short: "Pause a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			job := model.AdminJob{
-				CfID: commonOptions.changefeedID,
+				CfID: o.changefeedID,
 				Type: model.AdminStop,
 			}
 
@@ -42,6 +54,7 @@ func newCmdPauseChangefeed(f util.Factory, commonOptions *changefeedCommonOption
 		},
 	}
 
+	command.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command

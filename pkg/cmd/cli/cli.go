@@ -42,7 +42,7 @@ func (o *options) addFlags(c *cobra.Command) {
 	if o == nil {
 		return
 	}
-	c.PersistentFlags().BoolVarP(&o.interact, "interact", "i", false, " cdc cli with readline")
+	c.PersistentFlags().BoolVarP(&o.interact, "interact", "i", false, "Run cdc cli with readline")
 	c.PersistentFlags().StringVar(&o.cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 }
 

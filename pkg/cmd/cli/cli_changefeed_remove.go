@@ -22,6 +22,7 @@ import (
 
 // removeChangefeedOptions defines flags for the `cli changefeed remove` command.
 type removeChangefeedOptions struct {
+	changefeedID   string
 	optForceRemove bool
 }
 
@@ -31,7 +32,7 @@ func newRemoveChangefeedOptions() *removeChangefeedOptions {
 }
 
 // newCmdRemoveChangefeed creates the `cli changefeed remove` command.
-func newCmdRemoveChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
+func newCmdRemoveChangefeed(f util.Factory) *cobra.Command {
 	o := newRemoveChangefeedOptions()
 
 	command := &cobra.Command{
@@ -39,7 +40,7 @@ func newCmdRemoveChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 		Short: "Remove a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			job := model.AdminJob{
-				CfID: commonOptions.changefeedID,
+				CfID: o.changefeedID,
 				Type: model.AdminRemove,
 				Opts: &model.AdminJobOption{
 					ForceRemove: o.optForceRemove,
@@ -56,8 +57,9 @@ func newCmdRemoveChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 		},
 	}
 
-	command.PersistentFlags().BoolVarP(&o.optForceRemove, "force", "f", false, "remove all information of the changefeed")
+	command.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
+	command.PersistentFlags().BoolVarP(&o.optForceRemove, "force", "f", false, "remove all information of the changefeed")
 
 	return command
 }

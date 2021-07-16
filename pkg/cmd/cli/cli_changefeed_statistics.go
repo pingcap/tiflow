@@ -32,7 +32,8 @@ type profileStatus struct {
 
 // statisticsChangefeedOptions defines flags for the `cli changefeed statistics` command.
 type statisticsChangefeedOptions struct {
-	interval uint
+	changefeedID string
+	interval     uint
 }
 
 // newStatisticsChangefeedOptions creates new options for the `cli changefeed statistics` command.
@@ -41,7 +42,7 @@ func newStatisticsChangefeedOptions() *statisticsChangefeedOptions {
 }
 
 // newCmdStatisticsChangefeed creates the `cli changefeed statistics` command.
-func newCmdStatisticsChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
+func newCmdStatisticsChangefeed(f util.Factory) *cobra.Command {
 	o := newStatisticsChangefeedOptions()
 
 	command := &cobra.Command{
@@ -68,11 +69,11 @@ func newCmdStatisticsChangefeed(f util.Factory, commonOptions *changefeedCommonO
 					}
 				case <-tick.C:
 					now := time.Now()
-					status, _, err := etcdClient.GetChangeFeedStatus(ctx, commonOptions.changefeedID)
+					status, _, err := etcdClient.GetChangeFeedStatus(ctx, o.changefeedID)
 					if err != nil {
 						return err
 					}
-					taskPositions, err := etcdClient.GetAllTaskPositions(ctx, commonOptions.changefeedID)
+					taskPositions, err := etcdClient.GetAllTaskPositions(ctx, o.changefeedID)
 					if err != nil {
 						return err
 					}
@@ -101,6 +102,7 @@ func newCmdStatisticsChangefeed(f util.Factory, commonOptions *changefeedCommonO
 	}
 
 	command.PersistentFlags().UintVarP(&o.interval, "interval", "I", 10, "Interval for outputing the latest statistics")
+	command.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command

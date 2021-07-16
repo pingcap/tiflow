@@ -50,6 +50,7 @@ var forceEnableOldValueProtocols = []string{
 
 // createChangefeedCommonOptions defines common changefeed flags.
 type createChangefeedCommonOptions struct {
+	noConfirm              bool
 	startTs                uint64
 	targetTs               uint64
 	sinkURI                string
@@ -77,6 +78,7 @@ func (o *createChangefeedCommonOptions) addFlags(cmd *cobra.Command) {
 		return
 	}
 
+	cmd.PersistentFlags().BoolVar(&o.noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
 	cmd.PersistentFlags().Uint64Var(&o.targetTs, "target-ts", 0, "Target ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.sinkURI, "sink-uri", "", "sink uri")
@@ -142,9 +144,9 @@ func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credent
 
 // createChangefeedOptions defines common flags for the `cli changefeed crate` command.
 type createChangefeedOptions struct {
-	disableGCSafePointCheck bool
-
 	commonChangefeedOptions *createChangefeedCommonOptions
+	changefeedID            string
+	disableGCSafePointCheck bool
 }
 
 // newCreateChangefeedOptions creates new options for the `cli changefeed create` command.
@@ -162,11 +164,12 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	}
 
 	o.commonChangefeedOptions.addFlags(cmd)
+	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 }
 
 // newCmdCreateChangefeed creates the `cli changefeed create` command.
-func newCmdCreateChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
+func newCmdCreateChangefeed(f util.Factory) *cobra.Command {
 	commonChangefeedOptions := newCreateChangefeedCommonOptions()
 	o := newCreateChangefeedOptions(commonChangefeedOptions)
 
@@ -177,7 +180,7 @@ func newCmdCreateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
 
-			id := commonOptions.changefeedID
+			id := o.changefeedID
 			if id == "" {
 				id = uuid.New().String()
 			}
@@ -201,7 +204,7 @@ func newCmdCreateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 				return err
 			}
 
-			info, err := o.validate(ctx, f.GetPdAddr(), pdClient, commonOptions, cmd, true /* isCreate */, f.GetCredential(), captureInfos)
+			info, err := o.validate(ctx, f.GetPdAddr(), pdClient, cmd, true /* isCreate */, f.GetCredential(), captureInfos)
 			if err != nil {
 				return err
 			}
@@ -226,12 +229,11 @@ func newCmdCreateChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 	}
 
 	o.addFlags(command)
-	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }
 
-func (o *createChangefeedOptions) validate(ctx context.Context, cilPdAddr string, pdClient pd.Client, commonOptions *changefeedCommonOptions, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func (o *createChangefeedOptions) validate(ctx context.Context, cilPdAddr string, pdClient pd.Client, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if o.commonChangefeedOptions.sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -243,10 +245,10 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cilPdAddr string
 			}
 			o.commonChangefeedOptions.startTs = oracle.ComposeTS(ts, logical)
 		}
-		if err := o.validateStartTs(ctx, pdClient, commonOptions.changefeedID); err != nil {
+		if err := o.validateStartTs(ctx, pdClient, o.changefeedID); err != nil {
 			return nil, err
 		}
-		if err := confirmLargeDataGap(ctx, pdClient, cmd, commonOptions, o.commonChangefeedOptions.startTs); err != nil {
+		if err := confirmLargeDataGap(ctx, pdClient, cmd, o.commonChangefeedOptions.noConfirm, o.commonChangefeedOptions.startTs); err != nil {
 			return nil, err
 		}
 		if err := o.validateTargetTs(); err != nil {
@@ -374,7 +376,7 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cilPdAddr string
 				cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", ineligibleTables)
 			} else {
 				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
-				if !commonOptions.NoConfirm {
+				if !o.commonChangefeedOptions.noConfirm {
 					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
 					var yOrN string
 					_, err := fmt.Scan(&yOrN)

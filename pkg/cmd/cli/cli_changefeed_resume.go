@@ -27,15 +27,28 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
+// resumeChangefeedOptions defines flags for the `cli changefeed resume` command.
+type resumeChangefeedOptions struct {
+	changefeedID string
+	noConfirm    bool
+}
+
+// newResumeChangefeedOptions creates new options for the `cli changefeed pause` command.
+func newResumeChangefeedOptions() *resumeChangefeedOptions {
+	return &resumeChangefeedOptions{}
+}
+
 // newCmdResumeChangefeed creates the `cli changefeed resume` command.
-func newCmdResumeChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
+func newCmdResumeChangefeed(f util.Factory) *cobra.Command {
+	o := newResumeChangefeedOptions()
+
 	command := &cobra.Command{
 		Use:   "resume",
 		Short: "Resume a paused replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
 			job := model.AdminJob{
-				CfID: commonOptions.changefeedID,
+				CfID: o.changefeedID,
 				Type: model.AdminResume,
 			}
 
@@ -51,7 +64,7 @@ func newCmdResumeChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 
 			credential := f.GetCredential()
 
-			if err := resumeChangefeedCheck(ctx, etcdClient, pdClient, cmd, commonOptions, credential); err != nil {
+			if err := resumeChangefeedCheck(ctx, etcdClient, pdClient, cmd, o.changefeedID, o.noConfirm, credential); err != nil {
 				return err
 			}
 
@@ -59,14 +72,16 @@ func newCmdResumeChangefeed(f util.Factory, commonOptions *changefeedCommonOptio
 		},
 	}
 
+	command.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
+	command.PersistentFlags().BoolVar(&o.noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 
 	return command
 }
 
 func resumeChangefeedCheck(ctx context.Context, etcdClient *kv.CDCEtcdClient, pdClient pd.Client,
-	cmd *cobra.Command, commonOptions *changefeedCommonOptions, credential *security.Credential) error {
-	resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, commonOptions.changefeedID, credential)
+	cmd *cobra.Command, changefeedID string, noConfirm bool, credential *security.Credential) error {
+	resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, changefeedID, credential)
 	if err != nil {
 		return err
 	}
@@ -77,5 +92,5 @@ func resumeChangefeedCheck(ctx context.Context, etcdClient *kv.CDCEtcdClient, pd
 		return err
 	}
 
-	return confirmLargeDataGap(ctx, pdClient, cmd, commonOptions, info.TSO)
+	return confirmLargeDataGap(ctx, pdClient, cmd, noConfirm, info.TSO)
 }

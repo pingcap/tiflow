@@ -39,22 +39,18 @@ type cfMeta struct {
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
-	commonOptions *changefeedCommonOptions
-
-	simplified bool
+	changefeedID string
+	simplified   bool
 }
 
 // newQueryChangefeedOptions creates new options for the `cli changefeed query` command.
-func newQueryChangefeedOptions(commonOptions *changefeedCommonOptions) *queryChangefeedOptions {
-	return &queryChangefeedOptions{
-		commonOptions: commonOptions,
-		simplified:    false,
-	}
+func newQueryChangefeedOptions() *queryChangefeedOptions {
+	return &queryChangefeedOptions{}
 }
 
 // newCmdQueryChangefeed creates the `cli changefeed query` command.
-func newCmdQueryChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
-	o := newQueryChangefeedOptions(commonOptions)
+func newCmdQueryChangefeed(f util.Factory) *cobra.Command {
+	o := newQueryChangefeedOptions()
 
 	command := &cobra.Command{
 		Use:   "query",
@@ -68,7 +64,7 @@ func newCmdQueryChangefeed(f util.Factory, commonOptions *changefeedCommonOption
 			}
 
 			if o.simplified {
-				resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, o.commonOptions.changefeedID, f.GetCredential())
+				resp, err := applyOwnerChangefeedQuery(ctx, etcdClient, o.changefeedID, f.GetCredential())
 				if err != nil {
 					return err
 				}
@@ -76,21 +72,21 @@ func newCmdQueryChangefeed(f util.Factory, commonOptions *changefeedCommonOption
 				return nil
 			}
 
-			info, err := etcdClient.GetChangeFeedInfo(ctx, o.commonOptions.changefeedID)
+			info, err := etcdClient.GetChangeFeedInfo(ctx, o.changefeedID)
 			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 
-			status, _, err := etcdClient.GetChangeFeedStatus(ctx, o.commonOptions.changefeedID)
+			status, _, err := etcdClient.GetChangeFeedStatus(ctx, o.changefeedID)
 			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			if err != nil && cerror.ErrChangeFeedNotExists.Equal(err) {
-				log.Error("This changefeed does not exist", zap.String("changefeed", o.commonOptions.changefeedID))
+				log.Error("This changefeed does not exist", zap.String("changefeed", o.changefeedID))
 				return err
 			}
 
-			taskPositions, err := etcdClient.GetAllTaskPositions(ctx, o.commonOptions.changefeedID)
+			taskPositions, err := etcdClient.GetAllTaskPositions(ctx, o.changefeedID)
 			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
@@ -99,7 +95,7 @@ func newCmdQueryChangefeed(f util.Factory, commonOptions *changefeedCommonOption
 				count += pinfo.Count
 			}
 
-			processorInfos, err := etcdClient.GetAllTaskStatus(ctx, o.commonOptions.changefeedID)
+			processorInfos, err := etcdClient.GetAllTaskStatus(ctx, o.changefeedID)
 			if err != nil {
 				return err
 			}
@@ -110,7 +106,7 @@ func newCmdQueryChangefeed(f util.Factory, commonOptions *changefeedCommonOption
 
 			meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
 			if info == nil {
-				log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.commonOptions.changefeedID))
+				log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.changefeedID))
 			}
 
 			return util.JSONPrint(cmd, meta)
@@ -118,6 +114,7 @@ func newCmdQueryChangefeed(f util.Factory, commonOptions *changefeedCommonOption
 	}
 
 	command.PersistentFlags().BoolVarP(&o.simplified, "simple", "s", false, "Output simplified replication status")
+	command.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command

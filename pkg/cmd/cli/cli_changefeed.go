@@ -38,38 +38,22 @@ const (
 	tsGapWarning = 86400 * 1000
 )
 
-// changefeedCommonOptions defines common flags for the `changefeed` command.
-type changefeedCommonOptions struct {
-	changefeedID string
-	NoConfirm    bool
-}
-
-// newChangefeedCommonOptions creates new common options for the `changefeed` command.
-func newChangefeedCommonOptions() *changefeedCommonOptions {
-	return &changefeedCommonOptions{}
-}
-
 // newCmdChangefeed creates the `cli changefeed` command.
 func newCmdChangefeed(f util.Factory) *cobra.Command {
-	changefeedCommonOptions := newChangefeedCommonOptions()
-
 	cmds := &cobra.Command{
 		Use:   "changefeed",
 		Short: "Manage changefeed (changefeed is a replication task)",
 	}
 
 	cmds.AddCommand(newCmdListChangefeed(f))
-	cmds.AddCommand(newCmdQueryChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(newCmdPauseChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(newCmdResumeChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(newCmdRemoveChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(newCmdCreateChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(newCmdUpdateChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(newCmdStatisticsChangefeed(f, changefeedCommonOptions))
+	cmds.AddCommand(newCmdQueryChangefeed(f))
+	cmds.AddCommand(newCmdPauseChangefeed(f))
+	cmds.AddCommand(newCmdResumeChangefeed(f))
+	cmds.AddCommand(newCmdRemoveChangefeed(f))
+	cmds.AddCommand(newCmdCreateChangefeed(f))
+	cmds.AddCommand(newCmdUpdateChangefeed(f))
+	cmds.AddCommand(newCmdStatisticsChangefeed(f))
 	cmds.AddCommand(newCmdCyclicChangefeed(f))
-
-	cmds.PersistentFlags().StringVarP(&changefeedCommonOptions.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
-	cmds.PersistentFlags().BoolVar(&changefeedCommonOptions.NoConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 
 	return cmds
 }
@@ -148,8 +132,8 @@ func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job
 	return nil
 }
 
-func confirmLargeDataGap(ctx context.Context, pdClient pd.Client, cmd *cobra.Command, commonOptions *changefeedCommonOptions, startTs uint64) error {
-	if commonOptions.NoConfirm {
+func confirmLargeDataGap(ctx context.Context, pdClient pd.Client, cmd *cobra.Command, noConfirm bool, startTs uint64) error {
+	if noConfirm {
 		return nil
 	}
 
