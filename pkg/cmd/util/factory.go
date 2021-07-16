@@ -75,8 +75,8 @@ func (c *ClientFlags) GetPdAddr() string {
 	return c.cliPdAddr
 }
 
-// NewCredentialFlags creates new client flags.
-func NewCredentialFlags() *ClientFlags {
+// NewClientFlags creates new client flags.
+func NewClientFlags() *ClientFlags {
 	return &ClientFlags{}
 }
 

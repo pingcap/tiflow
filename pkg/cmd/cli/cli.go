@@ -57,7 +57,6 @@ func NewCmdCli() *cobra.Command {
 			// Here we will initialize the logging configuration and set the current default context.
 			util.InitCmd(cmd, &logutil.Config{Level: o.cliLogLevel})
 			util.LogHTTPProxies()
-
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -72,7 +71,7 @@ func NewCmdCli() *cobra.Command {
 	o.addFlags(cmds)
 
 	// Bind the certificate options and construct the client construction factory.
-	cf := util.NewCredentialFlags()
+	cf := util.NewClientFlags()
 	cf.AddFlags(cmds)
 	f := util.NewFactory(cf)
 

@@ -65,6 +65,8 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 }
 
 func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
+	ctx := cmdconetxt.GetDefaultContext()
+
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
 		return nil, err
@@ -73,11 +75,13 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	logConfig := etcdlogutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	pdEndpoints := strings.Split(f.GetPdAddr(), ",")
+
 	etcdClient, err := clientv3.New(clientv3.Config{
-		Context:     cmdconetxt.GetDefaultContext(),
+		Context:     ctx,
 		Endpoints:   pdEndpoints,
 		TLS:         tlsConfig,
 		LogConfig:   &logConfig,
@@ -99,19 +103,23 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := kv.NewCDCEtcdClient(cmdconetxt.GetDefaultContext(), etcdClient)
+
+	client := kv.NewCDCEtcdClient(ctx, etcdClient)
 	return &client, nil
 }
 
 func (f factoryImpl) PdClient() (pd.Client, error) {
+	ctx := cmdconetxt.GetDefaultContext()
+
 	credential := f.GetCredential()
 	grpcTLSOption, err := f.ToGRPCDialOption()
 	if err != nil {
 		return nil, err
 	}
+
 	pdAddr := f.GetPdAddr()
 	pdEndpoints := strings.Split(pdAddr, ",")
-	ctx := cmdconetxt.GetDefaultContext()
+
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
