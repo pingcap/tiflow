@@ -598,6 +598,7 @@ consumePreResolvedTs:
 	for {
 		select {
 		case event = <-eventCh:
+			log.Info("recv event", zap.Any("event", event))
 			c.Assert(event.Resolved, check.NotNil)
 			c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(100))
 		case <-time.After(time.Second):
@@ -634,6 +635,7 @@ consumePreResolvedTs:
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
+	log.Info("recv event", zap.Any("event", event))
 	c.Assert(event.Resolved, check.NotNil)
 	c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(120))
 
