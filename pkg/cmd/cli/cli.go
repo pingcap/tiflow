@@ -29,7 +29,6 @@ import (
 type options struct {
 	interact    bool
 	cliLogLevel string
-	CliPdAddr   string
 }
 
 // newOptions creates new options for the `cli` command.
@@ -43,7 +42,6 @@ func (o *options) addFlags(c *cobra.Command) {
 	if o == nil {
 		return
 	}
-	c.PersistentFlags().StringVar(&o.CliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
 	c.PersistentFlags().BoolVarP(&o.interact, "interact", "i", false, " cdc cli with readline")
 	c.PersistentFlags().StringVar(&o.cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 }
@@ -80,7 +78,7 @@ func NewCmdCli() *cobra.Command {
 
 	// Add subcommands.
 	cmds.AddCommand(newCmdCapture(f))
-	cmds.AddCommand(newCmdChangefeed(f, o))
+	cmds.AddCommand(newCmdChangefeed(f))
 	cmds.AddCommand(newCmdProcessor(f))
 	cmds.AddCommand(newCmdTso(f))
 	cmds.AddCommand(newCmdUnsafe(f))

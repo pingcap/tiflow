@@ -50,8 +50,6 @@ var forceEnableOldValueProtocols = []string{
 
 // createChangefeedCommonOptions defines common changefeed flags.
 type createChangefeedCommonOptions struct {
-	options *options
-
 	startTs                uint64
 	targetTs               uint64
 	sinkURI                string
@@ -68,10 +66,8 @@ type createChangefeedCommonOptions struct {
 }
 
 // newCreateChangefeedCommonOptions creates new create changefeed common options.
-func newCreateChangefeedCommonOptions(options *options) *createChangefeedCommonOptions {
-	return &createChangefeedCommonOptions{
-		options: options,
-	}
+func newCreateChangefeedCommonOptions() *createChangefeedCommonOptions {
+	return &createChangefeedCommonOptions{}
 }
 
 // addFlags receives a *cobra.Command reference and binds
@@ -107,8 +103,8 @@ func (o *createChangefeedCommonOptions) validateReplicaConfig(component string, 
 	return err
 }
 
-func (o *createChangefeedCommonOptions) validateTables(credential *security.Credential, cfg *config.ReplicaConfig) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	kvStore, err := kv.CreateTiStore(o.options.CliPdAddr, credential)
+func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig) (ineligibleTables, eligibleTables []model.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -170,8 +166,8 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 // newCmdCreateChangefeed creates the `cli changefeed create` command.
-func newCmdCreateChangefeed(f util.Factory, options *options, commonOptions *changefeedCommonOptions) *cobra.Command {
-	commonChangefeedOptions := newCreateChangefeedCommonOptions(options)
+func newCmdCreateChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
+	commonChangefeedOptions := newCreateChangefeedCommonOptions()
 	o := newCreateChangefeedOptions(commonChangefeedOptions)
 
 	command := &cobra.Command{
@@ -205,7 +201,7 @@ func newCmdCreateChangefeed(f util.Factory, options *options, commonOptions *cha
 				return err
 			}
 
-			info, err := o.validate(ctx, pdClient, commonOptions, cmd, true /* isCreate */, f.GetCredential(), captureInfos)
+			info, err := o.validate(ctx, f.GetPdAddr(), pdClient, commonOptions, cmd, true /* isCreate */, f.GetCredential(), captureInfos)
 			if err != nil {
 				return err
 			}
@@ -235,7 +231,7 @@ func newCmdCreateChangefeed(f util.Factory, options *options, commonOptions *cha
 	return command
 }
 
-func (o *createChangefeedOptions) validate(ctx context.Context, pdClient pd.Client, commonOptions *changefeedCommonOptions, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func (o *createChangefeedOptions) validate(ctx context.Context, cilPdAddr string, pdClient pd.Client, commonOptions *changefeedCommonOptions, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if o.commonChangefeedOptions.sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -369,7 +365,7 @@ func (o *createChangefeedOptions) validate(ctx context.Context, pdClient pd.Clie
 
 	if isCreate {
 		ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
-		ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(credential, cfg)
+		ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(cilPdAddr, credential, cfg)
 		if err != nil {
 			return nil, err
 		}

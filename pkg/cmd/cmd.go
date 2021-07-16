@@ -32,8 +32,8 @@ func NewCmd() *cobra.Command {
 	}
 }
 
-// Execute runs the root command.
-func Execute() {
+// Run runs the root command.
+func Run() {
 	cmd := NewCmd()
 
 	// Outputs cmd.Print to stdout.

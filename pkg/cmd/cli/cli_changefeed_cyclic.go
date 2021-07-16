@@ -80,7 +80,7 @@ func newCmdCyclicChangefeed(f util.Factory) *cobra.Command {
 				}
 				o.createCommonOptions.startTs = oracle.ComposeTS(ts, logical)
 
-				_, eligibleTables, err := o.createCommonOptions.validateTables(f.GetCredential(), cfg)
+				_, eligibleTables, err := o.createCommonOptions.validateTables(f.GetPdAddr(), f.GetCredential(), cfg)
 				if err != nil {
 					return err
 				}

@@ -28,8 +28,8 @@ import (
 )
 
 // newCmdPauseChangefeed creates the `cli changefeed update` command.
-func newCmdUpdateChangefeed(f util.Factory, options *options, commonOptions *changefeedCommonOptions) *cobra.Command {
-	o := newCreateChangefeedCommonOptions(options)
+func newCmdUpdateChangefeed(f util.Factory, commonOptions *changefeedCommonOptions) *cobra.Command {
+	o := newCreateChangefeedCommonOptions()
 
 	command := &cobra.Command{
 		Use:   "update",

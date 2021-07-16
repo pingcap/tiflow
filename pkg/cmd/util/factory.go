@@ -83,6 +83,7 @@ func NewCredentialFlags() *ClientFlags {
 // AddFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVar(&c.cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
 	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection")

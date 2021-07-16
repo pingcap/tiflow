@@ -50,7 +50,7 @@ func newChangefeedCommonOptions() *changefeedCommonOptions {
 }
 
 // newCmdChangefeed creates the `cli changefeed` command.
-func newCmdChangefeed(f util.Factory, options *options) *cobra.Command {
+func newCmdChangefeed(f util.Factory) *cobra.Command {
 	changefeedCommonOptions := newChangefeedCommonOptions()
 
 	cmds := &cobra.Command{
@@ -63,8 +63,8 @@ func newCmdChangefeed(f util.Factory, options *options) *cobra.Command {
 	cmds.AddCommand(newCmdPauseChangefeed(f, changefeedCommonOptions))
 	cmds.AddCommand(newCmdResumeChangefeed(f, changefeedCommonOptions))
 	cmds.AddCommand(newCmdRemoveChangefeed(f, changefeedCommonOptions))
-	cmds.AddCommand(newCmdCreateChangefeed(f, options, changefeedCommonOptions))
-	cmds.AddCommand(newCmdUpdateChangefeed(f, options, changefeedCommonOptions))
+	cmds.AddCommand(newCmdCreateChangefeed(f, changefeedCommonOptions))
+	cmds.AddCommand(newCmdUpdateChangefeed(f, changefeedCommonOptions))
 	cmds.AddCommand(newCmdStatisticsChangefeed(f, changefeedCommonOptions))
 	cmds.AddCommand(newCmdCyclicChangefeed(f))
 
