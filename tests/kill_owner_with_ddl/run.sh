@@ -72,7 +72,7 @@ function run() {
 
     for i in $(seq 1 3); do
         kill_cdc_and_restart $pd_addr $WORK_DIR $CDC_BINARY
-        sleep 2
+        sleep 8
     done
 
     export GO_FAILPOINTS=''
