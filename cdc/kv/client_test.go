@@ -631,8 +631,8 @@ consumePreResolvedTs:
 	ch2 <- makeEvent(120)
 	select {
 	case event = <-eventCh:
-	case <-time.After(time.Second):
-		c.Fatalf("reconnection not succeed in 1 second")
+	case <-time.After(3 * time.Second):
+		c.Fatalf("reconnection not succeed in 3 seconds")
 	}
 	c.Assert(event.Resolved, check.NotNil)
 	c.Assert(event.Resolved.ResolvedTs, check.Equals, uint64(120))
