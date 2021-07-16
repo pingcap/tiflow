@@ -15,10 +15,11 @@ package cli
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 // unsafeCommonOptions defines common for the `cli unsafe` command.
