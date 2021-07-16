@@ -14,8 +14,11 @@
 package cli
 
 import (
+	"fmt"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 // unsafeCommonOptions defines common for the `cli unsafe` command.
@@ -28,6 +31,22 @@ func newUnsafeCommonOptions() *unsafeCommonOptions {
 	return &unsafeCommonOptions{
 		noConfirm: false,
 	}
+}
+
+func (o *unsafeCommonOptions) confirmMetaDelete(cmd *cobra.Command) error {
+	if o.noConfirm {
+		return nil
+	}
+	cmd.Printf("Confirm that you know what this command will do and use it at your own risk [Y/N]\n")
+	var yOrN string
+	_, err := fmt.Scan(&yOrN)
+	if err != nil {
+		return err
+	}
+	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+		return errors.NewNoStackError("abort meta command")
+	}
+	return nil
 }
 
 // newCmdUnsafe creates the `cli unsafe` command.

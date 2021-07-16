@@ -14,9 +14,6 @@
 package cli
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
@@ -30,7 +27,7 @@ func newCmdReset(f util.Factory, commonOptions *unsafeCommonOptions) *cobra.Comm
 		Use:   "reset",
 		Short: "Reset the status of the TiCDC cluster, delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := confirmMetaDelete(cmd, commonOptions.noConfirm); err != nil {
+			if err := commonOptions.confirmMetaDelete(cmd); err != nil {
 				return err
 			}
 			ctx := context.GetDefaultContext()
@@ -71,20 +68,4 @@ func newCmdReset(f util.Factory, commonOptions *unsafeCommonOptions) *cobra.Comm
 	}
 
 	return command
-}
-
-func confirmMetaDelete(cmd *cobra.Command, noConfirm bool) error {
-	if noConfirm {
-		return nil
-	}
-	cmd.Printf("Confirm that you know what this command will do and use it at your own risk [Y/N]\n")
-	var yOrN string
-	_, err := fmt.Scan(&yOrN)
-	if err != nil {
-		return err
-	}
-	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-		return errors.NewNoStackError("abort meta command")
-	}
-	return nil
 }

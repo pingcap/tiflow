@@ -31,7 +31,6 @@ import (
 type updateChangefeedOptions struct {
 	commonChangefeedOptions *createChangefeedCommonOptions
 	changefeedID            string
-	disableGCSafePointCheck bool
 }
 
 // newUpdateChangefeedOptions creates new options for the `cli changefeed update` command.
@@ -51,7 +50,6 @@ func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
 	o.commonChangefeedOptions.addFlags(cmd)
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
-	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 }
 
 // newCmdPauseChangefeed creates the `cli changefeed update` command.
@@ -62,7 +60,6 @@ func newCmdUpdateChangefeed(f util.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "update",
 		Short: "Update config of an existing replication task (changefeed)",
-		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := context.GetDefaultContext()
 			etcdClient, err := f.EtcdClient()
@@ -80,6 +77,7 @@ func newCmdUpdateChangefeed(f util.Factory) *cobra.Command {
 				return err
 			}
 
+			// TODO: directly bind the options.
 			cmd.Flags().Visit(func(flag *pflag.Flag) {
 				switch flag.Name {
 				case "target-ts":
@@ -187,7 +185,6 @@ func newCmdUpdateChangefeed(f util.Factory) *cobra.Command {
 	}
 
 	o.addFlags(command)
-	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }

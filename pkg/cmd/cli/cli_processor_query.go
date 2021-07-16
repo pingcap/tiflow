@@ -46,18 +46,22 @@ func newCmdQueryProcessor(f util.Factory) *cobra.Command {
 		Short: "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.GetDefaultContext()
+
 			etcdClient, err := f.EtcdClient()
 			if err != nil {
 				return err
 			}
+
 			_, status, err := etcdClient.GetTaskStatus(ctx, o.changefeedID, o.captureID)
 			if err != nil && cerror.ErrTaskStatusNotExists.Equal(err) {
 				return err
 			}
+
 			_, position, err := etcdClient.GetTaskPosition(ctx, o.changefeedID, o.captureID)
 			if err != nil && cerror.ErrTaskPositionNotExists.Equal(err) {
 				return err
 			}
+
 			meta := &processorMeta{Status: status, Position: position}
 			return util.JSONPrint(cmd, meta)
 		},

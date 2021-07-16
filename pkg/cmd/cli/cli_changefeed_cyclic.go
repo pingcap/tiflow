@@ -58,7 +58,6 @@ func newCmdCyclicChangefeed(f util.Factory) *cobra.Command {
 		&cobra.Command{
 			Use:   "create-marktables",
 			Short: "Create cyclic replication mark tables",
-			Long:  ``,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := context.GetDefaultContext()
 

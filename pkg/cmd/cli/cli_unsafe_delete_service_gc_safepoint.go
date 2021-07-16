@@ -27,7 +27,7 @@ func newCmdDeleteServiceGcSafepoint(f util.Factory, commonOptions *unsafeCommonO
 		Use:   "delete-service-gc-safepoint",
 		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := confirmMetaDelete(cmd, commonOptions.noConfirm); err != nil {
+			if err := commonOptions.confirmMetaDelete(cmd); err != nil {
 				return err
 			}
 			ctx := context.GetDefaultContext()

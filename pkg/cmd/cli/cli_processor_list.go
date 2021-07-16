@@ -26,14 +26,17 @@ func newCmdListProcessor(f util.Factory) *cobra.Command {
 		Short: "List all processors in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.GetDefaultContext()
+
 			etcdClient, err := f.EtcdClient()
 			if err != nil {
 				return err
 			}
+
 			info, err := etcdClient.GetProcessors(ctx)
 			if err != nil {
 				return err
 			}
+
 			return util.JSONPrint(cmd, info)
 		},
 	}

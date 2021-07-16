@@ -61,6 +61,7 @@ func newOptions(serverConfig *config.ServerConfig) *options {
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
 	defaultServerConfig := config.GetDefaultServerConfig()
+
 	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
 	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", defaultServerConfig.Addr, "Set the listening address")
 	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", defaultServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
@@ -149,6 +150,7 @@ func (o *options) loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerC
 			return nil, err
 		}
 	}
+	// TODO: directly bind the options.
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "addr":
