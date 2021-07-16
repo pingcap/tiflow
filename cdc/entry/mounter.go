@@ -16,7 +16,6 @@ package entry
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -233,7 +232,9 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		PhysicalTableID: physicalTableID,
 		Delete:          raw.OpType == model.OpTypeDelete,
 	}
-	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs)
+	// when async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs
+	// a DML whose commitTs is equal to a DDL finishedTs using the schema info before the DDL
+	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs-1)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -250,9 +251,8 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			}
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
-		switch {
-		case bytes.HasPrefix(key, recordPrefix):
-			rowKV, err := m.unmarshalRowKVEntry(tableInfo, key, raw.Value, raw.OldValue, baseInfo)
+		if bytes.HasPrefix(key, recordPrefix) {
+			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -260,15 +260,6 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 				return nil, nil
 			}
 			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateSize())
-		case bytes.HasPrefix(key, indexPrefix):
-			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, raw.OldValue, baseInfo)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if indexKV == nil {
-				return nil, nil
-			}
-			return m.mountIndexKVEntry(tableInfo, indexKV, raw.ApproximateSize())
 		}
 		return nil, nil
 	}()
@@ -323,37 +314,6 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []
 		PreRow:      preRow,
 		RowExist:    rowExist,
 		PreRowExist: preRowExist,
-	}, nil
-}
-
-func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*indexKVEntry, error) {
-	// Skip set index KV.
-	// By default we cannot get the old value of a deleted row, then we must get the value of unique key
-	// or primary key for seeking the deleted row through its index key.
-	// After the old value was enabled, we can skip the index key.
-	if !base.Delete || m.enableOldValue {
-		return nil, nil
-	}
-
-	indexID, indexValue, err := decodeIndexKey(restKey)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	var recordID int64
-
-	if len(rawValue) == 8 {
-		// primary key or unique index
-		buf := bytes.NewBuffer(rawValue)
-		err = binary.Read(buf, binary.BigEndian, &recordID)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	base.RecordID = recordID
-	return &indexKVEntry{
-		baseKVEntry: base,
-		IndexID:     indexID,
-		IndexValue:  indexValue,
 	}, nil
 }
 
@@ -439,12 +399,28 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column
+	// Since we now always use old value internally,
+	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
+	// Normally old value is output when only enableOldValue is on,
+	// but for the Delete event, when the old value feature is off,
+	// the HandleKey column needs to be included as well. So we need to do the following filtering.
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
 		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+
+		// NOTICE: When the old Value feature is off,
+		// the Delete event only needs to keep the handle key column.
+		if row.Delete && !m.enableOldValue {
+			for i := range preCols {
+				col := preCols[i]
+				if col != nil && !col.Flag.IsHandleKey() {
+					preCols[i] = nil
+				}
+			}
 		}
 	}
 
@@ -458,11 +434,18 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
+	var tableInfoVersion uint64
+	// Align with the old format if old value disabled.
+	if row.Delete && !m.enableOldValue {
+		tableInfoVersion = 0
+	} else {
+		tableInfoVersion = tableInfo.TableInfoVersion
+	}
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
 		RowID:            row.RecordID,
-		TableInfoVersion: tableInfo.TableInfoVersion,
+		TableInfoVersion: tableInfoVersion,
 		Table: &model.TableName{
 			Schema:      schemaName,
 			Table:       tableName,
@@ -470,64 +453,6 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
 		Columns:         cols,
-		PreColumns:      preCols,
-		IndexColumns:    tableInfo.IndexColumnsOffset,
-		ApproximateSize: dataSize,
-	}, nil
-}
-
-func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
-	// skip set index KV
-	if !idx.Delete || m.enableOldValue {
-		return nil, nil
-	}
-	// skip any index that is not the handle
-	if idx.IndexID != tableInfo.HandleIndexID {
-		return nil, nil
-	}
-
-	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
-	if !exist {
-		log.Warn("index info not found", zap.Int64("indexID", idx.IndexID))
-		return nil, nil
-	}
-
-	if !tableInfo.IsIndexUnique(indexInfo) {
-		return nil, nil
-	}
-
-	err := idx.unflatten(tableInfo, m.tz)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	preCols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
-	for i, idxCol := range indexInfo.Columns {
-		colInfo := tableInfo.Columns[idxCol.Offset]
-		value, warn, err := formatColVal(idx.IndexValue[i], colInfo.Tp)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if warn != "" {
-			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
-		}
-		preCols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
-			Name:  colInfo.Name.O,
-			Type:  colInfo.Tp,
-			Value: value,
-			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
-		}
-	}
-	return &model.RowChangedEvent{
-		StartTs:  idx.StartTs,
-		CommitTs: idx.CRTs,
-		RowID:    idx.RecordID,
-		Table: &model.TableName{
-			Schema:      tableInfo.TableName.Schema,
-			Table:       tableInfo.TableName.Table,
-			TableID:     idx.PhysicalTableID,
-			IsPartition: tableInfo.GetPartitionInfo() != nil,
-		},
 		PreColumns:      preCols,
 		IndexColumns:    tableInfo.IndexColumnsOffset,
 		ApproximateSize: dataSize,
