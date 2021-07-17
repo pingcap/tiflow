@@ -148,7 +148,7 @@ const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	GCSafepointUpdateInterval = 2 * time.Second
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
 	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )
