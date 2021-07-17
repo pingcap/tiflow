@@ -183,11 +183,9 @@ LOOP:
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
-
 	failpoint.Inject("NewChangefeedRetryError", func() {
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
-
 	if c.state.Info.Config.CheckGCSafePoint {
 		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
 		if err != nil {
@@ -214,7 +212,10 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs)
+	// Since we wait for checkpoint == ddlJob.FinishTs before executing the DDL,
+	// when there is a recovery, there is no guarantee that the DDL at the checkpoint
+	// has been executed. So we need to start the DDL puller from (checkpoint-1).
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -262,10 +263,8 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			if status == nil {
 				status = &model.ChangeFeedStatus{
 					// the changefeed status is nil when the changefeed is just created.
-					// the txn in start ts is not replicated at that time,
-					// so the checkpoint ts and resolved ts should less than start ts.
-					ResolvedTs:   c.state.Info.StartTs - 1,
-					CheckpointTs: c.state.Info.StartTs - 1,
+					ResolvedTs:   c.state.Info.StartTs,
+					CheckpointTs: c.state.Info.StartTs,
 					AdminJobType: model.AdminNone,
 				}
 				return status, true, nil
@@ -321,6 +320,9 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
 		if ddlJob == nil || ddlResolvedTs != barrierTs {
+			if ddlResolvedTs < barrierTs {
+				return barrierTs, nil
+			}
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}

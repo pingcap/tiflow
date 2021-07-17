@@ -52,6 +52,26 @@ const (
 	StateFinished FeedState = "finished"
 )
 
+// ToInt return a int for each `FeedState`, only use this for metrics.
+func (s FeedState) ToInt() int {
+	switch s {
+	case StateNormal:
+		return 0
+	case StateError:
+		return 1
+	case StateFailed:
+		return 2
+	case StateStopped:
+		return 3
+	case StateFinished:
+		return 4
+	case StateRemoved:
+		return 5
+	}
+	// -1 for unknown feed state
+	return -1
+}
+
 const (
 	// errorHistoryGCInterval represents how long we keep error record in changefeed info
 	errorHistoryGCInterval = time.Minute * 10
@@ -78,7 +98,9 @@ type ChangeFeedInfo struct {
 	AdminJobType AdminJobType `json:"admin-job-type"`
 	Engine       SortEngine   `json:"sort-engine"`
 	// SortDir is deprecated
-	SortDir string `json:"-"`
+	// it cannot be set by user in changefeed level, any assignment to it should be ignored.
+	// but can be fetched for backward compatibility
+	SortDir string `json:"sort-dir"`
 
 	Config   *config.ReplicaConfig `json:"config"`
 	State    FeedState             `json:"state"`

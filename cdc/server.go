@@ -375,10 +375,8 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if diskInfo.Avail < dataDirThreshold {
-		log.Warn(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
-			"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
-	}
+	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
+		"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
 
 	return nil
 }
@@ -392,15 +390,32 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
+	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
+	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
+	cli := s.etcdClient
+	if cli == nil {
+		client, err := clientv3.New(clientv3.Config{
+			Endpoints:   s.pdEndpoints,
+			Context:     ctx,
+			DialTimeout: 5 * time.Second,
+		})
+		if err != nil {
+			return err
+		}
+		etcdClient := kv.NewCDCEtcdClient(ctx, client)
+		cli = &etcdClient
+		defer cli.Close()
+	}
+
 	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	allStatus, err := cli.GetAllChangeFeedStatus(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	candidates := make([]string, 0, len(allStatus))
 	for id := range allStatus {
-		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
+		info, err := cli.GetChangeFeedInfo(ctx, id)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -424,14 +439,25 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 // at the moment, only consider available disk space
 func findBestDataDir(candidates []string) (result string, ok bool) {
 	var low uint64 = 0
-	for _, dir := range candidates {
+
+	checker := func(dir string) (*util.DiskInfo, error) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
 		if err := util.IsDirReadWritable(dir); err != nil {
-			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
-			continue
+			return nil, err
 		}
 		info, err := util.GetDiskInfo(dir)
 		if err != nil {
-			log.Warn("try to get disk info failed", zap.String("dir", dir), zap.Error(err))
+			return nil, err
+		}
+		return info, err
+	}
+
+	for _, dir := range candidates {
+		info, err := checker(dir)
+		if err != nil {
+			log.Warn("check the availability of dir", zap.String("dir", dir), zap.Error(err))
 			continue
 		}
 		if info.Avail > low {
