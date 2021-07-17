@@ -21,6 +21,8 @@ pwd=$pwd
 log_level=debug
 restart=
 failpoint=$GO_FAILPOINTS
+config_path=
+data_dir=
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -64,6 +66,14 @@ while [[ ${1} ]]; do
             failpoint=${2}
             shift
             ;;
+        --config)
+            config_path="--config ${2}"
+            shift
+            ;;
+        --data-dir)
+            data_dir=${2}
+            shift
+            ;;
         *)
             echo "Unknown parameter: ${1}" >&2
             exit 1
@@ -74,6 +84,10 @@ while [[ ${1} ]]; do
         exit 1
     fi
 done
+
+if [ -z "$data_dir" ]; then
+    data_dir=${workdir}/cdc_data${logsuffix}
+fi
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
@@ -87,6 +101,8 @@ if [[ "$restart" == "true" ]]; then
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         --sorter-num-workerpool-goroutine 4 \
+        --data-dir "$data_dir" \
+        $config_path \
         $tls \
         $certcn \
         $addr \
@@ -101,6 +117,8 @@ else
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     --sorter-num-workerpool-goroutine 4 \
+    --data-dir "$data_dir" \
+    $config_path \
     $tls \
     $certcn \
     $addr \
@@ -108,5 +126,3 @@ else
 fi
 
 cd $pwd
-
-

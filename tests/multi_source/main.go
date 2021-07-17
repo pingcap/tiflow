@@ -62,6 +62,9 @@ func main() {
 			log.S().Errorf("Failed to close source database: %s\n", err)
 		}
 	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go switchAsyncCommit(ctx, sourceDB0)
 	util.MustExec(sourceDB0, "create database mark;")
 	runDDLTest([]*sql.DB{sourceDB0, sourceDB1})
 	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
@@ -106,6 +109,25 @@ func runDDLTest(srcs []*sql.DB) {
 		cancel()
 
 		util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", i))
+	}
+}
+
+func switchAsyncCommit(ctx context.Context, db *sql.DB) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	enabled := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if enabled {
+				util.MustExec(db, "set global tidb_enable_async_commit = off")
+			} else {
+				util.MustExec(db, "set global tidb_enable_async_commit = on")
+			}
+			enabled = !enabled
+		}
 	}
 }
 

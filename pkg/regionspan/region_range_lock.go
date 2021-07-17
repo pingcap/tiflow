@@ -15,6 +15,7 @@ package regionspan
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -286,7 +287,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 }
 
 // LockRange locks a range with specified version.
-func (l *RegionRangeLock) LockRange(startKey, endKey []byte, regionID, version uint64) LockRangeResult {
+func (l *RegionRangeLock) LockRange(ctx context.Context, startKey, endKey []byte, regionID, version uint64) LockRangeResult {
 	res, signalChs := l.tryLockRange(startKey, endKey, regionID, version)
 
 	if res.Status != LockRangeStatusWait {
@@ -298,7 +299,11 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, regionID, version u
 		var res1 LockRangeResult
 		for {
 			for _, ch := range signalChs1 {
-				<-ch
+				select {
+				case <-ctx.Done():
+					return LockRangeResult{Status: LockRangeStatusCancel}
+				case <-ch:
+				}
 			}
 			res1, signalChs1 = l.tryLockRange(startKey, endKey, regionID, version)
 			if res1.Status != LockRangeStatusWait {
@@ -374,6 +379,8 @@ const (
 	LockRangeStatusWait = 1
 	// LockRangeStatusStale means a LockRange operation is rejected because of the range's version is stale.
 	LockRangeStatusStale = 2
+	// LockRangeStatusCancel means a LockRange operation is cancelled.
+	LockRangeStatusCancel = 3
 )
 
 // LockRangeResult represents the result of LockRange method of RegionRangeLock.

@@ -16,6 +16,7 @@ package model
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -313,7 +314,7 @@ func ColumnValueString(c interface{}) string {
 	case int32:
 		data = strconv.FormatInt(int64(v), 10)
 	case int64:
-		data = strconv.FormatInt(int64(v), 10)
+		data = strconv.FormatInt(v, 10)
 	case uint8:
 		data = strconv.FormatUint(uint64(v), 10)
 	case uint16:
@@ -321,11 +322,11 @@ func ColumnValueString(c interface{}) string {
 	case uint32:
 		data = strconv.FormatUint(uint64(v), 10)
 	case uint64:
-		data = strconv.FormatUint(uint64(v), 10)
+		data = strconv.FormatUint(v, 10)
 	case float32:
 		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case float64:
-		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
+		data = strconv.FormatFloat(v, 'f', -1, 64)
 	case string:
 		data = v
 	case []byte:
@@ -412,11 +413,17 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
 type SingleTableTxn struct {
+	// data fields of SingleTableTxn
 	Table     *TableName
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
 	ReplicaID uint64
+
+	// control fields of SingleTableTxn
+	// FinishWg is a barrier txn, after this txn is received, the worker must
+	// flush cached txns and call FinishWg.Done() to mark txns have been flushed.
+	FinishWg *sync.WaitGroup
 }
 
 // Append adds a row changed event into SingleTableTxn

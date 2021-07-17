@@ -1,0 +1,40 @@
+
+# TiCDC Server 监听的地址，默认：127.0.0.1:8300
+# the listening address of TiCDC server, default: 127.0.0.1:8300
+addr = "127.0.0.1:8300"
+
+# 用于客户端建立连接的对外公开的地址，这个地址会被注册到 PD, 默认：和 addr 相同
+# the advertised listening address for client communication, this address will be registered with the PD, default: same with the addr item
+advertise-addr = "127.0.0.1:8300"
+
+# 日志文件路径
+# log file path
+log-file = "/tmp/ticdc/ticdc.log"
+
+# 日志级别 (debug|info|warn|error) 默认："info"
+# log level (debug|info|warn|error) default: "info"
+log-level = "info"
+
+# CDC GC safepoint TTL，以秒为单位，默认：86400(24H)
+# CDC GC safepoint TTL duration, specified in seconds, default: 86400(24H)
+# gc-ttl = 86400
+
+# TiCDC 集群的时区，默认： "System"
+# the time zone of TiCDC cluster, default: "System"
+# tz = "System"
+
+[log.file]
+# Max log file size in MB (upper limit to 4096MB).
+max-size = 300
+
+# Max log file keep days. No clean up by default.
+max-days = 0
+
+# Maximum number of old log files to retain. No clean up by default.
+max-backups = 0
+
+[security]
+# ca-path = ""
+# cert-path = ""
+# key-path = ""
+# cert-allowed-cn = ["cn1","cn2"]

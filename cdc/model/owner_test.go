@@ -289,6 +289,31 @@ type removeTableSuite struct{}
 
 var _ = check.Suite(&removeTableSuite{})
 
+func (s *removeTableSuite) TestMoveTable(c *check.C) {
+	defer testleak.AfterTest(c)()
+	info := TaskStatus{
+		Tables: map[TableID]*TableReplicaInfo{
+			1: {StartTs: 100},
+			2: {StartTs: 200},
+		},
+	}
+
+	replicaInfo, found := info.RemoveTable(2, 300, true)
+	c.Assert(found, check.IsTrue)
+	c.Assert(replicaInfo, check.DeepEquals, &TableReplicaInfo{StartTs: 200})
+	c.Assert(info.Tables, check.HasKey, int64(1))
+	c.Assert(info.Tables, check.Not(check.HasKey), int64(2))
+	expectedFlag := uint64(1) // OperFlagMoveTable
+	c.Assert(info.Operation, check.DeepEquals, map[int64]*TableOperation{
+		2: {
+			Delete:     true,
+			Flag:       expectedFlag,
+			BoundaryTs: 300,
+			Status:     OperDispatched,
+		},
+	})
+}
+
 func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 	defer testleak.AfterTest(c)()
 	info := TaskStatus{
@@ -300,7 +325,7 @@ func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 		},
 	}
 
-	replicaInfo, found := info.RemoveTable(2, 666)
+	replicaInfo, found := info.RemoveTable(2, 666, false)
 	c.Assert(found, check.IsTrue)
 	c.Assert(replicaInfo, check.DeepEquals, &TableReplicaInfo{StartTs: 200})
 }
@@ -308,7 +333,7 @@ func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 func (s *removeTableSuite) TestShouldHandleTableNotFound(c *check.C) {
 	defer testleak.AfterTest(c)()
 	info := TaskStatus{}
-	_, found := info.RemoveTable(404, 666)
+	_, found := info.RemoveTable(404, 666, false)
 	c.Assert(found, check.IsFalse)
 
 	info = TaskStatus{
@@ -316,6 +341,6 @@ func (s *removeTableSuite) TestShouldHandleTableNotFound(c *check.C) {
 			1: {StartTs: 100},
 		},
 	}
-	_, found = info.RemoveTable(404, 666)
+	_, found = info.RemoveTable(404, 666, false)
 	c.Assert(found, check.IsFalse)
 }

@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -45,23 +45,44 @@ type FeedState string
 // All FeedStates
 const (
 	StateNormal   FeedState = "normal"
+	StateError    FeedState = "error"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
-	StateRemoved  FeedState = "removed"
+	StateRemoved  FeedState = "removed" // deprecated, will be removed in the next version
 	StateFinished FeedState = "finished"
 )
 
+// ToInt return a int for each `FeedState`, only use this for metrics.
+func (s FeedState) ToInt() int {
+	switch s {
+	case StateNormal:
+		return 0
+	case StateError:
+		return 1
+	case StateFailed:
+		return 2
+	case StateStopped:
+		return 3
+	case StateFinished:
+		return 4
+	case StateRemoved:
+		return 5
+	}
+	// -1 for unknown feed state
+	return -1
+}
+
 const (
-	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
-	ErrorHistoryGCInterval = time.Minute * 10
+	// errorHistoryGCInterval represents how long we keep error record in changefeed info
+	errorHistoryGCInterval = time.Minute * 10
 
 	// errorHistoryCheckInterval represents time window for failure check
 	errorHistoryCheckInterval = time.Minute * 2
 
-	// errorHistoryThreshold represents failure upper limit in time window.
+	// ErrorHistoryThreshold represents failure upper limit in time window.
 	// Before a changefeed is initialized, check the the failure count of this
-	// changefeed, if it is less than errorHistoryThreshold, then initialize it.
-	errorHistoryThreshold = 5
+	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
+	ErrorHistoryThreshold = 3
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -76,7 +97,10 @@ type ChangeFeedInfo struct {
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType AdminJobType `json:"admin-job-type"`
 	Engine       SortEngine   `json:"sort-engine"`
-	SortDir      string       `json:"sort-dir"`
+	// SortDir is deprecated
+	// it cannot be set by user in changefeed level, any assignment to it should be ignored.
+	// but can be fetched for backward compatibility
+	SortDir string `json:"sort-dir"`
 
 	Config   *config.ReplicaConfig `json:"config"`
 	State    FeedState             `json:"state"`
@@ -88,13 +112,15 @@ type ChangeFeedInfo struct {
 	CreatorVersion    string        `json:"creator-version"`
 }
 
-var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
+const changeFeedIDMaxLen = 128
+
+var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
 // ValidateChangefeedID returns true if the changefeed ID matches
-// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
-	if !changeFeedIDRe.MatchString(changefeedID) {
-		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs()
+	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
 	}
 	return nil
 }
@@ -127,7 +153,7 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 		return info.StartTs
 	}
 
-	return oracle.EncodeTSO(info.CreateTime.Unix() * 1000)
+	return oracle.GoTimeToTS(info.CreateTime)
 }
 
 // GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
@@ -166,9 +192,20 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 			return errors.Annotatef(
 				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
-		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	return nil
+}
+
+// Clone returns a cloned ChangeFeedInfo
+func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
+	s, err := info.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	cloned := new(ChangeFeedInfo)
+	err = cloned.Unmarshal([]byte(s))
+	return cloned, err
 }
 
 // VerifyAndFix verifies changefeed info and may fillin some fields.
@@ -203,13 +240,10 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryGCInterval
 	})
-	if i == len(info.ErrorHis) {
-		info.ErrorHis = info.ErrorHis[:]
-	} else {
-		info.ErrorHis = info.ErrorHis[i:]
-	}
+	info.ErrorHis = info.ErrorHis[i:]
+
 	if i > 0 {
 		needSave = true
 	}
@@ -218,6 +252,38 @@ func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 		ts := info.ErrorHis[i]
 		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
 	})
-	canInit = len(info.ErrorHis)-i < errorHistoryThreshold
+	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
 	return
+}
+
+// HasFastFailError returns true if the error in changefeed is fast-fail
+func (info *ChangeFeedInfo) HasFastFailError() bool {
+	if info.Error == nil {
+		return false
+	}
+	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+}
+
+// findActiveErrors finds all errors occurring within errorHistoryCheckInterval
+func (info *ChangeFeedInfo) findActiveErrors() []int64 {
+	i := sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		// ts is a errors occurrence time, here to find all errors occurring within errorHistoryCheckInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
+	})
+	return info.ErrorHis[i:]
+}
+
+// ErrorsReachedThreshold checks error history of a changefeed
+// returns true if error counts reach threshold
+func (info *ChangeFeedInfo) ErrorsReachedThreshold() bool {
+	return len(info.findActiveErrors()) >= ErrorHistoryThreshold
+}
+
+// CleanUpOutdatedErrorHistory cleans up the outdated error history
+// return true if the ErrorHis changed
+func (info *ChangeFeedInfo) CleanUpOutdatedErrorHistory() bool {
+	lastLenOfErrorHis := len(info.ErrorHis)
+	info.ErrorHis = info.findActiveErrors()
+	return lastLenOfErrorHis != len(info.ErrorHis)
 }

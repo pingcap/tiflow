@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
@@ -71,8 +72,18 @@ type ChangeFeedRWriter interface {
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error)
+
 	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
+
+	// LeaseGuardRemoveAllTaskStatus wraps RemoveAllTaskStatus with a context restricted by lease TTL.
+	LeaseGuardRemoveAllTaskStatus(ctx context.Context, changefeedID string, leaseID clientv3.LeaseID) error
+
+	// LeaseGuardRemoveAllTaskPositions wraps RemoveAllTaskPositions with a context restricted by lease TTL.
+	LeaseGuardRemoveAllTaskPositions(ctx context.Context, changefeedID string, leaseID clientv3.LeaseID) error
+
+	// LeaseGuardPutAllChangeFeedStatus wraps PutAllChangeFeedStatus with a context restricted by lease TTL.
+	LeaseGuardPutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus, leaseID clientv3.LeaseID) error
 }
 
 type changeFeed struct {
@@ -119,6 +130,7 @@ type changeFeed struct {
 	lastRebalanceTime time.Time
 
 	etcdCli kv.CDCEtcdClient
+	leaseID clientv3.LeaseID
 
 	// context cancel function for all internal goroutines
 	cancel context.CancelFunc
@@ -321,7 +333,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 		id := id
 		targetTs := targetTs
 		updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
-			status.RemoveTable(id, targetTs)
+			status.RemoveTable(id, targetTs, false /*isMoveTable*/)
 			return true, nil
 		})
 		cleanedTables[id] = struct{}{}
@@ -366,7 +378,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	}
 
 	for captureID, funcs := range updateFuncs {
-		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, funcs...)
+		newStatus, _, err := c.etcdCli.LeaseGuardAtomicPutTaskStatus(ctx, c.id, captureID, c.leaseID, funcs...)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -391,15 +403,17 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 
 func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.CaptureID]*model.TaskStatus) error {
 	for captureID, status := range taskStatus {
-		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
-			if taskStatus.SomeOperationsUnapplied() {
-				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
-				return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
-			}
-			taskStatus.Tables = status.Tables
-			taskStatus.Operation = status.Operation
-			return true, nil
-		})
+		newStatus, _, err := c.etcdCli.LeaseGuardAtomicPutTaskStatus(
+			ctx, c.id, captureID, c.leaseID,
+			func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+				if taskStatus.SomeOperationsUnapplied() {
+					log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
+					return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
+				}
+				taskStatus.Tables = status.Tables
+				taskStatus.Operation = status.Operation
+				return true, nil
+			})
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -530,7 +544,7 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			// To ensure that the replication pipeline stops exactly at the boundary TS,
 			// The boundary TS specified by Remove Table Operation MUST greater or equal to the checkpoint TS of this table.
 			// So the global resolved TS is a reasonable values.
-			replicaInfo, exist := status.RemoveTable(tableID, c.status.ResolvedTs)
+			replicaInfo, exist := status.RemoveTable(tableID, c.status.ResolvedTs, true /*isMoveTable*/)
 			if !exist {
 				delete(c.moveTableJobs, tableID)
 				log.Warn("ignored the move job, the table is not exist in the source capture", zap.Reflect("job", job))
@@ -558,6 +572,7 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
 				c.orphanTables[tableID] = replicaInfo.StartTs
+				delete(c.moveTableJobs, tableID)
 				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
 				continue
 			}
@@ -663,6 +678,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("schema", todoDDLJob.SchemaName),
 		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("start-ts", todoDDLJob.StartTS),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
 	ddlEvent := new(model.DDLEvent)
@@ -922,6 +938,9 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		// some DDL is waiting to executed, we can't ensure whether the DDL has been executed.
 		// so we can't emit checkpoint to sink
 		if c.ddlState != model.ChangeFeedWaitToExecDDL {
+			failpoint.Inject("InjectEmitCheckpointTsError", func() {
+				failpoint.Return(cerror.ErrEmitCheckpointTsFailed.GenWithStackByArgs())
+			})
 			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
 			if err != nil {
 				return errors.Trace(err)

@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -35,29 +36,32 @@ func (s *contextSuite) TestVars(c *check.C) {
 	stdCtx := context.Background()
 	conf := config.GetDefaultReplicaConfig()
 	conf.Filter.Rules = []string{"hello.world"}
-	ctx := NewContext(stdCtx, &Vars{
-		Config: conf,
+	info := &model.ChangeFeedInfo{Config: conf}
+	ctx := NewContext(stdCtx, &GlobalVars{
+		CaptureInfo: &model.CaptureInfo{ID: "capture1"},
 	})
-	c.Assert(ctx.Vars().Config, check.DeepEquals, conf)
+	ctx = WithChangefeedVars(ctx, &ChangefeedVars{
+		Info: info,
+	})
+	c.Assert(ctx.ChangefeedVars().Info, check.DeepEquals, info)
+	c.Assert(ctx.GlobalVars().CaptureInfo.ID, check.Equals, "capture1")
 }
 
 func (s *contextSuite) TestStdCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
 	stdCtx, cancel := context.WithCancel(stdCtx)
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	cancel()
-	<-ctx.StdContext().Done()
 	<-ctx.Done()
 }
 
 func (s *contextSuite) TestCancel(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
 	cancel()
-	<-ctx.StdContext().Done()
 	<-ctx.Done()
 }
 
@@ -65,15 +69,12 @@ func (s *contextSuite) TestCancelCascade(c *check.C) {
 	defer testleak.AfterTest(c)()
 	startTime := time.Now()
 	stdCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(1*time.Second))
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx1, _ := WithCancel(ctx)
 	ctx2, cancel2 := WithCancel(ctx)
 	cancel2()
-	<-ctx2.StdContext().Done()
 	<-ctx2.Done()
 	c.Assert(time.Since(startTime), check.Less, time.Second)
-	<-ctx1.StdContext().Done()
-	c.Assert(time.Since(startTime), check.GreaterEqual, time.Second)
 	<-ctx1.Done()
 	c.Assert(time.Since(startTime), check.GreaterEqual, time.Second)
 	cancel()
@@ -82,11 +83,12 @@ func (s *contextSuite) TestCancelCascade(c *check.C) {
 func (s *contextSuite) TestThrow(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
-	ctx = WithErrorHandler(ctx, func(err error) {
+	ctx = WithErrorHandler(ctx, func(err error) error {
 		c.Assert(err.Error(), check.Equals, "mock error")
 		cancel()
+		return nil
 	})
 	ctx.Throw(nil)
 	ctx.Throw(errors.New("mock error"))
@@ -96,10 +98,10 @@ func (s *contextSuite) TestThrow(c *check.C) {
 func (s *contextSuite) TestThrowCascade(c *check.C) {
 	defer testleak.AfterTest(c)()
 	stdCtx := context.Background()
-	ctx := NewContext(stdCtx, &Vars{})
+	ctx := NewContext(stdCtx, &GlobalVars{})
 	ctx, cancel := WithCancel(ctx)
-	var errNum1, errNum2 int
-	ctx = WithErrorHandler(ctx, func(err error) {
+	var errNum1, errNum2, errNum3 int
+	ctx = WithErrorHandler(ctx, func(err error) error {
 		if err.Error() == "mock error" {
 			errNum1++
 		} else if err.Error() == "mock error2" {
@@ -107,13 +109,37 @@ func (s *contextSuite) TestThrowCascade(c *check.C) {
 		} else {
 			c.Fail()
 		}
+		return nil
 	})
-	ctx2 := WithErrorHandler(ctx, func(err error) {
-		errNum2++
-		c.Assert(err.Error(), check.Equals, "mock error2")
+	ctx2 := WithErrorHandler(ctx, func(err error) error {
+		if err.Error() == "mock error2" {
+			errNum2++
+			return err
+		} else if err.Error() == "mock error3" {
+			errNum3++
+		} else {
+			c.Fail()
+		}
+		return nil
 	})
 	ctx2.Throw(errors.New("mock error2"))
+	ctx2.Throw(errors.New("mock error3"))
 	ctx.Throw(errors.New("mock error"))
+	c.Assert(errNum1, check.Equals, 1)
+	c.Assert(errNum2, check.Equals, 2)
+	c.Assert(errNum3, check.Equals, 1)
 	cancel()
 	<-ctx.Done()
+}
+
+func (s *contextSuite) TestThrowPanic(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer func() {
+		panicMsg := recover()
+		c.Assert(panicMsg, check.Equals, "an error has escaped, please report a bug{error 26 0  mock error}")
+	}()
+	stdCtx := context.Background()
+	ctx := NewContext(stdCtx, &GlobalVars{})
+	ctx.Throw(nil)
+	ctx.Throw(errors.New("mock error"))
 }
