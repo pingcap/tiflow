@@ -55,7 +55,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	pendingSet := &sync.Map{}
 
 	defer func() {
-		log.Info("Unified Sorter: merger exiting, cleaning up resources")
+		log.Debug("Unified Sorter: merger exiting, cleaning up resources")
 		// cancel pending async IO operations.
 		onExit()
 		cleanUpTask := func(task *flushTask) {
