@@ -974,6 +974,8 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 		ownerMaintainTableNumGauge.DeleteLabelValues(cf.id, capture.AdvertiseAddr, maintainTableTypeWip)
 	}
 	delete(o.changeFeeds, job.CfID)
+	changefeedCheckpointTsGauge.DeleteLabelValues(cf.id)
+	changefeedCheckpointTsLagGauge.DeleteLabelValues(cf.id)
 	return nil
 }
 
