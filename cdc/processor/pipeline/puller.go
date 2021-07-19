@@ -69,7 +69,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	// NOTICE: always pull the old value internally
-	// See also: TODO(hi-rustin): add issue link here.
+	// See also: https://github.com/pingcap/ticdc/issues/2301.
 	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, globalConfig.Security, ctx.GlobalVars().KVStorage,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
