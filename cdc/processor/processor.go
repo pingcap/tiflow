@@ -384,9 +384,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
-				//if table.CheckpointTs() != p.changefeed.Status.ResolvedTs {
-				//	continue
-				//}
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.BoundaryTs = table.CheckpointTs()
 					operation.Status = model.OperFinished
