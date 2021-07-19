@@ -14,6 +14,7 @@
 package pipeline
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -22,7 +23,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/context"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -89,10 +90,10 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ctx, cancel := context.WithCancel(context.NewBackendContext4Test(false))
+	ctx, cancel := cdcContext.WithCancel(cdcContext.NewBackendContext4Test(false))
 	defer cancel()
 
-	ctx = context.WithErrorHandler(ctx, func(err error) error {
+	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		return nil
 	})
 	p := pipeline.NewPipeline(ctx, 0)
@@ -108,9 +109,9 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 
 	var sentCount int64
 	sendMsg := func(p *pipeline.Pipeline, msg *pipeline.Message) {
-		err := retry.Run(10*time.Millisecond, 100, func() error {
+		err := retry.Do(context.Background(), func() error {
 			return p.SendToFirstNode(msg)
-		})
+		}, retry.WithBackoffBaseDelay(10), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(100))
 		atomic.AddInt64(&sentCount, 1)
 		c.Assert(err, check.IsNil)
 	}
