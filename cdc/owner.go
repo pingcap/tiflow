@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -330,18 +329,6 @@ func (o *Owner) newChangeFeed(
 	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	// TODO delete
-	if info.Engine == model.SortInFile {
-		err = os.MkdirAll(info.SortDir, 0o755)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
-		err = util.IsDirAndWritable(info.SortDir)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
 	}
 
 	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
