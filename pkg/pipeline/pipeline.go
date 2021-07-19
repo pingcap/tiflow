@@ -89,7 +89,7 @@ func (p *Pipeline) AppendNode(ctx context.Context, name string, node Node) {
 
 func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runner) {
 	defer func() {
-		log.Info("a pipeline node is exiting, stop the whole pipeline", zap.String("name", runner.getName()))
+		log.Debug("a pipeline node is exiting, stop the whole pipeline", zap.String("name", runner.getName()))
 		p.close()
 		blackhole(previousRunner)
 		p.runnersWg.Done()
