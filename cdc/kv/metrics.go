@@ -13,9 +13,14 @@
 
 package kv
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var (
+	grpcMetrics = grpc_prometheus.NewClientMetrics()
+
 	eventFeedErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -103,4 +108,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(clientRegionTokenSize)
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(etcdRequestCounter)
+
+	// Register client metrics to registry.
+	registry.MustRegister(grpcMetrics)
 }
