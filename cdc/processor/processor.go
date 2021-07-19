@@ -460,7 +460,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().PDClient,
 		conf.Security,
 		ctx.GlobalVars().KVStorage,
-		checkpointTs, ddlspans, p.limitter, false)
+		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
