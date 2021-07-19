@@ -21,6 +21,11 @@ require (
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.4
 	github.com/google/uuid v1.1.1
+<<<<<<< HEAD
+=======
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+	github.com/grpc-ecosystem/grpc-gateway v1.14.3 // indirect
+>>>>>>> 2a5f97a4 (kv: add grpc client metrics (#2272))
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.0.5
 	github.com/jmoiron/sqlx v1.2.0
