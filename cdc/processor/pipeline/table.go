@@ -151,6 +151,14 @@ func (t *tablePipelineImpl) Wait() {
 	t.p.Wait()
 }
 
+// Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
+// replicating 1024 tables in the worst case.
+const defaultOutputChannelSize = 64
+
+// There are 5 or 6 runners in table pipeline: header, puller, sorter, mounter,
+// sink, cyclic if cyclic replication is enabled
+const defaultRunnersSize = 5
+
 // NewTablePipeline creates a table pipeline
 // TODO(leoppro): implement a mock kvclient to test the table pipeline
 func NewTablePipeline(ctx cdcContext.Context,
@@ -176,12 +184,24 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
-	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
+	config := ctx.ChangefeedVars().Info.Config
+	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
+	runnerSize := defaultRunnersSize
+	if cyclicEnabled {
+		runnerSize++
+	}
+	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
+<<<<<<< HEAD
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
 	config := ctx.ChangefeedVars().Info.Config
 	if config.Cyclic != nil && config.Cyclic.IsEnabled() {
+=======
+	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
+	p.AppendNode(ctx, "mounter", newMounterNode())
+	if cyclicEnabled {
+>>>>>>> 2fc6415c (processor, pipeline: reduce channel buffer (#2281))
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
 	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
