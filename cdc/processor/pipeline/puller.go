@@ -70,7 +70,11 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, globalConfig.Security, ctx.GlobalVars().KVStorage,
+<<<<<<< HEAD
 		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, config.EnableOldValue)
+=======
+		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
+>>>>>>> d748922e (puller: clean up unused parameter (#2309))
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil

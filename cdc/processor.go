@@ -166,7 +166,7 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -819,8 +819,13 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 			return nil
 		}
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
+<<<<<<< HEAD
 			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
 			enableOldValue)
+=======
+			replicaInfo.StartTs, []regionspan.Span{span},
+			true)
+>>>>>>> d748922e (puller: clean up unused parameter (#2309))
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
