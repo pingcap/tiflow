@@ -107,7 +107,8 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 		c.Fatal(err)
 		return err
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 2, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
@@ -218,7 +219,8 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 		c.Assert(err.Error(), check.Equals, "error node throw an error, index: 3")
 		return nil
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 3, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &errorNode{c: c})
 	p.AppendNode(ctx, "check node", &checkNode{
@@ -301,7 +303,8 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 		errs = append(errs, err)
 		return nil
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 2, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -351,7 +354,8 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 		c.Fatal(err)
 		return err
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 2, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -466,7 +470,8 @@ func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
 		return nil
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 1, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "panic", panicNode{})
 	p.Wait()
 }
