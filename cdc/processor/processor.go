@@ -288,7 +288,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
@@ -777,6 +777,8 @@ func (p *processor) doGCSchemaStorage() error {
 func (p *processor) Close() error {
 	for _, tbl := range p.tables {
 		tbl.Cancel()
+	}
+	for _, tbl := range p.tables {
 		tbl.Wait()
 	}
 	p.cancel()

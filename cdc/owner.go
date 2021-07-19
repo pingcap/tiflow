@@ -52,7 +52,7 @@ type ownership struct {
 	tickTime     time.Duration
 }
 
-func newOwnersip(tickTime time.Duration) ownership {
+func newOwnership(tickTime time.Duration) ownership {
 	minTickTime := 5 * time.Second
 	if tickTime > minTickTime {
 		log.Panic("ownership counter must be incearsed every 5 seconds")
@@ -148,7 +148,7 @@ const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	GCSafepointUpdateInterval = 2 * time.Second
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
 	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )
@@ -1110,7 +1110,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-
 			err = o.dispatchJob(ctx, job)
 			if err != nil {
 				return errors.Trace(err)
@@ -1276,7 +1275,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
-	ownership := newOwnersip(tickTime)
+	ownership := newOwnership(tickTime)
 loop:
 	for {
 		select {
@@ -1578,7 +1577,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	failpoint.Inject("sleep-before-watch-capture", nil)
 
 	// When an owner just starts, changefeed information is not updated at once.
-	// Supposing a crased capture should be removed now, the owner will miss deleting
+	// Supposing a crashed capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
 	// If the task positions and status decode failed, remove them.
 	if err := o.checkAndCleanTasksInfo(ctx); err != nil {
