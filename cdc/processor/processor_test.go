@@ -244,7 +244,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 			66: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
 		},
 	})
-	c.Assert(table66.stopTs, check.Equals, uint64(120))
+	c.Assert(table66.stopTs, check.Equals, p.changefeed.Status.ResolvedTs)
 
 	// remove table, not finished
 	_, err = p.Tick(ctx, p.changefeed)
@@ -361,7 +361,7 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	})
 	c.Assert(p.tables, check.HasLen, 4)
 	c.Assert(table3.canceled, check.IsFalse)
-	c.Assert(table3.stopTs, check.Equals, uint64(60))
+	c.Assert(table3.stopTs, check.Equals, p.changefeed.Status.ResolvedTs, check.Commentf("stopTs:%d", table3.stopTs))
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs, check.Equals, uint64(101))
 
 	// finish remove operations
@@ -406,8 +406,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 			4: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
 		},
 	})
-	c.Assert(table1.stopTs, check.Equals, uint64(120))
-	c.Assert(table4.stopTs, check.Equals, uint64(120))
+	c.Assert(table1.stopTs, check.Equals, p.changefeed.Status.ResolvedTs)
+	c.Assert(table4.stopTs, check.Equals, p.changefeed.Status.ResolvedTs)
 	c.Assert(table2.canceled, check.IsTrue)
 	c.Assert(p.tables, check.HasLen, 2)
 
