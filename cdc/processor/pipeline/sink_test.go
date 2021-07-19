@@ -112,7 +112,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-status",
 		Info: &model.ChangeFeedInfo{
-			StartTs: oracle.GoTimeToTS(time.Now()),
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
 			Config:  config.GetDefaultReplicaConfig(),
 		},
 	})
@@ -194,7 +194,7 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-many-ts",
 		Info: &model.ChangeFeedInfo{
-			StartTs: oracle.GoTimeToTS(time.Now()),
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
 			Config:  config.GetDefaultReplicaConfig(),
 		},
 	})
@@ -248,11 +248,13 @@ func (s *outputSuite) TestManyTs(c *check.C) {
 func (s *outputSuite) TestSplitUpdateEventWhenEnableOldValue(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.EnableOldValue = true
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-split-update-event",
 		Info: &model.ChangeFeedInfo{
-			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
+			Config:  cfg,
 		},
 	})
 	sink := &mockSink{}
@@ -310,7 +312,7 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-split-update-event",
 		Info: &model.ChangeFeedInfo{
-			StartTs: oracle.GoTimeToTS(time.Now()),
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
 			Config:  cfg,
 		},
 	})
