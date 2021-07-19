@@ -88,7 +88,10 @@ func getBackoffInMs(backoffBaseInMs, backoffCapInMs, try float64) time.Duration 
 	if temp <= 0 {
 		temp = 1
 	}
-	sleep := temp + rand.Int63n(temp)
-	backOff := math.Min(backoffCapInMs, float64(rand.Int63n(sleep*3))+backoffBaseInMs)
+	sleep := (temp + rand.Int63n(temp)) * 3
+	if sleep <= 0 {
+		sleep = math.MaxInt64
+	}
+	backOff := math.Min(backoffCapInMs, float64(rand.Int63n(sleep))+backoffBaseInMs)
 	return time.Duration(backOff) * time.Millisecond
 }
