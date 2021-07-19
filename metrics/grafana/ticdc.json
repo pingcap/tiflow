@@ -125,11 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-<<<<<<< HEAD
-  "iteration": 1620627250839,
-=======
   "iteration": 1626152035486,
->>>>>>> 3be1df924 (owner, metrics: add changefeed status in metrics and grafana (#2267))
   "links": [],
   "panels": [
     {
@@ -7157,9 +7153,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 16
-=======
-  "version": 18
->>>>>>> 3be1df924 (owner, metrics: add changefeed status in metrics and grafana (#2267))
+  "version": 17
 }

@@ -184,10 +184,6 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
-<<<<<<< HEAD
-
-	p := pipeline.NewPipeline(ctx, 500*time.Millisecond)
-=======
 	config := ctx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize
@@ -195,7 +191,6 @@ func NewTablePipeline(ctx cdcContext.Context,
 		runnerSize++
 	}
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
->>>>>>> 2fc6415c (processor, pipeline: reduce channel buffer (#2281))
 	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
 	p.AppendNode(ctx, "mounter", newMounterNode())
