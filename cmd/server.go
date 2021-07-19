@@ -147,6 +147,14 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		if err := strictDecodeFile(serverConfigFilePath, "TiCDC server", conf); err != nil {
 			return nil, err
 		}
+		// user specified sort-dir should not take effect, it's always `/tmp/sorter`
+		// if user try to set sort-dir by config file, warn it.
+		if conf.Sorter.SortDir != config.DefaultSortDir {
+			cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
+				"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
+
+			conf.Sorter.SortDir = config.DefaultSortDir
+		}
 	}
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
@@ -196,6 +204,7 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 	})
 
 	// user specified sorter dir should not take effect, it's always `/tmp/sorter`
+	// if user try to set sort-dir by flag, warn it.
 	if conf.Sorter.SortDir != config.DefaultSortDir {
 		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 			"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
