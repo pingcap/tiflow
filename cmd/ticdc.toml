@@ -23,6 +23,16 @@ log-level = "info"
 # the time zone of TiCDC cluster, default: "System"
 # tz = "System"
 
+[log.file]
+# Max log file size in MB (upper limit to 4096MB).
+max-size = 300
+
+# Max log file keep days. No clean up by default.
+max-days = 0
+
+# Maximum number of old log files to retain. No clean up by default.
+max-backups = 0
+
 [security]
 # ca-path = ""
 # cert-path = ""
