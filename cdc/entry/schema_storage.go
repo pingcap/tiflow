@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -719,31 +718,21 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
 	// DDL puller lagging too much.
-	err := retry.RunWithInfiniteRetry(10*time.Millisecond, func() error {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		default:
-		}
+	startTime := time.Now()
+	err := retry.Do(ctx, func() error {
 		var err error
 		snap, err = s.getSnapshot(ts)
-		if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
-			return backoff.Permanent(err)
-		}
-
-		return err
-	}, func(elapsed time.Duration) {
-		if elapsed >= 5*time.Minute {
+		if time.Since(startTime) >= 5*time.Minute && isRetryable(err) {
 			log.Warn("GetSnapshot is taking too long, DDL puller stuck?", zap.Uint64("ts", ts))
 		}
-	})
+		return err
+	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(), retry.WithIsRetryableErr(isRetryable))
 
-	switch e := err.(type) {
-	case *backoff.PermanentError:
-		return nil, e.Err
-	default:
-		return snap, err
-	}
+	return snap, err
+}
+
+func isRetryable(err error) bool {
+	return cerror.IsRetryableError(err) && cerror.ErrSchemaStorageUnresolved.Equal(err)
 }
 
 // GetLastSnapshot returns the last snapshot
