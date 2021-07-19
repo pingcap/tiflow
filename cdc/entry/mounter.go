@@ -61,62 +61,6 @@ type rowKVEntry struct {
 	PreRowExist bool
 }
 
-type indexKVEntry struct {
-	baseKVEntry
-	IndexID    int64
-	IndexValue []types.Datum
-}
-
-func (idx *indexKVEntry) unflatten(tableInfo *model.TableInfo, tz *time.Location) error {
-	if tableInfo.ID != idx.PhysicalTableID {
-		isPartition := false
-		if pi := tableInfo.GetPartitionInfo(); pi != nil {
-			for _, p := range pi.Definitions {
-				if p.ID == idx.PhysicalTableID {
-					isPartition = true
-					break
-				}
-			}
-		}
-		if !isPartition {
-			return cerror.ErrWrongTableInfo.GenWithStackByArgs(tableInfo.ID, idx.PhysicalTableID)
-		}
-	}
-	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
-	if !exist {
-		return cerror.ErrIndexKeyTableNotFound.GenWithStackByArgs(idx.IndexID)
-	}
-	if !isDistinct(index, idx.IndexValue) {
-		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
-		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
-	}
-	for i, v := range idx.IndexValue {
-		colOffset := index.Columns[i].Offset
-		fieldType := &tableInfo.Columns[colOffset].FieldType
-		datum, err := unflatten(v, fieldType, tz)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		idx.IndexValue[i] = datum
-	}
-	return nil
-}
-
-func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
-	if index.Primary {
-		return true
-	}
-	if index.Unique {
-		for _, value := range indexValue {
-			if value.IsNull() {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
