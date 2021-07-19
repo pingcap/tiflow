@@ -275,6 +275,10 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 					zap.Uint64("stoppedTs", msg.Command.StoppedTs), zap.Uint64("checkpointTs", n.checkpointTs))
 			}
 			n.targetTs = msg.Command.StoppedTs
+			n.barrierTs = msg.Command.StoppedTs
+			if err := n.flushSink(ctx, msg.Command.StoppedTs); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs

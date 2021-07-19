@@ -368,7 +368,7 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if opt.BoundaryTs < globalCheckpointTs {
 					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
 				}
-				if !table.AsyncStop(opt.BoundaryTs) {
+				if !table.AsyncStop(p.changefeed.Status.ResolvedTs) {
 					// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 					// and we do not want to alarm the user.
 					log.Debug("AsyncStop has failed, possible due to a full pipeline",
@@ -384,6 +384,9 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
+				//if table.CheckpointTs() != p.changefeed.Status.ResolvedTs {
+				//	continue
+				//}
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.BoundaryTs = table.CheckpointTs()
 					operation.Status = model.OperFinished

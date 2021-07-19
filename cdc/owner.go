@@ -211,7 +211,7 @@ func (o *Owner) addCapture(_ context.Context, info *model.CaptureInfo) {
 //
 // When capture-1 crashes between step-2 and step-3, this function should be
 // called to let owner re dispatch the table. Besides owner could also crash at
-// the same time, in that case this function should also be called. In addtition,
+// the same time, in that case this function should also be called. In addition,
 // this function only handles move table job: 1) the add table job persists both
 // table replicaInfo and operation, we can recover enough information from table
 // replicaInfo; 2) if a table is deleted from a capture and that capture crashes,

@@ -161,9 +161,8 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		}
 
 		if !config.NewReplicaImpl && s.cyclic != nil {
-			// Filter rows if it is origined from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+			// Filter rows if it is originated from downstream.
+			skippedRowCount := cyclic.FilterAndReduceTxns(resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
@@ -634,8 +633,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		worker := newMySQLSinkWorker(
-			s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
+		worker := newMySQLSinkWorker(s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
 		s.workers[i] = worker
 		go func() {
 			err := worker.run(ctx)
