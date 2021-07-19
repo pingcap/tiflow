@@ -50,6 +50,9 @@ const (
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	schemaStorageGCLag = time.Minute * 20
+
+	backoffBaseDelayInMs = 5
+	maxTries             = 3
 )
 
 type processor struct {
@@ -689,17 +692,17 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		return nil
 	})
 	var tableName *model.TableName
-	retry.Run(time.Millisecond*5, 3, func() error { //nolint:errcheck
+	retry.Do(ctx, func() error { //nolint:errcheck
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
 			tableName = &name
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
 		// Retry to find mark table ID
 		var markTableID model.TableID
-		err := retry.Run(50*time.Millisecond, 20, func() error {
+		err := retry.Do(context.Background(), func() error {
 			if tableName == nil {
 				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
 				if !exist {
@@ -707,14 +710,14 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 				}
 				tableName = &name
 			}
-			markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchameName, markTableTableName)
+			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchemaName, markTableTableName)
 			if !exist {
 				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
 			}
 			markTableID = tableInfo.ID
 			return nil
-		})
+		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
