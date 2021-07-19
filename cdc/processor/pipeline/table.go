@@ -192,16 +192,9 @@ func NewTablePipeline(ctx cdcContext.Context,
 	}
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
-<<<<<<< HEAD
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
-	config := ctx.ChangefeedVars().Info.Config
-	if config.Cyclic != nil && config.Cyclic.IsEnabled() {
-=======
-	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
-	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {
->>>>>>> 2fc6415c (processor, pipeline: reduce channel buffer (#2281))
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
 	tablePipeline.sinkNode = newSinkNode(sink, replicaInfo.StartTs, targetTs, flowController)
