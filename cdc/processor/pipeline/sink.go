@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"go.uber.org/zap"
 )
 
 const (
@@ -269,11 +268,11 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		}
 	case pipeline.MessageTypeCommand:
 		if msg.Command.Tp == pipeline.CommandTypeStopAtTs {
-			if msg.Command.StoppedTs < n.checkpointTs {
-				log.Warn("the stopped ts is less than the checkpoint ts, "+
-					"the table pipeline can't be stopped accurately, will be stopped soon",
-					zap.Uint64("stoppedTs", msg.Command.StoppedTs), zap.Uint64("checkpointTs", n.checkpointTs))
-			}
+			//if msg.Command.StoppedTs < n.checkpointTs {
+			//	log.Warn("the stopped ts is less than the checkpoint ts, "+
+			//		"the table pipeline can't be stopped accurately, will be stopped soon",
+			//		zap.Uint64("stoppedTs", msg.Command.StoppedTs), zap.Uint64("checkpointTs", n.checkpointTs))
+			//}
 			n.targetTs = msg.Command.StoppedTs
 			n.barrierTs = msg.Command.StoppedTs
 			if err := n.flushSink(ctx, msg.Command.StoppedTs); err != nil {

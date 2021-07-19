@@ -155,9 +155,9 @@ func (s *outputSuite) TestStatus(c *check.C) {
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusRunning)
 
-	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil)), check.IsNil)
-	c.Assert(node.Status(), check.Equals, TableStatusRunning)
+	err = node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil))
+	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
+	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil))
@@ -177,9 +177,9 @@ func (s *outputSuite) TestStatus(c *check.C) {
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)), check.IsNil)
 	c.Assert(node.Status(), check.Equals, TableStatusRunning)
 
-	c.Assert(node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil)), check.IsNil)
-	c.Assert(node.Status(), check.Equals, TableStatusRunning)
+	err = node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil))
+	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
+	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil))
