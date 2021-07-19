@@ -25,7 +25,7 @@ import (
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/tikv/client-go/v2/oracle"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 func TestSuite(t *testing.T) {
