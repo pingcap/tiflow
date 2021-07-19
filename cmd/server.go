@@ -187,18 +187,22 @@ func loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error)
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = serverConfig.Security.CertAllowedCN
 		case "sort-dir":
-			// user specified sorter dir should not take effect
-			if serverConfig.Sorter.SortDir != config.DefaultSortDir {
-				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
-					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
-			}
-			conf.Sorter.SortDir = config.DefaultSortDir
+			conf.Sorter.SortDir = serverConfig.Sorter.SortDir
 		case "pd", "config":
 			// do nothing
 		default:
 			log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
 		}
 	})
+
+	// user specified sorter dir should not take effect, it's always `/tmp/sorter`
+	if conf.Sorter.SortDir != config.DefaultSortDir {
+		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
+			"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
+
+		conf.Sorter.SortDir = config.DefaultSortDir
+	}
+
 	if err := conf.ValidateAndAdjust(); err != nil {
 		return nil, errors.Trace(err)
 	}
