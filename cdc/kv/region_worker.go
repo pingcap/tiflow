@@ -245,6 +245,9 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 }
 
 func (w *regionWorker) resolveLock(ctx context.Context) error {
+	// tikv resolved update interval is 1s, use half of the resolck lock interval
+	// as lock penalty.
+	resolveLockPenalty := 10
 	resolveLockInterval := 20 * time.Second
 	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
@@ -299,6 +302,17 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						log.Warn("kv client reconnect triggered",
 							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("since last event", sinceLastResolvedTs))
 						return errReconnect
+					}
+					// Only resolve lock if the resovled-ts keeps unchanged for
+					// more than resolveLockPenalty times.
+					if rts.ts.penalty < resolveLockPenalty {
+						if lastResolvedTs > rts.ts.resolvedTs {
+							rts.ts.resolvedTs = lastResolvedTs
+							rts.ts.eventTime = time.Now()
+							rts.ts.penalty = 0
+						}
+						w.rtsManager.Upsert(rts)
+						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 						zap.Uint64("regionID", rts.regionID),
@@ -582,13 +596,6 @@ func (w *regionWorker) handleEventEntry(
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
-			select {
-			case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(state.sri.ts)}:
-			default:
-				// rtsUpdateCh block often means too many regions are suffering
-				// lock resolve, the kv client status is not very healthy.
-				log.Warn("region is not upsert into rts manager", zap.Uint64("region-id", regionID))
-			}
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
