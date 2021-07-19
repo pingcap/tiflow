@@ -163,6 +163,10 @@ check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
 
+check-merge-conflicts:
+	@echo "check-merge-conflicts"
+	@./scripts/check-merge-conflicts.sh
+
 check-leaktest-added: tools/bin/gofumports
 	@echo "check leak test added in all unit tests"
 	./scripts/add-leaktest.sh $(TEST_FILES)
@@ -175,7 +179,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added
+check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added check-merge-conflicts
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
