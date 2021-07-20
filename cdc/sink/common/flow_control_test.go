@@ -182,7 +182,7 @@ func (s *flowControlSuite) TestFlowControlBasic(c *check.C) {
 
 	errg.Go(func() error {
 		lastCommitTs := uint64(1)
-		for i := 0; i < 100000; i++ {
+		for i := 0; i < 10000; i++ {
 			if rand.Int()%15 == 0 {
 				lastCommitTs += 10
 			}
@@ -322,7 +322,7 @@ func (s *flowControlSuite) TestFlowControlCallBack(c *check.C) {
 
 	errg.Go(func() error {
 		lastCommitTs := uint64(1)
-		for i := 0; i < 100000; i++ {
+		for i := 0; i < 10000; i++ {
 			if rand.Int()%15 == 0 {
 				lastCommitTs += 10
 			}
