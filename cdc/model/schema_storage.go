@@ -17,14 +17,12 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
-
-	"go.uber.org/zap"
-
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"go.uber.org/zap"
 )
 
 const (
@@ -137,9 +135,39 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		}
 	}
 
+	ti.findHandleIndex()
 	ti.initColumnsFlag()
 	log.Debug("warpped table info", zap.Reflect("tableInfo", ti))
 	return ti
+}
+
+func (ti *TableInfo) findHandleIndex() {
+	if ti.HandleIndexID == HandleIndexPKIsHandle {
+		// pk is handle
+		return
+	}
+	handleIndexOffset := -1
+	for i, idx := range ti.Indices {
+		if !ti.IsIndexUnique(idx) {
+			continue
+		}
+		if idx.Primary {
+			handleIndexOffset = i
+			break
+		}
+		if handleIndexOffset < 0 {
+			handleIndexOffset = i
+		} else {
+			if len(ti.Indices[handleIndexOffset].Columns) > len(ti.Indices[i].Columns) ||
+				(len(ti.Indices[handleIndexOffset].Columns) == len(ti.Indices[i].Columns) &&
+					ti.Indices[handleIndexOffset].ID > ti.Indices[i].ID) {
+				handleIndexOffset = i
+			}
+		}
+	}
+	if handleIndexOffset >= 0 {
+		ti.HandleIndexID = ti.Indices[handleIndexOffset].ID
+	}
 }
 
 func (ti *TableInfo) initColumnsFlag() {
