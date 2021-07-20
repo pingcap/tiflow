@@ -325,7 +325,9 @@ func prepareImpl(
 
 				batchInsertSQL := batchInsertSQLF(size, startIndex)
 				start := time.Now()
-				err := retry.Run(100*time.Millisecond, 5, func() error { return insertF(batchInsertSQL) })
+				err := retry.Do(context.Background(), func() error {
+					return insertF(batchInsertSQL)
+				}, retry.WithBackoffBaseDelay(100), retry.WithBackoffMaxDelay(60*100), retry.WithMaxTries(5))
 				if err != nil {
 					log.Panic("exec batch insert failed", zap.String("query", batchInsertSQL), zap.Error(err))
 				}
@@ -376,7 +378,8 @@ func mustExec(ctx context.Context, db *sql.DB, query string) {
 		_, err := db.ExecContext(ctx, query)
 		return err
 	}
-	err := retry.Run(100*time.Millisecond, 5, execF)
+
+	err := retry.Do(context.Background(), execF, retry.WithBackoffBaseDelay(100), retry.WithBackoffMaxDelay(60*100), retry.WithMaxTries(5))
 	if err != nil {
 		log.Panic("exec failed", zap.String("query", query), zap.Error(err))
 	}
