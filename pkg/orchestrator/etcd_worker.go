@@ -70,7 +70,7 @@ const etcdRequestProgressDuration = 2 * time.Second
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
-// And the specified etcd session is nil-safty.
+// And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration) error {
 	defer worker.cleanUp()
 

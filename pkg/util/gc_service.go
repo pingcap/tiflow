@@ -17,8 +17,11 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/retry"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 const (
@@ -30,14 +33,24 @@ const (
 
 // CheckSafetyOfStartTs checks if the startTs less than the minimum of Service-GC-Ts
 // and this function will update the service GC to startTs
-func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, changefeedID string, startTs uint64) error {
-	minServiceGCTs, err := pdCli.UpdateServiceGCSafePoint(ctx, cdcChangefeedCreatingServiceGCSafePointID+changefeedID,
-		cdcChangefeedCreatingServiceGCSafePointTTL, startTs)
-	if err != nil {
+func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, changefeedID string, startTs uint64) (err error) {
+	var minServiceGCTs uint64
+	// pd leader switch may happen, so just retry it.
+	if err := retry.Do(ctx, func() error {
+		minServiceGCTs, err = pdCli.UpdateServiceGCSafePoint(ctx, cdcChangefeedCreatingServiceGCSafePointID+changefeedID,
+			cdcChangefeedCreatingServiceGCSafePointTTL, startTs)
+		if err != nil {
+			log.Warn("update GC safepoint failed, retry later", zap.Error(err))
+		}
+		return err
+	},
+		retry.WithBackoffBaseDelay(1000),
+		retry.WithMaxTries(5),
+		retry.WithIsRetryableErr(cerror.IsRetryableError)); err != nil {
 		return errors.Trace(err)
 	}
 	if startTs < minServiceGCTs {
-		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
+		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
 	return nil
 }
