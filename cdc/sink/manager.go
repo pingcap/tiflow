@@ -58,6 +58,8 @@ func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpo
 
 // CreateTableSink creates a table sink
 func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) Sink {
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	if _, exist := m.tableSinks[tableID]; exist {
 		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
 	}
@@ -67,8 +69,6 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 		buffer:    make([]*model.RowChangedEvent, 0, 128),
 		emittedTs: checkpointTs,
 	}
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
 	m.tableSinks[tableID] = sink
 	return sink
 }
