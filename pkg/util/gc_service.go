@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -46,11 +46,11 @@ func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, changefeedID str
 	},
 		retry.WithBackoffBaseDelay(1000),
 		retry.WithMaxTries(5),
-		retry.WithIsRetryableErr(cerror.IsRetryableError)); err != nil {
+		retry.WithIsRetryableErr(cerrors.IsRetryableError)); err != nil {
 		return errors.Trace(err)
 	}
 	if startTs < minServiceGCTs {
-		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
+		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
 	return nil
 }
