@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
@@ -87,6 +88,20 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection")
+}
+
+// Validate makes sure provided values for ClientFlags are valid.
+func (c *ClientFlags) Validate() error {
+	tlsConfig, err := c.ToTLSConfig()
+	if err != nil {
+		return errors.Annotate(err, "fail to validate TLS settings")
+	}
+
+	if err := util.VerifyPdEndpoint(c.cliPdAddr, tlsConfig != nil); err != nil {
+		return errors.Annotate(err, "fail to validate PD endpoint")
+	}
+
+	return nil
 }
 
 // GetCredential returns credential.
