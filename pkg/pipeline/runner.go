@@ -33,12 +33,12 @@ type nodeRunner struct {
 	outputCh chan *Message
 }
 
-func newNodeRunner(name string, node Node, previous runner) *nodeRunner {
+func newNodeRunner(name string, node Node, previous runner, outputChanSize int) *nodeRunner {
 	return &nodeRunner{
 		name:     name,
 		node:     node,
 		previous: previous,
-		outputCh: make(chan *Message, defaultOutputChannelSize),
+		outputCh: make(chan *Message, outputChanSize),
 	}
 }
 
