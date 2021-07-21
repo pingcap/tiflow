@@ -147,13 +147,7 @@ var (
 	ErrSnapshotTableExists     = errors.Normalize("table %s.%s already exists", errors.RFCCodeText("CDC:ErrSnapshotTableExists"))
 
 	// puller related errors
-	ErrBufferReachLimit      = errors.Normalize("puller mem buffer reach size limit", errors.RFCCodeText("CDC:ErrBufferReachLimit"))
-	ErrFileSorterOpenFile    = errors.Normalize("open file failed", errors.RFCCodeText("CDC:ErrFileSorterOpenFile"))
-	ErrFileSorterReadFile    = errors.Normalize("read file failed", errors.RFCCodeText("CDC:ErrFileSorterReadFile"))
-	ErrFileSorterWriteFile   = errors.Normalize("write file failed", errors.RFCCodeText("CDC:ErrFileSorterWriteFile"))
-	ErrFileSorterEncode      = errors.Normalize("encode failed", errors.RFCCodeText("CDC:ErrFileSorterEncode"))
-	ErrFileSorterDecode      = errors.Normalize("decode failed", errors.RFCCodeText("CDC:ErrFileSorterDecode"))
-	ErrFileSorterInvalidData = errors.Normalize("invalid data", errors.RFCCodeText("CDC:ErrFileSorterInvalidData"))
+	ErrBufferReachLimit = errors.Normalize("puller mem buffer reach size limit", errors.RFCCodeText("CDC:ErrBufferReachLimit"))
 
 	// server related errors
 	ErrCaptureSuicide               = errors.Normalize("capture suicide", errors.RFCCodeText("CDC:ErrCaptureSuicide"))
