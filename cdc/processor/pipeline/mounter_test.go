@@ -95,7 +95,8 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
 		return nil
 	})
-	p := pipeline.NewPipeline(ctx, 0)
+	runnersSize, outputChannelSize := 2, 64
+	p := pipeline.NewPipeline(ctx, 0, runnersSize, outputChannelSize)
 	mounterNode := newMounterNode()
 	p.AppendNode(ctx, "mounter", mounterNode)
 
