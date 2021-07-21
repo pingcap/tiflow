@@ -14,10 +14,9 @@
 package httputil
 
 import (
-	"net/http"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/security"
+	"net/http"
 )
 
 // Client wraps an HTTP client and support TLS requests.
@@ -61,4 +60,14 @@ func IsFiltered(whiteList string, feedState model.FeedState) bool {
 		}
 	}
 	return whiteList == string(feedState)
+}
+
+// IsContainNonASCII return true if a string contain non-ascii char
+func IsContainNonASCII(s string) bool {
+	for _, r := range s {
+		if r < 0 || r > 127 {
+			return true
+		}
+	}
+	return false
 }
