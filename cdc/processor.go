@@ -65,7 +65,7 @@ const (
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
 	flushMemoryMetricsDuration    = time.Second * 5
 	flowControlOutChSize          = 128
-	maxTries = 3
+	maxTries                      = 3
 )
 
 type oldProcessor struct {
