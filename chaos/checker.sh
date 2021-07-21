@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# check the job status each 1m for 30 times
+# check the job status each 1m for 40 times
 completed=false
-for i in {1..30}; do
+for i in {1..40}; do
     kubectl wait --for=condition=complete job/bank-workload -n playground --timeout=1m
     if [ $? -eq 0 ]; then
         completed=true
