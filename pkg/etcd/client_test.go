@@ -47,6 +47,10 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 
 func (s *clientSuite) TestRetry(c *check.C) {
 	defer testleak.AfterTest(c)()
+	originValue := maxTries
+	// to speedup the test
+	maxTries = 2
+
 	cli := clientv3.NewCtxClient(context.TODO())
 	cli.KV = &mockClient{}
 	retrycli := Wrap(cli, nil)
@@ -54,10 +58,10 @@ func (s *clientSuite) TestRetry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(get, check.NotNil)
 
-	// TODO: speed test, it take about 6.59s
 	_, err = retrycli.Put(context.TODO(), "", "")
 	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, "mock error")
+	c.Assert(errors.Cause(err), check.ErrorMatches, "mock error", check.Commentf("err:%v", err.Error()))
+	maxTries = originValue
 }
 
 func (s *etcdSuite) TestDelegateLease(c *check.C) {
