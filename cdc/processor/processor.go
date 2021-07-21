@@ -288,7 +288,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
@@ -751,7 +751,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			zap.Any("replicaInfo", replicaInfo))
 	}()
 
-	log.Debug("Add table pipeline", zap.Int64("tableID", tableID),
+	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx),
 		zap.String("name", table.Name()),
 		zap.Any("replicaInfo", replicaInfo),
@@ -777,6 +777,8 @@ func (p *processor) doGCSchemaStorage() error {
 func (p *processor) Close() error {
 	for _, tbl := range p.tables {
 		tbl.Cancel()
+	}
+	for _, tbl := range p.tables {
 		tbl.Wait()
 	}
 	p.cancel()

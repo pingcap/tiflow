@@ -279,7 +279,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		log.Warn("The TiCDC cluster is built from 4.0-release branch, the old-value and unified-sorter are disabled by default.")
 	}
 	if len(configFile) > 0 {
-		if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+		if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -336,10 +336,13 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		}
 	}
 	switch sortEngine {
-	case model.SortUnified, model.SortInMemory, model.SortInFile:
+	case model.SortUnified, model.SortInMemory:
+	case model.SortInFile:
+		// obsolete. But we keep silent here. We create a Unified Sorter when the owner/processor sees this option
+		// for backward-compatibility.
 	default:
 		return nil, errors.Errorf("Creating changefeed with an invalid sort engine(%s), "+
-			"`%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
+			"`%s` and `%s` are the only valid options.", sortEngine, model.SortUnified, model.SortInMemory)
 	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
@@ -364,9 +367,9 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 	}
 
 	if info.Engine == model.SortInFile {
-		cmd.Printf("[WARN] file sorter is deprecated. " +
-			"make sure that you DO NOT use it in production. " +
-			"Adjust \"sort-engine\" to make use of the right sorter.\n")
+		cmd.Printf("[WARN] file sorter is obsolete. Unified Sorter is recommended. " +
+			"Adjust \"sort-engine\" to make use of the right sorter.\n" +
+			"A newer cluster will use Unified Sorter.\n")
 	}
 
 	tz, err := util.GetTimezone(timezone)
@@ -519,7 +522,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SinkURI = sinkURI
 				case "config":
 					cfg := info.Config
-					if err = strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+					if err = verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 						log.Error("decode config file error", zap.Error(err))
 					}
 				case "opts":
@@ -692,7 +695,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 
 				cfg := config.GetDefaultReplicaConfig()
 				if len(configFile) > 0 {
-					if err := strictDecodeFile(configFile, "TiCDC changefeed", cfg); err != nil {
+					if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 						return err
 					}
 				}

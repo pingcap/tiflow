@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -148,7 +147,7 @@ const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	GCSafepointUpdateInterval = 2 * time.Second
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
 	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )
@@ -330,18 +329,6 @@ func (o *Owner) newChangeFeed(
 	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	// TODO delete
-	if info.Engine == model.SortInFile {
-		err = os.MkdirAll(info.SortDir, 0o755)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
-		err = util.IsDirAndWritable(info.SortDir)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
 	}
 
 	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)

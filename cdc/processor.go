@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -811,16 +810,17 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
-		enableOldValue := p.changefeed.Config.EnableOldValue
-		span := regionspan.GetTableSpan(tableID, enableOldValue)
+		span := regionspan.GetTableSpan(tableID)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
 			p.sendError(err)
 			return nil
 		}
+		// NOTICE: always pull the old value internally
+		// See also: TODO(hi-rustin): add issue link here.
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
 			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
-			enableOldValue)
+			true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -832,23 +832,11 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
-		case model.SortInFile:
-			err := util.IsDirAndWritable(p.changefeed.SortDir)
-			if err != nil {
-				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
-					if err != nil {
-						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
-						return nil
-					}
-				} else {
-					p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check"))
-					return nil
-				}
+		case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+			if p.changefeed.Engine == model.SortInFile {
+				log.Warn("File sorter is obsolete. Please revise your changefeed settings and use unified sorter",
+					util.ZapFieldChangefeed(ctx))
 			}
-
-			sorter = puller.NewFileSorter(p.changefeed.SortDir)
-		case model.SortUnified:
 			err := psorter.UnifiedSorterCheckDir(p.changefeed.SortDir)
 			if err != nil {
 				p.sendError(errors.Trace(err))
