@@ -235,6 +235,7 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 	o.lastTickTime = now
 
 	ownerMaintainTableNumGauge.Reset()
+	changefeedStatusGauge.Reset()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
@@ -243,6 +244,9 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 			}
 			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
 			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
+			if changefeedState.Info != nil {
+				changefeedStatusGauge.WithLabelValues(changefeedID).Set(float64(changefeedState.Info.State.ToInt()))
+			}
 		}
 	}
 }
