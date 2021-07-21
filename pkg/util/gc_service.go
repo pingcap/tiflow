@@ -44,8 +44,9 @@ func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, changefeedID str
 		}
 		return err
 	},
-		retry.WithBackoffBaseDelay(1000),
-		retry.WithMaxTries(5),
+		retry.WithBackoffBaseDelay(500),
+		retry.WithBackoffMaxDelay(60*1000),
+		retry.WithMaxTries(8),
 		retry.WithIsRetryableErr(cerrors.IsRetryableError)); err != nil {
 		return errors.Trace(err)
 	}
