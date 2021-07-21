@@ -14,9 +14,10 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 var rootCmd = &cobra.Command{

@@ -14,9 +14,10 @@
 package httputil
 
 import (
+	"net/http"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/security"
-	"net/http"
 )
 
 // Client wraps an HTTP client and support TLS requests.
