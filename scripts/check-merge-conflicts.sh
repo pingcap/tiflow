@@ -1,4 +1,4 @@
-result=$(find ./ -type f \( -iname \*.json -o -iname \*.sh \) | while read file_path; do
+result=$(git ls-tree --full-tree --name-only -r HEAD | while read file_path; do
     if [[ `grep -E "^<<<<<<< HEAD$" "${file_path}"` ]]; then
         echo "${file_path}"
     fi
