@@ -474,7 +474,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
-	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(3), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(60*1000), retry.WithMaxTries(8), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	return
 }
 
