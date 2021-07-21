@@ -116,7 +116,6 @@ jobs:
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
-#          sleep 100
           wait-for-it upstream-tidb.playground.svc:4000
           wait-for-it downstream-tidb.playground.svc:4000
 
