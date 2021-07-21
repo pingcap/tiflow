@@ -142,7 +142,71 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 }
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
-	n.eventBuffer = append(n.eventBuffer, event)
+	if event == nil || event.Row == nil {
+		return nil
+	}
+
+	colLen := len(event.Row.Columns)
+	preColLen := len(event.Row.PreColumns)
+	config := ctx.ChangefeedVars().Info.Config
+
+	// This indicates that it is an update event,
+	// and after enable old value internally by default(but disable in the configuration).
+	// We need to handle the update event to be compatible with the old format.
+	if !config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+		handleKeyCount := 0
+		equivalentHandleKeyCount := 0
+		for i := range event.Row.Columns {
+			if event.Row.Columns[i].Flag.IsHandleKey() && event.Row.PreColumns[i].Flag.IsHandleKey() {
+				handleKeyCount++
+				colValueString := model.ColumnValueString(event.Row.Columns[i].Value)
+				preColValueString := model.ColumnValueString(event.Row.PreColumns[i].Value)
+				if colValueString == preColValueString {
+					equivalentHandleKeyCount++
+				}
+			}
+		}
+
+		// If the handle key columns are not updated, PreColumns is directly ignored.
+		if handleKeyCount == equivalentHandleKeyCount {
+			event.Row.PreColumns = nil
+			n.eventBuffer = append(n.eventBuffer, event)
+		} else {
+			// If there is an update to handle key columns,
+			// we need to split the event into two events to be compatible with the old format.
+			// NOTICE: Here we don't need a full deep copy because our two events need Columns and PreColumns respectively,
+			// so it won't have an impact and no more full deep copy wastes memory.
+			deleteEvent := *event
+			deleteEventRow := *event.Row
+			deleteEventRowKV := *event.RawKV
+			deleteEvent.Row = &deleteEventRow
+			deleteEvent.RawKV = &deleteEventRowKV
+
+			deleteEvent.Row.Columns = nil
+			for i := range deleteEvent.Row.PreColumns {
+				// NOTICE: Only the handle key pre column is retained in the delete event.
+				if !deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+					deleteEvent.Row.PreColumns[i] = nil
+				}
+			}
+			// Align with the old format if old value disabled.
+			deleteEvent.Row.TableInfoVersion = 0
+			n.eventBuffer = append(n.eventBuffer, &deleteEvent)
+
+			insertEvent := *event
+			insertEventRow := *event.Row
+			insertEventRowKV := *event.RawKV
+			insertEvent.Row = &insertEventRow
+			insertEvent.RawKV = &insertEventRowKV
+
+			// NOTICE: clean up pre cols for insert event.
+			insertEvent.Row.PreColumns = nil
+			n.eventBuffer = append(n.eventBuffer, &insertEvent)
+		}
+	} else {
+		n.eventBuffer = append(n.eventBuffer, event)
+	}
+
 	if len(n.eventBuffer) >= defaultSyncResolvedBatch {
 		if err := n.flushRow2Sink(ctx); err != nil {
 			return errors.Trace(err)
