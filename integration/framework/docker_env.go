@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os/exec"
+	"time"
 
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
