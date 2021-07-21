@@ -61,14 +61,11 @@ const (
 
 	schemaStorageGCLag = time.Minute * 20
 
-<<<<<<< HEAD
 	// for better sink performance under flow control
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
 	flushMemoryMetricsDuration    = time.Second * 5
 	flowControlOutChSize          = 128
-=======
 	maxTries = 3
->>>>>>> 283fa588 (sink: fix issue, Fail-fast for unrecoverable DML errors (#1928))
 )
 
 type oldProcessor struct {
