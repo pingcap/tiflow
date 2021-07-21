@@ -3003,7 +3003,6 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	// Since there exists incremental scan limit in kv client, we must wait for
 	// the ready region and send initialized event.
 	sent := make(map[uint64]bool, regionNum)
-	err = retry.Run(time.Millisecond*200, 20, func() error {
 	err = retry.Do(context.Background(), func() error {
 		count := 0
 		// send initialized event and a resolved ts event to each region
