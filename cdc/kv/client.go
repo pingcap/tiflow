@@ -474,7 +474,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
-	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(8), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(3), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	return
 }
 
@@ -524,7 +524,7 @@ type eventFeedSession struct {
 
 	// The channel to send the processed events.
 	eventCh chan<- *model.RegionFeedEvent
-	// The token based region router, it controls the uninitialzied regions with
+	// The token based region router, it controls the uninitialized regions with
 	// a given size limit.
 	regionRouter LimitRegionRouter
 	// The channel to put the region that will be sent requests.
@@ -622,8 +622,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				// possible, we create a new goroutine to handle it.
 				// The sequence of region range we process is not matter, the
 				// region lock keeps the region access sequence.
-				// Besides the count or frequency of range request is limitted,
-				// we use ephemeral goroutine instead of permanent gourotine.
+				// Besides the count or frequency of range request is limited,
+				// we use ephemeral goroutine instead of permanent goroutine.
 				g.Go(func() error {
 					return s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
 				})
@@ -749,7 +749,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 }
 
 // requestRegionToStore gets singleRegionInfo from regionRouter, which is a token
-// based limitter, sends request to TiKV.
+// based limiter, sends request to TiKV.
 // If the send request to TiKV returns error, fail the region with sendRequestToStoreErr
 // and kv client will redispatch the region.
 // If initialize gPRC stream with an error, fail the region with connectToStoreErr
@@ -1282,7 +1282,7 @@ func (s *eventFeedSession) receiveFromStream(
 			// Use the same delay mechanism as `stream.Send` error handling, since
 			// these two errors often mean upstream store suffers an accident, which
 			// needs time to recover, kv client doesn't need to retry frequently.
-			// TODO: add a better retry backoff or rate limitter
+			// TODO: add a better retry backoff or rate limiter
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
 
 			// TODO: better to closes the send direction of the stream to notify
