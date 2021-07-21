@@ -116,11 +116,7 @@ jobs:
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/upstream.yaml -n playground
           kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/downstream.yaml -n playground
 
-          sudo apt-get update -y
-          sudo apt-get install -y wait-for-it
-
-          wait-for-it upstream-tidb.playground.svc:4000  --timeout=100
-          wait-for-it downstream-tidb.playground.svc:4000 --timeout=100
+          sleep 100
 
           kubectl wait --for=condition=Ready pod -l app.kubernetes.io/managed-by=tidb-operator -n playground --timeout=300s || true
 
