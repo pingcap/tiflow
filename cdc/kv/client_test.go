@@ -3000,14 +3000,11 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	}
 
 	// wait for all regions requested from cdc kv client
-<<<<<<< HEAD
 	// Since there exists incremental scan limit in kv client, we must wait for
 	// the ready region and send initialized event.
 	sent := make(map[uint64]bool, regionNum)
 	err = retry.Run(time.Millisecond*200, 20, func() error {
-=======
 	err = retry.Do(context.Background(), func() error {
->>>>>>> 283fa588 (sink: fix issue, Fail-fast for unrecoverable DML errors (#1928))
 		count := 0
 		// send initialized event and a resolved ts event to each region
 		requestIDs.Range(func(key, value interface{}) bool {
