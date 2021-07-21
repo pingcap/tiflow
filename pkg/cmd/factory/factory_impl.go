@@ -86,6 +86,8 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 		TLS:         tlsConfig,
 		LogConfig:   &logConfig,
 		DialTimeout: 30 * time.Second,
+		// TODO(hi-rustin): add gRPC metrics to Options.
+		// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673018537.
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -122,6 +124,8 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
+		// TODO(hi-rustin): add gRPC metrics to Options.
+		// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673032407.
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
