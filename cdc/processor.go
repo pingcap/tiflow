@@ -815,12 +815,11 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
-		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID)
 		kvStorage := util.KVStorageFromCtx(ctx)
 		// NOTICE: always pull the old value internally
 		// See also: TODO(hi-rustin): add issue link here.
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
+		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {

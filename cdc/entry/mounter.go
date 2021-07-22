@@ -330,14 +330,6 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 }
 
 func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
-	// if m.enableOldValue == true, go into this function
-	// if m.enableNewValue == false and row.Delete == false, go into this function
-	// if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
-	// only if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle == false, skip this function
-	if !m.enableOldValue && row.Delete && !tableInfo.PKIsHandle {
-		return nil, nil
-	}
-
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column
