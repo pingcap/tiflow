@@ -27,7 +27,6 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	etcdlogutil "go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -60,6 +59,10 @@ func (f *factoryImpl) GetPdAddr() string {
 	return f.clientGetter.GetPdAddr()
 }
 
+func (f *factoryImpl) GetLogLevel() string {
+	return f.clientGetter.GetLogLevel()
+}
+
 func (f *factoryImpl) GetCredential() *security.Credential {
 	return f.clientGetter.GetCredential()
 }
@@ -77,7 +80,13 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	}
 
 	logConfig := etcdlogutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	logLevel := zap.NewAtomicLevel()
+	err = logLevel.UnmarshalText([]byte(f.GetLogLevel()))
+	if err != nil {
+		return nil, err
+	}
+	logConfig.Level = logLevel
+
 	pdEndpoints := strings.Split(f.GetPdAddr(), ",")
 
 	etcdClient, err := clientv3.New(clientv3.Config{
