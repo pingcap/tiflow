@@ -1,12 +1,6 @@
 name: chaos
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
 
   schedule:
     - cron: '40 16-23 * * *' # run at minute 0 and 40 every hour from 00:00 ~ 07:00 UTC+8
