@@ -50,8 +50,6 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 		"ticdc-creating-changefeed2": 65,
 	})
 
-	// simulate pd client leader switch
-	// only can retry one time, and then success
 	s.pdCli.enableLeaderSwitch = true
 
 	s.pdCli.retryThresh = 1
@@ -59,14 +57,12 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	err = CheckSafetyOfStartTs(ctx, s.pdCli, "changefeed2", 65)
 	c.Assert(err, check.IsNil)
 
-	// try 8 time, then failed due to exceed retry limit
 	s.pdCli.retryThresh = 8
 	s.pdCli.retryCount = 0
 	err = CheckSafetyOfStartTs(ctx, s.pdCli, "changefeed2", 65)
 	c.Assert(err, check.Not(check.IsNil))
 	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 8")
 
-	// retry 3 time, failed due to bad start-ts
 	s.pdCli.retryThresh = 3
 	s.pdCli.retryCount = 0
 	err = CheckSafetyOfStartTs(ctx, s.pdCli, "changefeed1", 50)
@@ -85,6 +81,7 @@ func (m *mockPdClientForServiceGCSafePoint) UpdateServiceGCSafePoint(ctx context
 	defer func() { m.retryCount++ }()
 	minSafePoint := uint64(math.MaxUint64)
 	if m.enableLeaderSwitch && m.retryCount < m.retryThresh {
+		// simulate pd leader switch error
 		return minSafePoint, errors.New("not pd leader")
 	}
 
