@@ -1,6 +1,6 @@
 ### Makefile for ticdc
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
-	integration_test_build integration_test integration_test_mysql integration_test_kafka
+	integration_test_build integration_test integration_test_mysql integration_test_kafka bank
 
 PROJECT=ticdc
 
@@ -76,6 +76,9 @@ dev: check test
 test: unit_test
 
 build: cdc
+
+bank:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
 
 build-failpoint:
 	$(FAILPOINT_ENABLE)
