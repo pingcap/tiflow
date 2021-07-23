@@ -60,7 +60,7 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	s.pdCli.retryThresh = 8
 	s.pdCli.retryCount = 0
 	err = CheckSafetyOfStartTs(ctx, s.pdCli, "changefeed2", 65)
-	c.Assert(err, check.Not(check.IsNil))
+	c.Assert(err, check.NotNil)
 	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 8")
 
 	s.pdCli.retryThresh = 3
