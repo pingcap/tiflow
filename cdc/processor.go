@@ -1094,7 +1094,55 @@ func (p *oldProcessor) sorterConsume(
 			if ev.Row == nil {
 				continue
 			}
-			rows = append(rows, ev.Row)
+			colLen := len(ev.Row.Columns)
+			preColLen := len(ev.Row.PreColumns)
+
+			// This indicates that it is an update event,
+			// and after enable old value internally by default(but disable in the configuration).
+			// We need to handle the update event to be compatible with the old format.
+			if !p.changefeed.Config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+				handleKeyCount := 0
+				equivalentHandleKeyCount := 0
+				for i := range ev.Row.Columns {
+					if ev.Row.Columns[i].Flag.IsHandleKey() && ev.Row.PreColumns[i].Flag.IsHandleKey() {
+						handleKeyCount++
+						colValueString := model.ColumnValueString(ev.Row.Columns[i].Value)
+						preColValueString := model.ColumnValueString(ev.Row.PreColumns[i].Value)
+						if colValueString == preColValueString {
+							equivalentHandleKeyCount++
+						}
+					}
+				}
+
+				// If the handle key columns are not updated, PreColumns is directly ignored.
+				if handleKeyCount == equivalentHandleKeyCount {
+					ev.Row.PreColumns = nil
+					rows = append(rows, ev.Row)
+				} else {
+					// If there is an update to handle key columns,
+					// we need to split the event into two events to be compatible with the old format.
+					deleteEventRow := *ev.Row
+
+					deleteEventRow.Columns = nil
+					for i := range deleteEventRow.PreColumns {
+						// NOTICE: Only the handle key pre column is retained in the delete event.
+						if !deleteEventRow.PreColumns[i].Flag.IsHandleKey() {
+							deleteEventRow.PreColumns[i] = nil
+						}
+					}
+					// Align with the old format if old value disabled.
+					deleteEventRow.TableInfoVersion = 0
+					rows = append(rows, &deleteEventRow)
+
+					insertEventRow := *ev.Row
+
+					// NOTICE: clean up pre cols for insert event.
+					insertEventRow.PreColumns = nil
+					rows = append(rows, &insertEventRow)
+				}
+			} else {
+				rows = append(rows, ev.Row)
+			}
 		}
 		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
 			log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
@@ -1110,8 +1158,8 @@ func (p *oldProcessor) sorterConsume(
 		return nil
 	}
 
-	processRowChangedEvent := func(row *model.PolymorphicEvent) error {
-		events = append(events, row)
+	processRowChangedEvent := func(event *model.PolymorphicEvent) error {
+		events = append(events, event)
 
 		if len(events) >= defaultSyncResolvedBatch {
 			err := flushRowChangedEvents()
