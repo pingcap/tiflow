@@ -26,7 +26,7 @@ func NewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "cdc",
 		Short: "CDC",
-		Long:  `Change Data capture`,
+		Long:  `Change Data Capture`,
 	}
 }
 
