@@ -18,11 +18,13 @@ import (
 	"strings"
 	"time"
 
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	etcdlogutil "go.etcd.io/etcd/pkg/logutil"
@@ -30,6 +32,19 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
+
+var (
+	// FIXME?: I'm not sure if this is a good way to register metrics?
+	// Maybe we should put it inside the factoryImpl structure instead of using a global variable,
+	// but that's how our other metrics are registered. So let's keep it consistent for now.
+	grpcMetrics = grpc_prometheus.NewClientMetrics()
+)
+
+// InitMetrics registers grpc client metrics.
+func InitMetrics(registry *prometheus.Registry) {
+	// Register client metrics to registry.
+	registry.MustRegister(grpcMetrics)
+}
 
 type factoryImpl struct {
 	clientGetter ClientGetter
@@ -47,26 +62,32 @@ func NewFactory(clientGetter ClientGetter) Factory {
 	return f
 }
 
+// ToTLSConfig returns the configuration of tls.
 func (f *factoryImpl) ToTLSConfig() (*tls.Config, error) {
 	return f.clientGetter.ToTLSConfig()
 }
 
+// ToGRPCDialOption returns the option of GRPC dial.
 func (f *factoryImpl) ToGRPCDialOption() (grpc.DialOption, error) {
 	return f.clientGetter.ToGRPCDialOption()
 }
 
+// GetPdAddr returns pd address.
 func (f *factoryImpl) GetPdAddr() string {
 	return f.clientGetter.GetPdAddr()
 }
 
+// GetLogLevel returns log level.
 func (f *factoryImpl) GetLogLevel() string {
 	return f.clientGetter.GetLogLevel()
 }
 
+// GetCredential returns security credentials.
 func (f *factoryImpl) GetCredential() *security.Credential {
 	return f.clientGetter.GetCredential()
 }
 
+// EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 
@@ -95,10 +116,10 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 		TLS:         tlsConfig,
 		LogConfig:   &logConfig,
 		DialTimeout: 30 * time.Second,
-		// TODO(hi-rustin): add gRPC metrics to Options.
-		// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673018537.
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
+			grpc.WithUnaryInterceptor(grpcMetrics.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(grpcMetrics.StreamClientInterceptor()),
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
@@ -119,6 +140,7 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	return &client, nil
 }
 
+// PdClient creates new pd client.
 func (f factoryImpl) PdClient() (pd.Client, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 
@@ -133,10 +155,10 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
-		// TODO(hi-rustin): add gRPC metrics to Options.
-		// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673032407.
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
+			grpc.WithUnaryInterceptor(grpcMetrics.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(grpcMetrics.StreamClientInterceptor()),
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
