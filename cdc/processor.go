@@ -1101,44 +1101,16 @@ func (p *oldProcessor) sorterConsume(
 			// and after enable old value internally by default(but disable in the configuration).
 			// We need to handle the update event to be compatible with the old format.
 			if !p.changefeed.Config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
-				handleKeyCount := 0
-				equivalentHandleKeyCount := 0
-				for i := range ev.Row.Columns {
-					if ev.Row.Columns[i].Flag.IsHandleKey() && ev.Row.PreColumns[i].Flag.IsHandleKey() {
-						handleKeyCount++
-						colValueString := model.ColumnValueString(ev.Row.Columns[i].Value)
-						preColValueString := model.ColumnValueString(ev.Row.PreColumns[i].Value)
-						if colValueString == preColValueString {
-							equivalentHandleKeyCount++
-						}
+				if shouldSplitUpdateEventRow(ev.Row) {
+					splitRows, err := splitUpdateEventRow(ev.Row)
+					if err != nil {
+						return errors.Trace(err)
 					}
-				}
-
-				// If the handle key columns are not updated, PreColumns is directly ignored.
-				if handleKeyCount == equivalentHandleKeyCount {
+					rows = append(rows, splitRows...)
+				} else {
+					// If the handle key columns are not updated, PreColumns is directly ignored.
 					ev.Row.PreColumns = nil
 					rows = append(rows, ev.Row)
-				} else {
-					// If there is an update to handle key columns,
-					// we need to split the event into two events to be compatible with the old format.
-					deleteEventRow := *ev.Row
-
-					deleteEventRow.Columns = nil
-					for i := range deleteEventRow.PreColumns {
-						// NOTICE: Only the handle key pre column is retained in the delete event.
-						if !deleteEventRow.PreColumns[i].Flag.IsHandleKey() {
-							deleteEventRow.PreColumns[i] = nil
-						}
-					}
-					// Align with the old format if old value disabled.
-					deleteEventRow.TableInfoVersion = 0
-					rows = append(rows, &deleteEventRow)
-
-					insertEventRow := *ev.Row
-
-					// NOTICE: clean up pre cols for insert event.
-					insertEventRow.PreColumns = nil
-					rows = append(rows, &insertEventRow)
 				}
 			} else {
 				rows = append(rows, ev.Row)
@@ -1312,6 +1284,65 @@ func (p *oldProcessor) sorterConsume(
 			}
 		}
 	}
+}
+
+// shouldSplitUpdateEventRow determines if the split event is needed to align the old format based on
+// whether the handle key column has been modified.
+// Because if the handle key column is modified,
+// we need to use splitUpdateEventRow to split the row update event into a row delete and a row insert event.
+func shouldSplitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) bool {
+	// nil row will never be split.
+	if rowUpdateChangeEvent == nil {
+		return false
+	}
+
+	handleKeyCount := 0
+	equivalentHandleKeyCount := 0
+	for i := range rowUpdateChangeEvent.Columns {
+		if rowUpdateChangeEvent.Columns[i].Flag.IsHandleKey() && rowUpdateChangeEvent.PreColumns[i].Flag.IsHandleKey() {
+			handleKeyCount++
+			colValueString := model.ColumnValueString(rowUpdateChangeEvent.Columns[i].Value)
+			preColValueString := model.ColumnValueString(rowUpdateChangeEvent.PreColumns[i].Value)
+			if colValueString == preColValueString {
+				equivalentHandleKeyCount++
+			}
+		}
+	}
+
+	// If the handle key columns are not updated, so we do **not** need to split the event row.
+	return !(handleKeyCount == equivalentHandleKeyCount)
+}
+
+// splitUpdateEventRow splits an row update event into a row delete and a row insert event.
+func splitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) ([]*model.RowChangedEvent, error) {
+	if rowUpdateChangeEvent == nil {
+		return nil, errors.New("nil row cannot be split")
+	}
+
+	result := make([]*model.RowChangedEvent, 2)
+
+	// If there is an update to handle key columns,
+	// we need to split the event into two events to be compatible with the old format.
+	deleteEventRow := *rowUpdateChangeEvent
+
+	deleteEventRow.Columns = nil
+	for i := range deleteEventRow.PreColumns {
+		// NOTICE: Only the handle key pre column is retained in the delete event.
+		if !deleteEventRow.PreColumns[i].Flag.IsHandleKey() {
+			deleteEventRow.PreColumns[i] = nil
+		}
+	}
+	// Align with the old format if old value disabled.
+	deleteEventRow.TableInfoVersion = 0
+	result = append(result, &deleteEventRow)
+
+	insertEventRow := *rowUpdateChangeEvent
+
+	// NOTICE: clean up pre cols for insert event.
+	insertEventRow.PreColumns = nil
+	result = append(result, &insertEventRow)
+
+	return result, nil
 }
 
 // pullerConsume receives RawKVEntry from a given puller and sends to sorter
