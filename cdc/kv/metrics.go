@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	grpcMetrics = grpc_prometheus.NewClientMetrics()
+	// GRPCMetrics specifies the metrics for the client.
+	GRPCMetrics = grpc_prometheus.NewClientMetrics()
 
 	eventFeedErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -110,5 +111,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(etcdRequestCounter)
 
 	// Register client metrics to registry.
-	//registry.MustRegister(grpcMetrics)
+	registry.MustRegister(GRPCMetrics)
 }

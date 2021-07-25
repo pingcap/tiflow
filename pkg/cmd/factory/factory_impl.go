@@ -18,13 +18,11 @@ import (
 	"strings"
 	"time"
 
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	etcdlogutil "go.etcd.io/etcd/pkg/logutil"
@@ -32,17 +30,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
-
-// FIXME?: I'm not sure if this is a good way to register metrics?
-// Maybe we should put it inside the factoryImpl structure instead of using a global variable,
-// but that's how our other metrics are registered. So let's keep it consistent for now.
-var grpcMetrics = grpc_prometheus.NewClientMetrics()
-
-// InitMetrics registers grpc client metrics.
-func InitMetrics(registry *prometheus.Registry) {
-	// Register client metrics to registry.
-	registry.MustRegister(grpcMetrics)
-}
 
 type factoryImpl struct {
 	clientGetter ClientGetter
@@ -116,8 +103,8 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 		DialTimeout: 30 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
-			grpc.WithUnaryInterceptor(grpcMetrics.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(grpcMetrics.StreamClientInterceptor()),
+			grpc.WithUnaryInterceptor(kv.GRPCMetrics.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(kv.GRPCMetrics.StreamClientInterceptor()),
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
@@ -155,8 +142,8 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 		ctx, pdEndpoints, credential.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
-			grpc.WithUnaryInterceptor(grpcMetrics.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(grpcMetrics.StreamClientInterceptor()),
+			grpc.WithUnaryInterceptor(kv.GRPCMetrics.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(kv.GRPCMetrics.StreamClientInterceptor()),
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{

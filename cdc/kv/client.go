@@ -272,8 +272,8 @@ func (a *connArray) Init(ctx context.Context) error {
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
 			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcMaxCallRecvMsgSize)),
-			grpc.WithUnaryInterceptor(grpcMetrics.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(grpcMetrics.StreamClientInterceptor()),
+			grpc.WithUnaryInterceptor(GRPCMetrics.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(GRPCMetrics.StreamClientInterceptor()),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: gbackoff.Config{
 					BaseDelay:  time.Second,
