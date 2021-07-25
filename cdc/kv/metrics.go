@@ -110,5 +110,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(etcdRequestCounter)
 
 	// Register client metrics to registry.
-	registry.MustRegister(grpcMetrics)
+	//registry.MustRegister(grpcMetrics)
 }
