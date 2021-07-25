@@ -33,12 +33,10 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-var (
-	// FIXME?: I'm not sure if this is a good way to register metrics?
-	// Maybe we should put it inside the factoryImpl structure instead of using a global variable,
-	// but that's how our other metrics are registered. So let's keep it consistent for now.
-	grpcMetrics = grpc_prometheus.NewClientMetrics()
-)
+// FIXME?: I'm not sure if this is a good way to register metrics?
+// Maybe we should put it inside the factoryImpl structure instead of using a global variable,
+// but that's how our other metrics are registered. So let's keep it consistent for now.
+var grpcMetrics = grpc_prometheus.NewClientMetrics()
 
 // InitMetrics registers grpc client metrics.
 func InitMetrics(registry *prometheus.Registry) {
