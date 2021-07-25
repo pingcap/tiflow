@@ -204,7 +204,7 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 	return !(handleKeyCount == equivalentHandleKeyCount)
 }
 
-// splitUpdateEvent splits a update event into a delete and an insert event.
+// splitUpdateEvent splits an update event into a delete and an insert event.
 func splitUpdateEvent(updateEvent *model.PolymorphicEvent) ([]*model.PolymorphicEvent, error) {
 	if updateEvent == nil {
 		return nil, errors.New("nil event cannot be split")
