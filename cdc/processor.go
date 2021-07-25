@@ -1313,13 +1313,13 @@ func shouldSplitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) bool
 	return !(handleKeyCount == equivalentHandleKeyCount)
 }
 
-// splitUpdateEventRow splits an row update event into a row delete and a row insert event.
+// splitUpdateEventRow splits a row update event into a row delete and a row insert event.
 func splitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) ([]*model.RowChangedEvent, error) {
 	if rowUpdateChangeEvent == nil {
 		return nil, errors.New("nil row cannot be split")
 	}
 
-	result := make([]*model.RowChangedEvent, 2)
+	var result []*model.RowChangedEvent
 
 	// If there is an update to handle key columns,
 	// we need to split the event into two events to be compatible with the old format.
