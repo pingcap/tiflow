@@ -186,7 +186,7 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 	owner.WriteDebugInfo(&buf)
 
 	// remove job.done, it's hard to check deep equals
-	jobs := owner.takeOnwerJobs()
+	jobs := owner.takeOwnerJobs()
 	for _, job := range jobs {
 		c.Assert(job.done, check.NotNil)
 		close(job.done)
@@ -213,5 +213,5 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 			debugInfoWriter: &buf,
 		},
 	})
-	c.Assert(owner.takeOnwerJobs(), check.HasLen, 0)
+	c.Assert(owner.takeOwnerJobs(), check.HasLen, 0)
 }
