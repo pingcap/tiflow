@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
+	"go.uber.org/zap"
 )
 
 const (
@@ -103,10 +104,16 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	defer func() {
 		if err != nil {
 			n.status.Store(TableStatusStopped)
+			log.Debug("set TableStatusStopped cause err != nil", zap.Error(err))
+
 			return
 		}
 		if n.checkpointTs >= n.targetTs {
 			n.status.Store(TableStatusStopped)
+			log.Debug("set TableStatusStopped cause n.checkpointTs >= n.targetTs",
+				zap.Uint64("n.checkpointTs", n.checkpointTs),
+				zap.Uint64("n.targetTs", n.targetTs))
+
 			err = n.sink.Close()
 			if err != nil {
 				err = errors.Trace(err)
@@ -115,6 +122,13 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 			err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 		}
 	}()
+
+	log.Debug("flushSink",
+		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Uint64("barrierTs", n.barrierTs),
+		zap.Uint64("targetTs", n.targetTs),
+		zap.Uint64("checkpointTs", n.checkpointTs))
+
 	if resolvedTs > n.barrierTs {
 		resolvedTs = n.barrierTs
 	}
@@ -131,6 +145,13 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Debug("flushSink.FlushRowChangedEvents",
+		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Uint64("barrierTs", n.barrierTs),
+		zap.Uint64("targetTs", n.targetTs),
+		zap.Uint64("n.checkpointTs", n.checkpointTs),
+		zap.Uint64("checkpointTs", checkpointTs))
+
 	if checkpointTs <= n.checkpointTs {
 		return nil
 	}
@@ -270,6 +291,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 		if msg.Command.Tp == pipeline.CommandTypeStopAtTs {
 			n.targetTs = msg.Command.StoppedTs
 			n.barrierTs = msg.Command.StoppedTs
+			log.Debug("got CommandTypeStopAtTs", zap.Uint64("StoppedTs", msg.Command.StoppedTs))
 			if err := n.flushSink(ctx, msg.Command.StoppedTs); err != nil {
 				return errors.Trace(err)
 			}
@@ -285,6 +307,8 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	n.status.Store(TableStatusStopped)
+	log.Debug("set TableStatusStopped cause sinkNode.Destroy")
+
 	n.flowController.Abort()
 	return n.sink.Close()
 }
