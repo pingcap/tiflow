@@ -53,6 +53,7 @@ func mustLockRangeSuccess(
 }
 
 // nolint:unparam
+// NOTICE: For now, regionID always is 1.
 func mustLockRangeStale(
 	ctx context.Context,
 	c *check.C,
@@ -70,6 +71,7 @@ func mustLockRangeStale(
 }
 
 // nolint:unparam
+// NOTICE: For now, regionID always is 1.
 func mustLockRangeWait(
 	ctx context.Context,
 	c *check.C,
