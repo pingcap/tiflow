@@ -210,7 +210,7 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) ([]*model.Polymorphic
 		return nil, errors.New("nil event cannot be split")
 	}
 
-	var result []*model.PolymorphicEvent
+	result := make([]*model.PolymorphicEvent, 0, 2)
 
 	// If there is an update to handle key columns,
 	// we need to split the event into two events to be compatible with the old format.
