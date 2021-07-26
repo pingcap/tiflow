@@ -179,7 +179,7 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column has been modified.
-// Because if the handle key column is modified,
+// If the handle key column is modified,
 // we need to use splitUpdateEvent to split the update event into a delete and an insert event.
 func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 	// nil event will never be split.
