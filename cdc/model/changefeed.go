@@ -249,6 +249,9 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 	if info.Config.Scheduler == nil {
 		info.Config.Scheduler = defaultConfig.Scheduler
 	}
+	if info.Config.Consistent == nil {
+		info.Config.Consistent = defaultConfig.Consistent
+	}
 	return nil
 }
 

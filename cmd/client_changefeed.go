@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
@@ -340,6 +341,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 			}
 		}
 	}
+
 	switch sortEngine {
 	case model.SortUnified, model.SortInMemory:
 	case model.SortInFile:
@@ -349,6 +351,16 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		return nil, errors.Errorf("Creating changefeed with an invalid sort engine(%s), "+
 			"`%s` and `%s` are the only valid options.", sortEngine, model.SortUnified, model.SortInMemory)
 	}
+
+	if cfg.Consistent != nil {
+		if !redo.IsValidConsistentLevel(cfg.Consistent.Level) {
+			return nil, cerror.ErrConsistentLevel.GenWithStackByArgs(cfg.Consistent.Level)
+		}
+		if !redo.IsValidConsistentStorage(cfg.Consistent.Storage) {
+			return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(cfg.Consistent.Storage)
+		}
+	}
+
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
 		Opts:              make(map[string]string),
