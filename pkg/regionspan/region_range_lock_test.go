@@ -52,6 +52,7 @@ func mustLockRangeSuccess(
 	mustSuccess(c, res, expectedCheckpointTs)
 }
 
+// nolint:unparam
 func mustLockRangeStale(
 	ctx context.Context,
 	c *check.C,
@@ -68,6 +69,7 @@ func mustLockRangeStale(
 	mustStale(c, res, spans...)
 }
 
+// nolint:unparam
 func mustLockRangeWait(
 	ctx context.Context,
 	c *check.C,
