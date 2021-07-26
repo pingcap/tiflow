@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -40,6 +41,7 @@ type changefeed struct {
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	gcManager        GcManager
+	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -165,7 +167,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		return errors.Trace(err)
 	}
 	if shouldUpdateState {
-		c.updateStatus(barrierTs)
+		return c.updateStatus(ctx, barrierTs)
 	}
 	return nil
 }
@@ -233,6 +235,13 @@ LOOP:
 		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
+
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+	redoManager, err := redo.NewManager(cancelCtx, c.state.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
+	c.redoManager = redoManager
 
 	// init metrics
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
@@ -393,6 +402,12 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		c.ddlEventCache = ddlEvent
+		if c.redoManager.Enabled() {
+			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+			if err != nil {
+				return false, err
+			}
+		}
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
@@ -408,7 +423,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(barrierTs model.Ts) {
+func (c *changefeed) updateStatus(ctx context.Context, barrierTs model.Ts) error {
 	resolvedTs := barrierTs
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
@@ -441,11 +456,19 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 		return status, changed, nil
 	})
 
+	if c.redoManager.Enabled() {
+		err := c.redoManager.FlushResolvedAndCheckpointTs(ctx, resolvedTs, checkpointTs)
+		if err != nil {
+			return err
+		}
+	}
+
 	phyTs := oracle.ExtractPhysical(checkpointTs)
 	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
 	// It is more accurate to get tso from PD, but in most cases since we have
 	// deployed NTP service, a little bias is acceptable here.
 	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	return nil
 }
 
 func (c *changefeed) Close() {

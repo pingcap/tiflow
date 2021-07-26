@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -70,6 +71,8 @@ type oldProcessor struct {
 	session  *concurrency.Session
 
 	sinkManager *sink.Manager
+	// it is always a disabled redo log manager in old processor
+	redoManager redo.LogManager
 
 	globalResolvedTs         uint64
 	localResolvedTs          uint64
@@ -193,6 +196,7 @@ func newProcessor(
 		etcdCli:       cdcEtcdCli,
 		session:       session,
 		sinkManager:   sinkManager,
+		redoManager:   redo.NewDisabledManager(),
 		ddlPuller:     ddlPuller,
 		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum, changefeed.Config.EnableOldValue),
 		schemaStorage: schemaStorage,
@@ -866,7 +870,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 			p.pullerConsume(ctx, plr, sorter)
 		}()
 
-		tableSink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
+		tableSink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
 		go func() {
 			p.sorterConsume(ctx, tableID, sorter, pResolvedTs, pCheckpointTs, replicaInfo, tableSink)
 		}()
