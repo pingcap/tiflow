@@ -1288,7 +1288,7 @@ func (p *oldProcessor) sorterConsume(
 
 // shouldSplitUpdateEventRow determines if the split event is needed to align the old format based on
 // whether the handle key column has been modified.
-// Because if the handle key column is modified,
+// If the handle key column is modified,
 // we need to use splitUpdateEventRow to split the row update event into a row delete and a row insert event.
 func shouldSplitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) bool {
 	// nil row will never be split.
