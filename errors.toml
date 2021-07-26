@@ -236,36 +236,6 @@ error = '''
 file sink meta file already exists
 '''
 
-["CDC:ErrFileSorterDecode"]
-error = '''
-decode failed
-'''
-
-["CDC:ErrFileSorterEncode"]
-error = '''
-encode failed
-'''
-
-["CDC:ErrFileSorterInvalidData"]
-error = '''
-invalid data
-'''
-
-["CDC:ErrFileSorterOpenFile"]
-error = '''
-open file failed
-'''
-
-["CDC:ErrFileSorterReadFile"]
-error = '''
-read file failed
-'''
-
-["CDC:ErrFileSorterWriteFile"]
-error = '''
-write file failed
-'''
-
 ["CDC:ErrFilterRuleInvalid"]
 error = '''
 filter rule is invalid

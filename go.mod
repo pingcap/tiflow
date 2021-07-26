@@ -21,6 +21,7 @@ require (
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.4
 	github.com/google/uuid v1.1.1
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.0.5
 	github.com/jmoiron/sqlx v1.2.0
@@ -49,7 +50,6 @@ require (
 	github.com/tikv/pd v1.1.0-beta.0.20210105112549-e5be7fd38659
 	github.com/tinylib/msgp v1.1.2
 	github.com/uber-go/atomic v1.4.0
-	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
 	go.uber.org/zap v1.16.0
