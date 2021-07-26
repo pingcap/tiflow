@@ -1217,7 +1217,7 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 	o.stepDown = stepDown
 
 	// Close and Run should be in separated goroutines
-	// A channel is used here to sychronize the steps.
+	// A channel is used here to synchronize the steps.
 
 	// Single the Run function to exit
 	select {
