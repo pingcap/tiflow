@@ -1127,7 +1127,7 @@ func (s *etcdSuite) TestHandleFeedEventWithWorkerPool(c *check.C) {
 
 // TestStreamSendWithError mainly tests the scenario that the `Send` call of a gPRC
 // stream of kv client meets error, and kv client can clean up the broken stream,
-// establish a new one and recover the normal evend feed processing.
+// establish a new one and recover the normal event feed processing.
 func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
@@ -1194,7 +1194,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 			requestIds.Store(req.RegionId, req.RequestId)
 		}
 	}
-	// Reuse the same listen addresss as server 1
+	// Reuse the same listen address as server 1
 	server2, _ := newMockServiceSpecificAddr(ctx, c, srv2, addr1, wg)
 	defer func() {
 		close(ch2)
