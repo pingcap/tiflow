@@ -25,6 +25,7 @@ import (
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -140,40 +141,42 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 }
 
 func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
-	query := fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)
-	if _, err := db.ExecContext(ctx, query); err != nil {
-		log.Error("sequenceTest set tidb_snapshot failed", zap.String("query", query), zap.Error(err))
-		return errors.Trace(err)
-	}
+	return retry.Do(ctx, func() error {
+		query := fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)
+		if _, err := db.ExecContext(ctx, query); err != nil {
+			log.Error("sequenceTest set tidb_snapshot failed", zap.String("query", query), zap.Error(err))
+			return errors.Trace(err)
+		}
 
-	query = fmt.Sprintf("SELECT sequence FROM accounts_seq%d ORDER BY sequence", tableID)
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		log.Warn("select sequence err", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
-		return nil
-	}
-	defer rows.Close()
-
-	var curr, previous int
-	for rows.Next() {
-		if err = rows.Scan(&curr); err != nil {
+		query = fmt.Sprintf("SELECT sequence FROM accounts_seq%d ORDER BY sequence", tableID)
+		rows, err := db.QueryContext(ctx, query)
+		if err != nil {
 			log.Warn("select sequence err", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 			return nil
 		}
+		defer rows.Close()
 
-		if previous != 0 && previous != curr && previous+1 != curr {
-			return errors.Errorf("missing changes sequence account_seq%d, current sequence=%d, previous sequence=%d", tableID, curr, previous)
+		var curr, previous int
+		for rows.Next() {
+			if err = rows.Scan(&curr); err != nil {
+				log.Warn("select sequence err", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
+				return nil
+			}
+
+			if previous != 0 && previous != curr && previous+1 != curr {
+				return errors.Errorf("missing changes sequence account_seq%d, current sequence=%d, previous sequence=%d", tableID, curr, previous)
+			}
+			previous = curr
 		}
-		previous = curr
-	}
 
-	log.Info("sequence verify pass", zap.String("tag", tag))
+		log.Info("sequence verify pass", zap.String("tag", tag))
 
-	if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
-		log.Warn("sequenceTest reset tidb_snapshot failed")
-	}
+		if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
+			log.Warn("sequenceTest reset tidb_snapshot failed")
+		}
 
-	return nil
+		return nil
+	}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 // tryDropDB will drop table if data incorrect and panic error likes bad connect.
@@ -243,40 +246,43 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 }
 
 func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
-	var obtained, expect int
+	return retry.Do(ctx,
+		func() error {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)); err != nil {
+				log.Error("bank set tidb_snapshot failed", zap.String("endTs", endTs))
+				return errors.Trace(err)
+			}
 
-	if _, err := db.ExecContext(ctx, fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)); err != nil {
-		log.Error("bank set tidb_snapshot failed", zap.String("endTs", endTs))
-		return errors.Trace(err)
-	}
+			var obtained, expect int
 
-	query := fmt.Sprintf("SELECT SUM(balance) as total FROM accounts%d", tableID)
-	if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
-		log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
-		return errors.Trace(err)
-	}
+			query := fmt.Sprintf("SELECT SUM(balance) as total FROM accounts%d", tableID)
+			if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
+				log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
+				return errors.Trace(err)
+			}
 
-	expect = accounts * initBalance
-	if obtained != expect {
-		return errors.Errorf("verify balance failed, accounts%d expect %d, but got %d", tableID, expect, obtained)
-	}
+			expect = accounts * initBalance
+			if obtained != expect {
+				return errors.Errorf("verify balance failed, accounts%d expect %d, but got %d", tableID, expect, obtained)
+			}
 
-	query = fmt.Sprintf("SELECT COUNT(*) as count FROM accounts%d", tableID)
-	if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
-		log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
-		return errors.Trace(err)
-	}
-	if obtained != accounts {
-		return errors.Errorf("verify count failed, accounts%d expected=%d, obtained=%d", tableID, accounts, obtained)
-	}
+			query = fmt.Sprintf("SELECT COUNT(*) as count FROM accounts%d", tableID)
+			if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
+				log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
+				return errors.Trace(err)
+			}
+			if obtained != accounts {
+				return errors.Errorf("verify count failed, accounts%d expected=%d, obtained=%d", tableID, accounts, obtained)
+			}
 
-	log.Info("bank verify pass", zap.String("tag", tag))
+			log.Info("bank verify pass", zap.String("tag", tag))
 
-	if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
-		log.Warn("bank reset tidb_snapshot failed")
-	}
+			if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
+				log.Warn("bank reset tidb_snapshot failed")
+			}
 
-	return nil
+			return nil
+		}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 // tryDropDB will drop table if data incorrect and panic error likes bad connect.
@@ -325,7 +331,9 @@ func prepareImpl(
 
 				batchInsertSQL := batchInsertSQLF(size, startIndex)
 				start := time.Now()
-				err := retry.Run(100*time.Millisecond, 5, func() error { return insertF(batchInsertSQL) })
+				err := retry.Do(context.Background(), func() error {
+					return insertF(batchInsertSQL)
+				}, retry.WithBackoffBaseDelay(100), retry.WithBackoffMaxDelay(60*100), retry.WithMaxTries(5))
 				if err != nil {
 					log.Panic("exec batch insert failed", zap.String("query", batchInsertSQL), zap.Error(err))
 				}
@@ -376,7 +384,8 @@ func mustExec(ctx context.Context, db *sql.DB, query string) {
 		_, err := db.ExecContext(ctx, query)
 		return err
 	}
-	err := retry.Run(100*time.Millisecond, 5, execF)
+
+	err := retry.Do(context.Background(), execF, retry.WithBackoffBaseDelay(100), retry.WithBackoffMaxDelay(60*100), retry.WithMaxTries(5))
 	if err != nil {
 		log.Panic("exec failed", zap.String("query", query), zap.Error(err))
 	}
@@ -403,7 +412,7 @@ func openDB(ctx context.Context, dsn string) *sql.DB {
 	}
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(50 * time.Minute)
+	db.SetConnMaxLifetime(10 * time.Minute)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
@@ -455,7 +464,7 @@ func run(
 	// DDL is a strong sync point in TiCDC. Once finishmark table is replicated to downstream
 	// all previous DDL and DML are replicated too.
 	mustExec(ctx, upstreamDB, `CREATE TABLE IF NOT EXISTS finishmark (foo BIGINT PRIMARY KEY)`)
-	waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
+	waitCtx, waitCancel := context.WithTimeout(ctx, 15*time.Minute)
 	endTs, err := getDownStreamSyncedEndTs(waitCtx, downstreamDB, "finishmark")
 	waitCancel()
 	if err != nil {
@@ -535,7 +544,7 @@ func run(
 					return ctx.Err()
 				case tblName := <-tblChan:
 					log.Info("downstream start wait for table", zap.String("tblName", tblName))
-					waitCtx, waitCancel := context.WithTimeout(ctx, 5*time.Minute)
+					waitCtx, waitCancel := context.WithTimeout(ctx, 15*time.Minute)
 					endTs, err := getDownStreamSyncedEndTs(waitCtx, downstreamDB, tblName)
 					waitCancel()
 					log.Info("ddl synced", zap.String("table", tblName))
@@ -552,13 +561,13 @@ func run(
 					atomic.AddInt64(&valid, 1)
 
 					for _, test := range tests {
-						verifyCtx, verifyCancel := context.WithTimeout(ctx, time.Second*20)
+						verifyCtx, verifyCancel := context.WithTimeout(ctx, 2*time.Minute)
 						if err := test.verify(verifyCtx, upstreamDB, accounts, tableID, upstream, ""); err != nil {
 							log.Panic("upstream verify failed", zap.Error(err))
 						}
 						verifyCancel()
 
-						verifyCtx, verifyCancel = context.WithTimeout(ctx, time.Second*20)
+						verifyCtx, verifyCancel = context.WithTimeout(ctx, 2*time.Minute)
 						if err := test.verify(verifyCtx, downstreamDB, accounts, tableID, downstream, endTs); err != nil {
 							log.Panic("downstream verify failed", zap.Error(err))
 						}
