@@ -1306,7 +1306,7 @@ func splitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) ([]*model.
 		return nil, errors.New("nil row cannot be split")
 	}
 
-	var result []*model.RowChangedEvent
+	result := make([]*model.RowChangedEvent, 0, 2)
 
 	// If there is an update to handle key columns,
 	// we need to split the event into two events to be compatible with the old format.
