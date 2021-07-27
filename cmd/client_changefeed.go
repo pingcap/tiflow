@@ -270,14 +270,19 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 	}
 	cfg := config.GetDefaultReplicaConfig()
 
-	sortEngineFlag := cmd.Flag("sort-engine")
-	if cdcClusterVer == version.TiCDCClusterVersion4_0 {
+	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
 		cfg.EnableOldValue = false
-		if !sortEngineFlag.Changed {
-			sortEngine = model.SortInMemory
-		}
-		log.Warn("The TiCDC cluster is built from 4.0-release branch, the old-value and unified-sorter are disabled by default.")
+		log.Warn("The TiCDC cluster is built from an older version, disabling old value by default.",
+			zap.String("version", cdcClusterVer.String()))
 	}
+
+	sortEngineFlag := cmd.Flag("sort-engine")
+	if !sortEngineFlag.Changed && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
+		sortEngine = model.SortInMemory
+		log.Warn("The TiCDC cluster is built form an older version, disabling Unified Sorter by default",
+			zap.String("version", cdcClusterVer.String()))
+	}
+
 	if len(configFile) > 0 {
 		if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 			return nil, err
