@@ -437,7 +437,7 @@ func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	err = retry.Run(50*time.Millisecond, 3, func() error {
+	err = retry.Do(ctx, func() error {
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
@@ -465,11 +465,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
-<<<<<<< HEAD
-	})
-=======
 	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(8), retry.WithIsRetryableErr(cerror.IsRetryableError))
->>>>>>> c1273ef58 (utils: make CheckSafetyOfStartTs retry. (#2342))
 	return
 }
 
