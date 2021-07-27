@@ -653,7 +653,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
-	s.broadcastFinishTxn(ctx)
+	s.broadcastFinishTxn()
 	s.execWaitNotifier.Notify()
 	done := make(chan struct{})
 	go func() {
@@ -670,7 +670,7 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	}
 }
 
-func (s *mysqlSink) broadcastFinishTxn(ctx context.Context) {
+func (s *mysqlSink) broadcastFinishTxn() {
 	// Note all data txn is sent via channel, the control txn must come after all
 	// data txns in each worker. So after worker receives the control txn, it can
 	// flush txns immediately and call wait group done once.
