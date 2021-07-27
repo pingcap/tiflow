@@ -52,6 +52,8 @@ func mustLockRangeSuccess(
 	mustSuccess(c, res, expectedCheckpointTs)
 }
 
+// nolint:unparam
+// NOTICE: For now, regionID always is 1.
 func mustLockRangeStale(
 	ctx context.Context,
 	c *check.C,
@@ -68,6 +70,8 @@ func mustLockRangeStale(
 	mustStale(c, res, spans...)
 }
 
+// nolint:unparam
+// NOTICE: For now, regionID always is 1.
 func mustLockRangeWait(
 	ctx context.Context,
 	c *check.C,

@@ -81,7 +81,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	err = testSorter(ctx, c, sorter, 10000, true)
+	err = testSorter(ctx, c, sorter, 10000)
 	c.Assert(err, check.ErrorMatches, ".*context cancel.*")
 }
 
@@ -112,7 +112,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 10000000, true)
+		err := testSorter(ctx, c, sorter, 10000000)
 		c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 		close(finishedCh)
 	}()
@@ -127,7 +127,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	log.Info("Sorter successfully cancelled")
 }
 
-func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int, needWorkerPool bool) error {
+func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int) error {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -143,12 +143,9 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 	errg.Go(func() error {
 		return sorter.Run(ctx)
 	})
-
-	if needWorkerPool {
-		errg.Go(func() error {
-			return RunWorkerPool(ctx)
-		})
-	}
+	errg.Go(func() error {
+		return RunWorkerPool(ctx)
+	})
 
 	producerProgress := make([]uint64, numProducers)
 
@@ -328,7 +325,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 		sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 		c.Assert(err, check.IsNil)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err = testSorter(ctx, c, sorter, 100000000, true)
+		err = testSorter(ctx, c, sorter, 100000000)
 		c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 		cancel()
 	}
@@ -368,7 +365,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 10000, true)
+		err := testSorter(ctx, c, sorter, 10000)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()
@@ -395,7 +392,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	finishedCh = make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 10000, true)
+		err := testSorter(ctx, c, sorter, 10000)
 		c.Assert(err, check.ErrorMatches, ".*injected write error.*")
 		close(finishedCh)
 	}()
@@ -451,7 +448,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 	finishedCh := make(chan struct{})
 	go func() {
-		err := testSorter(ctx, c, sorter, 10000, true)
+		err := testSorter(ctx, c, sorter, 10000)
 		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
 		close(finishedCh)
 	}()

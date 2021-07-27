@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,26 +11,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
-
-// Reference: https://dzone.com/articles/measuring-integration-test-coverage-rate-in-pouchc
+package cmd
 
 import (
 	"os"
-	"strings"
-	"testing"
+
+	"github.com/pingcap/ticdc/pkg/cmd/version"
+	"github.com/spf13/cobra"
 )
 
-func TestRunMain(_ *testing.T) {
-	var args []string
-	for _, arg := range os.Args {
-		switch {
-		case strings.HasPrefix(arg, "-test."):
-		default:
-			args = append(args, arg)
-		}
+// NewCmd creates the root command.
+func NewCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "cdc",
+		Short: "CDC",
+		Long:  `Change Data Capture`,
 	}
+}
 
-	os.Args = args
-	main()
+// Run runs the root command.
+func Run() {
+	cmd := NewCmd()
+
+	// Outputs cmd.Print to stdout.
+	cmd.SetOut(os.Stdout)
+
+	cmd.AddCommand(version.NewCmdVersion())
+
+	if err := cmd.Execute(); err != nil {
+		cmd.Println(err)
+		os.Exit(1)
+	}
 }
