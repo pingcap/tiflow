@@ -79,7 +79,7 @@ type RawKVEntry struct {
 	// Commit or resolved TS
 	CRTs uint64 `msg:"crts"`
 
-	// Additonal debug info
+	// Additional debug info
 	RegionID uint64 `msg:"region_id"`
 }
 
