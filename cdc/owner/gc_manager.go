@@ -42,8 +42,10 @@ type gcManager struct {
 
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
-	lastSafePointTs   uint64
-	isTiCDCBlockGC    bool
+	// todo: what does this mean?
+	lastSafePointTs uint64
+	// todo: what does this mean?
+	isTiCDCBlockGC bool
 
 	pdPhysicalTimeCache time.Time
 	lastUpdatedPdTime   time.Time

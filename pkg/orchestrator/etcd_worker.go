@@ -299,7 +299,7 @@ func (worker *EtcdWorker) applyUpdates() error {
 	return nil
 }
 
-func logEtcdOps(ops []clientv3.Op, commited bool) {
+func logEtcdOps(ops []clientv3.Op, committed bool) {
 	if log.GetLevel() != zapcore.DebugLevel || len(ops) == 0 {
 		return
 	}
@@ -311,7 +311,7 @@ func logEtcdOps(ops []clientv3.Op, commited bool) {
 			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
 		}
 	}
-	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
 }
 
 func (worker *EtcdWorker) cleanUp() {
