@@ -16,7 +16,6 @@ package dailytest
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -100,7 +99,7 @@ func doJob(table *table, db *sql.DB, batch int, jobChan chan struct{}, doneChan 
 	doneChan <- struct{}{}
 }
 
-func doWait(doneChan chan struct{}, start time.Time, jobCount int, workerCount int) {
+func doWait(doneChan chan struct{}, workerCount int) {
 	for i := 0; i < workerCount; i++ {
 		<-doneChan
 	}
@@ -112,14 +111,13 @@ func doDMLProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch
 	jobChan := make(chan struct{}, 16*workerCount)
 	doneChan := make(chan struct{}, workerCount)
 
-	start := time.Now()
 	go addJobs(jobCount, jobChan)
 
 	for i := 0; i < workerCount; i++ {
 		go doJob(table, db, batch, jobChan, doneChan)
 	}
 
-	doWait(doneChan, start, jobCount, workerCount)
+	doWait(doneChan, workerCount)
 }
 
 func doDDLProcess(table *table, db *sql.DB) {
