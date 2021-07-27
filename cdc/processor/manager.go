@@ -40,7 +40,7 @@ const (
 
 type command struct {
 	tp      commandTp
-	payload interface{}
+	payload io.Writer
 	done    chan struct{}
 }
 
@@ -154,7 +154,7 @@ func (m *Manager) WriteDebugInfo(w io.Writer) {
 	}
 }
 
-func (m *Manager) sendCommand(tp commandTp, payload interface{}) chan struct{} {
+func (m *Manager) sendCommand(tp commandTp, payload io.Writer) chan struct{} {
 	timeout := time.Second * 3
 	cmd := &command{tp: tp, payload: payload, done: make(chan struct{})}
 	select {
@@ -181,8 +181,7 @@ func (m *Manager) handleCommand() error {
 		}
 		return cerrors.ErrReactorFinished
 	case commandTpWriteDebugInfo:
-		w := cmd.payload.(io.Writer)
-		m.writeDebugInfo(w)
+		m.writeDebugInfo(cmd.payload)
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
 	}
