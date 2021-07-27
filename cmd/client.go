@@ -196,6 +196,21 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", cliPdAddr)
 			}
 			ctx := defaultContext
+			_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
+			if err != nil {
+				return err
+			}
+			cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+			if err != nil {
+				return err
+			}
+			isUnknownVersion, err := version.CheckTiCDCClusterVersion(cdcClusterVer)
+			if err != nil {
+				return err
+			}
+			if isUnknownVersion {
+				return errors.NewNoStackError("TiCDC cluster is unknown, please start TiCDC cluster")
+			}
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.
 			for _, pdEndpoint := range pdEndpoints {
 				err = version.CheckClusterVersion(ctx, pdCli, pdEndpoint, credential, errorTiKVIncompatible)
