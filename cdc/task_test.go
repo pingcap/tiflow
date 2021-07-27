@@ -126,7 +126,7 @@ func (s *taskSuite) TestParseTask(c *check.C) {
 	}
 	for _, t := range tests {
 		c.Log("testing ", t.Desc)
-		task, err := s.w.parseTask(ctx, t.Key, nil)
+		task, err := s.w.parseTask(ctx, t.Key)
 		if t.Expected == nil {
 			c.Assert(err, check.NotNil)
 			c.Assert(task, check.IsNil)

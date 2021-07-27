@@ -230,14 +230,14 @@ func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) err
 	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
 }
 
-func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
+func verifyTargetTs(startTs, targetTs uint64) error {
 	if targetTs > 0 && targetTs <= startTs {
 		return errors.Errorf("target-ts %d must be larger than start-ts: %d", targetTs, startTs)
 	}
 	return nil
 }
 
-func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+func verifyTables(credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err

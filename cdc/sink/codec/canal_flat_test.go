@@ -83,8 +83,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
 
-	msg, err := encoder.newFlatMessageForDDL(testCaseDdl)
-	c.Assert(err, check.IsNil)
+	msg := encoder.newFlatMessageForDDL(testCaseDdl)
 	c.Assert(msg, check.NotNil)
 
 	c.Assert(msg.tikvTs, check.Equals, testCaseDdl.CommitTs)
