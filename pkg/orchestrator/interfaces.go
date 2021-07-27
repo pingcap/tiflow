@@ -19,8 +19,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 )
 
-// Reactor is a stateful transform of states.
-// It models Owner and Processor, which reacts according to updates in Etcd.
+// Reactor is a stateful transform of states, which reacts according to updates in Etcd.
 type Reactor interface {
 	Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error)
 }
