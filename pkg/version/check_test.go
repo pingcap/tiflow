@@ -107,8 +107,19 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
-		c.Assert(err, check.ErrorMatches,
-			".*PD .* is not supported.*")
+		c.Assert(err, check.ErrorMatches, ".*PD .* is not supported.*")
+	}
+
+	// Check maximum compatible PD.
+	{
+		mock.getVersion = func() string {
+			return `v10000.0.0`
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
+		c.Assert(err, check.ErrorMatches, ".*PD .* is not supported.*")
 	}
 
 	{
@@ -120,10 +131,22 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: `1.0.0-alpha-271-g824ae7fd`}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
-		c.Assert(err, check.ErrorMatches,
-			".*TiKV .* is not supported.*")
+		c.Assert(err, check.ErrorMatches, ".*TiKV .* is not supported.*")
 		err = CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
 		c.Assert(err, check.IsNil)
+	}
+
+	// Check maximum compatible TiKV.
+	{
+		mock.getVersion = func() string {
+			return minPDVersion.String()
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			// TiKV does not include 'v'.
+			return []*metapb.Store{{Version: `10000.0.0`}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
+		c.Assert(err, check.ErrorMatches, ".*TiKV .* is not supported.*")
 	}
 
 	{
@@ -178,7 +201,7 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 	}{
 		{
 			captureInfos: []*model.CaptureInfo{},
-			expected:     TiCDCClusterVersionUnknown,
+			expected:     ticdcClusterVersionUnknown,
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
@@ -186,7 +209,7 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 				{ID: "capture2", Version: ""},
 				{ID: "capture3", Version: ""},
 			},
-			expected: TiCDCClusterVersion{MinTiCDCVersion, false},
+			expected: TiCDCClusterVersion{defaultTiCDCVersion, false},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
@@ -271,6 +294,45 @@ func (s *checkSuite) TestTiCDCClusterVersionFeaturesCompatible(c *check.C) {
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
 
-	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), check.Equals, true)
+	c.Assert(ticdcClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(ticdcClusterVersionUnknown.ShouldEnableOldValueByDefault(), check.Equals, true)
+}
+
+func (s *checkSuite) TestCheckTiCDCClusterVersion(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	testCases := []struct {
+		cdcClusterVersion TiCDCClusterVersion
+		expectedErr       string
+		expectedUnknown   bool
+	}{
+		{
+			cdcClusterVersion: TiCDCClusterVersion{isUnknown: true},
+			expectedErr:       "",
+			expectedUnknown:   true,
+		},
+		{
+			cdcClusterVersion: TiCDCClusterVersion{Version: minTiCDCVersion},
+			expectedErr:       "",
+			expectedUnknown:   false,
+		},
+		{
+			cdcClusterVersion: TiCDCClusterVersion{Version: semver.New("1.0.0")},
+			expectedErr:       ".*minimal compatible version.*",
+			expectedUnknown:   false,
+		},
+		{
+			cdcClusterVersion: TiCDCClusterVersion{Version: semver.New("10000.0.0")},
+			expectedErr:       ".*maximum compatible version.*",
+			expectedUnknown:   false,
+		},
+	}
+
+	for _, tc := range testCases {
+		isUnknown, err := CheckTiCDCClusterVersion(tc.cdcClusterVersion)
+		c.Assert(isUnknown, check.Equals, tc.expectedUnknown)
+		if len(tc.expectedErr) != 0 {
+			c.Assert(err, check.ErrorMatches, tc.expectedErr)
+		}
+	}
 }

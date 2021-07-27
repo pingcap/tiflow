@@ -34,14 +34,34 @@ import (
 	"go.uber.org/zap"
 )
 
-// minPDVersion is the version of the minimal compatible PD.
-var minPDVersion *semver.Version = semver.New("4.0.0-rc.1")
+var (
+	// minPDVersion is the version of the minimal compatible PD.
+	// TODO bump 5.2.0-alpha once PD releases.
+	minPDVersion *semver.Version = semver.New("5.1.0-alpha")
+	// maxPDVersion is the version of the maximum compatible PD.
+	// Compatible versions are in [minPDVersion, maxPDVersion)
+	// 9999.0.0 disables the check effectively in the master branch.
+	maxPDVersion *semver.Version = semver.New("9999.0.0")
 
-// MinTiKVVersion is the version of the minimal compatible TiKV.
-var MinTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
+	// MinTiKVVersion is the version of the minimal compatible TiKV.
+	// TODO bump 5.2.0-alpha once TiKV releases.
+	MinTiKVVersion *semver.Version = semver.New("5.1.0-alpha")
+	// maxTiKVVersion is the version of the maximum compatible TiKV.
+	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
+	// 9999.0.0 disables the check effectively in the master branch.
+	maxTiKVVersion *semver.Version = semver.New("9999.0.0")
 
-// MinTiCDCVersion is the version of the first TiCDC release
-var MinTiCDCVersion *semver.Version = semver.New("4.0.1")
+	// minTiCDCVersion is the version of the minimal compatible TiCDC.
+	// TODO bump 5.2.0-alpha once TiCDC releases.
+	minTiCDCVersion *semver.Version = semver.New("5.1.0-alpha")
+	// Compatible versions are in [MinTiCDCVersion, MaxTiCDCVersion)
+	// 9999.0.0 disables the check effectively in the master branch.
+	maxTiCDCVersion *semver.Version = semver.New("9999.0.0")
+
+	// CaptureInfo.Version is added since v4.0.11,
+	// we use the minimal release version as default.
+	defaultTiCDCVersion *semver.Version = semver.New("4.0.1")
+)
 
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
 
@@ -107,10 +127,16 @@ func CheckClusterVersion(
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
 
-	ord := ver.Compare(*minPDVersion)
-	if ord < 0 {
-		arg := fmt.Sprintf("PD %s is not supported, require minimal version %s",
+	minOrd := ver.Compare(*minPDVersion)
+	if minOrd < 0 {
+		arg := fmt.Sprintf("PD %s is not supported, the minimal compatible version is %s",
 			removeVAndHash(pdVer.Version), minPDVersion)
+		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
+	}
+	maxOrd := ver.Compare(*maxPDVersion)
+	if maxOrd >= 0 {
+		arg := fmt.Sprintf("PD %s is not supported, the maximum compatible version is %s",
+			removeVAndHash(pdVer.Version), maxPDVersion)
 		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	return nil
@@ -136,10 +162,16 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		if err != nil {
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
-		ord := ver.Compare(*MinTiKVVersion)
-		if ord < 0 {
-			arg := fmt.Sprintf("TiKV %s is not supported, require minimal version %s",
+		minOrd := ver.Compare(*MinTiKVVersion)
+		if minOrd < 0 {
+			arg := fmt.Sprintf("TiKV %s is not supported, the minimal compatible version is %s",
 				removeVAndHash(s.Version), MinTiKVVersion)
+			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
+		}
+		maxOrd := ver.Compare(*maxTiKVVersion)
+		if maxOrd >= 0 {
+			arg := fmt.Sprintf("TiKV %s is not supported, the maximum compatible version is %s",
+				removeVAndHash(s.Version), maxTiKVVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 	}
@@ -176,13 +208,13 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
 }
 
-// TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version
-var TiCDCClusterVersionUnknown = TiCDCClusterVersion{isUnknown: true}
+// ticdcClusterVersionUnknown is a read-only variable to represent the unknown cluster version
+var ticdcClusterVersionUnknown = TiCDCClusterVersion{isUnknown: true}
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
 func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVersion, error) {
 	if len(captureInfos) == 0 {
-		return TiCDCClusterVersionUnknown, nil
+		return ticdcClusterVersionUnknown, nil
 	}
 	var minVer *semver.Version
 	for _, captureInfo := range captureInfos {
@@ -191,14 +223,35 @@ func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVers
 		if captureInfo.Version != "" {
 			ver, err = semver.NewVersion(removeVAndHash(captureInfo.Version))
 		} else {
-			ver = MinTiCDCVersion
+			ver = defaultTiCDCVersion
 		}
 		if err != nil {
-			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
+			return ticdcClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		if minVer == nil || ver.Compare(*minVer) < 0 {
 			minVer = ver
 		}
 	}
 	return TiCDCClusterVersion{minVer, false}, nil
+}
+
+// CheckTiCDCClusterVersion returns the version of ticdc cluster
+func CheckTiCDCClusterVersion(cdcClusterVer TiCDCClusterVersion) (unknown bool, err error) {
+	if cdcClusterVer.isUnknown {
+		return true, nil
+	}
+	ver := cdcClusterVer.Version
+	minOrd := ver.Compare(*minTiCDCVersion)
+	if minOrd < 0 {
+		arg := fmt.Sprintf("TiCDC %s is not supported, the minimal compatible version is %s",
+			ver, minTiCDCVersion)
+		return false, cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
+	}
+	maxOrd := ver.Compare(*maxTiCDCVersion)
+	if maxOrd >= 0 {
+		arg := fmt.Sprintf("TiCDC %s is not supported, the maximum compatible version is %s",
+			ver, maxTiCDCVersion)
+		return false, cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
+	}
+	return false, nil
 }
