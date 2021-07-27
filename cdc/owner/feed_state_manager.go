@@ -111,11 +111,12 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		}
 		m.shouldBeRunning = false
 		jobsPending = true
-		m.patchState(model.StateRemoved)
-		// remove changefeed info and status
+
+		// remove changefeedInfo
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return nil, true, nil
 		})
+		// remove changefeedStatus
 		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return nil, true, nil
 		})
