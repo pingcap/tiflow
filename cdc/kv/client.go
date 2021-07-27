@@ -602,7 +602,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return s.dispatchRequest(ctx, g)
+		return s.dispatchRequest(ctx)
 	})
 
 	g.Go(func() error {
@@ -852,6 +852,7 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			limiter := s.client.getRegionLimiter(regionID)
 			g.Go(func() error {
+				defer s.deleteStream(rpcCtx.Addr)
 				if !s.enableKVClientV2 {
 					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				}
@@ -926,7 +927,6 @@ func (s *eventFeedSession) requestRegionToStore(
 // responsible for handling the error.
 func (s *eventFeedSession) dispatchRequest(
 	ctx context.Context,
-	g *errgroup.Group,
 ) error {
 	for {
 		// Note that when a region is received from the channel, it's range has been already locked.
@@ -1321,7 +1321,7 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 		if cevent.ResolvedTs != nil {
 			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			err = s.sendResolvedTs(ctx, g, cevent.ResolvedTs, regionStates, pendingRegions, addr)
+			err = s.sendResolvedTs(ctx, cevent.ResolvedTs, regionStates, addr)
 			if err != nil {
 				return err
 			}
@@ -1401,10 +1401,8 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 
 func (s *eventFeedSession) sendResolvedTs(
 	ctx context.Context,
-	g *errgroup.Group,
 	resolvedTs *cdcpb.ResolvedTs,
 	regionStates map[uint64]*regionFeedState,
-	pendingRegions *syncRegionFeedStateMap,
 	addr string,
 ) error {
 	for _, regionID := range resolvedTs.Regions {
@@ -1685,7 +1683,10 @@ func (s *eventFeedSession) deleteStream(storeAddr string) {
 	s.streamsLock.Lock()
 	defer s.streamsLock.Unlock()
 	delete(s.streams, storeAddr)
-	delete(s.streamsCanceller, storeAddr)
+	if cancel, ok := s.streamsCanceller[storeAddr]; ok {
+		cancel()
+		delete(s.streamsCanceller, storeAddr)
+	}
 }
 
 func (s *eventFeedSession) getStream(storeAddr string) (stream cdcpb.ChangeData_EventFeedClient, ok bool) {

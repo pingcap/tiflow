@@ -884,7 +884,7 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 // handleDDL call handleDDL of every changefeeds
 func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		err := cf.handleDDL(ctx, o.captures)
+		err := cf.handleDDL(ctx)
 		if err != nil {
 			var code string
 			if terror, ok := err.(*errors.Error); ok {

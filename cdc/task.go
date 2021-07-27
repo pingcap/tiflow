@@ -146,7 +146,7 @@ restart:
 					return
 				}
 			} else if ev.Type == clientv3.EventTypeDelete {
-				task, err := w.parseTask(ctx, ev.PrevKv.Key, ev.PrevKv.Value)
+				task, err := w.parseTask(ctx, ev.PrevKv.Key)
 				if err != nil {
 					log.Warn("parse task failed",
 						zap.String("capture-id", w.capture.info.ID),
@@ -164,7 +164,7 @@ restart:
 }
 
 func (w *TaskWatcher) parseTask(ctx context.Context,
-	key, val []byte) (*Task, error) {
+	key []byte) (*Task, error) {
 	if len(key) <= len(w.cfg.Prefix) {
 		return nil, cerror.ErrInvalidTaskKey.GenWithStackByArgs(string(key))
 	}
@@ -182,7 +182,7 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 }
 
 func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*TaskEvent, error) {
-	task, err := w.parseTask(ctx, key, val)
+	task, err := w.parseTask(ctx, key)
 	if err != nil {
 		log.Warn("parse task failed",
 			zap.String("capture-id", w.capture.info.ID),

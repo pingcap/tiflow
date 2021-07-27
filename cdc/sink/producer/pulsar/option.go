@@ -42,10 +42,7 @@ func parseSinkOptions(u *url.URL) (opt *Option, err error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := parseProducerOptions(u)
-	if err != nil {
-		return nil, err
-	}
+	p := parseProducerOptions(u)
 	opt = &Option{
 		clientOptions:   c,
 		producerOptions: p,
@@ -88,7 +85,7 @@ func parseClientOption(u *url.URL) (opt *pulsar.ClientOptions, err error) {
 	return opt, nil
 }
 
-func parseProducerOptions(u *url.URL) (opt *pulsar.ProducerOptions, err error) {
+func parseProducerOptions(u *url.URL) (opt *pulsar.ProducerOptions) {
 	vs := values(u.Query())
 	opt = &pulsar.ProducerOptions{
 		Name:                    vs.Str("name"),
@@ -120,7 +117,7 @@ func parseProducerOptions(u *url.URL) (opt *pulsar.ProducerOptions, err error) {
 	default:
 		opt.Topic = strings.Trim(u.Path, "/")
 	}
-	return opt, nil
+	return opt
 }
 
 type values url.Values
