@@ -109,7 +109,7 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 	p.AppendNode(ctx, "check", checkNode)
 
 	var sentCount int64
-	sendMsg := func(p *pipeline.Pipeline, msg *pipeline.Message) {
+	sendMsg := func(p *pipeline.Pipeline, msg pipeline.Message) {
 		err := retry.Do(context.Background(), func() error {
 			return p.SendToFirstNode(msg)
 		}, retry.WithBackoffBaseDelay(10), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(100))
@@ -123,7 +123,7 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < basicsTestMessageCount; i++ {
-			var msg *pipeline.Message
+			var msg pipeline.Message
 			if i%100 == 0 {
 				// generates a control message
 				msg = pipeline.TickMessage()
