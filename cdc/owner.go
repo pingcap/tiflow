@@ -437,7 +437,7 @@ func (o *Owner) newChangeFeed(
 	}
 	defer func() {
 		if resultErr != nil && primarySink != nil {
-			primarySink.Close()
+			primarySink.Close(ctx)
 		}
 	}()
 	go func() {

@@ -76,7 +76,11 @@ func (c *checkSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	panic("unreachable")
 }
 
-func (c *checkSink) Close() error {
+func (c *checkSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (c *checkSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
@@ -86,7 +90,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	defer cancel()
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
-	defer manager.Close()
+	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
 	var wg sync.WaitGroup
@@ -141,7 +145,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	defer cancel()
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
-	defer manager.Close()
+	defer manager.Close(ctx)
 	goroutineNum := 100
 	var wg sync.WaitGroup
 	const ExitSignal = uint64(math.MaxUint64)
@@ -198,7 +202,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				// remove table
 				table := tableSinks[0]
 				close(closeChs[0])
-				c.Assert(table.Close(), check.IsNil)
+				c.Assert(table.Close(ctx), check.IsNil)
 				tableSinks = tableSinks[1:]
 				closeChs = closeChs[1:]
 			}
@@ -240,7 +244,11 @@ func (e *errorSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	panic("unreachable")
 }
 
-func (e *errorSink) Close() error {
+func (e *errorSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (e *errorSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
@@ -250,10 +258,11 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	defer cancel()
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0)
-	defer manager.Close()
+	defer manager.Close(ctx)
 	sink := manager.CreateTableSink(1, 0)
 	err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		CommitTs: 1,
+		Table:    &model.TableName{TableID: 1},
 	})
 	c.Assert(err, check.IsNil)
 	_, err = sink.FlushRowChangedEvents(ctx, 2)
