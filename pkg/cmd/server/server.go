@@ -90,6 +90,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	_ = cmd.Flags().MarkHidden("sort-dir")
 }
 
+// run runs the server cmd.
 func (o *options) run(cmd *cobra.Command) error {
 	conf, err := o.toServerCfg(cmd)
 	if err != nil {
@@ -143,10 +144,12 @@ func (o *options) run(cmd *cobra.Command) error {
 	return nil
 }
 
+// complete adapts from the command line args and factory to the data required.
 func (o *options) complete() {
 	o.serverConfig.Security = o.getCredential()
 }
 
+// validate checks that the provided attach options are specified.
 func (o *options) validate() error {
 	if len(o.serverPdAddr) == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
@@ -161,6 +164,7 @@ func (o *options) validate() error {
 	return nil
 }
 
+// toServerCfg converts the options to the server's configuration.
 func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) {
 	conf := config.GetDefaultServerConfig()
 	if len(o.serverConfigFilePath) > 0 {
@@ -233,6 +237,7 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 	return conf, nil
 }
 
+// getCredential returns security credential.
 func (o *options) getCredential() *security.Credential {
 	var certAllowedCN []string
 	if len(o.allowedCertCN) != 0 {
