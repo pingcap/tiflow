@@ -173,7 +173,7 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 	if v.String() == "5.0.0-rc" {
 		return false
 	}
-	return !v.LessThan(*semver.Must(semver.NewVersion("4.0.13"))) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
+	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
 }
 
 // TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version
