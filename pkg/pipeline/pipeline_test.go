@@ -76,7 +76,7 @@ func (e echoNode) Destroy(ctx NodeContext) error {
 
 type checkNode struct {
 	c        *check.C
-	expected []*Message
+	expected []Message
 	index    int
 }
 
@@ -112,7 +112,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
-		expected: []*Message{
+		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
@@ -225,7 +225,7 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	p.AppendNode(ctx, "error node", &errorNode{c: c})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
-		expected: []*Message{
+		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
@@ -380,7 +380,7 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
-		expected: []*Message{
+		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{

@@ -101,7 +101,7 @@ func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runne
 }
 
 // SendToFirstNode sends the message to the first node
-func (p *Pipeline) SendToFirstNode(msg *Message) error {
+func (p *Pipeline) SendToFirstNode(msg Message) error {
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
 	if p.isClosed {
