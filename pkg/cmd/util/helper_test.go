@@ -14,8 +14,13 @@
 package util
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -94,4 +99,73 @@ func (s *utilsSuite) TestVerifyPdEndpoint(c *check.C) {
 
 	// valid https URL with TLS.
 	c.Assert(VerifyPdEndpoint("https://aa", true), check.IsNil)
+}
+
+func (s *utilsSuite) TestStrictDecodeValidFile(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dataDir := c.MkDir()
+	tmpDir := c.MkDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := fmt.Sprintf(`
+addr = "128.0.0.1:1234"
+advertise-addr = "127.0.0.1:1111"
+
+log-file = "/root/cdc1.log"
+log-level = "warn"
+
+data-dir = "%+v"
+gc-ttl = 500
+tz = "US"
+capture-session-ttl = 10
+
+owner-flush-interval = "600ms"
+processor-flush-interval = "600ms"
+
+[log.file]
+max-size = 200
+max-days = 1
+max-backups = 1
+
+[sorter]
+chunk-size-limit = 10000000
+max-memory-consumption = 2000000
+max-memory-percentage = 3
+num-concurrent-worker = 4
+num-workerpool-goroutine = 5
+sort-dir = "/tmp/just_a_test"
+
+[security]
+ca-path = "aa"
+cert-path = "bb"
+key-path = "cc"
+cert-allowed-cn = ["dd","ee"]
+`, dataDir)
+	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	conf := config.GetDefaultServerConfig()
+	err = StrictDecodeFile(configPath, "test", conf)
+	c.Assert(err, check.IsNil)
+}
+
+func (s *utilsSuite) TestStrictDecodeInvalidFile(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dataDir := c.MkDir()
+	tmpDir := c.MkDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := fmt.Sprintf(`
+unknown = "128.0.0.1:1234"
+data-dir = "%+v"
+
+[log.unkown]
+max-size = 200
+max-days = 1
+max-backups = 1
+`, dataDir)
+	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	conf := config.GetDefaultServerConfig()
+	err = StrictDecodeFile(configPath, "test", conf)
+	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options.*")
 }
