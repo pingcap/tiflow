@@ -160,7 +160,7 @@ func (v *TiCDCClusterVersion) IsUnknown() bool {
 // ShouldEnableOldValueByDefault returns whether old value should be enabled by default
 func (v *TiCDCClusterVersion) ShouldEnableOldValueByDefault() bool {
 	// we assume the unknown version to be the latest version
-	return v.isUnknown || !v.LessThan(*semver.Must(semver.NewVersion("5.0.0-rc")))
+	return v.isUnknown || !v.LessThan(*semver.New("5.0.0-rc"))
 }
 
 // ShouldEnableUnifiedSorterByDefault returns whether Unified Sorter should be enabled by default
