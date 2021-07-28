@@ -92,9 +92,10 @@ type mysqlSink struct {
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
 
-	txnCache   *common.UnresolvedTxnCache
-	workers    []*mysqlSinkWorker
-	resolvedTs uint64
+	txnCache      *common.UnresolvedTxnCache
+	workers       []*mysqlSinkWorker
+	resolvedTs    uint64
+	maxResolvedTs uint64
 
 	execWaitNotifier *notify.Notifier
 	resolvedNotifier *notify.Notifier
@@ -116,7 +117,14 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return nil
 }
 
+// FlushRowChangedEvents will flushes all received events, we don't allow mysql
+// sink to receive events before resolving
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	if atomic.LoadUint64(&s.maxResolvedTs) < resolvedTs {
+		atomic.StoreUint64(&s.maxResolvedTs, resolvedTs)
+	}
+	// resolvedTs can be fallen back, such as a new table is added into this sink
+	// with a smaller start-ts
 	atomic.StoreUint64(&s.resolvedTs, resolvedTs)
 	s.resolvedNotifier.Notify()
 
@@ -861,11 +869,43 @@ func (w *mysqlSinkWorker) cleanup() {
 	}
 }
 
-func (s *mysqlSink) Close() error {
+func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
 	s.resolvedNotifier.Close()
 	err := s.db.Close()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
+}
+
+func (s *mysqlSink) Barrier(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		default:
+			maxResolvedTs := atomic.LoadUint64(&s.maxResolvedTs)
+			if s.checkpointTs() >= maxResolvedTs {
+				return nil
+			}
+			checkpointTs, err := s.FlushRowChangedEvents(ctx, maxResolvedTs)
+			if err != nil {
+				return err
+			}
+			if checkpointTs >= maxResolvedTs {
+				return nil
+			}
+		}
+	}
+}
+
+func (s *mysqlSink) checkpointTs() uint64 {
+	checkpointTs := atomic.LoadUint64(&s.resolvedTs)
+	for _, worker := range s.workers {
+		workerCheckpointTs := atomic.LoadUint64(&worker.checkpointTs)
+		if workerCheckpointTs < checkpointTs {
+			checkpointTs = workerCheckpointTs
+		}
+	}
+	return checkpointTs
 }
 
 func logDMLTxnErr(err error) error {

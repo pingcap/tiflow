@@ -267,9 +267,14 @@ func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 	return nil
 }
 
-func (k *mqSink) Close() error {
+func (k *mqSink) Close(ctx context.Context) error {
 	err := k.mqProducer.Close()
 	return errors.Trace(err)
+}
+
+func (k *mqSink) Barrier(cxt context.Context) error {
+	// TODO
+	return nil
 }
 
 func (k *mqSink) run(ctx context.Context) error {

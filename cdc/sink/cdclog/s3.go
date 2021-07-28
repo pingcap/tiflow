@@ -342,7 +342,12 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 	return nil
 }
 
-func (s *s3Sink) Close() error {
+func (s *s3Sink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (s *s3Sink) Barrier(ctx context.Context) error {
+	// TODO
 	return nil
 }
 
