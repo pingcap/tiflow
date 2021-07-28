@@ -68,7 +68,7 @@ func (b ChanBuffer) Get(ctx context.Context) (model.RegionFeedEvent, error) {
 var _ EventBuffer = &memBuffer{}
 
 type memBuffer struct {
-	limitter *BlurResourceLimitter
+	limitter *BlurResourceLimiter
 
 	mu struct {
 		sync.Mutex
@@ -78,7 +78,7 @@ type memBuffer struct {
 }
 
 // Passing nil will make a unlimited  buffer.
-func makeMemBuffer(limitter *BlurResourceLimitter) *memBuffer {
+func makeMemBuffer(limitter *BlurResourceLimiter) *memBuffer {
 	return &memBuffer{
 		limitter: limitter,
 		mu: struct {
@@ -95,7 +95,7 @@ func makeMemBuffer(limitter *BlurResourceLimitter) *memBuffer {
 // AddEntry implements EventBuffer interface.
 func (b *memBuffer) AddEntry(ctx context.Context, entry model.RegionFeedEvent) error {
 	b.mu.Lock()
-	if b.limitter != nil && b.limitter.OverBucget() {
+	if b.limitter != nil && b.limitter.OverBudget() {
 		b.mu.Unlock()
 		return cerror.ErrBufferReachLimit.GenWithStackByArgs()
 	}
@@ -158,31 +158,31 @@ func entrySize(e model.RegionFeedEvent) int {
 	} else if e.Resolved != nil {
 		return int(sizeOfResolve)
 	} else {
-		log.Panic("unknow event type")
+		log.Panic("unknown event type")
 	}
 
 	return 0
 }
 
-// BlurResourceLimitter limit resource use.
-type BlurResourceLimitter struct {
+// BlurResourceLimiter limit resource use.
+type BlurResourceLimiter struct {
 	budget int64
 	used   int64
 }
 
-// NewBlurResourceLimmter create a BlurResourceLimitter.
-func NewBlurResourceLimmter(budget int64) *BlurResourceLimitter {
-	return &BlurResourceLimitter{
+// NewBlurResourceLimiter create a BlurResourceLimiter.
+func NewBlurResourceLimiter(budget int64) *BlurResourceLimiter {
+	return &BlurResourceLimiter{
 		budget: budget,
 	}
 }
 
-// Add used resource into limmter
-func (rl *BlurResourceLimitter) Add(n int64) {
+// Add used resource into limiter
+func (rl *BlurResourceLimiter) Add(n int64) {
 	atomic.AddInt64(&rl.used, n)
 }
 
-// OverBucget retun true if over budget.
-func (rl *BlurResourceLimitter) OverBucget() bool {
+// OverBudget return true if over budget.
+func (rl *BlurResourceLimiter) OverBudget() bool {
 	return atomic.LoadInt64(&rl.used) >= atomic.LoadInt64(&rl.budget)
 }

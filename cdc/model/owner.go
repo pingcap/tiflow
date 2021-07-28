@@ -174,6 +174,7 @@ func (o *TableOperation) Clone() *TableOperation {
 }
 
 // TaskWorkload records the workloads of a task
+// todo (Ling Jin): what the workload really means about ?
 // the value of the struct is the workload
 type TaskWorkload map[TableID]WorkloadInfo
 
@@ -215,7 +216,7 @@ func (i *TableReplicaInfo) Clone() *TableReplicaInfo {
 
 // TaskStatus records the task information of a capture
 type TaskStatus struct {
-	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
+	// Table information list, containing tables that processor should process, updated by owner, processor is read only.
 	Tables       map[TableID]*TableReplicaInfo `json:"tables"`
 	Operation    map[TableID]*TableOperation   `json:"operation"`
 	AdminJobType AdminJobType                  `json:"admin-job-type"`

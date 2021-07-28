@@ -38,6 +38,7 @@ import (
 )
 
 const (
+	// todo: add comment about this channel size
 	defaultOutputChanSize = 128000
 )
 

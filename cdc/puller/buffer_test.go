@@ -99,7 +99,7 @@ var _ = check.Suite(&memBufferSuite{})
 
 func (bs *memBufferSuite) TestMemBuffer(c *check.C) {
 	defer testleak.AfterTest(c)()
-	limitter := NewBlurResourceLimmter(1024 * 1024)
+	limitter := NewBlurResourceLimiter(1024 * 1024)
 	bf := makeMemBuffer(limitter)
 
 	var err error

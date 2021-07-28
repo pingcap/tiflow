@@ -66,7 +66,7 @@ type oldProcessor struct {
 	captureInfo  model.CaptureInfo
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
-	limitter     *puller.BlurResourceLimitter
+	limitter     *puller.BlurResourceLimiter
 	stopped      int32
 
 	pdCli      pd.Client
@@ -158,7 +158,7 @@ func newProcessor(
 ) (*oldProcessor, error) {
 	etcdCli := session.Client()
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
-	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
+	limitter := puller.NewBlurResourceLimiter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts",
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))

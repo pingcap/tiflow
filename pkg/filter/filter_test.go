@@ -130,7 +130,7 @@ func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := &config.ReplicaConfig{
 		Filter: &config.FilterConfig{
-			DDLAllowlist: []model.ActionType{model.ActionAddForeignKey},
+			DDLAllowList: []model.ActionType{model.ActionAddForeignKey},
 		},
 	}
 	filter, err := NewFilter(config)

@@ -62,7 +62,7 @@ type processor struct {
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
-	limitter      *puller.BlurResourceLimitter
+	limiter       *puller.BlurResourceLimiter
 	schemaStorage entry.SchemaStorage
 	filter        *filter.Filter
 	mounter       entry.Mounter
@@ -89,7 +89,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p := &processor{
-		limitter:     puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
+		limiter:      puller.NewBlurResourceLimiter(defaultMemBufferCapacity),
 		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
@@ -195,6 +195,7 @@ func (p *processor) checkChangefeedNormal() bool {
 	if p.changefeed.Info.AdminJobType.IsStopState() || p.changefeed.Status.AdminJobType.IsStopState() {
 		return false
 	}
+	// todo (Ling jin): understand CheckChangefeedNormal method
 	// add a patch to check the changefeed is runnable when applying the patches in the etcd worker.
 	p.changefeed.CheckChangefeedNormal()
 	return true
@@ -444,15 +445,15 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
-	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
+	ddlSpans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	conf := config.GetGlobalServerConfig()
 	ddlPuller := puller.NewPuller(
 		ctx,
 		ctx.GlobalVars().PDClient,
 		conf.Security,
-		ctx.GlobalVars().KVStorage,
-		checkpointTs, ddlspans, false)
+		kvStorage,
+		checkpointTs, ddlSpans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -723,7 +724,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
-		p.limitter,
+		p.limiter,
 		p.mounter,
 		tableID,
 		tableNameStr,

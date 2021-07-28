@@ -26,7 +26,7 @@ import (
 type Filter struct {
 	filter           filterV2.Filter
 	ignoreTxnStartTs []uint64
-	ddlAllowlist     []model.ActionType
+	ddlAllowList     []model.ActionType
 	isCyclicEnabled  bool
 }
 
@@ -64,7 +64,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	return &Filter{
 		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
-		ddlAllowlist:     cfg.Filter.DDLAllowlist,
+		ddlAllowList:     cfg.Filter.DDLAllowList,
 		isCyclicEnabled:  cfg.Cyclic.IsEnabled(),
 	}, nil
 }
@@ -116,7 +116,7 @@ func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
-	for _, allowDDLType := range f.ddlAllowlist {
+	for _, allowDDLType := range f.ddlAllowList {
 		if allowDDLType == ddlType {
 			return false
 		}

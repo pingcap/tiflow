@@ -671,15 +671,17 @@ type schemaStorageImpl struct {
 	explicitTables bool
 }
 
+func getSchemaSnapshot(meta *timeta.Meta, startTs uint64, forceReplicate bool) (*schemaSnapshot, error) {
+	if meta == nil {
+		return newEmptySchemaSnapshot(forceReplicate), nil
+	}
+
+	return newSchemaSnapshotFromMeta(meta, startTs, forceReplicate)
+}
+
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool) (SchemaStorage, error) {
-	var snap *schemaSnapshot
-	var err error
-	if meta == nil {
-		snap = newEmptySchemaSnapshot(forceReplicate)
-	} else {
-		snap, err = newSchemaSnapshotFromMeta(meta, startTs, forceReplicate)
-	}
+	snap, err := getSchemaSnapshot(meta, startTs, forceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
