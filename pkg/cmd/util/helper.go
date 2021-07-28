@@ -68,13 +68,13 @@ func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 
 // LogHTTPProxies logs HTTP proxy relative environment variables.
 func LogHTTPProxies() {
-	fields := proxyFields()
+	fields := findProxyFields()
 	if len(fields) > 0 {
 		log.Info("using proxy config", fields...)
 	}
 }
 
-func proxyFields() []zap.Field {
+func findProxyFields() []zap.Field {
 	proxyCfg := httpproxy.FromEnvironment()
 	fields := make([]zap.Field, 0, 3)
 	if proxyCfg.HTTPProxy != "" {
