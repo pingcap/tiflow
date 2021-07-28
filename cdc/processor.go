@@ -1089,11 +1089,12 @@ func (p *oldProcessor) sorterConsume(
 			// We need to handle the update event to be compatible with the old format.
 			if !p.changefeed.Config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
 				if shouldSplitUpdateEventRow(ev.Row) {
-					splitRows, err := splitUpdateEventRow(ev.Row)
+					deleteEventRow, insertEventRow, err := splitUpdateEventRow(ev.Row)
 					if err != nil {
 						return errors.Trace(err)
 					}
-					rows = append(rows, splitRows...)
+					// NOTICE: Please do not change the order, the delete event always comes before the insert event.
+					rows = append(rows, deleteEventRow, insertEventRow)
 				} else {
 					// If the handle key columns are not updated, PreColumns is directly ignored.
 					ev.Row.PreColumns = nil
@@ -1301,12 +1302,10 @@ func shouldSplitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) bool
 }
 
 // splitUpdateEventRow splits a row update event into a row delete and a row insert event.
-func splitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) ([]*model.RowChangedEvent, error) {
+func splitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) (*model.RowChangedEvent, *model.RowChangedEvent, error) {
 	if rowUpdateChangeEvent == nil {
-		return nil, errors.New("nil row cannot be split")
+		return nil, nil, errors.New("nil row cannot be split")
 	}
-
-	result := make([]*model.RowChangedEvent, 0, 2)
 
 	// If there is an update to handle key columns,
 	// we need to split the event into two events to be compatible with the old format.
@@ -1321,15 +1320,13 @@ func splitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) ([]*model.
 	}
 	// Align with the old format if old value disabled.
 	deleteEventRow.TableInfoVersion = 0
-	result = append(result, &deleteEventRow)
 
 	insertEventRow := *rowUpdateChangeEvent
 
 	// NOTICE: clean up pre cols for insert event.
 	insertEventRow.PreColumns = nil
-	result = append(result, &insertEventRow)
 
-	return result, nil
+	return &deleteEventRow, &insertEventRow, nil
 }
 
 // pullerConsume receives RawKVEntry from a given puller and sends to sorter
