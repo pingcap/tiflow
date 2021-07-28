@@ -14,10 +14,11 @@
 package server
 
 import (
+	"testing"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	ticonfig "github.com/pingcap/tidb/config"
-	"testing"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
