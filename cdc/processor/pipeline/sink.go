@@ -155,11 +155,12 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 	// We need to handle the update event to be compatible with the old format.
 	if !config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
 		if shouldSplitUpdateEvent(event) {
-			splitEvents, err := splitUpdateEvent(event)
+			deleteEvent, insertEvent, err := splitUpdateEvent(event)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			n.eventBuffer = append(n.eventBuffer, splitEvents...)
+			// NOTICE: Please do not change the order, the delete event always comes before the insert event.
+			n.eventBuffer = append(n.eventBuffer, deleteEvent, insertEvent)
 		} else {
 			// If the handle key columns are not updated, PreColumns is directly ignored.
 			event.Row.PreColumns = nil
@@ -205,12 +206,10 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 }
 
 // splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(updateEvent *model.PolymorphicEvent) ([]*model.PolymorphicEvent, error) {
+func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
 	if updateEvent == nil {
-		return nil, errors.New("nil event cannot be split")
+		return nil, nil, errors.New("nil event cannot be split")
 	}
-
-	result := make([]*model.PolymorphicEvent, 0, 2)
 
 	// If there is an update to handle key columns,
 	// we need to split the event into two events to be compatible with the old format.
@@ -231,19 +230,16 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) ([]*model.Polymorphic
 	}
 	// Align with the old format if old value disabled.
 	deleteEvent.Row.TableInfoVersion = 0
-	result = append(result, &deleteEvent)
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row
 	insertEventRowKV := *updateEvent.RawKV
 	insertEvent.Row = &insertEventRow
 	insertEvent.RawKV = &insertEventRowKV
-
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.Row.PreColumns = nil
-	result = append(result, &insertEvent)
 
-	return result, nil
+	return &deleteEvent, &insertEvent, nil
 }
 
 func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
