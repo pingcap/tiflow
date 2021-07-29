@@ -23,14 +23,13 @@ import (
 	"net/http/pprof"
 	"os"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -72,6 +71,15 @@ func (s *Server) startStatusHTTP() error {
 		return errors.Trace(err)
 	}
 	s.statusServer = &http.Server{Addr: conf.Addr, Handler: serverMux, TLSConfig: tlsConfig}
+
+	if config.OpenAPIImpl {
+		router, err := CreateRouter(s.capture)
+		log.Info("Create router success. CDC new HTTP server will run")
+		if err != nil {
+			log.Error("status server create router failed", zap.Error(err))
+		}
+		s.statusServer.Handler = router
+	}
 
 	ln, err := net.Listen("tcp", conf.Addr)
 	if err != nil {

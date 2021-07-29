@@ -33,6 +33,8 @@ const (
 	// NewReplicaImpl is true if we using new processor
 	// new owner should be also switched on after it implemented
 	NewReplicaImpl = true
+	// OpenAPIImpl is true when using OpenAPI
+	OpenAPIImpl = false
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
 )
