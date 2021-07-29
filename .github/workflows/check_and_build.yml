@@ -11,7 +11,7 @@ on:
       - 'release-[0-9].[0-9]*'
 
 concurrency:
-  group: ${{ github.ref }}
+  group: ${{ github.ref }}-${{ github.workflow }}
   cancel-in-progress: true
 
 jobs:
