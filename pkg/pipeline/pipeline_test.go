@@ -527,7 +527,10 @@ func BenchmarkPipeline(b *testing.B) {
 			b.ResetTimer()
 			b.Run(fmt.Sprintf("%d node(s)", i), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					p.SendToFirstNode(BarrierMessage(1))
+					err := p.SendToFirstNode(BarrierMessage(1))
+					if err != nil {
+						b.Fatal(err)
+					}
 					<-ch
 				}
 			})
