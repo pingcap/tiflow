@@ -55,12 +55,6 @@ func patchTiDBConf() {
 	})
 }
 
-func init() {
-	patchTiDBConf()
-	rootCmd.AddCommand(serverCmd)
-	initServerCmd(serverCmd)
-}
-
 func initServerCmd(cmd *cobra.Command) {
 	defaultServerConfig := config.GetDefaultServerConfig()
 	cmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
