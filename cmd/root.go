@@ -31,7 +31,7 @@ func Execute() {
 	// Outputs cmd.Print to stdout.
 	rootCmd.SetOut(os.Stdout)
 
-	//rootCmd.AddCommand(server.NewCmdServer())
+	// rootCmd.AddCommand(server.NewCmdServer())
 	rootCmd.AddCommand(version.NewCmdVersion())
 
 	if err := rootCmd.Execute(); err != nil {
