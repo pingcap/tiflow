@@ -272,6 +272,8 @@ func patchTiDBConf() {
 
 // NewCmdServer creates the `server` command.
 func NewCmdServer() *cobra.Command {
+	patchTiDBConf()
+
 	o := newOptions(config.GetDefaultServerConfig())
 
 	command := &cobra.Command{
@@ -287,7 +289,6 @@ func NewCmdServer() *cobra.Command {
 		},
 	}
 
-	patchTiDBConf()
 	o.addFlags(command)
 
 	return command
