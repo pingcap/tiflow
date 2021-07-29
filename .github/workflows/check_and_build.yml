@@ -10,6 +10,10 @@ on:
       - master
       - 'release-[0-9].[0-9]*'
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   docker_build:
