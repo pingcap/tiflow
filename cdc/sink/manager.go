@@ -110,8 +110,16 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 	delete(m.tableSinks, tableID)
 	m.tableSinksMu.Unlock()
 	callback := make(chan struct{})
-	m.drawbackChan <- drawbackMsg{tableID: tableID, callback: callback}
-	<-callback
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case m.drawbackChan <- drawbackMsg{tableID: tableID, callback: callback}:
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-callback:
+	}
 	return m.backendSink.Barrier(ctx)
 }
 
