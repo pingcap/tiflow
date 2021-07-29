@@ -15,6 +15,7 @@ package server
 
 import (
 	"context"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"strings"
 	"time"
 
@@ -27,7 +28,6 @@ import (
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	ticdcutil "github.com/pingcap/ticdc/pkg/util"
@@ -142,25 +142,10 @@ func (o *options) run(cmd *cobra.Command) error {
 	return nil
 }
 
-// validate checks that the provided attach options are specified.
-func (o *options) validate() error {
-	o.serverConfig.Security = o.getCredential()
-
-	if len(o.serverPdAddr) == 0 {
-		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
-	}
-
-	for _, ep := range strings.Split(o.serverPdAddr, ",") {
-		if err := util.VerifyPdEndpoint(ep, o.serverConfig.Security.IsTLSEnabled()); err != nil {
-			return cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
-		}
-	}
-
-	return nil
-}
-
 // toServerCfg converts the options to the server's configuration.
 func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) {
+	o.serverConfig.Security = o.getCredential()
+
 	conf := config.GetDefaultServerConfig()
 	if len(o.serverConfigFilePath) > 0 {
 		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", conf); err != nil {
@@ -234,6 +219,15 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 		return nil, errors.Trace(err)
 	}
 
+	if len(o.serverPdAddr) == 0 {
+		return nil, cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
+	}
+	for _, ep := range strings.Split(o.serverPdAddr, ",") {
+		if err := util.VerifyPdEndpoint(ep, conf.Security.IsTLSEnabled()); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
+		}
+	}
+
 	if conf.DataDir == "" {
 		cmd.Printf(color.HiYellowString("[WARN] TiCDC server data-dir is not set. " +
 			"Please use `cdc server --data-dir` to start the cdc server if possible.\n"))
@@ -265,10 +259,6 @@ func NewCmdServer() *cobra.Command {
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := o.validate()
-			if err != nil {
-				return err
-			}
 			return o.run(cmd)
 		},
 	}

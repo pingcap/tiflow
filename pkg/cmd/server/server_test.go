@@ -57,50 +57,6 @@ func (s *serverSuite) TestDefaultCfg(c *check.C) {
 	c.Assert(o.serverPdAddr, check.Equals, "http://127.0.0.1:2379")
 }
 
-func (s *serverSuite) TestValidateWithEmptyPdAddress(c *check.C) {
-	defer testleak.AfterTest(c)()
-	cmd := new(cobra.Command)
-	o := newOptions(config.GetDefaultServerConfig())
-	o.addFlags(cmd)
-
-	c.Assert(cmd.ParseFlags([]string{"--pd="}), check.IsNil)
-	err := o.validate()
-	c.Assert(err, check.ErrorMatches, ".*empty PD address.*")
-}
-
-func (s *serverSuite) TestValidateWithInvalidPdAddress(c *check.C) {
-	defer testleak.AfterTest(c)()
-	cmd := new(cobra.Command)
-	o := newOptions(config.GetDefaultServerConfig())
-	o.addFlags(cmd)
-
-	c.Assert(cmd.ParseFlags([]string{"--pd=aa"}), check.IsNil)
-	err := o.validate()
-	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
-}
-
-func (s *serverSuite) TestValidateWithInvalidPdAddressWithoutHost(c *check.C) {
-	defer testleak.AfterTest(c)()
-	cmd := new(cobra.Command)
-	o := newOptions(config.GetDefaultServerConfig())
-	o.addFlags(cmd)
-
-	c.Assert(cmd.ParseFlags([]string{"--pd=http://"}), check.IsNil)
-	err := o.validate()
-	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
-}
-
-func (s *serverSuite) TestValidateWithHttpsPdAddressWithoutCertificate(c *check.C) {
-	defer testleak.AfterTest(c)()
-	cmd := new(cobra.Command)
-	o := newOptions(config.GetDefaultServerConfig())
-	o.addFlags(cmd)
-
-	c.Assert(cmd.ParseFlags([]string{"--pd=https://aa"}), check.IsNil)
-	err := o.validate()
-	c.Assert(err, check.ErrorMatches, ".*PD endpoint scheme is https, please provide certificate.*")
-}
-
 func (s *serverSuite) TestAddUnknownFlag(c *check.C) {
 	defer testleak.AfterTest(c)()
 	cmd := new(cobra.Command)
@@ -138,8 +94,6 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 		"--sort-dir", "/tmp/just_a_test",
 	}), check.IsNil)
 
-	err := o.validate()
-	c.Assert(err, check.IsNil)
 	cfg, err := o.toServerCfg(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
@@ -224,8 +178,6 @@ sort-dir = "/tmp/just_a_test"
 
 	c.Assert(cmd.ParseFlags([]string{"--config", configPath}), check.IsNil)
 
-	err = o.validate()
-	c.Assert(err, check.IsNil)
 	cfg, err := o.toServerCfg(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
@@ -327,8 +279,6 @@ cert-allowed-cn = ["dd","ee"]
 		"--config", configPath,
 	}), check.IsNil)
 
-	err = o.validate()
-	c.Assert(err, check.IsNil)
 	cfg, err := o.toServerCfg(cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
