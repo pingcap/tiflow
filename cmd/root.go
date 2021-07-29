@@ -16,7 +16,6 @@ package cmd
 import (
 	"os"
 
-	"github.com/pingcap/ticdc/pkg/cmd/server"
 	"github.com/pingcap/ticdc/pkg/cmd/version"
 	"github.com/spf13/cobra"
 )
@@ -32,7 +31,7 @@ func Execute() {
 	// Outputs cmd.Print to stdout.
 	rootCmd.SetOut(os.Stdout)
 
-	rootCmd.AddCommand(server.NewCmdServer())
+	//rootCmd.AddCommand(server.NewCmdServer())
 	rootCmd.AddCommand(version.NewCmdVersion())
 
 	if err := rootCmd.Execute(); err != nil {
