@@ -144,6 +144,8 @@ func (o *options) run(cmd *cobra.Command) error {
 
 // validate checks that the provided attach options are specified.
 func (o *options) validate() error {
+	o.serverConfig.Security = o.getCredential()
+
 	if len(o.serverPdAddr) == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
@@ -159,8 +161,6 @@ func (o *options) validate() error {
 
 // toServerCfg converts the options to the server's configuration.
 func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) {
-	o.serverConfig.Security = o.getCredential()
-
 	conf := config.GetDefaultServerConfig()
 	if len(o.serverConfigFilePath) > 0 {
 		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", conf); err != nil {
