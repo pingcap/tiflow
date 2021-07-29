@@ -184,6 +184,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs, StoppedTs: 6}), nil))
+	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
