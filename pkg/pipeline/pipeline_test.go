@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	stdCtx "context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -481,12 +482,16 @@ type forward struct {
 }
 
 func (n *forward) Init(ctx NodeContext) error {
-	// do nothing
 	return nil
 }
 
 func (n *forward) Receive(ctx NodeContext) error {
-	n.ch <- ctx.Message()
+	m := ctx.Message()
+	if n.ch != nil {
+		n.ch <- m
+	} else {
+		ctx.SendToNextNode(m)
+	}
 	return nil
 }
 
@@ -494,22 +499,41 @@ func (n *forward) Destroy(ctx NodeContext) error {
 	return nil
 }
 
+// Run the benchmark
+// go test -benchmem -run=^$ -bench ^(BenchmarkPipeline)$ github.com/pingcap/ticdc/pkg/pipeline
 func BenchmarkPipeline(b *testing.B) {
 	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
-	ctx, cancel := context.WithCancel(ctx)
-	ctx = context.WithErrorHandler(ctx, func(err error) error {
-		b.Fatal(err)
-		return err
-	})
-	ch := make(chan Message)
 	runnersSize, outputChannelSize := 2, 64
-	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
-	p.AppendNode(ctx, "forward node", &forward{ch: ch})
 
-	for i := 0; i < b.N; i++ {
-		p.SendToFirstNode(BarrierMessage(1))
-		<-ch
-	}
-	cancel()
-	p.Wait()
+	b.Run("BenchmarkPipeline", func(b *testing.B) {
+		for i := 1; i <= 8; i++ {
+			ctx, cancel := context.WithCancel(ctx)
+			ctx = context.WithErrorHandler(ctx, func(err error) error {
+				b.Fatal(err)
+				return err
+			})
+
+			ch := make(chan Message)
+			p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
+			for j := 0; j < i; j++ {
+				if (j + 1) == i {
+					// The last node
+					p.AppendNode(ctx, "forward node", &forward{ch: ch})
+				} else {
+					p.AppendNode(ctx, "forward node", &forward{})
+				}
+			}
+
+			b.ResetTimer()
+			b.Run(fmt.Sprintf("%d node(s)", i), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					p.SendToFirstNode(BarrierMessage(1))
+					<-ch
+				}
+			})
+			b.StopTimer()
+			cancel()
+			p.Wait()
+		}
+	})
 }
