@@ -115,7 +115,9 @@ func (p *Pipeline) SendToFirstNode(msg *Message) error {
 	select {
 	case p.header <- msg:
 	default:
-		return cerror.ErrPipelineTryAgain.GenWithStackByArgs()
+		// Do not call `GenWithStackByArgs` in the hot path,
+		// it consumes lots of CPU.
+		return cerror.ErrPipelineTryAgain
 	}
 	return nil
 }
