@@ -25,10 +25,7 @@ jobs:
 
   make_check_build:
     name: Make Check & Build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    runs-on: [self-hosted,X64,docker]
     steps:
 
     - name: Check out code into the Go module directory
