@@ -40,16 +40,14 @@ import (
 
 // options defines flags for the `server` command.
 type options struct {
-	serverConfig *config.ServerConfig
-
 	serverPdAddr         string
 	serverConfigFilePath string
+	caPath               string
+	certPath             string
+	keyPath              string
+	allowedCertCN        string
 
-	// TODO(hi-rustin): Consider using the client construction factory.
-	caPath        string
-	certPath      string
-	keyPath       string
-	allowedCertCN string
+	serverConfig *config.ServerConfig
 }
 
 // newOptions creates new options for the `server` command.
@@ -74,6 +72,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
+
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", defaultServerConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", defaultServerConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", defaultServerConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
@@ -87,13 +86,13 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
+
 	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
-	_ = cmd.Flags().MarkHidden("sort-dir")
+	_ = cmd.Flags().MarkHidden("sort-dir") //nolint:errcheck
 }
 
-// run runs the server cmd.
 func (o *options) run(cmd *cobra.Command) error {
-	conf, err := o.toServerCfg(cmd)
+	conf, err := o.loadAndVerifyServerConfig(cmd)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -106,12 +105,10 @@ func (o *options) run(cmd *cobra.Command) error {
 		FileMaxBackups: conf.Log.File.MaxBackups,
 	})
 	defer cancel()
-
 	tz, err := ticdcutil.GetTimezone(conf.TZ)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
-
 	config.StoreGlobalServerConfig(conf)
 	ctx := ticdcutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
 	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, conf.AdvertiseAddr)
@@ -132,7 +129,6 @@ func (o *options) run(cmd *cobra.Command) error {
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}
-
 	err = server.Run(ctx)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
@@ -145,44 +141,16 @@ func (o *options) run(cmd *cobra.Command) error {
 	return nil
 }
 
-// complete adapts from the command line args and factory to the data required.
-func (o *options) complete() {
+func (o *options) loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error) {
 	o.serverConfig.Security = o.getCredential()
-}
 
-// validate checks that the provided attach options are specified.
-func (o *options) validate() error {
-	if len(o.serverPdAddr) == 0 {
-		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
-	}
-
-	for _, ep := range strings.Split(o.serverPdAddr, ",") {
-		if err := util.VerifyPdEndpoint(ep, o.serverConfig.Security.IsTLSEnabled()); err != nil {
-			return cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
-		}
-	}
-
-	return nil
-}
-
-// toServerCfg converts the options to the server's configuration.
-func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) {
 	conf := config.GetDefaultServerConfig()
 	if len(o.serverConfigFilePath) > 0 {
 		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", conf); err != nil {
 			return nil, err
 		}
-
-		// User specified sort-dir should not take effect, it's always `/tmp/sorter`
-		// if user try to set sort-dir by config file, warn it.
-		if conf.Sorter.SortDir != config.DefaultSortDir {
-			cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
-				"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
-
-			conf.Sorter.SortDir = config.DefaultSortDir
-		}
 	}
-
+	// TODO: directly bind the options.
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "addr":
@@ -222,8 +190,7 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = o.serverConfig.Security.CertAllowedCN
 		case "sort-dir":
-			// user specified sorter dir should not take effect, it's always `/tmp/sorter`
-			// if user try to set sort-dir by flag, warn it.
+			// user specified sorter dir should not take effect
 			if o.serverConfig.Sorter.SortDir != config.DefaultSortDir {
 				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
@@ -235,9 +202,16 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 			log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
 		}
 	})
-
 	if err := conf.ValidateAndAdjust(); err != nil {
 		return nil, errors.Trace(err)
+	}
+	if len(o.serverPdAddr) == 0 {
+		return nil, cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
+	}
+	for _, ep := range strings.Split(o.serverPdAddr, ",") {
+		if err := util.VerifyPdEndpoint(ep, conf.Security.IsTLSEnabled()); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
+		}
 	}
 
 	if conf.DataDir == "" {
@@ -248,7 +222,6 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 	return conf, nil
 }
 
-// getCredential returns security credential.
 func (o *options) getCredential() *security.Credential {
 	var certAllowedCN []string
 	if len(o.allowedCertCN) != 0 {
@@ -263,33 +236,27 @@ func (o *options) getCredential() *security.Credential {
 	}
 }
 
-func patchTiDBConf() {
-	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
-		// Disable kv client batch send loop introduced by tidb library, which is not used in TiCDC server
-		conf.TiKVClient.MaxBatchSize = 0
-	})
-}
-
 // NewCmdServer creates the `server` command.
 func NewCmdServer() *cobra.Command {
-	patchTiDBConf()
-
 	o := newOptions(config.GetDefaultServerConfig())
 
 	command := &cobra.Command{
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			o.complete()
-			err := o.validate()
-			if err != nil {
-				return err
-			}
 			return o.run(cmd)
 		},
 	}
 
+	patchTiDBConf()
 	o.addFlags(command)
 
 	return command
+}
+
+func patchTiDBConf() {
+	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
+		// Disable kv client batch send loop introduced by tidb library, which is not used in TiCDC server
+		conf.TiKVClient.MaxBatchSize = 0
+	})
 }
