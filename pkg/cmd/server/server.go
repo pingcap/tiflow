@@ -40,14 +40,14 @@ import (
 
 // options defines flags for the `server` command.
 type options struct {
+	serverConfig         *config.ServerConfig
 	serverPdAddr         string
 	serverConfigFilePath string
-	caPath               string
-	certPath             string
-	keyPath              string
-	allowedCertCN        string
 
-	serverConfig *config.ServerConfig
+	caPath        string
+	certPath      string
+	keyPath       string
+	allowedCertCN string
 }
 
 // newOptions creates new options for the `server` command.
@@ -62,7 +62,6 @@ func newOptions(serverConfig *config.ServerConfig) *options {
 func (o *options) addFlags(cmd *cobra.Command) {
 	defaultServerConfig := config.GetDefaultServerConfig()
 
-	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
 	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", defaultServerConfig.Addr, "Set the listening address")
 	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", defaultServerConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 	cmd.Flags().StringVar(&o.serverConfig.TZ, "tz", defaultServerConfig.TZ, "Specify time zone of TiCDC cluster")
@@ -72,7 +71,6 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.serverConfig.DataDir, "data-dir", defaultServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(defaultServerConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(defaultServerConfig.ProcessorFlushInterval), "processor flushes task status interval")
-
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", defaultServerConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", defaultServerConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", defaultServerConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
@@ -81,18 +79,18 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	// We use 8GB as a safe default before we support local configuration file.
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", defaultServerConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
 	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", defaultServerConfig.Sorter.SortDir, "sorter's temporary file directory")
+	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
+	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
 
 	cmd.Flags().StringVar(&o.caPath, "ca", "", "CA certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
-
-	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
-	_ = cmd.Flags().MarkHidden("sort-dir") //nolint:errcheck
+	_ = cmd.Flags().MarkHidden("sort-dir")
 }
 
 func (o *options) run(cmd *cobra.Command) error {
-	conf, err := o.loadAndVerifyServerConfig(cmd)
+	conf, err := o.toServerCfg(cmd)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -105,10 +103,12 @@ func (o *options) run(cmd *cobra.Command) error {
 		FileMaxBackups: conf.Log.File.MaxBackups,
 	})
 	defer cancel()
+
 	tz, err := ticdcutil.GetTimezone(conf.TZ)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
+
 	config.StoreGlobalServerConfig(conf)
 	ctx := ticdcutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
 	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, conf.AdvertiseAddr)
@@ -141,7 +141,7 @@ func (o *options) run(cmd *cobra.Command) error {
 	return nil
 }
 
-func (o *options) loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerConfig, error) {
+func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) {
 	o.serverConfig.Security = o.getCredential()
 
 	conf := config.GetDefaultServerConfig()
@@ -150,7 +150,6 @@ func (o *options) loadAndVerifyServerConfig(cmd *cobra.Command) (*config.ServerC
 			return nil, err
 		}
 	}
-	// TODO: directly bind the options.
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "addr":
