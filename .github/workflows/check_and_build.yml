@@ -64,6 +64,6 @@ jobs:
           args: --timeout 10m0s
 
       - name: Revive Lint
-        uses: morphy2k/revive-action@v1
+        uses: docker://morphy/revive-action:v1
         with:
           config: tools/check/revive.toml
