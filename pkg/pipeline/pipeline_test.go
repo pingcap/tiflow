@@ -475,3 +475,41 @@ func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
 	p.AppendNode(ctx, "panic", panicNode{})
 	p.Wait()
 }
+
+type forward struct {
+	ch chan Message
+}
+
+func (n *forward) Init(ctx NodeContext) error {
+	// do nothing
+	return nil
+}
+
+func (n *forward) Receive(ctx NodeContext) error {
+	n.ch <- ctx.Message()
+	return nil
+}
+
+func (n *forward) Destroy(ctx NodeContext) error {
+	return nil
+}
+
+func BenchmarkPipeline(b *testing.B) {
+	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
+	ctx, cancel := context.WithCancel(ctx)
+	ctx = context.WithErrorHandler(ctx, func(err error) error {
+		b.Fatal(err)
+		return err
+	})
+	ch := make(chan Message)
+	runnersSize, outputChannelSize := 2, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
+	p.AppendNode(ctx, "forward node", &forward{ch: ch})
+
+	for i := 0; i < b.N; i++ {
+		p.SendToFirstNode(BarrierMessage(1))
+		<-ch
+	}
+	cancel()
+	p.Wait()
+}
