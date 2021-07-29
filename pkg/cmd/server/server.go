@@ -89,6 +89,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	_ = cmd.Flags().MarkHidden("sort-dir")
 }
 
+// run runs the server cmd.
 func (o *options) run(cmd *cobra.Command) error {
 	conf, err := o.toServerCfg(cmd)
 	if err != nil {
@@ -141,6 +142,22 @@ func (o *options) run(cmd *cobra.Command) error {
 	return nil
 }
 
+// validate checks that the provided attach options are specified.
+func (o *options) validate() error {
+	if len(o.serverPdAddr) == 0 {
+		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
+	}
+
+	for _, ep := range strings.Split(o.serverPdAddr, ",") {
+		if err := util.VerifyPdEndpoint(ep, o.serverConfig.Security.IsTLSEnabled()); err != nil {
+			return cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
+		}
+	}
+
+	return nil
+}
+
+// toServerCfg converts the options to the server's configuration.
 func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) {
 	o.serverConfig.Security = o.getCredential()
 
@@ -149,7 +166,17 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", conf); err != nil {
 			return nil, err
 		}
+
+		// User specified sort-dir should not take effect, it's always `/tmp/sorter`
+		// if user try to set sort-dir by config file, warn it.
+		if conf.Sorter.SortDir != config.DefaultSortDir {
+			cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
+				"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
+
+			conf.Sorter.SortDir = config.DefaultSortDir
+		}
 	}
+
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "addr":
@@ -189,7 +216,8 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 		case "cert-allowed-cn":
 			conf.Security.CertAllowedCN = o.serverConfig.Security.CertAllowedCN
 		case "sort-dir":
-			// user specified sorter dir should not take effect
+			// user specified sorter dir should not take effect, it's always `/tmp/sorter`
+			// if user try to set sort-dir by flag, warn it.
 			if o.serverConfig.Sorter.SortDir != config.DefaultSortDir {
 				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
@@ -201,16 +229,9 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 			log.Panic("unknown flag, please report a bug", zap.String("flagName", flag.Name))
 		}
 	})
+
 	if err := conf.ValidateAndAdjust(); err != nil {
 		return nil, errors.Trace(err)
-	}
-	if len(o.serverPdAddr) == 0 {
-		return nil, cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
-	}
-	for _, ep := range strings.Split(o.serverPdAddr, ",") {
-		if err := util.VerifyPdEndpoint(ep, conf.Security.IsTLSEnabled()); err != nil {
-			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
-		}
 	}
 
 	if conf.DataDir == "" {
@@ -221,6 +242,7 @@ func (o *options) toServerCfg(cmd *cobra.Command) (*config.ServerConfig, error) 
 	return conf, nil
 }
 
+// getCredential returns security credential.
 func (o *options) getCredential() *security.Credential {
 	var certAllowedCN []string
 	if len(o.allowedCertCN) != 0 {
@@ -243,6 +265,10 @@ func NewCmdServer() *cobra.Command {
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			err := o.validate()
+			if err != nil {
+				return err
+			}
 			return o.run(cmd)
 		},
 	}
