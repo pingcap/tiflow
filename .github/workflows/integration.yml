@@ -8,6 +8,11 @@ on:
   pull_request:
     branches: [ master ]
 
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   MySQL-integration:
     runs-on: ubuntu-latest
