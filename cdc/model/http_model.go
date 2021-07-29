@@ -30,15 +30,16 @@ func (t JSONTime) MarshalJSON() ([]byte, error) {
 	return []byte(stamp), nil
 }
 
-// HttpError of cdc http api
-type HttpError struct {
+// HTTPError of cdc http api
+type HTTPError struct {
 	Error string `json:"error_msg"`
 	Code  string `json:"error_code"`
 }
 
-func NewHttpError(err error) HttpError {
+// NewHTTPError wrap a err into HTTPError
+func NewHTTPError(err error) HTTPError {
 	errCode, _ := errors.RFCCode(err)
-	return HttpError{
+	return HTTPError{
 		Error: err.Error(),
 		Code:  string(errCode),
 	}
@@ -108,6 +109,7 @@ type CaptureTaskStatus struct {
 	TaskStatus *TaskStatus `json:"status"`
 }
 
+// Capture holds common information of a capture in cdc
 type Capture struct {
 	ID            string `json:"id"`
 	IsOwner       bool   `json:"is_owner"`

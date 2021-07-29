@@ -24,11 +24,12 @@ import (
 	"github.com/pingcap/ticdc/cdc/capture"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-
+	// use for OpenAPI online docs
 	_ "github.com/pingcap/ticdc/docs"
 )
 
-func CreateRouter(capture2 *capture.Capture) (*gin.Engine, error) {
+// NewRouter create a router for OpenAPI
+func NewRouter(capture2 *capture.Capture) (*gin.Engine, error) {
 	router := gin.New()
 
 	// discard gin log output
@@ -38,7 +39,7 @@ func CreateRouter(capture2 *capture.Capture) (*gin.Engine, error) {
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
 
-	captureHandler := capture.NewHttpHandler(capture2)
+	captureHandler := capture.NewHTTPHandler(capture2)
 
 	// OpenAPI online docs
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -89,10 +90,6 @@ func CreateRouter(capture2 *capture.Capture) (*gin.Engine, error) {
 		pprofGroup.GET("/symbol", gin.WrapF(pprof.Symbol))
 		pprofGroup.GET("/trace", gin.WrapF(pprof.Trace))
 	}
-
-	// test
-	// create a route that will last 5 seconds
-	router.GET("/long", capture.TimedOutHandler(time.Second*6))
 
 	return router, nil
 }

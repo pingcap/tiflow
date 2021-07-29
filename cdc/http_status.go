@@ -73,7 +73,7 @@ func (s *Server) startStatusHTTP() error {
 	s.statusServer = &http.Server{Addr: conf.Addr, Handler: serverMux, TLSConfig: tlsConfig}
 
 	if config.OpenAPIImpl {
-		router, err := CreateRouter(s.capture)
+		router, err := NewRouter(s.capture)
 		log.Info("Create router success. CDC new HTTP server will run")
 		if err != nil {
 			log.Error("status server create router failed", zap.Error(err))

@@ -114,7 +114,7 @@ definitions:
           $ref: '#/definitions/model.CaptureTaskStatus'
         type: array
     type: object
-  model.HttpError:
+  model.HTTPError:
     properties:
       error_code:
         type: string
@@ -237,11 +237,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: List captures
       tags:
       - capture
@@ -267,7 +267,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: List changefeed
       tags:
       - changefeed
@@ -290,11 +290,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Create changefeed
       tags:
       - changefeed
@@ -317,11 +317,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Remove a changefeed
       tags:
       - changefeed
@@ -345,11 +345,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Get changefeed
       tags:
       - changefeed
@@ -377,11 +377,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Update a changefeed
       tags:
       - changefeed
@@ -404,11 +404,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Pause a changefeed
       tags:
       - changefeed
@@ -431,11 +431,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Resume a changefeed
       tags:
       - changefeed
@@ -470,11 +470,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: move table
       tags:
       - changefeed
@@ -497,11 +497,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: rebalance tables
       tags:
       - changefeed
@@ -533,11 +533,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: notify the owner to resign
       tags:
       - owner
@@ -558,11 +558,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: List processors
       tags:
       - processor
@@ -581,11 +581,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Get processor detail information
       tags:
       - processor
@@ -604,11 +604,11 @@ paths:
         "400":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/model.HttpError'
+            $ref: '#/definitions/model.HTTPError'
       summary: Get server status
       tags:
       - common

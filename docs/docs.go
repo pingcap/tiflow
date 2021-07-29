@@ -50,13 +50,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -96,7 +96,7 @@ var doc = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -131,13 +131,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -175,13 +175,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -223,13 +223,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -262,13 +262,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -303,13 +303,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -344,13 +344,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -403,13 +403,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -444,13 +444,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -499,13 +499,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -537,13 +537,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -572,13 +572,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -607,13 +607,13 @@ var doc = `{
                     "400": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/model.HttpError"
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     }
                 }
@@ -794,7 +794,7 @@ var doc = `{
                 }
             }
         },
-        "model.HttpError": {
+        "model.HTTPError": {
             "type": "object",
             "properties": {
                 "error_code": {
