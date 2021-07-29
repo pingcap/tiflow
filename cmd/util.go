@@ -164,11 +164,11 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 	if job.Opts != nil && job.Opts.ForceRemove {
 		forceRemoveOpt = "true"
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID:       {job.CfID},
 		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
-	}))
+	})
 	if err != nil {
 		return err
 	}
