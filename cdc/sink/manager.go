@@ -178,6 +178,7 @@ func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
+// Note once the Close is called, no more events can be written to this table sink
 func (t *tableSink) Close(ctx context.Context) error {
 	return t.manager.destroyTableSink(ctx, t.tableID)
 }
@@ -259,7 +260,8 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				metricEmitRowDuration.Observe(dur.Seconds())
 
 				// put remaining rows back to buffer
-				b.buffer[tableID] = rows[i:]
+				// append to a new, fixed slice to avoid lazy GC
+				b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
 			}
 			b.bufferMu.Unlock()
 
