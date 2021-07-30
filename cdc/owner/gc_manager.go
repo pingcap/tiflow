@@ -37,6 +37,12 @@ const (
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
+type GcManager interface {
+	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
+	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
+	CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error
+}
+
 type gcManager struct {
 	gcTTL int64
 
@@ -49,7 +55,7 @@ type gcManager struct {
 	lastUpdatedPdTime   time.Time
 }
 
-func newGCManager() *gcManager {
+func newGCManager() GcManager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))

@@ -39,7 +39,7 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        *gcManager
+	gcManager        GcManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -68,7 +68,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -86,7 +86,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager *gcManager,
+	id model.ChangeFeedID, gcManager GcManager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
