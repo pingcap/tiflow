@@ -90,6 +90,24 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
+
+	// create a changefeed, and make it meet ErrGCTTLExceeded
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+
+	removeJob := model.AdminJob{
+		CfID:  changefeedID,
+		Type:  model.AdminRemove,
+		Opts:  &model.AdminJobOption{ForceRemove: true},
+		Error: nil,
+	}
+
+	owner.EnqueueJob(removeJob)
+	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
 }
 
 func (s *ownerSuite) TestStopChangefeed(c *check.C) {
