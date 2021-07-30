@@ -50,7 +50,7 @@ func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 
 func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	defer testleak.AfterTest(c)()
-	gcManager := newGCManager()
+	gcManager := newGCManager().(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
@@ -126,7 +126,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 
 func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 	defer testleak.AfterTest(c)()
-	gcManager := newGCManager()
+	gcManager := newGCManager().(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
@@ -153,7 +153,7 @@ func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
-	gcManager := newGCManager()
+	gcManager := newGCManager().(*gcManager)
 	gcManager.isTiCDCBlockGC = true
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
