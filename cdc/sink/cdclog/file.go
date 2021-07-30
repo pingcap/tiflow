@@ -349,7 +349,8 @@ func (f *fileSink) Close(ctx context.Context) error {
 }
 
 func (f *fileSink) Barrier(ctx context.Context) error {
-	// TODO
+	// Barrier does nothing because FlushRowChangedEvents in file sink has flushed
+	// all buffered events forcedlly.
 	return nil
 }
 
