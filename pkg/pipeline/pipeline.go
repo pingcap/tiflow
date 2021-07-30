@@ -100,6 +100,8 @@ func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runne
 	}
 }
 
+var pipelineTryAgainError error = cerror.ErrPipelineTryAgain.FastGenByArgs()
+
 // SendToFirstNode sends the message to the first node
 func (p *Pipeline) SendToFirstNode(msg *Message) error {
 	p.closeMu.Lock()
@@ -115,7 +117,9 @@ func (p *Pipeline) SendToFirstNode(msg *Message) error {
 	select {
 	case p.header <- msg:
 	default:
-		return cerror.ErrPipelineTryAgain.GenWithStackByArgs()
+		// Do not call `GenWithStackByArgs` in the hot path,
+		// it consumes lots of CPU.
+		return pipelineTryAgainError
 	}
 	return nil
 }
