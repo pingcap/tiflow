@@ -47,12 +47,10 @@ type regionStatefulEvent struct {
 
 func (s *eventFeedSession) sendRegionChangeEventV2(
 	ctx context.Context,
-	g *errgroup.Group,
 	event *cdcpb.Event,
 	worker *regionWorker,
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
-	limiter *rate.Limiter,
 ) error {
 	state, ok := worker.getRegionState(event.RegionId)
 	// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
@@ -84,11 +82,11 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		// Firstly load the region info.
 		state, ok = pendingRegions.take(event.RequestId)
 		if !ok {
-			log.Error("received an event but neither pending region nor running region was found",
+			log.Warn("drop event due to region feed is removed",
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("requestID", event.RequestId),
 				zap.String("addr", addr))
-			return cerror.ErrNoPendingRegion.GenWithStackByArgs(event.RegionId, event.RequestId, addr)
+			return nil
 		}
 
 		state.start()
@@ -115,7 +113,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 func (s *eventFeedSession) sendResolvedTsV2(
 	ctx context.Context,
-	g *errgroup.Group,
 	resolvedTs *cdcpb.ResolvedTs,
 	worker *regionWorker,
 	addr string,
@@ -188,6 +185,10 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, limiter, addr)
 
+	defer func() {
+		worker.evictAllRegions() //nolint:errcheck
+	}()
+
 	g.Go(func() error {
 		return worker.run(ctx)
 	})
@@ -259,14 +260,14 @@ func (s *eventFeedSession) receiveFromStreamV2(
 		}
 
 		for _, event := range cevent.Events {
-			err = s.sendRegionChangeEventV2(ctx, g, event, worker, pendingRegions, addr, limiter)
+			err = s.sendRegionChangeEventV2(ctx, event, worker, pendingRegions, addr)
 			if err != nil {
 				return err
 			}
 		}
 		if cevent.ResolvedTs != nil {
 			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			err = s.sendResolvedTsV2(ctx, g, cevent.ResolvedTs, worker, addr)
+			err = s.sendResolvedTsV2(ctx, cevent.ResolvedTs, worker, addr)
 			if err != nil {
 				return err
 			}

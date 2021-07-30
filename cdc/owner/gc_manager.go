@@ -34,7 +34,7 @@ const (
 	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
-// gcSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
+// gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
 type gcManager struct {
@@ -94,6 +94,9 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
 		actual = uint64(val.(int))
 	})
+	if actual == minCheckpointTs {
+		log.Info("update gc safe point success", zap.Uint64("gcSafePointTs", minCheckpointTs))
+	}
 	if actual > minCheckpointTs {
 		log.Warn("update gc safe point failed, the gc safe point is larger than checkpointTs", zap.Uint64("actual", actual), zap.Uint64("checkpointTs", minCheckpointTs))
 	}

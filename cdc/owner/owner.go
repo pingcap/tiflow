@@ -235,6 +235,7 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 	o.lastTickTime = now
 
 	ownerMaintainTableNumGauge.Reset()
+	changefeedStatusGauge.Reset()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
@@ -243,6 +244,9 @@ func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
 			}
 			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
 			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
+			if changefeedState.Info != nil {
+				changefeedStatusGauge.WithLabelValues(changefeedID).Set(float64(changefeedState.Info.State.ToInt()))
+			}
 		}
 	}
 }
@@ -259,7 +263,7 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 }
 
 func (o *Owner) handleJobs() {
-	jobs := o.takeOnwerJobs()
+	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
@@ -281,7 +285,7 @@ func (o *Owner) handleJobs() {
 	}
 }
 
-func (o *Owner) takeOnwerJobs() []*ownerJob {
+func (o *Owner) takeOwnerJobs() []*ownerJob {
 	o.ownerJobQueueMu.Lock()
 	defer o.ownerJobQueueMu.Unlock()
 
