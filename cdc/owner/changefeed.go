@@ -122,7 +122,9 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
-		return errors.Trace(c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs))
+		if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }
