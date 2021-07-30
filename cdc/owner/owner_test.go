@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -32,6 +33,16 @@ var _ = check.Suite(&ownerSuite{})
 
 type ownerSuite struct {
 }
+
+type mockGcManager struct {
+	GcManager
+}
+
+func (m *mockGcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+	return cerror.ErrGCTTLExceeded
+}
+
+var _ GcManager = &mockGcManager{}
 
 func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &mockPDClient{updateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -91,7 +102,6 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
 
-	// create a changefeed, and make it meet ErrGCTTLExceeded
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
@@ -104,6 +114,9 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 		Opts:  &model.AdminJobOption{ForceRemove: true},
 		Error: nil,
 	}
+
+	// this will make changefeed always meet ErrGCTTLExceeded
+	owner.gcManager = &mockGcManager{}
 
 	// this tick create remove changefeed patches
 	owner.EnqueueJob(removeJob)
