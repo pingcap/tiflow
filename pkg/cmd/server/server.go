@@ -135,11 +135,11 @@ func (o *options) run(cmd *cobra.Command) error {
 	return nil
 }
 
-// complete adapts from the command line args and factory to the data required.
+// complete adapts from the command line args and config file to the data required.
 func (o *options) complete(cmd *cobra.Command) error {
 	o.serverConfig.Security = o.getCredential()
 
-	cfg := o.serverConfig.Clone()
+	cfg := config.GetDefaultServerConfig()
 
 	if len(o.serverConfigFilePath) > 0 {
 		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg); err != nil {
