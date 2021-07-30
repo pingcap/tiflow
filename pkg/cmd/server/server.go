@@ -44,6 +44,7 @@ type options struct {
 	serverPdAddr         string
 	serverConfigFilePath string
 
+	// TODO(hi-rustin): Consider using a client construction factory here.
 	caPath        string
 	certPath      string
 	keyPath       string
