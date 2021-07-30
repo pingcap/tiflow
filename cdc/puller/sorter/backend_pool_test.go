@@ -35,7 +35,7 @@ var _ = check.SerialSuites(&backendPoolSuite{})
 func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	dataDir := "/tmp/cdc_data"
+	dataDir := c.MkDir()
 	err := os.MkdirAll(dataDir, 0o755)
 	c.Assert(err, check.IsNil)
 
