@@ -355,7 +355,7 @@ type CDCKVClient interface {
 		enableOldValue bool,
 		lockResolver txnutil.LockResolver,
 		isPullerInit PullerInitialization,
-		eventCh chan<- *model.RegionFeedEvent,
+		eventCh chan<- model.RegionFeedEvent,
 	) error
 	Close() error
 }
@@ -495,7 +495,7 @@ func (c *CDCClient) EventFeed(
 	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
-	eventCh chan<- *model.RegionFeedEvent,
+	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(ctx, c, c.regionCache, c.kvStorage, span,
 		lockResolver, isPullerInit,
@@ -526,7 +526,7 @@ type eventFeedSession struct {
 	totalSpan regionspan.ComparableSpan
 
 	// The channel to send the processed events.
-	eventCh chan<- *model.RegionFeedEvent
+	eventCh chan<- model.RegionFeedEvent
 	// The token based region router, it controls the uninitialized regions with
 	// a given size limit.
 	regionRouter LimitRegionRouter
@@ -568,7 +568,7 @@ func newEventFeedSession(
 	isPullerInit PullerInitialization,
 	enableOldValue bool,
 	startTs uint64,
-	eventCh chan<- *model.RegionFeedEvent,
+	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	kvClientCfg := config.GetGlobalServerConfig().KVClient
@@ -953,7 +953,7 @@ func (s *eventFeedSession) dispatchRequest(
 		//    distribution in puller, so this resolved ts event is needed.
 		// After this resolved ts event is sent, we don't need to send one more
 		// resolved ts event when the region starts to work.
-		resolvedEv := &model.RegionFeedEvent{
+		resolvedEv := model.RegionFeedEvent{
 			RegionID: sri.verID.GetID(),
 			Resolved: &model.ResolvedSpan{
 				Span:       sri.span,
@@ -1474,7 +1474,7 @@ func (s *eventFeedSession) singleEventFeed(
 			return nil
 		}
 		// emit a checkpointTs
-		revent := &model.RegionFeedEvent{
+		revent := model.RegionFeedEvent{
 			RegionID: regionID,
 			Resolved: &model.ResolvedSpan{
 				Span:       span,
@@ -1551,7 +1551,7 @@ func (s *eventFeedSession) singleEventFeed(
 			err = cerror.ErrEventFeedAborted.GenWithStackByArgs()
 			return
 		}
-		var revent *model.RegionFeedEvent
+		var revent model.RegionFeedEvent
 		lastReceivedEventTime = time.Now()
 		if event.changeEvent != nil {
 			metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
@@ -1706,7 +1706,7 @@ func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.Can
 	return
 }
 
-func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (*model.RegionFeedEvent, error) {
+func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1714,10 +1714,10 @@ func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bo
 	case cdcpb.Event_Row_PUT:
 		opType = model.OpTypePut
 	default:
-		return nil, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
+		return model.RegionFeedEvent{}, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
 	}
 
-	revent := &model.RegionFeedEvent{
+	revent := model.RegionFeedEvent{
 		RegionID: regionID,
 		Val: &model.RawKVEntry{
 			OpType:   opType,
