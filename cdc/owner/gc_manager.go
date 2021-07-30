@@ -37,6 +37,7 @@ const (
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
+// GcManager is an interface for gc manager
 type GcManager interface {
 	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
 	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
