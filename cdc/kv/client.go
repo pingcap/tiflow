@@ -147,10 +147,13 @@ type regionEvent struct {
 	resolvedTs  *cdcpb.ResolvedTs
 }
 
+// A special event that indicates singleEventFeed is closed.
+var emptyRegionEvent = regionEvent{}
+
 type regionFeedState struct {
 	sri           singleRegionInfo
 	requestID     uint64
-	regionEventCh chan *regionEvent
+	regionEventCh chan regionEvent
 	stopped       int32
 
 	lock           sync.RWMutex
@@ -164,7 +167,7 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 	return &regionFeedState{
 		sri:           sri,
 		requestID:     requestID,
-		regionEventCh: make(chan *regionEvent, 16),
+		regionEventCh: make(chan regionEvent, 16),
 		stopped:       0,
 	}
 }
@@ -1291,7 +1294,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 			for _, state := range regionStates {
 				select {
-				case state.regionEventCh <- nil:
+				case state.regionEventCh <- emptyRegionEvent:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -1390,7 +1393,7 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 	}
 
 	select {
-	case state.regionEventCh <- &regionEvent{
+	case state.regionEventCh <- regionEvent{
 		changeEvent: event,
 	}:
 	case <-ctx.Done():
@@ -1416,7 +1419,7 @@ func (s *eventFeedSession) sendResolvedTs(
 				continue
 			}
 			select {
-			case state.regionEventCh <- &regionEvent{
+			case state.regionEventCh <- regionEvent{
 				resolvedTs: resolvedTs,
 			}:
 			case <-ctx.Done():
@@ -1438,7 +1441,7 @@ func (s *eventFeedSession) singleEventFeed(
 	span regionspan.ComparableSpan,
 	startTs uint64,
 	storeAddr string,
-	receiverCh <-chan *regionEvent,
+	receiverCh <-chan regionEvent,
 ) (lastResolvedTs uint64, initialized bool, err error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
@@ -1495,7 +1498,7 @@ func (s *eventFeedSession) singleEventFeed(
 	})
 
 	for {
-		var event *regionEvent
+		var event regionEvent
 		var ok bool
 		select {
 		case <-ctx.Done():
@@ -1543,7 +1546,7 @@ func (s *eventFeedSession) singleEventFeed(
 		case event, ok = <-receiverCh:
 		}
 
-		if !ok || event == nil {
+		if !ok || event == emptyRegionEvent {
 			log.Debug("singleEventFeed closed by error")
 			err = cerror.ErrEventFeedAborted.GenWithStackByArgs()
 			return
