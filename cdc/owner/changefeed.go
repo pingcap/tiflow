@@ -132,14 +132,15 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	c.feedStateManager.Tick(state)
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 
-	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
-		return errors.Trace(err)
-	}
-
 	if !c.feedStateManager.ShouldRunning() {
 		c.releaseResources()
 		return nil
 	}
+
+	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		return errors.Trace(err)
+	}
+
 	if !c.preflightCheck(captures) {
 		return nil
 	}
