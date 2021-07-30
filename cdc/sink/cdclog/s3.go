@@ -37,7 +37,7 @@ const (
 	maxCompletePartSize = 100 << 20 // rotate row changed event file if one complete file larger than 100Mb
 	maxDDLFlushSize     = 10 << 20  // rotate ddl event file if one complete file larger than 10Mb
 
-	defaultBufferChanSize               = 1280000
+	defaultBufferChanSize               = 20480
 	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
@@ -78,7 +78,8 @@ func (tb *tableBuffer) isEmpty() bool {
 }
 
 func (tb *tableBuffer) shouldFlush() bool {
-	return tb.sendSize.Load() > maxPartFlushSize
+	// if sendSize > 5 MB or data chennal is full, flush it
+	return tb.sendSize.Load() > maxPartFlushSize || tb.sendEvents.Load() == defaultBufferChanSize
 }
 
 func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {

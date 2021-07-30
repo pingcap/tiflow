@@ -87,7 +87,8 @@ func (ts *tableStream) isEmpty() bool {
 }
 
 func (ts *tableStream) shouldFlush() bool {
-	return ts.sendSize.Load() > maxPartFlushSize
+	// if sendSize > 5 MB or data chennal is full, flush it
+	return ts.sendSize.Load() > maxPartFlushSize || ts.sendEvents.Load() == defaultBufferChanSize
 }
 
 func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
