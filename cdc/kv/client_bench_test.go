@@ -101,7 +101,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	*sync.Map, /* regionID -> requestID/storeID */
 	*sync.WaitGroup, /* ensure eventfeed routine exit */
 	context.CancelFunc, /* cancle both mock server and cdc kv client */
-	chan *model.RegionFeedEvent, /* kv client output channel */
+	chan model.RegionFeedEvent, /* kv client output channel */
 	[]chan *cdcpb.ChangeDataEvent, /* mock server data channels */
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -189,7 +189,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 1000000)
+	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
@@ -223,7 +223,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	*sync.Map, /* regionID -> requestID */
 	*sync.WaitGroup, /* ensure eventfeed routine exit */
 	context.CancelFunc, /* cancle both mock server and cdc kv client */
-	chan *model.RegionFeedEvent, /* kv client output channel */
+	chan model.RegionFeedEvent, /* kv client output channel */
 	chan *cdcpb.ChangeDataEvent, /* mock server data channel */
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -277,7 +277,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 1000000)
+	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
