@@ -40,7 +40,7 @@ import (
 
 // options defines flags for the `server` command.
 type options struct {
-	serverConfigOptions  *config.ServerConfig
+	serverConfig         *config.ServerConfig
 	serverPdAddr         string
 	serverConfigFilePath string
 
@@ -48,38 +48,35 @@ type options struct {
 	certPath      string
 	keyPath       string
 	allowedCertCN string
-
-	finalCfg *config.ServerConfig
 }
 
 // newOptions creates new options for the `server` command.
 func newOptions() *options {
 	return &options{
-		serverConfigOptions: config.GetDefaultServerConfig(),
-		finalCfg:            config.GetDefaultServerConfig(),
+		serverConfig: config.GetDefaultServerConfig(),
 	}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&o.serverConfigOptions.Addr, "addr", o.finalCfg.Addr, "Set the listening address")
-	cmd.Flags().StringVar(&o.serverConfigOptions.AdvertiseAddr, "advertise-addr", o.finalCfg.AdvertiseAddr, "Set the advertise listening address for client communication")
-	cmd.Flags().StringVar(&o.serverConfigOptions.TZ, "tz", o.finalCfg.TZ, "Specify time zone of TiCDC cluster")
-	cmd.Flags().Int64Var(&o.serverConfigOptions.GcTTL, "gc-ttl", o.finalCfg.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
-	cmd.Flags().StringVar(&o.serverConfigOptions.LogFile, "log-file", o.finalCfg.LogFile, "log file path")
-	cmd.Flags().StringVar(&o.serverConfigOptions.LogLevel, "log-level", o.finalCfg.LogLevel, "log level (etc: debug|info|warn|error)")
-	cmd.Flags().StringVar(&o.serverConfigOptions.DataDir, "data-dir", o.finalCfg.DataDir, "the path to the directory used to store TiCDC-generated data")
-	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfigOptions.OwnerFlushInterval), "owner-flush-interval", time.Duration(o.finalCfg.OwnerFlushInterval), "owner flushes changefeed status interval")
-	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfigOptions.ProcessorFlushInterval), "processor-flush-interval", time.Duration(o.finalCfg.ProcessorFlushInterval), "processor flushes task status interval")
-	cmd.Flags().IntVar(&o.serverConfigOptions.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", o.finalCfg.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
-	cmd.Flags().IntVar(&o.serverConfigOptions.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", o.finalCfg.Sorter.NumConcurrentWorker, "sorter concurrency level")
-	cmd.Flags().Uint64Var(&o.serverConfigOptions.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", o.finalCfg.Sorter.ChunkSizeLimit, "size of heaps for sorting")
+	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", o.serverConfig.Addr, "Set the listening address")
+	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", o.serverConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
+	cmd.Flags().StringVar(&o.serverConfig.TZ, "tz", o.serverConfig.TZ, "Specify time zone of TiCDC cluster")
+	cmd.Flags().Int64Var(&o.serverConfig.GcTTL, "gc-ttl", o.serverConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
+	cmd.Flags().StringVar(&o.serverConfig.LogFile, "log-file", o.serverConfig.LogFile, "log file path")
+	cmd.Flags().StringVar(&o.serverConfig.LogLevel, "log-level", o.serverConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().StringVar(&o.serverConfig.DataDir, "data-dir", o.serverConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
+	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(o.serverConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
+	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(o.serverConfig.ProcessorFlushInterval), "processor flushes task status interval")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", o.serverConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
+	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", o.serverConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
 	// 80 is safe on most systems.
-	cmd.Flags().IntVar(&o.serverConfigOptions.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", o.finalCfg.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", o.serverConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
 	// We use 8GB as a safe default before we support local configuration file.
-	cmd.Flags().Uint64Var(&o.serverConfigOptions.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", o.finalCfg.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
-	cmd.Flags().StringVar(&o.serverConfigOptions.Sorter.SortDir, "sort-dir", o.finalCfg.Sorter.SortDir, "sorter's temporary file directory")
+	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", o.serverConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
+	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", o.serverConfig.Sorter.SortDir, "sorter's temporary file directory")
 	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
 	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
 
@@ -92,25 +89,23 @@ func (o *options) addFlags(cmd *cobra.Command) {
 
 // run runs the server cmd.
 func (o *options) run(cmd *cobra.Command) error {
-	cfg := o.finalCfg
-
 	cancel := util.InitCmd(cmd, &logutil.Config{
-		File:           cfg.LogFile,
-		Level:          cfg.LogLevel,
-		FileMaxSize:    cfg.Log.File.MaxSize,
-		FileMaxDays:    cfg.Log.File.MaxDays,
-		FileMaxBackups: cfg.Log.File.MaxBackups,
+		File:           o.serverConfig.LogFile,
+		Level:          o.serverConfig.LogLevel,
+		FileMaxSize:    o.serverConfig.Log.File.MaxSize,
+		FileMaxDays:    o.serverConfig.Log.File.MaxDays,
+		FileMaxBackups: o.serverConfig.Log.File.MaxBackups,
 	})
 	defer cancel()
 
-	tz, err := ticdcutil.GetTimezone(cfg.TZ)
+	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
-	config.StoreGlobalServerConfig(cfg)
+	config.StoreGlobalServerConfig(o.serverConfig)
 	ctx := ticdcutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
-	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, cfg.AdvertiseAddr)
+	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
 
 	version.LogVersionInfo()
 	if ticdcutil.FailpointBuild {
@@ -142,69 +137,71 @@ func (o *options) run(cmd *cobra.Command) error {
 
 // complete adapts from the command line args and factory to the data required.
 func (o *options) complete(cmd *cobra.Command) error {
-	o.serverConfigOptions.Security = o.getCredential()
+	o.serverConfig.Security = o.getCredential()
+
+	cfg := o.serverConfig.Clone()
 
 	if len(o.serverConfigFilePath) > 0 {
-		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", o.finalCfg); err != nil {
+		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg); err != nil {
 			return err
 		}
 
 		// User specified sort-dir should not take effect, it's always `/tmp/sorter`
 		// if user try to set sort-dir by config file, warn it.
-		if o.finalCfg.Sorter.SortDir != config.DefaultSortDir {
+		if cfg.Sorter.SortDir != config.DefaultSortDir {
 			cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 				"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 
-			o.finalCfg.Sorter.SortDir = config.DefaultSortDir
+			cfg.Sorter.SortDir = config.DefaultSortDir
 		}
 	}
 
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "addr":
-			o.finalCfg.Addr = o.serverConfigOptions.Addr
+			cfg.Addr = o.serverConfig.Addr
 		case "advertise-addr":
-			o.finalCfg.AdvertiseAddr = o.serverConfigOptions.AdvertiseAddr
+			cfg.AdvertiseAddr = o.serverConfig.AdvertiseAddr
 		case "tz":
-			o.finalCfg.TZ = o.serverConfigOptions.TZ
+			cfg.TZ = o.serverConfig.TZ
 		case "gc-ttl":
-			o.finalCfg.GcTTL = o.serverConfigOptions.GcTTL
+			cfg.GcTTL = o.serverConfig.GcTTL
 		case "log-file":
-			o.finalCfg.LogFile = o.serverConfigOptions.LogFile
+			cfg.LogFile = o.serverConfig.LogFile
 		case "log-level":
-			o.finalCfg.LogLevel = o.serverConfigOptions.LogLevel
+			cfg.LogLevel = o.serverConfig.LogLevel
 		case "data-dir":
-			o.finalCfg.DataDir = o.serverConfigOptions.DataDir
+			cfg.DataDir = o.serverConfig.DataDir
 		case "owner-flush-interval":
-			o.finalCfg.OwnerFlushInterval = o.serverConfigOptions.OwnerFlushInterval
+			cfg.OwnerFlushInterval = o.serverConfig.OwnerFlushInterval
 		case "processor-flush-interval":
-			o.finalCfg.ProcessorFlushInterval = o.serverConfigOptions.ProcessorFlushInterval
+			cfg.ProcessorFlushInterval = o.serverConfig.ProcessorFlushInterval
 		case "sorter-num-workerpool-goroutine":
-			o.finalCfg.Sorter.NumWorkerPoolGoroutine = o.serverConfigOptions.Sorter.NumWorkerPoolGoroutine
+			cfg.Sorter.NumWorkerPoolGoroutine = o.serverConfig.Sorter.NumWorkerPoolGoroutine
 		case "sorter-num-concurrent-worker":
-			o.finalCfg.Sorter.NumConcurrentWorker = o.serverConfigOptions.Sorter.NumConcurrentWorker
+			cfg.Sorter.NumConcurrentWorker = o.serverConfig.Sorter.NumConcurrentWorker
 		case "sorter-chunk-size-limit":
-			o.finalCfg.Sorter.ChunkSizeLimit = o.serverConfigOptions.Sorter.ChunkSizeLimit
+			cfg.Sorter.ChunkSizeLimit = o.serverConfig.Sorter.ChunkSizeLimit
 		case "sorter-max-memory-percentage":
-			o.finalCfg.Sorter.MaxMemoryPressure = o.serverConfigOptions.Sorter.MaxMemoryPressure
+			cfg.Sorter.MaxMemoryPressure = o.serverConfig.Sorter.MaxMemoryPressure
 		case "sorter-max-memory-consumption":
-			o.finalCfg.Sorter.MaxMemoryConsumption = o.serverConfigOptions.Sorter.MaxMemoryConsumption
+			cfg.Sorter.MaxMemoryConsumption = o.serverConfig.Sorter.MaxMemoryConsumption
 		case "ca":
-			o.finalCfg.Security.CAPath = o.serverConfigOptions.Security.CAPath
+			cfg.Security.CAPath = o.serverConfig.Security.CAPath
 		case "cert":
-			o.finalCfg.Security.CertPath = o.serverConfigOptions.Security.CertPath
+			cfg.Security.CertPath = o.serverConfig.Security.CertPath
 		case "key":
-			o.finalCfg.Security.KeyPath = o.serverConfigOptions.Security.KeyPath
+			cfg.Security.KeyPath = o.serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
-			o.finalCfg.Security.CertAllowedCN = o.serverConfigOptions.Security.CertAllowedCN
+			cfg.Security.CertAllowedCN = o.serverConfig.Security.CertAllowedCN
 		case "sort-dir":
 			// user specified sorter dir should not take effect, it's always `/tmp/sorter`
 			// if user try to set sort-dir by flag, warn it.
-			if o.serverConfigOptions.Sorter.SortDir != config.DefaultSortDir {
+			if o.serverConfig.Sorter.SortDir != config.DefaultSortDir {
 				cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in server settings. " +
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 			}
-			o.finalCfg.Sorter.SortDir = config.DefaultSortDir
+			cfg.Sorter.SortDir = config.DefaultSortDir
 		case "pd", "config":
 			// do nothing
 		default:
@@ -212,14 +209,16 @@ func (o *options) complete(cmd *cobra.Command) error {
 		}
 	})
 
-	if err := o.finalCfg.ValidateAndAdjust(); err != nil {
+	if err := cfg.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
 
-	if o.finalCfg.DataDir == "" {
+	if cfg.DataDir == "" {
 		cmd.Printf(color.HiYellowString("[WARN] TiCDC server data-dir is not set. " +
 			"Please use `cdc server --data-dir` to start the cdc server if possible.\n"))
 	}
+
+	o.serverConfig = cfg
 
 	return nil
 }
@@ -232,7 +231,7 @@ func (o *options) validate() error {
 	for _, ep := range strings.Split(o.serverPdAddr, ",") {
 		// NOTICE: The configuration used here is the one that has been completed,
 		// as it may be configured by the configuration file.
-		if err := util.VerifyPdEndpoint(ep, o.finalCfg.Security.IsTLSEnabled()); err != nil {
+		if err := util.VerifyPdEndpoint(ep, o.serverConfig.Security.IsTLSEnabled()); err != nil {
 			return cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
 		}
 	}
