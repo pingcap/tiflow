@@ -333,6 +333,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
+		log.Info("async exec ddl", zap.Bool("done", done))
 		if !done {
 			return barrierTs, nil
 		}
@@ -370,6 +371,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
 		return true, nil
 	}
+	log.Info("async exec ddl", zap.Any("job", job))
 	if c.ddlEventCache == nil || c.ddlEventCache.CommitTs != job.BinlogInfo.FinishedTS {
 		ddlEvent, err := c.schema.BuildDDLEvent(job)
 		if err != nil {
