@@ -65,7 +65,7 @@ type ownerJob struct {
 type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
 
-	gcManager *gcManager
+	gcManager GcManager
 
 	ownerJobQueueMu sync.Mutex
 	ownerJobQueue   []*ownerJob
@@ -74,7 +74,7 @@ type Owner struct {
 
 	closed int32
 
-	newChangefeed func(id model.ChangeFeedID, gcManager *gcManager) *changefeed
+	newChangefeed func(id model.ChangeFeedID, gcManager GcManager) *changefeed
 }
 
 // NewOwner creates a new Owner
@@ -92,7 +92,7 @@ func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error)) *Owner {
 	o := NewOwner()
-	o.newChangefeed = func(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
+	o.newChangefeed = func(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
 	return o
