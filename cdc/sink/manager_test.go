@@ -220,6 +220,28 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	}
 }
 
+func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 16)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	defer manager.Close(ctx)
+
+	tableID := int64(49)
+	tableSink := manager.CreateTableSink(tableID, 100)
+	err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+		Table:    &model.TableName{TableID: tableID},
+		CommitTs: uint64(110),
+	})
+	c.Assert(err, check.IsNil)
+	_, err = tableSink.FlushRowChangedEvents(ctx, 110)
+	c.Assert(err, check.IsNil)
+	err = manager.destroyTableSink(ctx, tableID)
+	c.Assert(err, check.IsNil)
+}
+
 type errorSink struct {
 	*check.C
 }
