@@ -123,7 +123,7 @@ func (s *pullerSuite) newPullerForTest(
 		kv.NewCDCKVClient = backupNewCDCKVClient
 	}()
 	pdCli := &mockPdClientForPullerTest{clusterID: uint64(1)}
-	plr := NewPuller(ctx, pdCli, nil /* credential */, store, checkpointTs, spans, nil /* limitter */, enableOldValue)
+	plr := NewPuller(ctx, pdCli, nil /* credential */, store, checkpointTs, spans, enableOldValue)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
