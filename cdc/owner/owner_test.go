@@ -105,9 +105,16 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 		Error: nil,
 	}
 
+	// this tick create remove changefeed patches
 	owner.EnqueueJob(removeJob)
 	_, err = owner.Tick(ctx, state)
 	c.Assert(err, check.IsNil)
+
+	// apply patches and update owner's in memory changefeed states
+	tester.MustApplyPatches()
+	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
 func (s *ownerSuite) TestStopChangefeed(c *check.C) {
