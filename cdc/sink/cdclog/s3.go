@@ -37,7 +37,7 @@ const (
 	maxCompletePartSize = 100 << 20 // rotate row changed event file if one complete file larger than 100Mb
 	maxDDLFlushSize     = 10 << 20  // rotate ddl event file if one complete file larger than 10Mb
 
-	defaultBufferChanSize               = 20480
+	defaultBufferChanSize               = 1280000
 	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
@@ -331,16 +331,6 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if tableInfo != nil {
-		for _, table := range tableInfo {
-			if table != nil {
-				err := s.storage.WriteFile(ctx, makeTableDirectoryName(table.TableID), nil)
-				if err != nil {
-					return errors.Annotate(
-						cerror.WrapError(cerror.ErrS3SinkStorageAPI, err),
-						"create table directory on s3 failed")
-				}
-			}
-		}
 		// update log meta to record the relationship about tableName and tableID
 		s.logMeta = makeLogMetaContent(tableInfo)
 
@@ -367,7 +357,7 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	options := &storage.BackendOptions{}
 	storage.ExtractQueryParameters(sinkURI, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialize, err)
 	}
 	// we should set this to true, since br set it by default in parseBackend
 	s3.ForcePathStyle = true
@@ -376,11 +366,11 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	}
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
-		SkipCheckPath:   false,
+		SkipCheckPath:   true,
 		HTTPClient:      nil,
 	})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialize, err)
 	}
 
 	s := &s3Sink{

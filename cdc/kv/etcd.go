@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -31,6 +33,7 @@ import (
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 const (
@@ -55,6 +58,11 @@ const (
 
 	// JobKeyPrefix is the prefix of job keys
 	JobKeyPrefix = EtcdKeyBase + "/job"
+)
+
+const (
+	putTaskStatusBackoffBaseDelayInMs = 100
+	putTaskStatusMaxTries             = 3
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -162,9 +170,13 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]int64) error {
 	for _, lease := range leases {
 		_, err := c.Client.Revoke(ctx, clientv3.LeaseID(lease))
-		if err != nil {
-			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		if err == nil {
+			continue
+		} else if etcdErr := err.(rpctypes.EtcdError); etcdErr.Code() == codes.NotFound {
+			// it means the etcd lease is already expired or revoked
+			continue
 		}
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	return nil
 }
@@ -291,9 +303,6 @@ func (c CDCEtcdClient) GetCaptureLeases(ctx context.Context) (map[string]int64, 
 
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
 func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
-	if err := model.ValidateChangefeedID(changeFeedID); err != nil {
-		return err
-	}
 	infoKey := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	jobKey := GetEtcdKeyJob(changeFeedID)
 	value, err := info.Marshal()
@@ -616,12 +625,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 ) (*model.TaskStatus, int64, error) {
 	var status *model.TaskStatus
 	var newModRevision int64
-	err := retry.Run(100*time.Millisecond, 3, func() error {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		default:
-		}
+	err := retry.Do(ctx, func() error {
 		var modRevision int64
 		var err error
 		modRevision, status, err = c.GetTaskStatus(ctx, changefeedID, captureID)
@@ -665,7 +669,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		}
 		newModRevision = resp.Header.GetRevision()
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(putTaskStatusBackoffBaseDelayInMs), retry.WithMaxTries(putTaskStatusMaxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if err != nil {
 		return nil, newModRevision, errors.Trace(err)
 	}

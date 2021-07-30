@@ -12,10 +12,17 @@ function check_changefeed_state() {
     endpoints=$1
     changefeedid=$2
     expected=$3
-    output=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$endpoints 2>&1)
-    state=$(echo $output | grep -oE "\"state\": \"[a-z]+\""|tr -d '" '|awk -F':' '{print $(NF)}')
-    if [ "$state" != "$expected" ]; then
-        echo "unexpected state $output, expected $expected"
+    error_msg=$4
+    info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
+    echo "$info"
+    state=$(echo $info|jq -r '.state')
+    if [[ ! "$state" == "$expected" ]]; then
+        echo "changefeed state $state does not equal to $expected"
+        exit 1
+    fi
+    message=$(echo $info|jq -r '.error.message')
+    if [[ ! "$message" =~ "$error_msg" ]]; then
+        echo "error message '$message' is not as expected '$error_msg'"
         exit 1
     fi
 }
@@ -45,16 +52,15 @@ function run() {
     TOPIC_NAME="ticdc-changefeed-auto-stop-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
-        *) SINK_URI="mysql://root@127.0.0.1:3306/";;
+        *) SINK_URI="mysql://normal:123456@127.0.0.1:3306/";;
     esac
     changefeedid=$(cdc cli changefeed create --pd="http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 
-    ensure 10 check_changefeed_state  ${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "stopped"
+    ensure 10 check_changefeed_state  "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" ${changefeedid} "normal" "processor sync resolved injected error"
 
-    cdc cli changefeed resume --changefeed-id=${changefeedid} --pd="http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     for i in $(seq $DB_COUNT); do
         check_table_exists "changefeed_auto_stop_$i.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     done

@@ -280,10 +280,7 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 	if rebalanceNow {
 		c.rebalanceNextTick = true
 	}
-	err = c.handleManualMoveTableJobs(ctx, captures)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	c.handleManualMoveTableJobs(captures)
 	err = c.rebalanceTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
@@ -423,12 +420,12 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 	return nil
 }
 
-func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+func (c *changeFeed) handleManualMoveTableJobs(captures map[model.CaptureID]*model.CaptureInfo) {
 	if len(captures) == 0 {
-		return nil
+		return
 	}
 	if len(c.moveTableJobs) > 0 {
-		return nil
+		return
 	}
 	for len(c.manualMoveCommands) > 0 {
 		moveJob := c.manualMoveCommands[0]
@@ -461,7 +458,6 @@ func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map
 		c.moveTableJobs[moveJob.TableID] = moveJob
 		log.Info("received the manual move table job", zap.Reflect("job", moveJob))
 	}
-	return nil
 }
 
 func (c *changeFeed) rebalanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
@@ -572,6 +568,7 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
 				c.orphanTables[tableID] = replicaInfo.StartTs
+				delete(c.moveTableJobs, tableID)
 				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
 				continue
 			}
@@ -585,7 +582,7 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 	return errors.Trace(err)
 }
 
-func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
+func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	schemaID := job.SchemaID
 	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		tableID := job.BinlogInfo.TableInfo.ID
@@ -644,7 +641,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 // handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
-func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
+func (c *changeFeed) handleDDL(ctx context.Context) error {
 	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
@@ -677,6 +674,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("schema", todoDDLJob.SchemaName),
 		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("start-ts", todoDDLJob.StartTS),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
 	ddlEvent := new(model.DDLEvent)
@@ -699,7 +697,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	c.ddlState = model.ChangeFeedExecDDL
 
 	// TODO consider some newly added DDL types such as `ActionCreateSequence`
-	skip, err := c.applyJob(ctx, todoDDLJob)
+	skip, err := c.applyJob(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -936,6 +934,9 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		// some DDL is waiting to executed, we can't ensure whether the DDL has been executed.
 		// so we can't emit checkpoint to sink
 		if c.ddlState != model.ChangeFeedWaitToExecDDL {
+			failpoint.Inject("InjectEmitCheckpointTsError", func() {
+				failpoint.Return(cerror.ErrEmitCheckpointTsFailed.GenWithStackByArgs())
+			})
 			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
 			if err != nil {
 				return errors.Trace(err)

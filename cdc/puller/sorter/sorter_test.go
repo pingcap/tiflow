@@ -16,13 +16,14 @@ package sorter
 import (
 	"context"
 	"math"
+	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -30,8 +31,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
-	_ "net/http/pprof"
 )
 
 const (
@@ -61,22 +62,27 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	testSorter(ctx, c, sorter, 10000, true)
+	err = testSorter(ctx, c, sorter, 10000)
+	c.Assert(err, check.ErrorMatches, ".*context cancel.*")
 }
 
 func (s *sorterSuite) TestSorterCancel(c *check.C) {
@@ -84,25 +90,30 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	finishedCh := make(chan struct{})
 	go func() {
-		testSorter(ctx, c, sorter, 10000000, true)
+		err := testSorter(ctx, c, sorter, 10000000)
+		c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 		close(finishedCh)
 	}()
 
@@ -116,23 +127,25 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	log.Info("Sorter successfully cancelled")
 }
 
-func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int, needWorkerPool bool) {
+func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, count int) error {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
+
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
+	}()
 
 	ctx, cancel := context.WithCancel(ctx)
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		return sorter.Run(ctx)
 	})
-
-	if needWorkerPool {
-		errg.Go(func() error {
-			return RunWorkerPool(ctx)
-		})
-	}
+	errg.Go(func() error {
+		return RunWorkerPool(ctx)
+	})
 
 	producerProgress := make([]uint64, numProducers)
 
@@ -213,11 +226,7 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 		}
 	})
 
-	err = errg.Wait()
-	if errors.Cause(err) == context.Canceled || errors.Cause(err) == context.DeadlineExceeded {
-		return
-	}
-	c.Assert(err, check.IsNil)
+	return errg.Wait()
 }
 
 func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
@@ -229,16 +238,17 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 	pool = nil
 	poolMu.Unlock()
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll("/tmp/sorter_local", 0o755)
 	c.Assert(err, check.IsNil)
 	// We expect the local setting to override the changefeed setting
 	config.GetGlobalServerConfig().Sorter.SortDir = "/tmp/sorter_local"
 
-	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+	_, err = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
 		"test-cf",
 		"test",
 		0,
 		"0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	poolMu.Lock()
 	defer poolMu.Unlock()
@@ -261,11 +271,12 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	// We expect the changefeed setting to take effect
 	config.GetGlobalServerConfig().Sorter.SortDir = ""
 
-	_ = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+	_, err = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
 		"test-cf",
 		"test",
 		0,
 		"0.0.0.0:0")
+	c.Assert(err, check.IsNil)
 
 	poolMu.Lock()
 	defer poolMu.Unlock()
@@ -281,16 +292,19 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:      0, // disable memory sort
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
 	}
 	config.StoreGlobalServerConfig(conf)
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
 
 	// enable the failpoint to simulate delays
@@ -308,9 +322,171 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	}()
 
 	for i := 0; i < 5; i++ {
-		sorter := NewUnifiedSorter("/tmp/sorter", "test-cf", "test", 0, "0.0.0.0:0")
+		sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+		c.Assert(err, check.IsNil)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		testSorter(ctx, c, sorter, 100000000, true)
+		err = testSorter(ctx, c, sorter, 100000000)
+		c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 		cancel()
 	}
+}
+
+func (s *sorterSuite) TestSorterIOError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
+	conf.Sorter = &config.SorterConfig{
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
+	}
+	config.StoreGlobalServerConfig(conf)
+
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
+	c.Assert(err, check.IsNil)
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	}()
+
+	finishedCh := make(chan struct{})
+	go func() {
+		err := testSorter(ctx, c, sorter, 10000)
+		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
+		close(finishedCh)
+	}()
+
+	after := time.After(60 * time.Second)
+	select {
+	case <-after:
+		c.Fatal("TestSorterIOError timed out")
+	case <-finishedCh:
+	}
+
+	UnifiedSorterCleanUp()
+	_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	// enable the failpoint to simulate backEnd write error (usually would happen when writing to a file)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndWrite")
+	}()
+
+	// recreate the sorter
+	sorter, err = NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
+
+	finishedCh = make(chan struct{})
+	go func() {
+		err := testSorter(ctx, c, sorter, 10000)
+		c.Assert(err, check.ErrorMatches, ".*injected write error.*")
+		close(finishedCh)
+	}()
+
+	after = time.After(60 * time.Second)
+	select {
+	case <-after:
+		c.Fatal("TestSorterIOError timed out")
+	case <-finishedCh:
+	}
+}
+
+func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
+	conf := config.GetDefaultServerConfig()
+	conf.DataDir = "/tmp/cdc_data"
+	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
+	conf.Sorter = &config.SorterConfig{
+		NumConcurrentWorker:    8,
+		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:      60,
+		MaxMemoryConsumption:   0,
+		NumWorkerPoolGoroutine: 4,
+		SortDir:                sortDir,
+	}
+	config.StoreGlobalServerConfig(conf)
+
+	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
+	c.Assert(err, check.IsNil)
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	c.Assert(err, check.IsNil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// enable the failpoint to simulate backEnd allocation error (usually would happen when creating a file)
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay", "sleep(2000)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectHeapSorterExitDelay")
+	}()
+
+	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc", "return(true)")
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
+	}()
+
+	finishedCh := make(chan struct{})
+	go func() {
+		err := testSorter(ctx, c, sorter, 10000)
+		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
+		close(finishedCh)
+	}()
+
+	after := time.After(60 * time.Second)
+	select {
+	case <-after:
+		c.Fatal("TestSorterIOError timed out")
+	case <-finishedCh:
+	}
+}
+
+func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	sorter, err := NewUnifiedSorter("/tmp/sorter",
+		"test-cf",
+		"test",
+		0,
+		"0.0.0.0:0")
+	c.Assert(err, check.IsNil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+	defer cancel()
+	err = sorter.Run(ctx)
+	c.Assert(err, check.ErrorMatches, ".*deadline.*")
+
+	ctx1, cancel1 := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel1()
+	for i := 0; i < 10000; i++ {
+		sorter.AddEntry(ctx1, model.NewPolymorphicEvent(generateMockRawKV(uint64(i))))
+	}
+
+	select {
+	case <-ctx1.Done():
+		c.Fatal("TestSortClosedAddEntry timed out")
+	default:
+	}
+	cancel1()
 }

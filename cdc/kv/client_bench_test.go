@@ -29,9 +29,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
-	"github.com/pingcap/tidb/store/mockstore/mocktikv"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb/store/mockstore/mockcopr"
+	"github.com/tikv/client-go/v2/mockstore/mocktikv"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 )
@@ -139,7 +140,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}()
 	}
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
@@ -200,7 +201,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	}()
 
 	// wait all regions requested from cdc kv client
-	err = retry.Run(time.Millisecond*500, 20, func() error {
+	err = retry.Do(context.Background(), func() error {
 		count := 0
 		requestIDs.Range(func(_, _ interface{}) bool {
 			count++
@@ -210,7 +211,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	})
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 	if err != nil {
 		b.Error(err)
 	}
@@ -250,7 +251,7 @@ func prepareBench(b *testing.B, regionNum int) (
 		server1.Stop()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	if err != nil {
 		b.Error(err)
 	}
@@ -288,7 +289,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	}()
 
 	// wait all regions requested from cdc kv client
-	err = retry.Run(time.Millisecond*500, 20, func() error {
+	err = retry.Do(context.Background(), func() error {
 		count := 0
 		requestIDs.Range(func(_, _ interface{}) bool {
 			count++
@@ -298,7 +299,7 @@ func prepareBench(b *testing.B, regionNum int) (
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	})
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 	if err != nil {
 		b.Error(err)
 	}
@@ -373,13 +374,12 @@ func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
 				}
 			}
 		})
-
-		err := retry.Run(time.Millisecond*500, 20, func() error {
+		err := retry.Do(context.Background(), func() error {
 			if len(mockSrvCh) == 0 {
 				return nil
 			}
 			return errors.New("not all events are sent yet")
-		})
+		}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			b.Error(err)
 		}
@@ -389,12 +389,34 @@ func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
+func benchmarkResolvedTsClientV2(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(ctx) //nolint:errcheck
+	}()
+	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
+}
+
 func BenchmarkResolvedTsClientV1(b *testing.B) {
 	benchmarkSingleWorkerResolvedTs(b, false /* clientV1 */)
 }
 
 func BenchmarkResolvedTsClientV2(b *testing.B) {
-	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
+	benchmarkResolvedTsClientV2(b)
+}
+
+func BenchmarkResolvedTsClientV2WorkerPool(b *testing.B) {
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 10000
+	regionWorkerLowWatermark = 2000
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	benchmarkResolvedTsClientV2(b)
 }
 
 func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
@@ -472,14 +494,14 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 			}
 		})
 
-		err := retry.Run(time.Millisecond*500, 1000, func() error {
+		err := retry.Do(context.Background(), func() error {
 			for _, input := range inputs {
 				if len(input) != 0 {
 					return errors.New("not all events are sent yet")
 				}
 			}
 			return nil
-		})
+		}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(1000))
 		if err != nil {
 			b.Error(err)
 		}
@@ -489,10 +511,32 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 	}
 }
 
+func benchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	InitWorkerPool()
+	go func() {
+		RunWorkerPool(ctx) //nolint:errcheck
+	}()
+	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
+}
+
 func BenchmarkMultiStoreResolvedTsClientV1(b *testing.B) {
 	benchmarkMultipleStoreResolvedTs(b, false /* clientV1 */)
 }
 
 func BenchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
-	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
+	benchmarkMultiStoreResolvedTsClientV2(b)
+}
+
+func BenchmarkMultiStoreResolvedTsClientV2WorkerPool(b *testing.B) {
+	hwm := regionWorkerHighWatermark
+	lwm := regionWorkerLowWatermark
+	regionWorkerHighWatermark = 1000
+	regionWorkerLowWatermark = 200
+	defer func() {
+		regionWorkerHighWatermark = hwm
+		regionWorkerLowWatermark = lwm
+	}()
+	benchmarkMultiStoreResolvedTsClientV2(b)
 }

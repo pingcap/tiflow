@@ -18,6 +18,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -49,6 +50,7 @@ func LogVersionInfo() {
 		zap.String("git-branch", GitBranch),
 		zap.String("utc-build-time", BuildTS),
 		zap.String("go-version", GoVersion),
+		zap.Bool("failpoint-build", util.FailpointBuild),
 	)
 }
 
@@ -60,5 +62,6 @@ func GetRawInfo() string {
 	info += fmt.Sprintf("Git Branch: %s\n", GitBranch)
 	info += fmt.Sprintf("UTC Build Time: %s\n", BuildTS)
 	info += fmt.Sprintf("Go Version: %s\n", GoVersion)
+	info += fmt.Sprintf("Failpoint Build: %t\n", util.FailpointBuild)
 	return info
 }

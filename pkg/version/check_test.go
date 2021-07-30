@@ -40,8 +40,9 @@ var _ = check.Suite(&checkSuite{})
 
 type mockPDClient struct {
 	pd.Client
-	getAllStores func() []*metapb.Store
-	getVersion   func() string
+	getAllStores  func() []*metapb.Store
+	getVersion    func() string
+	getStatusCode func() int
 }
 
 func (m *mockPDClient) GetAllStores(ctx context.Context, opts ...pd.GetStoreOption) ([]*metapb.Store, error) {
@@ -52,6 +53,11 @@ func (m *mockPDClient) GetAllStores(ctx context.Context, opts ...pd.GetStoreOpti
 }
 
 func (m *mockPDClient) ServeHTTP(resp http.ResponseWriter, _ *http.Request) {
+	// set status code at first, else will not work
+	if m.getStatusCode != nil {
+		resp.WriteHeader(m.getStatusCode())
+	}
+
 	if m.getVersion != nil {
 		_, _ = resp.Write([]byte(fmt.Sprintf(`{"version":"%s"}`, m.getVersion())))
 	}
@@ -119,6 +125,15 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		err = CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
 		c.Assert(err, check.IsNil)
 	}
+
+	{
+		mock.getStatusCode = func() int {
+			return http.StatusBadRequest
+		}
+
+		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
+		c.Assert(err, check.ErrorMatches, ".*response status: .*")
+	}
 }
 
 func (s *checkSuite) TestCompareVersion(c *check.C) {
@@ -171,7 +186,7 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 				{ID: "capture2", Version: ""},
 				{ID: "capture3", Version: ""},
 			},
-			expected: TiCDCClusterVersion4_0,
+			expected: TiCDCClusterVersion{MinTiCDCVersion, false},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
@@ -179,36 +194,79 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 				{ID: "capture2", Version: "4.0.7"},
 				{ID: "capture3", Version: "5.0.0-rc"},
 			},
-			expected: TiCDCClusterVersion4_0,
+			expected: TiCDCClusterVersion{semver.New("4.0.7"), false},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "5.0.0-rc"},
 			},
-			expected: TiCDCClusterVersion5_0,
+			expected: TiCDCClusterVersion{semver.New("5.0.0-rc"), false},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "5.0.0"},
 			},
-			expected: TiCDCClusterVersion5_0,
+			expected: TiCDCClusterVersion{semver.New("5.0.0"), false},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "4.1.0"},
 			},
-			expected: TiCDCClusterVersion4_0,
+			expected: TiCDCClusterVersion{semver.New("4.1.0"), false},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "4.0.10"},
 			},
-			expected: TiCDCClusterVersion4_0,
+			expected: TiCDCClusterVersion{semver.New("4.0.10"), false},
 		},
 	}
 	for _, tc := range testCases {
 		ver, err := GetTiCDCClusterVersion(tc.captureInfos)
 		c.Assert(err, check.IsNil)
-		c.Assert(ver, check.Equals, tc.expected)
+		c.Assert(ver, check.DeepEquals, tc.expected)
 	}
+}
+
+func (s *checkSuite) TestTiCDCClusterVersionFeaturesCompatible(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	ver := TiCDCClusterVersion{semver.New("4.0.10"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+
+	ver = TiCDCClusterVersion{semver.New("4.0.12"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+
+	ver = TiCDCClusterVersion{semver.New("4.0.13"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+
+	ver = TiCDCClusterVersion{semver.New("4.0.13-hotfix"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+
+	ver = TiCDCClusterVersion{semver.New("4.0.14"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+
+	ver = TiCDCClusterVersion{semver.New("5.0.0-rc"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+
+	ver = TiCDCClusterVersion{semver.New("5.0.0"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+
+	ver = TiCDCClusterVersion{semver.New("5.1.0"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+
+	ver = TiCDCClusterVersion{semver.New("5.2.0-alpha"), false}
+	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+
+	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), check.Equals, true)
 }

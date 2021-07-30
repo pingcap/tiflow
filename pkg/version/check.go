@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,6 +40,9 @@ var minPDVersion *semver.Version = semver.New("4.0.0-rc.1")
 // MinTiKVVersion is the version of the minimal compatible TiKV.
 var MinTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
 
+// MinTiCDCVersion is the version of the first TiCDC release
+var MinTiCDCVersion *semver.Version = semver.New("4.0.1")
+
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
 
 func removeVAndHash(v string) string {
@@ -62,6 +65,7 @@ func CheckClusterVersion(
 		}
 		log.Warn("check TiKV version failed", zap.Error(err))
 	}
+
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
 		return err
@@ -70,35 +74,39 @@ func CheckClusterVersion(
 	pdVer := struct {
 		Version string `json:"version"`
 	}{}
+
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdHTTP), nil)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
+
 	resp, err := httpCli.Do(req)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
-	if resp.StatusCode < 200 && resp.StatusCode >= 300 {
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		arg := fmt.Sprintf("response status: %s", resp.Status)
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
 	}
+
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
+
 	err = json.Unmarshal(content, &pdVer)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
-	err = resp.Body.Close()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
-	}
+
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
+
 	ord := ver.Compare(*minPDVersion)
 	if ord < 0 {
 		arg := fmt.Sprintf("PD %s is not supported, require minimal version %s",
@@ -139,14 +147,37 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 }
 
 // TiCDCClusterVersion is the version of TiCDC cluster
-type TiCDCClusterVersion string
+type TiCDCClusterVersion struct {
+	*semver.Version
+	isUnknown bool
+}
 
-// ticdc cluster version
-const (
-	TiCDCClusterVersionUnknown TiCDCClusterVersion = "Unknown"
-	TiCDCClusterVersion4_0     TiCDCClusterVersion = "4.0.X"
-	TiCDCClusterVersion5_0     TiCDCClusterVersion = "5.0.X"
-)
+// IsUnknown returns whether this is an unknown version
+func (v *TiCDCClusterVersion) IsUnknown() bool {
+	return v.isUnknown
+}
+
+// ShouldEnableOldValueByDefault returns whether old value should be enabled by default
+func (v *TiCDCClusterVersion) ShouldEnableOldValueByDefault() bool {
+	// we assume the unknown version to be the latest version
+	return v.isUnknown || !v.LessThan(*semver.New("5.0.0-rc"))
+}
+
+// ShouldEnableUnifiedSorterByDefault returns whether Unified Sorter should be enabled by default
+func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
+	if v.isUnknown {
+		// we assume the unknown version to be the latest version
+		return true
+	}
+	// x >= 4.0.13 AND x != 5.0.0-rc
+	if v.String() == "5.0.0-rc" {
+		return false
+	}
+	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
+}
+
+// TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version
+var TiCDCClusterVersionUnknown = TiCDCClusterVersion{isUnknown: true}
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
 func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVersion, error) {
@@ -160,7 +191,7 @@ func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVers
 		if captureInfo.Version != "" {
 			ver, err = semver.NewVersion(removeVAndHash(captureInfo.Version))
 		} else {
-			ver = semver.New("4.0.1")
+			ver = MinTiCDCVersion
 		}
 		if err != nil {
 			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
@@ -169,8 +200,5 @@ func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVers
 			minVer = ver
 		}
 	}
-	if minVer.Major < 5 {
-		return TiCDCClusterVersion4_0, nil
-	}
-	return TiCDCClusterVersion5_0, nil
+	return TiCDCClusterVersion{minVer, false}, nil
 }

@@ -49,7 +49,7 @@ function run() {
     TOPIC_NAME="ticdc-cli-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
-        *) SINK_URI="mysql://root@127.0.0.1:3306/";;
+        *) SINK_URI="mysql://normal:123456@127.0.0.1:3306/";;
     esac
 
     uuid="custom-changefeed-name"
@@ -128,33 +128,16 @@ EOF
     # Resume changefeed
     run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-    if [[ $jobtype != 2 ]]; then
-        echo "[$(date)] <<<<< unexpect admin job type! expect 2 got ${jobtype} >>>>>"
+    if [[ $jobtype != 0 ]]; then
+        echo "[$(date)] <<<<< unexpect admin job type! expect 0 got ${jobtype} >>>>>"
         exit 1
     fi
     check_changefeed_state $uuid "normal"
 
     # Remove changefeed
     run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
-    jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-    if [[ $jobtype != 3 ]]; then
-        echo "[$(date)] <<<<< unexpect admin job type! expect 3 got ${jobtype} >>>>>"
-        exit 1
-    fi
-    check_changefeed_state $uuid "removed"
+    check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 0
 
-    set +e
-    # Make sure changefeed can not be created if a removed changefeed with the same name exists
-    create_log=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1)
-    set -e
-    exists=$(echo $create_log | grep -oE 'already exists')
-    if [[ -z $exists ]]; then
-        echo "[$(date)] <<<<< unexpect output got ${create_log} >>>>>"
-        exit 1
-    fi
-
-    # force remove the changefeed, and re create a new one with the same name
-    run_cdc_cli changefeed --changefeed-id $uuid remove --force && sleep 3
     run_cdc_cli changefeed create --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid" && sleep 3
     check_changefeed_state $uuid "normal"
 

@@ -24,10 +24,8 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"go.uber.org/zap"
 )
 
 type managerSuite struct{}
@@ -48,9 +46,6 @@ func (c *checkSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
-	for _, row := range rows {
-		log.Info("rows in check sink", zap.Reflect("row", row))
-	}
 	c.rows = append(c.rows, rows...)
 	return nil
 }
@@ -62,7 +57,6 @@ func (c *checkSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 func (c *checkSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
-	log.Info("flush in check sink", zap.Uint64("resolved", resolvedTs))
 	var newRows []*model.RowChangedEvent
 	for _, row := range c.rows {
 		c.Assert(row.CommitTs, check.Greater, c.lastResolvedTs)
@@ -98,8 +92,14 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
-		tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+		}()
 	}
+	wg.Wait()
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		tableSink := tableSinks[i]

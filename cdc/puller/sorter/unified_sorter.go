@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@ import (
 	"context"
 	"os"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -30,6 +28,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	inputChSize       = 128
+	outputChSize      = 128
+	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
+)
+
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
 	inputCh     chan *model.PolymorphicEvent
@@ -37,6 +41,8 @@ type UnifiedSorter struct {
 	dir         string
 	pool        *backEndPool
 	metricsInfo *metricsInfo
+
+	closeCh chan struct{}
 }
 
 type metricsInfo struct {
@@ -83,7 +89,7 @@ func NewUnifiedSorter(
 	changeFeedID model.ChangeFeedID,
 	tableName string,
 	tableID model.TableID,
-	captureAddr string) *UnifiedSorter {
+	captureAddr string) (*UnifiedSorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -93,13 +99,17 @@ func NewUnifiedSorter(
 			// Let the local setting override the changefeed setting
 			dir = sorterConfig.SortDir
 		}
-		pool = newBackEndPool(dir, captureAddr)
+		var err error
+		pool, err = newBackEndPool(dir, captureAddr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	lazyInitWorkerPool()
 	return &UnifiedSorter{
-		inputCh:  make(chan *model.PolymorphicEvent, 128),
-		outputCh: make(chan *model.PolymorphicEvent, 128),
+		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
+		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
 		pool:     pool,
 		metricsInfo: &metricsInfo{
@@ -108,7 +118,8 @@ func NewUnifiedSorter(
 			tableID:      tableID,
 			captureAddr:  captureAddr,
 		},
-	}
+		closeCh: make(chan struct{}, 1),
+	}, nil
 }
 
 // UnifiedSorterCleanUp cleans up the files that might have been used.
@@ -129,6 +140,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		log.Info("sorterDebug: Running Unified Sorter in debug mode")
 	})
 
+	defer close(s.closeCh)
+
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
@@ -141,7 +154,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
 	errg, subctx := errgroup.WithContext(ctx)
-	heapSorterCollectCh := make(chan *flushTask, 4096)
+	heapSorterCollectCh := make(chan *flushTask, heapCollectChSize)
 	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
 	defer mergerCleanUp(heapSorterCollectCh)
 
@@ -173,6 +186,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			}
 			// must wait for all writers to exit to close the channel.
 			close(heapSorterCollectCh)
+			failpoint.Inject("InjectHeapSorterExitDelay", func() {})
 		}()
 
 		select {
@@ -183,9 +197,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
-	var mergerBufLen int64
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc, &mergerBufLen))
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
 	})
 
 	errg.Go(func() error {
@@ -201,15 +214,6 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
-			// tentative value 1280000
-			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
-				after := time.After(1 * time.Second)
-				select {
-				case <-subctx.Done():
-					return subctx.Err()
-				case <-after:
-				}
-			}
 			select {
 			case <-subctx.Done():
 				return subctx.Err()
@@ -223,6 +227,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 						default:
 						}
 						err := sorter.poolHandle.AddEvent(subctx, event)
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						if err != nil {
 							return errors.Trace(err)
 						}
@@ -240,6 +249,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				default:
 					err := heapSorters[targetID].poolHandle.AddEvent(subctx, event)
 					if err != nil {
+						if cerror.ErrWorkerPoolHandleCancelled.Equal(err) {
+							// no need to report ErrWorkerPoolHandleCancelled,
+							// as it may confuse the user
+							return nil
+						}
 						return errors.Trace(err)
 					}
 					metricSorterConsumeCount.WithLabelValues("kv").Inc()
@@ -256,6 +270,7 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 	select {
 	case <-ctx.Done():
 		return
+	case <-s.closeCh:
 	case s.inputCh <- entry:
 	}
 }
