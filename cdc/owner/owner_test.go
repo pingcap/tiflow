@@ -116,7 +116,8 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	}
 
 	// this will make changefeed always meet ErrGCTTLExceeded
-	owner.gcManager = &mockGcManager{}
+	mockedGcManager := &mockGcManager{GcManager: owner.gcManager}
+	owner.gcManager = mockedGcManager
 
 	// this tick create remove changefeed patches
 	owner.EnqueueJob(removeJob)
