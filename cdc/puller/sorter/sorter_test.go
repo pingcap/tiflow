@@ -64,7 +64,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
-	conf.DataDir = "/tmp/cdc_data"
+	conf.DataDir = c.MkDir()
 	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
@@ -92,7 +92,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
-	conf.DataDir = "/tmp/cdc_data"
+	conf.DataDir = c.MkDir()
 	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
@@ -243,12 +243,14 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 	pool = nil
 	poolMu.Unlock()
 
-	err := os.MkdirAll("/tmp/sorter_local", 0o755)
+	baseDir := c.MkDir()
+	dir := filepath.Join(baseDir, "sorter_local")
+	err := os.MkdirAll(dir, 0o755)
 	c.Assert(err, check.IsNil)
 	// We expect the local setting to override the changefeed setting
-	config.GetGlobalServerConfig().Sorter.SortDir = "/tmp/sorter_local"
+	config.GetGlobalServerConfig().Sorter.SortDir = dir
 
-	_, err = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+	_, err = NewUnifiedSorter(filepath.Join(baseDir, "sorter"), /* the changefeed setting */
 		"test-cf",
 		"test",
 		0,
@@ -259,7 +261,7 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 	defer poolMu.Unlock()
 
 	c.Assert(pool, check.NotNil)
-	c.Assert(pool.dir, check.Equals, "/tmp/sorter_local")
+	c.Assert(pool.dir, check.Equals, dir)
 }
 
 func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
@@ -271,12 +273,11 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	pool = nil
 	poolMu.Unlock()
 
-	err := os.MkdirAll("/tmp/sorter", 0o755)
-	c.Assert(err, check.IsNil)
+	dir := c.MkDir()
 	// We expect the changefeed setting to take effect
 	config.GetGlobalServerConfig().Sorter.SortDir = ""
 
-	_, err = NewUnifiedSorter("/tmp/sorter", /* the changefeed setting */
+	_, err := NewUnifiedSorter(dir, /* the changefeed setting */
 		"test-cf",
 		"test",
 		0,
@@ -287,7 +288,7 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	defer poolMu.Unlock()
 
 	c.Assert(pool, check.NotNil)
-	c.Assert(pool.dir, check.Equals, "/tmp/sorter")
+	c.Assert(pool.dir, check.Equals, dir)
 }
 
 // TestSorterCancelRestart tests the situation where the Unified Sorter is repeatedly canceled and
@@ -297,7 +298,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	defer UnifiedSorterCleanUp()
 
 	conf := config.GetDefaultServerConfig()
-	conf.DataDir = "/tmp/cdc_data"
+	conf.DataDir = c.MkDir()
 	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
@@ -344,7 +345,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	defer log.SetLevel(zapcore.InfoLevel)
 
 	conf := config.GetDefaultServerConfig()
-	conf.DataDir = "/tmp/cdc_data"
+	conf.DataDir = c.MkDir()
 	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
@@ -421,7 +422,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	defer log.SetLevel(zapcore.InfoLevel)
 
 	conf := config.GetDefaultServerConfig()
-	conf.DataDir = "/tmp/cdc_data"
+	conf.DataDir = c.MkDir()
 	sortDir := filepath.Join(conf.DataDir, config.DefaultSortDir)
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
@@ -473,7 +474,7 @@ func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer UnifiedSorterCleanUp()
 
-	sorter, err := NewUnifiedSorter("/tmp/sorter",
+	sorter, err := NewUnifiedSorter(c.MkDir(),
 		"test-cf",
 		"test",
 		0,
