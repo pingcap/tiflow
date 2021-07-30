@@ -34,7 +34,7 @@ import (
 
 type ownerJobType int
 
-// All AdminJob types
+// All OwnerJob types
 const (
 	ownerJobTypeRebalance ownerJobType = iota
 	ownerJobTypeManualSchedule
