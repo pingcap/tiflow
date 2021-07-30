@@ -100,7 +100,9 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	return nil
 }
 
-// stop is called when sink receives a stop command or checkpointTs reaches targetTs
+// stop is called when sink receives a stop command or checkpointTs reaches targetTs.
+// In this method, the builtin table sink will be closed by calling `Close`, and
+// no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 	n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
