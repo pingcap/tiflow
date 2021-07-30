@@ -10,6 +10,11 @@ on:
       - master
       - 'release-[0-9].[0-9]*'
 
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
 
   docker_build:
