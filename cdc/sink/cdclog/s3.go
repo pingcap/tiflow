@@ -348,7 +348,8 @@ func (s *s3Sink) Close(ctx context.Context) error {
 }
 
 func (s *s3Sink) Barrier(ctx context.Context) error {
-	// TODO
+	// Barrier does nothing because FlushRowChangedEvents in s3 sink has flushed
+	// all buffered events forcedlly.
 	return nil
 }
 

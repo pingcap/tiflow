@@ -273,7 +273,8 @@ func (k *mqSink) Close(ctx context.Context) error {
 }
 
 func (k *mqSink) Barrier(cxt context.Context) error {
-	// TODO
+	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
+	// all buffered events forcedlly.
 	return nil
 }
 
