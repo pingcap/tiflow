@@ -130,13 +130,12 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	c.feedStateManager.Tick(state)
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-
 	if !c.feedStateManager.ShouldRunning() {
 		c.releaseResources()
 		return nil
 	}
 
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
 		return errors.Trace(err)
 	}
