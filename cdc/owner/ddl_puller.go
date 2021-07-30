@@ -53,6 +53,7 @@ type ddlPullerImpl struct {
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
 	cancel         context.CancelFunc
+	lastDDLJobID   int64
 }
 
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
@@ -119,7 +120,12 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		}
 		h.mu.Lock()
 		defer h.mu.Unlock()
+		if job.ID == h.lastDDLJobID {
+			log.Warn("ignore duplicated DDL job", zap.Any("job", job))
+			return nil
+		}
 		h.pendingDDLJobs = append(h.pendingDDLJobs, job)
+		h.lastDDLJobID = job.ID
 		return nil
 	}
 
