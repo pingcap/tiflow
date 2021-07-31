@@ -541,6 +541,11 @@ error = '''
 owner encountered inconsistent state. report a bug if this happens frequently. %s
 '''
 
+["CDC:ErrOwnerNotFound"]
+error = '''
+can't not found an owner
+'''
+
 ["CDC:ErrOwnerSortDir"]
 error = '''
 owner sort dir

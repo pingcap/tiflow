@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -97,16 +97,30 @@ type ChangefeedConfig struct {
 	SinkConfig            *config.SinkConfig `json:"sink_config"`
 }
 
+// ProcessorCommonInfo holds the common info of a processor
+type ProcessorCommonInfo struct {
+	CfID      string `json:"changefeed_id"`
+	CaptureID string `json:"capture_id"`
+}
+
 // ProcessorDetail holds the detail info of a processor
 type ProcessorDetail struct {
-	Status   *TaskStatus   `json:"status"`
-	Position *TaskPosition `json:"position"`
+	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
+	CheckPointTs uint64 `json:"checkpoint_ts"`
+	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
+	ResolvedTs uint64 `json:"resolved_ts"`
+	// all table ids that this processor are replicating
+	Tables []int64 `json:"table_ids"`
+	// Error code when error happens
+	Error *RunningError `json:"error"`
 }
 
 // CaptureTaskStatus holds TaskStatus of a capture
 type CaptureTaskStatus struct {
-	CaptureID  string      `json:"capture_id"`
-	TaskStatus *TaskStatus `json:"status"`
+	CaptureID string `json:"capture_id"`
+	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
+	Tables    []int64                     `json:"table_ids"`
+	Operation map[TableID]*TableOperation `json:"table_operations"`
 }
 
 // Capture holds common information of a capture in cdc

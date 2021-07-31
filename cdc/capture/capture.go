@@ -359,3 +359,23 @@ func (c *Capture) IsOwner() bool {
 		return nil
 	}) == nil
 }
+
+// GetOwner return the owner of current TiCDC cluster
+func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
+	_, captureInfos, err := c.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ownerID, err := c.etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, captureInfo := range captureInfos {
+		if captureInfo.ID == ownerID {
+			return captureInfo, nil
+		}
+	}
+	return nil, cerror.ErrOwnerNotFound
+}

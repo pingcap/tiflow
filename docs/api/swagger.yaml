@@ -30,8 +30,16 @@ definitions:
     properties:
       capture_id:
         type: string
-      status:
-        $ref: '#/definitions/model.TaskStatus'
+      table_ids:
+        description: Table information list, containing tables that processor should
+          process, updated by ownrer, processor is read only.
+        items:
+          type: integer
+        type: array
+      table_operations:
+        additionalProperties:
+          $ref: '#/definitions/model.TableOperation'
+        type: object
     type: object
   model.ChangefeedCommonInfo:
     properties:
@@ -121,19 +129,31 @@ definitions:
       error_msg:
         type: string
     type: object
-  model.ProcInfoSnap:
+  model.ProcessorCommonInfo:
     properties:
-      capture-id:
+      capture_id:
         type: string
-      changefeed-id:
+      changefeed_id:
         type: string
     type: object
   model.ProcessorDetail:
     properties:
-      position:
-        $ref: '#/definitions/model.TaskPosition'
-      status:
-        $ref: '#/definitions/model.TaskStatus'
+      checkpoint_ts:
+        description: The maximum event CommitTs that has been synchronized. This is
+          updated by corresponding processor.
+        type: integer
+      error:
+        $ref: '#/definitions/model.RunningError'
+        description: Error code when error happens
+      resolved_ts:
+        description: The event that satisfies CommitTs <= ResolvedTs can be synchronized.
+          This is updated by corresponding processor.
+        type: integer
+      table_ids:
+        description: all table ids that this processor are replicating
+        items:
+          type: integer
+        type: array
     type: object
   model.RunningError:
     properties:
@@ -173,46 +193,6 @@ definitions:
         type: integer
       status:
         type: integer
-    type: object
-  model.TableReplicaInfo:
-    properties:
-      mark-table-id:
-        type: integer
-      start-ts:
-        type: integer
-    type: object
-  model.TaskPosition:
-    properties:
-      checkpoint-ts:
-        description: The maximum event CommitTs that has been synchronized. This is
-          updated by corresponding processor.
-        type: integer
-      count:
-        description: The count of events were synchronized. This is updated by corresponding
-          processor.
-        type: integer
-      error:
-        $ref: '#/definitions/model.RunningError'
-        description: Error code when error happens
-      resolved-ts:
-        description: The event that satisfies CommitTs <= ResolvedTs can be synchronized.
-          This is updated by corresponding processor.
-        type: integer
-    type: object
-  model.TaskStatus:
-    properties:
-      admin-job-type:
-        type: integer
-      operation:
-        additionalProperties:
-          $ref: '#/definitions/model.TableOperation'
-        type: object
-      tables:
-        additionalProperties:
-          $ref: '#/definitions/model.TableReplicaInfo'
-        description: Table information list, containing tables that processor should
-          process, updated by ownrer, processor is read only.
-        type: object
     type: object
 info:
   contact: {}
@@ -515,8 +495,10 @@ paths:
       responses:
         "200":
           description: ""
-        "404":
-          description: ""
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
       summary: Check if CDC cluster is health
       tags:
       - common
@@ -545,7 +527,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: list all processors in cdc cluster
+      description: list all processors in the TiCDC cluster
       produces:
       - application/json
       responses:
@@ -553,7 +535,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/model.ProcInfoSnap'
+              $ref: '#/definitions/model.ProcessorCommonInfo'
             type: array
         "400":
           description: Internal Server Error

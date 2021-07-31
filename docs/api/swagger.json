@@ -456,8 +456,11 @@
                     "200": {
                         "description": ""
                     },
-                    "404": {
-                        "description": ""
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
                     }
                 }
             }
@@ -496,7 +499,7 @@
         },
         "/api/v1/processors": {
             "get": {
-                "description": "list all processors in cdc cluster",
+                "description": "list all processors in the TiCDC cluster",
                 "consumes": [
                     "application/json"
                 ],
@@ -513,7 +516,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/model.ProcInfoSnap"
+                                "$ref": "#/definitions/model.ProcessorCommonInfo"
                             }
                         }
                     },
@@ -652,8 +655,18 @@
                 "capture_id": {
                     "type": "string"
                 },
-                "status": {
-                    "$ref": "#/definitions/model.TaskStatus"
+                "table_ids": {
+                    "description": "Table information list, containing tables that processor should process, updated by ownrer, processor is read only.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "table_operations": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/model.TableOperation"
+                    }
                 }
             }
         },
@@ -788,13 +801,13 @@
                 }
             }
         },
-        "model.ProcInfoSnap": {
+        "model.ProcessorCommonInfo": {
             "type": "object",
             "properties": {
-                "capture-id": {
+                "capture_id": {
                     "type": "string"
                 },
-                "changefeed-id": {
+                "changefeed_id": {
                     "type": "string"
                 }
             }
@@ -802,11 +815,24 @@
         "model.ProcessorDetail": {
             "type": "object",
             "properties": {
-                "position": {
-                    "$ref": "#/definitions/model.TaskPosition"
+                "checkpoint_ts": {
+                    "description": "The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.",
+                    "type": "integer"
                 },
-                "status": {
-                    "$ref": "#/definitions/model.TaskStatus"
+                "error": {
+                    "description": "Error code when error happens",
+                    "$ref": "#/definitions/model.RunningError"
+                },
+                "resolved_ts": {
+                    "description": "The event that satisfies CommitTs \u003c= ResolvedTs can be synchronized. This is updated by corresponding processor.",
+                    "type": "integer"
+                },
+                "table_ids": {
+                    "description": "all table ids that this processor are replicating",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -863,59 +889,6 @@
                 },
                 "status": {
                     "type": "integer"
-                }
-            }
-        },
-        "model.TableReplicaInfo": {
-            "type": "object",
-            "properties": {
-                "mark-table-id": {
-                    "type": "integer"
-                },
-                "start-ts": {
-                    "type": "integer"
-                }
-            }
-        },
-        "model.TaskPosition": {
-            "type": "object",
-            "properties": {
-                "checkpoint-ts": {
-                    "description": "The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.",
-                    "type": "integer"
-                },
-                "count": {
-                    "description": "The count of events were synchronized. This is updated by corresponding processor.",
-                    "type": "integer"
-                },
-                "error": {
-                    "description": "Error code when error happens",
-                    "$ref": "#/definitions/model.RunningError"
-                },
-                "resolved-ts": {
-                    "description": "The event that satisfies CommitTs \u003c= ResolvedTs can be synchronized. This is updated by corresponding processor.",
-                    "type": "integer"
-                }
-            }
-        },
-        "model.TaskStatus": {
-            "type": "object",
-            "properties": {
-                "admin-job-type": {
-                    "type": "integer"
-                },
-                "operation": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/model.TableOperation"
-                    }
-                },
-                "tables": {
-                    "description": "Table information list, containing tables that processor should process, updated by ownrer, processor is read only.",
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/model.TableReplicaInfo"
-                    }
                 }
             }
         }
