@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,11 +30,11 @@ import (
 
 // NewRouter create a router for OpenAPI
 func NewRouter(capture2 *capture.Capture) *gin.Engine {
-	router := gin.Default()
+	router := gin.New()
 
 	// discard gin log output
-	gin.DefaultWriter = ioutil.Discard
 	gin.SetMode(gin.ReleaseMode)
+	gin.DefaultWriter = ioutil.Discard
 
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))

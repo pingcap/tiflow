@@ -40,8 +40,8 @@ const (
 	APIOpVarCaptureID = "capture_id"
 	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table_id"
-	// RedirectFromCapture is a header to be set when a request redirect from
-	RedirectFromCapture = "TiCDC-RedirectFromCapture"
+	// ForwardFromCapture is a header to be set when a request is forwarded from another capture
+	ForwardFromCapture = "TiCDC-ForwardFromCapture"
 )
 
 type httpHandler struct {
@@ -571,12 +571,12 @@ func (h *httpHandler) Health(c *gin.Context) {
 // forwardToOwner an request to owner
 func (h *httpHandler) forwardToOwner(c *gin.Context) {
 	// every request can only forward to owner one time
-	if len(c.GetHeader(RedirectFromCapture)) != 0 {
+	if len(c.GetHeader(ForwardFromCapture)) != 0 {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(cerror.ErrOwnerNotFound))
 		return
 	}
 
-	c.Header(RedirectFromCapture, h.capture.Info().ID)
+	c.Header(ForwardFromCapture, h.capture.Info().ID)
 
 	owner, err := h.capture.GetOwner(c)
 	if err != nil {

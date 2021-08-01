@@ -23,7 +23,6 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
