@@ -244,8 +244,7 @@ loop:
 			if e == nil {
 				break loop
 			}
-			err := server.Send(e)
-			s.c.Assert(err, check.IsNil)
+			server.Send(e) //nolint:errcheck
 		case <-notify.notify:
 			break loop
 		}
