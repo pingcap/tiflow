@@ -3288,7 +3288,7 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
