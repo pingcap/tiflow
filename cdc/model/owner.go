@@ -19,7 +19,9 @@ import (
 	"math"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // AdminJobType represents for admin job type, both used in owner and processor
@@ -238,6 +240,7 @@ func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts, isMoveTable bool) (
 		return nil, false
 	}
 	delete(ts.Tables, id)
+	log.Info("remove a table", zap.Int64("tableId", id), zap.Uint64("boundaryTs", boundaryTs), zap.Bool("isMoveTable", isMoveTable))
 	if ts.Operation == nil {
 		ts.Operation = make(map[TableID]*TableOperation)
 	}
@@ -262,6 +265,7 @@ func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs T
 		return
 	}
 	ts.Tables[id] = table
+	log.Info("add a table", zap.Int64("tableId", id), zap.Uint64("boundaryTs", boundaryTs))
 	if ts.Operation == nil {
 		ts.Operation = make(map[TableID]*TableOperation)
 	}

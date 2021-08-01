@@ -45,7 +45,7 @@ type ddlHandler struct {
 func newDDLHandler(pdCli pd.Client, conns *kv.ConnArray, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
 	// TODO: context should be passed from outter caller
 	ctx, cancel := context.WithCancel(context.Background())
-	plr := puller.NewPuller(ctx, pdCli, conns, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
+	plr := puller.NewPuller(ctx, pdCli, conns, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
 	h := &ddlHandler{
 		puller: plr,
 		cancel: cancel,
