@@ -84,11 +84,11 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		// Firstly load the region info.
 		state, ok = pendingRegions.take(event.RequestId)
 		if !ok {
-			log.Error("received an event but neither pending region nor running region was found",
+			log.Warn("drop event due to region feed is removed",
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("requestID", event.RequestId),
 				zap.String("addr", addr))
-			return cerror.ErrNoPendingRegion.GenWithStackByArgs(event.RegionId, event.RequestId, addr)
+			return nil
 		}
 
 		state.start()
@@ -185,6 +185,10 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, limiter, addr)
+
+	defer func() {
+		worker.evictAllRegions(ctx) //nolint:errcheck
+	}()
 
 	g.Go(func() error {
 		return worker.run(ctx)
