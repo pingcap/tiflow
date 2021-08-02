@@ -32,24 +32,54 @@ type capture struct {
 	AdvertiseAddr string `json:"address"`
 }
 
-// newCmdListCapture creates the `capture list` command.
+// listCaptureOptions defines flags for the `cli capture list` command.
+type listCaptureOptions struct {
+	etcdClient *kv.CDCEtcdClient
+}
+
+// newListCaptureOptions creates new listCaptureOptions for the `cli capture list` command.
+func newListCaptureOptions() *listCaptureOptions {
+	return &listCaptureOptions{}
+}
+
+// complete adapts from the command line args to the data required.
+func (o *listCaptureOptions) complete(f factory.Factory) error {
+	etcdClient, err := f.EtcdClient()
+	if err != nil {
+		return err
+	}
+
+	o.etcdClient = etcdClient
+
+	return nil
+}
+
+// run runs the `cli capture list` command.
+func (o *listCaptureOptions) run(cmd *cobra.Command) error {
+	ctx := cmdcontext.GetDefaultContext()
+
+	captures, err := listCaptures(ctx, o.etcdClient)
+	if err != nil {
+		return err
+	}
+
+	return util.JSONPrint(cmd, captures)
+}
+
+// newCmdListCapture creates the `cli capture list` command.
 func newCmdListCapture(f factory.Factory) *cobra.Command {
+	o := newListCaptureOptions()
+
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List all captures in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmdcontext.GetDefaultContext()
-			etcdClient, err := f.EtcdClient()
+			err := o.complete(f)
 			if err != nil {
 				return err
 			}
 
-			captures, err := listCaptures(ctx, etcdClient)
-			if err != nil {
-				return err
-			}
-
-			return util.JSONPrint(cmd, captures)
+			return o.run(cmd)
 		},
 	}
 	return command
