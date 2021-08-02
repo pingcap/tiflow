@@ -45,12 +45,12 @@ func NewClient(credential *security.Credential) (*Client, error) {
 	}, nil
 }
 
-// IsNeeded return true if the given feedState matches the whiteList.
-func IsNeeded(whiteList string, feedState model.FeedState) bool {
-	if whiteList == "all" {
+// IsListState return true if the given feedState matches the listState.
+func IsListState(listState string, feedState model.FeedState) bool {
+	if listState == "all" {
 		return true
 	}
-	if whiteList == "" {
+	if listState == "" {
 		switch feedState {
 		case model.StateNormal:
 			return true
@@ -60,5 +60,5 @@ func IsNeeded(whiteList string, feedState model.FeedState) bool {
 			return true
 		}
 	}
-	return whiteList == string(feedState)
+	return listState == string(feedState)
 }

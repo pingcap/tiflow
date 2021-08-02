@@ -19,12 +19,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	chttputil "github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -44,20 +43,21 @@ const (
 	ForwardFromCapture = "TiCDC-ForwardFromCapture"
 )
 
-type httpHandler struct {
+// HTTPHandler is a  HTTPHandler of capture
+type HTTPHandler struct {
 	capture *Capture
 }
 
-// NewHTTPHandler return a httpHandler for OpenAPI
-func NewHTTPHandler(capture *Capture) httpHandler {
-	return httpHandler{
+// NewHTTPHandler return a HTTPHandler for OpenAPI
+func NewHTTPHandler(capture *Capture) HTTPHandler {
+	return HTTPHandler{
 		capture: capture,
 	}
 }
 
-// ListChangefeed lists all changgefeed in cdc cluster
+// ListChangefeed lists all changgefeeds in cdc cluster
 // @Summary List changefeed
-// @Description list all changefeed in cdc cluster
+// @Description list all changefeeds in cdc cluster
 // @Tags changefeed
 // @Accept  json
 // @Produce  json
@@ -65,7 +65,7 @@ func NewHTTPHandler(capture *Capture) httpHandler {
 // @Success 200 {array} model.ChangefeedCommonInfo
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/changefeeds [get]
-func (h *httpHandler) ListChangefeed(c *gin.Context) {
+func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 	state := c.Query(APIOpVarChangefeedState)
 	statuses, err := h.capture.etcdClient.GetAllChangeFeedStatus(c.Request.Context())
 	if err != nil {
@@ -90,7 +90,7 @@ func (h *httpHandler) ListChangefeed(c *gin.Context) {
 			return
 		}
 
-		if !chttputil.IsNeeded(state, cfInfo.State) {
+		if !chttputil.IsListState(state, cfInfo.State) {
 			continue
 		}
 
@@ -134,7 +134,7 @@ func (h *httpHandler) ListChangefeed(c *gin.Context) {
 // @Success 200 {object} model.ChangefeedDetail
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id} [get]
-func (h *httpHandler) GetChangefeed(c *gin.Context) {
+func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 	changefeedID := c.Param(APIOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
@@ -195,7 +195,7 @@ func (h *httpHandler) GetChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds [post]
-func (h *httpHandler) CreateChangefeed(c *gin.Context) {
+func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 	// TODO
 }
 
@@ -209,13 +209,18 @@ func (h *httpHandler) CreateChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id}/pause [post]
-func (h *httpHandler) PauseChangefeed(c *gin.Context) {
+func (h *HTTPHandler) PauseChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
 	}
 
 	changefeedID := c.Param(APIOpVarChangefeedID)
+	if err := model.ValidateChangefeedID(changefeedID); err != nil {
+		c.IndentedJSON(http.StatusBadRequest,
+			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		return
+	}
 	// check if the changefeed exists && check if the etcdClient work well
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(c, changefeedID)
 	if err != nil {
@@ -246,13 +251,18 @@ func (h *httpHandler) PauseChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id}/resume [post]
-func (h *httpHandler) ResumeChangefeed(c *gin.Context) {
+func (h *HTTPHandler) ResumeChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
 	}
 
 	changefeedID := c.Param(APIOpVarChangefeedID)
+	if err := model.ValidateChangefeedID(changefeedID); err != nil {
+		c.IndentedJSON(http.StatusBadRequest,
+			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		return
+	}
 	// check if the changefeed exists && check if the etcdClient work well
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(c, changefeedID)
 	if err != nil {
@@ -284,7 +294,7 @@ func (h *httpHandler) ResumeChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id} [put]
-func (h *httpHandler) UpdateChangefeed(c *gin.Context) {
+func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 	// TODO
 }
 
@@ -298,12 +308,17 @@ func (h *httpHandler) UpdateChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id} [delete]
-func (h *httpHandler) RemoveChangefeed(c *gin.Context) {
+func (h *HTTPHandler) RemoveChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
 	}
 	changefeedID := c.Param(APIOpVarChangefeedID)
+	if err := model.ValidateChangefeedID(changefeedID); err != nil {
+		c.IndentedJSON(http.StatusBadRequest,
+			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		return
+	}
 	// check if the changefeed exists && check if the etcdClient work well
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(c, changefeedID)
 	if err != nil {
@@ -334,7 +349,7 @@ func (h *httpHandler) RemoveChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id}/tables/rebalance_table [post]
-func (h *httpHandler) RebalanceTable(c *gin.Context) {
+func (h *HTTPHandler) RebalanceTable(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -373,7 +388,7 @@ func (h *httpHandler) RebalanceTable(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id}/tables/move_table [post]
-func (h *httpHandler) MoveTable(c *gin.Context) {
+func (h *HTTPHandler) MoveTable(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 	}
@@ -423,7 +438,7 @@ func (h *httpHandler) MoveTable(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/owner/resign [post]
-func (h *httpHandler) ResignOwner(c *gin.Context) {
+func (h *HTTPHandler) ResignOwner(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 	}
@@ -445,7 +460,7 @@ func (h *httpHandler) ResignOwner(c *gin.Context) {
 // @Success 200 {object} model.ProcessorDetail
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors/{changefeed_id}/{capture_id} [get]
-func (h *httpHandler) GetProcessor(c *gin.Context) {
+func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 	changefeedID := c.Param(APIOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
@@ -485,7 +500,7 @@ func (h *httpHandler) GetProcessor(c *gin.Context) {
 // @Success 200 {array} model.ProcessorCommonInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors [get]
-func (h *httpHandler) ListProcessor(c *gin.Context) {
+func (h *HTTPHandler) ListProcessor(c *gin.Context) {
 	infos, err := h.capture.etcdClient.GetProcessors(c)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
@@ -508,7 +523,7 @@ func (h *httpHandler) ListProcessor(c *gin.Context) {
 // @Success 200 {array} model.Capture
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/captures [get]
-func (h *httpHandler) ListCapture(c *gin.Context) {
+func (h *HTTPHandler) ListCapture(c *gin.Context) {
 	_, raw, err := h.capture.etcdClient.GetCaptures(c)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
@@ -540,7 +555,7 @@ func (h *httpHandler) ListCapture(c *gin.Context) {
 // @Success 200 {object} model.ServerStatus
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/status [get]
-func (h *httpHandler) ServerStatus(c *gin.Context) {
+func (h *HTTPHandler) ServerStatus(c *gin.Context) {
 	status := model.ServerStatus{
 		Version: version.ReleaseVersion,
 		GitHash: version.GitHash,
@@ -560,7 +575,7 @@ func (h *httpHandler) ServerStatus(c *gin.Context) {
 // @Success 200
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
-func (h *httpHandler) Health(c *gin.Context) {
+func (h *HTTPHandler) Health(c *gin.Context) {
 	if _, err := h.capture.GetOwner(c); err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -569,10 +584,10 @@ func (h *httpHandler) Health(c *gin.Context) {
 }
 
 // forwardToOwner an request to owner
-func (h *httpHandler) forwardToOwner(c *gin.Context) {
+func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	// every request can only forward to owner one time
 	if len(c.GetHeader(ForwardFromCapture)) != 0 {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(cerror.ErrOwnerNotFound))
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(cerror.ErrRequestForwardErr.FastGenByArgs()))
 		return
 	}
 

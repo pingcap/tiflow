@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package docs
 
 import (
 	"bytes"
@@ -74,7 +74,7 @@ var doc = `{
         },
         "/api/v1/changefeeds": {
             "get": {
-                "description": "list all changefeed in cdc cluster",
+                "description": "list all changefeeds in cdc cluster",
                 "consumes": [
                     "application/json"
                 ],
@@ -683,7 +683,7 @@ var doc = `{
                     "type": "string"
                 },
                 "table_ids": {
-                    "description": "Table information list, containing tables that processor should process, updated by ownrer, processor is read only.",
+                    "description": "Table list, containing tables that processor should process",
                     "type": "array",
                     "items": {
                         "type": "integer"
@@ -843,7 +843,7 @@ var doc = `{
             "type": "object",
             "properties": {
                 "checkpoint_ts": {
-                    "description": "The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.",
+                    "description": "The maximum event CommitTs that has been synchronized.",
                     "type": "integer"
                 },
                 "error": {
@@ -851,7 +851,7 @@ var doc = `{
                     "$ref": "#/definitions/model.RunningError"
                 },
                 "resolved_ts": {
-                    "description": "The event that satisfies CommitTs \u003c= ResolvedTs can be synchronized. This is updated by corresponding processor.",
+                    "description": "The event that satisfies CommitTs \u003c= ResolvedTs can be synchronized.",
                     "type": "integer"
                 },
                 "table_ids": {
@@ -938,7 +938,7 @@ var SwaggerInfo = swaggerInfo{
 	BasePath:    "",
 	Schemes:     []string{},
 	Title:       "TiCDC OpenAPI",
-	Description: "This is a doc of TiCDC OpenAPI.",
+	Description: "This is a docs of TiCDC OpenAPI.",
 }
 
 type s struct{}

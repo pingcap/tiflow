@@ -105,9 +105,9 @@ type ProcessorCommonInfo struct {
 
 // ProcessorDetail holds the detail info of a processor
 type ProcessorDetail struct {
-	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
+	// The maximum event CommitTs that has been synchronized.
 	CheckPointTs uint64 `json:"checkpoint_ts"`
-	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
+	// The event that satisfies CommitTs <= ResolvedTs can be synchronized.
 	ResolvedTs uint64 `json:"resolved_ts"`
 	// all table ids that this processor are replicating
 	Tables []int64 `json:"table_ids"`
@@ -118,7 +118,7 @@ type ProcessorDetail struct {
 // CaptureTaskStatus holds TaskStatus of a capture
 type CaptureTaskStatus struct {
 	CaptureID string `json:"capture_id"`
-	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
+	// Table list, containing tables that processor should process
 	Tables    []int64                     `json:"table_ids"`
 	Operation map[TableID]*TableOperation `json:"table_operations"`
 }

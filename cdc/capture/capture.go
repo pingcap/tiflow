@@ -377,5 +377,5 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 			return captureInfo, nil
 		}
 	}
-	return nil, cerror.ErrOwnerNotFound
+	return nil, cerror.ErrOwnerNotFound.FastGenByArgs()
 }
