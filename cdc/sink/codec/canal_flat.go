@@ -146,7 +146,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 	return ret, nil
 }
 
-func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) (*canalFlatMessage, error) {
+func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) *canalFlatMessage {
 	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, convertDdlEventType(e), 1)
 
 	ret := &canalFlatMessage{
@@ -160,7 +160,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) (*c
 		Query:         e.Query,
 		tikvTs:        e.CommitTs,
 	}
-	return ret, nil
+	return ret
 }
 
 // EncodeCheckpointEvent is no-op
@@ -198,10 +198,7 @@ func (c *CanalFlatEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResu
 
 // EncodeDDLEvent encodes DDL events
 func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
-	msg, err := c.newFlatMessageForDDL(e)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	msg := c.newFlatMessageForDDL(e)
 	value, err := json.Marshal(msg)
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
