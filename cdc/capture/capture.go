@@ -151,6 +151,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 	})
 	err := c.register(ctx)
 	if err != nil {
+		log.Error("register capture info failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 	defer func() {
@@ -347,12 +348,10 @@ func (c *Capture) unregister(ctx cdcContext.Context) error {
 // AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
-	if err := c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
 		o.AsyncStop()
 		return nil
-	}); err != nil {
-		log.Warn("capture async close", zap.Error(err))
-	}
+	})
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
@@ -362,13 +361,11 @@ func (c *Capture) AsyncClose() {
 
 // WriteDebugInfo writes the debug info into writer.
 func (c *Capture) WriteDebugInfo(w io.Writer) {
-	if err := c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
 		_, _ = fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w)
 		return nil
-	}); err != nil {
-		log.Warn("capture write debug info", zap.Error(err))
-	}
+	})
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
