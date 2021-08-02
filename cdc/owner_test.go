@@ -1193,7 +1193,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 		c.Assert(err, check.IsNil)
 		err = cf.schema.FillSchemaName(job)
 		c.Assert(err, check.IsNil)
-		_, err = cf.applyJob(context.TODO(), job)
+		_, err = cf.applyJob(job)
 		c.Assert(err, check.IsNil)
 		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
 		c.Assert(cf.tables, check.DeepEquals, expectTables[i])
