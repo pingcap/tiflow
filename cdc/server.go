@@ -298,12 +298,12 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
 		kvStorage := util.KVStorageFromCtx(ctx)
+		if s.capture != nil {
+			s.capture.session.Close() //nolint:errcheck
+		}
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 		if err != nil {
 			return err
-		}
-		if s.capture != nil {
-			s.capture.session.Close() //nolint:errcheck
 		}
 		s.capture = capture
 		s.etcdClient = &capture.etcdClient
