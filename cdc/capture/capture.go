@@ -320,7 +320,7 @@ func (c *Capture) resign(ctx cdcContext.Context) error {
 
 // register the capture information in etcd
 func (c *Capture) register(ctx cdcContext.Context) error {
-	if !atomic.CompareAndSwapInt32(&c.infoRegistered, 0, 1) {
+	if atomic.LoadInt32(&c.infoRegistered) == 1 {
 		// capture info already registered
 		return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info already registered"))
 	}
@@ -328,6 +328,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
+	atomic.StoreInt32(&c.infoRegistered, 1)
 	return nil
 }
 
