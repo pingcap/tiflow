@@ -20,18 +20,18 @@ type NodeContext interface {
 	context.Context
 
 	// Message returns the message sent by the previous node
-	Message() *Message
+	Message() Message
 	// SendToNextNode sends the message to the next node
-	SendToNextNode(msg *Message)
+	SendToNextNode(msg Message)
 }
 
 type nodeContext struct {
 	context.Context
-	msg      *Message
-	outputCh chan *Message
+	msg      Message
+	outputCh chan Message
 }
 
-func newNodeContext(ctx context.Context, msg *Message, outputCh chan *Message) NodeContext {
+func newNodeContext(ctx context.Context, msg Message, outputCh chan Message) NodeContext {
 	return &nodeContext{
 		Context:  ctx,
 		msg:      msg,
@@ -39,27 +39,27 @@ func newNodeContext(ctx context.Context, msg *Message, outputCh chan *Message) N
 	}
 }
 
-func (ctx *nodeContext) Message() *Message {
+func (ctx *nodeContext) Message() Message {
 	return ctx.msg
 }
 
-func (ctx *nodeContext) SendToNextNode(msg *Message) {
+func (ctx *nodeContext) SendToNextNode(msg Message) {
 	// The header channel should never be blocked
 	ctx.outputCh <- msg
 }
 
 type messageContext struct {
 	NodeContext
-	message *Message
+	message Message
 }
 
-func withMessage(ctx NodeContext, msg *Message) NodeContext {
+func withMessage(ctx NodeContext, msg Message) NodeContext {
 	return messageContext{
 		NodeContext: ctx,
 		message:     msg,
 	}
 }
 
-func (ctx messageContext) Message() *Message {
+func (ctx messageContext) Message() Message {
 	return ctx.message
 }
