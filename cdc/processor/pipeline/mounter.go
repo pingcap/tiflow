@@ -29,61 +29,7 @@ func newMounterNode(mounter entry.Mounter) pipeline.Node {
 }
 
 func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
-<<<<<<< HEAD
 	// do nothing
-=======
-	stdCtx, cancel := context.WithCancel(ctx)
-	n.cancel = cancel
-
-	receiver, err := n.notifier.NewReceiver(time.Millisecond * 100)
-	if err != nil {
-		log.Panic("unexpected error", zap.Error(err))
-	}
-
-	n.wg.Go(func() error {
-		defer receiver.Stop()
-		for {
-			select {
-			case <-stdCtx.Done():
-				return nil
-			case <-receiver.C:
-				// handles writes to the queue
-				for {
-					n.mu.Lock()
-					msgs := n.queue.PopManyFront(waitEventMountedBatchSize)
-					n.mu.Unlock()
-					if len(msgs) == 0 {
-						break // inner loop
-					}
-
-					for _, msg := range msgs {
-						msg := msg.(pipeline.Message)
-						if msg.Tp != pipeline.MessageTypePolymorphicEvent {
-							// sends the control message directly to the next node
-							ctx.SendToNextNode(msg)
-							continue // to handling the next message
-						}
-
-						// handles PolymorphicEvents
-						event := msg.PolymorphicEvent
-						if event.RawKV.OpType != model.OpTypeResolved {
-							failpoint.Inject("MounterNodeWaitPrepare", func() {})
-							// only RowChangedEvents need mounting
-							err := event.WaitPrepare(stdCtx)
-							if err != nil {
-								ctx.Throw(err)
-								return nil
-							}
-						}
-
-						ctx.SendToNextNode(msg)
-					}
-				}
-			}
-		}
-	})
-
->>>>>>> c60bdb68 (pipeline: use Message value to reduce GC pressure (#2415))
 	return nil
 }
 
