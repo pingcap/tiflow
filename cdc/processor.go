@@ -169,7 +169,7 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -827,7 +827,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		// NOTICE: always pull the old value internally
 		// See also: TODO(hi-rustin): add issue link here.
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
-			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
+			replicaInfo.StartTs, []regionspan.Span{span},
 			true)
 		go func() {
 			err := plr.Run(ctx)
