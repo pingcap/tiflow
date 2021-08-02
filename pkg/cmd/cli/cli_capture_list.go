@@ -82,6 +82,7 @@ func newCmdListCapture(f factory.Factory) *cobra.Command {
 			return o.run(cmd)
 		},
 	}
+
 	return command
 }
 

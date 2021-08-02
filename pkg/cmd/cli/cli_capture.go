@@ -20,14 +20,14 @@ import (
 
 // newCmdCapture creates the `cli capture` command.
 func newCmdCapture(f factory.Factory) *cobra.Command {
-	command := &cobra.Command{
+	cmds := &cobra.Command{
 		Use:   "capture",
 		Short: "Manage capture (capture is a CDC server instance)",
 	}
-	command.AddCommand(
+	cmds.AddCommand(
 		newCmdListCapture(f),
 		// TODO: add resign owner command
 	)
 
-	return command
+	return cmds
 }
