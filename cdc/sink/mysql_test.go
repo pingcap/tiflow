@@ -1194,7 +1194,9 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	c.Assert(err, check.IsNil)
 
+	err = sink.Barrier(ctx)
 	c.Assert(err, check.IsNil)
 
 	err = sink.Close(ctx)
