@@ -92,7 +92,7 @@ func (c *Capture) reset() error {
 	c.processorManager = c.newProcessorManager()
 	if c.session != nil {
 		if err := c.session.Close(); err != nil {
-			log.Warn("close etcd session failed", zap.Error(err))
+			return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "close exist capture session")
 		}
 	}
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
@@ -128,6 +128,7 @@ func (c *Capture) Run(ctx context.Context) error {
 		}
 		err = c.reset()
 		if err != nil {
+			log.Error("reset capture failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 		err = c.run(ctx)
