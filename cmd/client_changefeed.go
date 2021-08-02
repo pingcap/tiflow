@@ -242,7 +242,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
-func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -260,7 +260,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		if err := confirmLargeDataGap(ctx, cmd, startTs); err != nil {
 			return nil, err
 		}
-		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {
+		if err := verifyTargetTs(startTs, targetTs); err != nil {
 			return nil, err
 		}
 	}
@@ -367,7 +367,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 
 	if isCreate {
 		ctx = util.PutTimezoneInCtx(ctx, tz)
-		ineligibleTables, eligibleTables, err := verifyTables(ctx, credential, cfg, startTs)
+		ineligibleTables, eligibleTables, err := verifyTables(credential, cfg, startTs)
 		if err != nil {
 			return nil, err
 		}
@@ -453,11 +453,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
-			if err != nil {
-				return err
-			}
-			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), captureInfos)
+			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential())
 			if err != nil {
 				return err
 			}
@@ -693,7 +689,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 				}
 				startTs = oracle.ComposeTS(ts, logical)
 
-				_, eligibleTables, err := verifyTables(ctx, getCredential(), cfg, startTs)
+				_, eligibleTables, err := verifyTables(getCredential(), cfg, startTs)
 				if err != nil {
 					return err
 				}

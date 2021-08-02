@@ -225,7 +225,7 @@ func (w *regionWorker) checkRegionStateEmpty() (empty bool) {
 
 // checkShouldExit checks whether the region worker should exit, if should exit
 // return an error
-func (w *regionWorker) checkShouldExit(ctx context.Context, addr string) error {
+func (w *regionWorker) checkShouldExit(addr string) error {
 	empty := w.checkRegionStateEmpty()
 	// If there is not region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
@@ -254,7 +254,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 		zap.String("error", err.Error()))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
-		return w.checkShouldExit(ctx, state.sri.rpcCtx.Addr)
+		return w.checkShouldExit(state.sri.rpcCtx.Addr)
 	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
@@ -288,7 +288,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	// check and cancel gRPC stream before reconnecting region, in case of the
 	// scenario that region connects to the same TiKV store again and reuses
 	// resource in this region worker by accident.
-	retErr := w.checkShouldExit(ctx, state.sri.rpcCtx.Addr)
+	retErr := w.checkShouldExit(state.sri.rpcCtx.Addr)
 
 	revokeToken := !state.initialized
 	err2 := w.session.onRegionFail(ctx, regionErrorInfo{
@@ -431,7 +431,7 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 	return err
 }
 
-func (w *regionWorker) initPoolHandles(ctx context.Context, handleCount int) {
+func (w *regionWorker) initPoolHandles(handleCount int) {
 	handles := make([]workerpool.EventHandle, 0, handleCount)
 	for i := 0; i < handleCount; i++ {
 		poolHandle := regionWorkerPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
@@ -606,7 +606,7 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	w.parentCtx = parentCtx
 	wg, ctx := errgroup.WithContext(parentCtx)
 	w.initMetrics(ctx)
-	w.initPoolHandles(ctx, w.concurrent)
+	w.initPoolHandles(w.concurrent)
 	wg.Go(func() error {
 		return w.checkErrorReconnect(w.resolveLock(ctx))
 	})
@@ -771,7 +771,7 @@ func (w *regionWorker) handleResolvedTs(
 
 // evictAllRegions is used when gRPC stream meets error and re-establish, notify
 // all existing regions to re-establish
-func (w *regionWorker) evictAllRegions(ctx context.Context) error {
+func (w *regionWorker) evictAllRegions() error {
 	var err error
 	for _, states := range w.statesManager.states {
 		states.Range(func(_, value interface{}) bool {

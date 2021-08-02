@@ -41,7 +41,7 @@ var httputilServerMsg = "this is httputil test server"
 func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
 	defer testleak.AfterTest(c)()
 	port := 8303
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 
 	dir, err := os.Getwd()
 	c.Assert(err, check.IsNil)
@@ -53,7 +53,7 @@ func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
 		[]string{},
 	)
 	c.Assert(err, check.IsNil)
-	server := runServer(ctx, serverTLS, port, c)
+	server := runServer(serverTLS, port, c)
 	defer func() {
 		cancel()
 		server.Close()
@@ -81,7 +81,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(httputilServerMsg))
 }
 
-func runServer(ctx context.Context, tlsCfg *tls.Config, port int, c *check.C) *http.Server {
+func runServer(tlsCfg *tls.Config, port int, c *check.C) *http.Server {
 	http.HandleFunc("/", handler)
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: nil}
 
