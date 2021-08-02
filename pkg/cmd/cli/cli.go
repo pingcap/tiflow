@@ -69,7 +69,7 @@ func NewCmdCli() *cobra.Command {
 		},
 	}
 
-	// Binding the `cmd` command flags.
+	// Binding the `cli` command flags.
 	o.addFlags(cmds)
 	cf.AddFlags(cmds)
 
