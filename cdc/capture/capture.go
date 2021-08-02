@@ -333,12 +333,13 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 
 // unregister the capture info in etcd
 func (c *Capture) unregister(ctx cdcContext.Context) error {
-	if !atomic.CompareAndSwapInt32(&c.infoRegistered, 1, 0) {
+	if atomic.LoadInt32(&c.infoRegistered) == 0 {
 		return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info is not registered"))
 	}
 	if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(ctx, c.info.ID); err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
+	atomic.StoreInt32(&c.infoRegistered, 0)
 	return nil
 }
 
