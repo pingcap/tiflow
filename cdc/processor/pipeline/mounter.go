@@ -82,7 +82,7 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 					}
 
 					for _, msg := range msgs {
-						msg := msg.(*pipeline.Message)
+						msg := msg.(pipeline.Message)
 						if msg.Tp != pipeline.MessageTypePolymorphicEvent {
 							// sends the control message directly to the next node
 							ctx.SendToNextNode(msg)
