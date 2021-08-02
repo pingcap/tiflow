@@ -877,10 +877,18 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 }
 
 func (s *mysqlSink) Barrier(ctx context.Context) error {
+	warnDuration := 3 * time.Minute
+	ticker := time.NewTicker(warnDuration)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			ticker.Reset(warnDuration)
+			log.Warn("Barrier doesn't return in time, may be stuck",
+				zap.Uint64("resolved-ts", atomic.LoadUint64(&s.maxResolvedTs)),
+				zap.Uint64("checkpoint-ts", s.checkpointTs()))
 		default:
 			maxResolvedTs := atomic.LoadUint64(&s.maxResolvedTs)
 			if s.checkpointTs() >= maxResolvedTs {
