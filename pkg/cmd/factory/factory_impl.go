@@ -47,26 +47,32 @@ func NewFactory(clientGetter ClientGetter) Factory {
 	return f
 }
 
+// ToTLSConfig returns the configuration of tls.
 func (f *factoryImpl) ToTLSConfig() (*tls.Config, error) {
 	return f.clientGetter.ToTLSConfig()
 }
 
+// ToGRPCDialOption returns the option of GRPC dial.
 func (f *factoryImpl) ToGRPCDialOption() (grpc.DialOption, error) {
 	return f.clientGetter.ToGRPCDialOption()
 }
 
+// GetPdAddr returns pd address.
 func (f *factoryImpl) GetPdAddr() string {
 	return f.clientGetter.GetPdAddr()
 }
 
+// GetLogLevel returns log level.
 func (f *factoryImpl) GetLogLevel() string {
 	return f.clientGetter.GetLogLevel()
 }
 
+// GetCredential returns security credentials.
 func (f *factoryImpl) GetCredential() *security.Credential {
 	return f.clientGetter.GetCredential()
 }
 
+// EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 
@@ -119,6 +125,7 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 	return &client, nil
 }
 
+// PdClient creates new pd client.
 func (f factoryImpl) PdClient() (pd.Client, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 
