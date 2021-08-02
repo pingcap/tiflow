@@ -302,6 +302,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
+		if s.capture != nil {
+			s.capture.session.Close() //nolint:errcheck
+		}
 		s.capture = capture
 		s.etcdClient = &capture.etcdClient
 	}
