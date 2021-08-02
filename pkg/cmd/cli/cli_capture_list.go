@@ -42,7 +42,7 @@ func newListCaptureOptions() *listCaptureOptions {
 	return &listCaptureOptions{}
 }
 
-// complete adapts from the command line args to the data required.
+// complete adapts from the command line args to the data and client required.
 func (o *listCaptureOptions) complete(f factory.Factory) error {
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
