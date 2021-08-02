@@ -151,6 +151,12 @@ func WithCancel(ctx Context) (Context, context.CancelFunc) {
 	return WithStd(ctx, stdCtx), cancel
 }
 
+// WithTimeout returns a Context with the timeout and cancel function
+func WithTimeout(ctx Context, timeout time.Duration) (Context, context.CancelFunc) {
+	stdCtx, cancel := context.WithTimeout(ctx, timeout)
+	return WithStd(ctx, stdCtx), cancel
+}
+
 type throwContext struct {
 	Context
 	f func(error) error

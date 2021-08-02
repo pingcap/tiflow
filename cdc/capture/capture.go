@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,7 +45,9 @@ import (
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	captureMu sync.Mutex
-	info      *model.CaptureInfo
+
+	info           *model.CaptureInfo
+	infoRegistered int32
 
 	ownerMu          sync.Mutex
 	owner            *owner.Owner
@@ -151,8 +154,8 @@ func (c *Capture) run(stdCtx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer func() {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
+		timeoutCtx, cancel := cdcContext.WithTimeout(ctx, 5*time.Second)
+		if err := c.unregister(timeoutCtx); err != nil {
 			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
 		}
 		cancel()
@@ -163,7 +166,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
-		// when the campaignOwner returns an error, it means that the the owner throws an unrecoverable serious errors
+		// when the campaignOwner returns an error, it means that the owner throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the owner tick)
 		// so we should also stop the processor and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
@@ -307,7 +310,7 @@ func (c *Capture) campaign(ctx cdcContext.Context) error {
 	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(ctx, c.info.ID))
 }
 
-// Resign lets a owner start a new election.
+// Resign lets an owner start a new election.
 func (c *Capture) resign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
@@ -315,10 +318,25 @@ func (c *Capture) resign(ctx cdcContext.Context) error {
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 
-// register registers the capture information in etcd
+// register the capture information in etcd
 func (c *Capture) register(ctx cdcContext.Context) error {
+	if !atomic.CompareAndSwapInt32(&c.infoRegistered, 0, 1) {
+		// capture info already registered
+		return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info already registered"))
+	}
 	err := ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	if err != nil {
+		return cerror.WrapError(cerror.ErrCaptureRegister, err)
+	}
+	return nil
+}
+
+// unregister the capture info in etcd
+func (c *Capture) unregister(ctx cdcContext.Context) error {
+	if !atomic.CompareAndSwapInt32(&c.infoRegistered, 1, 0) {
+		return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info is not registered"))
+	}
+	if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(ctx, c.info.ID); err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
 	return nil
@@ -327,10 +345,12 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 // AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
+	if err := c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		o.AsyncStop()
 		return nil
-	})
+	}); err != nil {
+		log.Warn("capture async close", zap.Error(err))
+	}
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
@@ -340,15 +360,17 @@ func (c *Capture) AsyncClose() {
 
 // WriteDebugInfo writes the debug info into writer.
 func (c *Capture) WriteDebugInfo(w io.Writer) {
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
-		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
+	if err := c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+		_, _ = fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w)
 		return nil
-	})
+	}); err != nil {
+		log.Warn("capture write debug info", zap.Error(err))
+	}
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
-		fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
+		_, _ = fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 		c.processorManager.WriteDebugInfo(w)
 	}
 }
