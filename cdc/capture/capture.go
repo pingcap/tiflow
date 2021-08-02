@@ -46,8 +46,8 @@ type Capture struct {
 	captureMu sync.Mutex
 
 	// make sure that only one capture's info registered into etcd
-	infoRegistered bool
-	info           *model.CaptureInfo
+	// infoRegistered bool
+	info *model.CaptureInfo
 
 	ownerMu          sync.Mutex
 	owner            *owner.Owner
@@ -323,27 +323,27 @@ func (c *Capture) resign(ctx cdcContext.Context) error {
 
 // register the capture information in etcd
 func (c *Capture) register(ctx cdcContext.Context) error {
-	if c.infoRegistered {
-		// capture info already registered
-		return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info already registered"))
-	}
+	// if c.infoRegistered {
+	// 	// capture info already registered
+	// 	return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info already registered"))
+	// }
 	err := ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
-	c.infoRegistered = true
+	// c.infoRegistered = true
 	return nil
 }
 
 // unregister the capture info in etcd
 func (c *Capture) unregister(ctx cdcContext.Context) error {
-	if !c.infoRegistered {
-		return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info is not registered"))
-	}
+	// if !c.infoRegistered {
+	// 	return cerror.WrapError(cerror.ErrCaptureRegister, errors.New("capture info is not registered"))
+	// }
 	if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(ctx, c.info.ID); err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
-	c.infoRegistered = false
+	// c.infoRegistered = false
 	return nil
 }
 
