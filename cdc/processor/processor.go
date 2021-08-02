@@ -505,7 +505,9 @@ func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
-		log.Error("processor receives redundant error", zap.Error(err))
+		if errors.Cause(err) != context.Canceled {
+			log.Error("processor receives redundant error", zap.Error(err))
+		}
 	}
 }
 
