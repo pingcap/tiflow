@@ -203,7 +203,7 @@ func (t *table) buildColumnList() {
 	t.columnList = strings.Join(columns, ",")
 }
 
-func parseTable(t *table, stmt *ast.CreateTableStmt) error {
+func parseTable(t *table, stmt *ast.CreateTableStmt) {
 	t.name = stmt.Table.Name.L
 	t.columns = make([]*column, 0, len(stmt.Cols))
 
@@ -217,8 +217,6 @@ func parseTable(t *table, stmt *ast.CreateTableStmt) error {
 	}
 
 	t.buildColumnList()
-
-	return nil
 }
 
 func parseTableSQL(table *table, sql string) error {
@@ -229,7 +227,7 @@ func parseTableSQL(table *table, sql string) error {
 
 	switch node := stmt.(type) {
 	case *ast.CreateTableStmt:
-		err = parseTable(table, node)
+		parseTable(table, node)
 	default:
 		err = errors.Errorf("invalid statement - %v", stmt.Text())
 	}

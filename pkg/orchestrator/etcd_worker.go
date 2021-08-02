@@ -134,10 +134,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
-				err := worker.handleEvent(ctx, event)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				worker.handleEvent(ctx, event)
 			}
 		}
 
@@ -179,7 +176,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	}
 }
 
-func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
+func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
 	worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
 		key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
 		value:    event.Kv.Value,
@@ -196,7 +193,6 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 	case mvccpb.DELETE:
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
-	return nil
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
