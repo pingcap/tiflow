@@ -578,7 +578,7 @@ func (p *oldProcessor) removeTable(tableID int64) {
 	if table.markTableID != 0 {
 		delete(p.markTableIDs, table.markTableID)
 	}
-	tableResolvedTsHistogram.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
@@ -614,7 +614,7 @@ func (p *oldProcessor) handleTables(ctx context.Context, status *model.TaskStatu
 				opt.Done = true
 				opt.Status = model.OperFinished
 				status.Dirty = true
-				tableResolvedTsHistogram.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 			}
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
@@ -1030,7 +1030,7 @@ func (p *oldProcessor) sorterConsume(
 ) {
 	var lastResolvedTs uint64
 	opDone := false
-	resolvedHistogram := tableResolvedTsHistogram.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	resolvedGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
 	checkDone := func() {
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
@@ -1234,7 +1234,7 @@ func (p *oldProcessor) sorterConsume(
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
 				p.localResolvedNotifier.Notify()
-				resolvedHistogram.Observe(float64(oracle.ExtractPhysical(pEvent.CRTs)))
+				resolvedGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 				if !opDone {
 					checkDone()
 				}
@@ -1357,7 +1357,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
-		tableResolvedTsHistogram.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	}
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
