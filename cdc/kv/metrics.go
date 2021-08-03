@@ -78,7 +78,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "region_token",
 			Help:      "size of region token in kv client",
-		}, []string{"store", "table", "changefeed"})
+		}, []string{"store", "changefeed"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
