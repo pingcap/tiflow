@@ -23,7 +23,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "consume_count",
 		Help:      "the number of events consumed by the sorter",
-	}, []string{"capture", "changefeed", "table", "type"})
+	}, []string{"capture", "changefeed", "type"})
 
 	sorterEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
