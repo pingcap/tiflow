@@ -39,7 +39,7 @@ type mockGcManager struct {
 }
 
 func (m *mockGcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
-	return cerror.ErrGCTTLExceeded
+	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
 }
 
 var _ GcManager = &mockGcManager{}
