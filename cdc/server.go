@@ -299,7 +299,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
 		kvStorage := util.KVStorageFromCtx(ctx)
 		if s.capture != nil && s.capture.session != nil {
-			log.Debug("close old capture session")
+			log.Info("close old capture session")
 			if err := s.capture.session.Close(); err != nil {
 				log.Error("close old capture session failed", zap.Error(err))
 			}
@@ -316,7 +316,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 			if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
 				log.Warn("failed to delete capture info when capture exited", zap.Error(err))
 			}
-			log.Debug("try to delete old capture info success")
+			log.Info("try to delete old capture info success")
 			cancel()
 		}()
 	}
