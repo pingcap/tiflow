@@ -14,6 +14,7 @@
 package util
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/spf13/cobra"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -167,4 +169,28 @@ max-backups = 1
 	conf := config.GetDefaultServerConfig()
 	err = StrictDecodeFile(configPath, "test", conf)
 	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options.*")
+}
+
+func (s *utilsSuite) TestJSONPrint(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cmd := new(cobra.Command)
+	type testStruct struct {
+		A string `json:"a"`
+	}
+
+	data := testStruct{
+		A: "string",
+	}
+
+	var b bytes.Buffer
+	cmd.SetOut(&b)
+
+	err := JSONPrint(cmd, &data)
+	c.Assert(err, check.IsNil)
+
+	output := `{
+  "a": "string"
+}
+`
+	c.Assert(b.String(), check.Equals, output)
 }
