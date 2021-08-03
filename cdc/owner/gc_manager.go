@@ -41,7 +41,7 @@ var gcSafepointUpdateInterval = 1 * time.Minute
 type GcManager interface {
 	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
 	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
-	CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error
+	checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error
 }
 
 type gcManager struct {
@@ -128,7 +128,7 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 	return m.pdPhysicalTimeCache, nil
 }
 
-func (m *gcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)
 		if err != nil {
