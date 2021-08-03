@@ -32,13 +32,13 @@ var (
 			Name:      "resolved_ts_lag",
 			Help:      "local resolved ts lag of processor",
 		}, []string{"changefeed", "capture"})
-	tableResolvedTsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	tableResolvedTsHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "table_resolved_ts",
 			Help:      "local resolved ts of processor",
-		}, []string{"changefeed", "capture", "table"})
+		}, []string{"changefeed", "capture"})
 	checkpointTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -95,7 +95,7 @@ var (
 func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(resolvedTsGauge)
 	registry.MustRegister(resolvedTsLagGauge)
-	registry.MustRegister(tableResolvedTsGauge)
+	registry.MustRegister(tableResolvedTsHistogram)
 	registry.MustRegister(checkpointTsGauge)
 	registry.MustRegister(checkpointTsLagGauge)
 	registry.MustRegister(syncTableNumGauge)
