@@ -45,8 +45,8 @@ var (
 			Name:      "resolved_ts",
 			Help:      "puller forward resolved ts",
 		}, []string{"capture", "changefeed"})
-	outputChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	outputChanSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "output_chan_size",
@@ -59,8 +59,8 @@ var (
 			Name:      "mem_buffer_size",
 			Help:      "Puller in memory buffer size",
 		}, []string{"capture", "changefeed"})
-	eventChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	eventChanSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "event_chan_size",
@@ -111,8 +111,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(txnCollectCounter)
 	registry.MustRegister(pullerResolvedTsGauge)
 	registry.MustRegister(memBufferSizeGauge)
-	registry.MustRegister(outputChanSizeGauge)
-	registry.MustRegister(eventChanSizeGauge)
+	registry.MustRegister(outputChanSizeHistogram)
+	registry.MustRegister(eventChanSizeHistogram)
 	registry.MustRegister(entrySorterResolvedChanSizeGauge)
 	registry.MustRegister(entrySorterOutputChanSizeGauge)
 	registry.MustRegister(entrySorterUnsortedSizeGauge)
