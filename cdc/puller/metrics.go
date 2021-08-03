@@ -37,35 +37,35 @@ var (
 			Subsystem: "puller",
 			Name:      "txn_collect_event_count",
 			Help:      "The number of events received from txn collector",
-		}, []string{"capture", "changefeed", "table", "type"})
+		}, []string{"capture", "changefeed", "type"})
 	pullerResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "resolved_ts",
 			Help:      "puller forward resolved ts",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"capture", "changefeed"})
 	outputChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "output_chan_size",
 			Help:      "Puller entry buffer size",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"capture", "changefeed"})
 	memBufferSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "mem_buffer_size",
 			Help:      "Puller in memory buffer size",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"capture", "changefeed"})
 	eventChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "event_chan_size",
 			Help:      "Puller event channel size",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"capture", "changefeed"})
 	entrySorterResolvedChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -85,7 +85,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "entry_sorter_unsorted_size",
-			Help:      "Puller entry sorter unsoreted items size",
+			Help:      "Puller entry sorter unsorted items size",
 		}, []string{"capture", "changefeed", "table"})
 	entrySorterSortDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{

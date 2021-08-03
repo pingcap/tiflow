@@ -71,7 +71,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
-		}, []string{"id", "channel"})
+		}, []string{"channel"})
 	clientRegionTokenSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
