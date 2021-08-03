@@ -56,7 +56,7 @@ type gcManager struct {
 	lastUpdatedPdTime   time.Time
 }
 
-func newGCManager() GcManager {
+func newGCManager() *gcManager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
