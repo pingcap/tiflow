@@ -15,6 +15,7 @@ package util
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"os"
 	"os/signal"
@@ -132,5 +133,15 @@ func VerifyPdEndpoint(pdEndpoint string, useTLS bool) error {
 			return errors.New("PD endpoint scheme is https, please provide certificate")
 		}
 	}
+	return nil
+}
+
+// JSONPrint will output the data in JSON format.
+func JSONPrint(cmd *cobra.Command, v interface{}) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	cmd.Printf("%s\n", data)
 	return nil
 }
