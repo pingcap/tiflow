@@ -128,14 +128,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableID, _ := util.TableIDFromCtx(ctx)
-	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
-	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
+	metricOutputChanSize := outputChanSizeHistogram.WithLabelValues(captureAddr, changefeedID)
+	metricEventChanSize := eventChanSizeHistogram.WithLabelValues(captureAddr, changefeedID)
 	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
 	defer func() {
-		outputChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID)
-		eventChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID)
+		outputChanSizeHistogram.DeleteLabelValues(captureAddr, changefeedID)
+		eventChanSizeHistogram.DeleteLabelValues(captureAddr, changefeedID)
 		memBufferSizeGauge.DeleteLabelValues(captureAddr, changefeedID)
 		pullerResolvedTsGauge.DeleteLabelValues(captureAddr, changefeedID)
 		kvEventCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
@@ -149,8 +149,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(15 * time.Second):
-				metricEventChanSize.Set(float64(len(eventCh)))
-				metricOutputChanSize.Set(float64(len(p.outputCh)))
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
 			}
 		}
