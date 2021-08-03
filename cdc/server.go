@@ -299,7 +299,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
 		kvStorage := util.KVStorageFromCtx(ctx)
 		if s.capture != nil && s.capture.session != nil {
-			s.capture.session.Close() //nolint:errcheck
+			if err := s.capture.session.Close(); err != nil {
+				log.Warn("close old capture session failed", zap.Error(err))
+			}
 		}
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 		if err != nil {
