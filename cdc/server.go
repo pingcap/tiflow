@@ -298,22 +298,22 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
 		kvStorage := util.KVStorageFromCtx(ctx)
-		if s.capture != nil {
-			s.capture.session.Close() //nolint:errcheck
-		}
+		// if s.capture != nil && s.capture.session != nil {
+		// 	s.capture.session.Close() //nolint:errcheck
+		// }
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 		if err != nil {
 			return err
 		}
 		s.capture = capture
 		s.etcdClient = &capture.etcdClient
-		defer func() {
-			timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
-				log.Warn("failed to delete capture info when capture exited", zap.Error(err))
-			}
-			cancel()
-		}()
+		// defer func() {
+		// 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// 	if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
+		// 		log.Warn("failed to delete capture info when capture exited", zap.Error(err))
+		// 	}
+		// 	cancel()
+		// }()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
