@@ -143,13 +143,6 @@ func NewCapture(
 func (c *Capture) Run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	// TODO: we'd better to add some wait mechanism to ensure no routine is blocked
-	defer func() {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := c.etcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
-			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
-		}
-		cancel()
-	}()
 	defer cancel()
 	defer close(c.closed)
 
