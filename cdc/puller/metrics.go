@@ -51,6 +51,7 @@ var (
 			Subsystem: "puller",
 			Name:      "output_chan_size",
 			Help:      "Puller entry buffer size",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
 		}, []string{"capture", "changefeed"})
 	memBufferSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -65,6 +66,7 @@ var (
 			Subsystem: "puller",
 			Name:      "event_chan_size",
 			Help:      "Puller event channel size",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
 		}, []string{"capture", "changefeed"})
 	entrySorterResolvedChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
