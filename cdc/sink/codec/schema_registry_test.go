@@ -304,6 +304,7 @@ func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	called := 0
+	//nolint:unparam
 	schemaGen := func() (string, error) {
 		called++
 		return `{
