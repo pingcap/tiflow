@@ -46,9 +46,6 @@ import (
 )
 
 const (
-	// defaultMemBufferCapacity is the default memory buffer per change feed.
-	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
 	schemaStorageGCLag = time.Minute * 20
 )
 
@@ -59,7 +56,6 @@ type processor struct {
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
-	limitter      *puller.BlurResourceLimitter
 	schemaStorage entry.SchemaStorage
 	filter        *filter.Filter
 	mounter       entry.Mounter
@@ -86,7 +82,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p := &processor{
-		limitter:     puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
 		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
@@ -720,7 +715,6 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
-		p.limitter,
 		p.mounter,
 		tableID,
 		tableNameStr,
