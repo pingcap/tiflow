@@ -67,20 +67,16 @@ func NewHTTPHandler(capture *Capture) HTTPHandler {
 // @Router /api/v1/changefeeds [get]
 func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 	state := c.Query(apiOpVarChangefeedState)
+	// get all changefeed status
 	statuses, err := h.capture.etcdClient.GetAllChangeFeedStatus(c.Request.Context())
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
-	changefeedIDs := make(map[string]struct{}, len(statuses))
-	for cid := range statuses {
-		changefeedIDs[cid] = struct{}{}
-	}
 
 	resps := make([]*model.ChangefeedCommonInfo, 0)
-	for changefeedID := range changefeedIDs {
-
-		cfInfo, err := h.capture.etcdClient.GetChangeFeedInfo(c.Request.Context(), changefeedID)
+	for cfID, cfStatus := range statuses {
+		cfInfo, err := h.capture.etcdClient.GetChangeFeedInfo(c.Request.Context(), cfID)
 		if err != nil {
 			// If a changefeed does not exists, skip it
 			if cerror.ErrChangeFeedNotExists.Equal(err) {
@@ -94,18 +90,8 @@ func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 			continue
 		}
 
-		cfStatus, _, err := h.capture.etcdClient.GetChangeFeedStatus(c.Request.Context(), changefeedID)
-		if err != nil {
-			// If a changefeed does not exists, skip it
-			if cerror.ErrChangeFeedNotExists.Equal(err) {
-				continue
-			}
-			c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
-			return
-		}
-
 		resp := &model.ChangefeedCommonInfo{
-			ID: changefeedID,
+			ID: cfID,
 		}
 
 		if cfInfo != nil {
