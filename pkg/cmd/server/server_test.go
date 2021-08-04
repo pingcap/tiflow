@@ -11,12 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package server
 
 import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -25,6 +26,8 @@ import (
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/spf13/cobra"
 )
+
+func TestSuite(t *testing.T) { check.TestingT(t) }
 
 type serverSuite struct{}
 
@@ -37,84 +40,90 @@ func (s *serverSuite) TestPatchTiDBConf(c *check.C) {
 	c.Assert(cfg.TiKVClient.MaxBatchSize, check.Equals, uint(0))
 }
 
-func (s *serverSuite) TestDataDirServerConfig(c *check.C) {
+func (s *serverSuite) TestValidateWithEmptyPdAddress(c *check.C) {
 	defer testleak.AfterTest(c)()
 	cmd := new(cobra.Command)
-	initServerCmd(cmd)
-	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
-	cfg, err := loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.NotNil)
-	// data dir default to ""
-	c.Assert(cfg.DataDir, check.Equals, "")
-	c.Assert(cfg.Sorter.SortDir, check.Equals, filepath.Join("", "/tmp/sorter"))
+	o := newOptions()
+	o.addFlags(cmd)
 
-	dataDir := c.MkDir()
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
-	c.Assert(cmd.ParseFlags([]string{"--data-dir=" + dataDir}), check.IsNil)
-	cfg, err = loadAndVerifyServerConfig(cmd)
+	c.Assert(cmd.ParseFlags([]string{"--pd="}), check.IsNil)
+	err := o.complete(cmd)
 	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.NotNil)
-	c.Assert(cfg.DataDir, check.Equals, dataDir)
-	// sorter-dir is not set yet
-	c.Assert(cfg.Sorter.SortDir, check.Equals, "/tmp/sorter")
+	err = o.validate()
+	c.Assert(err, check.ErrorMatches, ".*empty PD address.*")
 }
 
-func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
+func (s *serverSuite) TestValidateWithInvalidPdAddress(c *check.C) {
 	defer testleak.AfterTest(c)()
-	// test default flag values
 	cmd := new(cobra.Command)
-	initServerCmd(cmd)
-	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
-	cfg, err := loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.NotNil)
+	o := newOptions()
+	o.addFlags(cmd)
 
-	defcfg := config.GetDefaultServerConfig()
-	c.Assert(defcfg.ValidateAndAdjust(), check.IsNil)
-	c.Assert(cfg, check.DeepEquals, defcfg)
-	c.Assert(serverPdAddr, check.Equals, "http://127.0.0.1:2379")
-
-	// test empty PD address
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
-	c.Assert(cmd.ParseFlags([]string{"--pd="}), check.IsNil)
-	_, err = loadAndVerifyServerConfig(cmd)
-	c.Assert(err, check.ErrorMatches, ".*empty PD address.*")
-
-	// test invalid PD address
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
 	c.Assert(cmd.ParseFlags([]string{"--pd=aa"}), check.IsNil)
-	_, err = loadAndVerifyServerConfig(cmd)
+	err := o.complete(cmd)
+	c.Assert(err, check.IsNil)
+	err = o.validate()
 	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+}
 
-	// test invalid PD address(without host)
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
+func (s *serverSuite) TestValidateWithInvalidPdAddressWithoutHost(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
 	c.Assert(cmd.ParseFlags([]string{"--pd=http://"}), check.IsNil)
-	_, err = loadAndVerifyServerConfig(cmd)
+	err := o.complete(cmd)
+	c.Assert(err, check.IsNil)
+	err = o.validate()
 	c.Assert(err, check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
+}
 
-	// test missing certificate
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
+func (s *serverSuite) TestValidateWithHttpsPdAddressWithoutCertificate(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
 	c.Assert(cmd.ParseFlags([]string{"--pd=https://aa"}), check.IsNil)
-	_, err = loadAndVerifyServerConfig(cmd)
+	err := o.complete(cmd)
+	c.Assert(err, check.IsNil)
+	err = o.validate()
 	c.Assert(err, check.ErrorMatches, ".*PD endpoint scheme is https, please provide certificate.*")
+}
 
-	// test undefined flag
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
+func (s *serverSuite) TestAddUnknownFlag(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
 	c.Assert(cmd.ParseFlags([]string{"--PD="}), check.ErrorMatches, ".*unknown flag: --PD.*")
-	_, err = loadAndVerifyServerConfig(cmd)
+}
+
+func (s *serverSuite) TestDefaultCfg(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
+	c.Assert(cmd.ParseFlags([]string{}), check.IsNil)
+	err := o.complete(cmd)
 	c.Assert(err, check.IsNil)
 
-	// test flags without config file
+	defaultCfg := config.GetDefaultServerConfig()
+	c.Assert(defaultCfg.ValidateAndAdjust(), check.IsNil)
+	c.Assert(o.serverConfig, check.DeepEquals, defaultCfg)
+	c.Assert(o.serverPdAddr, check.Equals, "http://127.0.0.1:2379")
+}
+
+func (s *serverSuite) TestParseCfg(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dataDir := c.MkDir()
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
 	c.Assert(cmd.ParseFlags([]string{
 		"--addr", "127.5.5.1:8833",
 		"--advertise-addr", "127.5.5.1:7777",
@@ -135,9 +144,12 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 		"--sorter-num-workerpool-goroutine", "90",
 		"--sort-dir", "/tmp/just_a_test",
 	}), check.IsNil)
-	cfg, err = loadAndVerifyServerConfig(cmd)
+
+	err := o.complete(cmd)
 	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
+	err = o.validate()
+	c.Assert(err, check.IsNil)
+	c.Assert(o.serverConfig, check.DeepEquals, &config.ServerConfig{
 		Addr:          "127.5.5.1:8833",
 		AdvertiseAddr: "127.5.5.1:7777",
 		LogFile:       "/root/cdc.log",
@@ -175,9 +187,11 @@ func (s *serverSuite) TestLoadAndVerifyServerConfig(c *check.C) {
 			RegionScanLimit:  40,
 		},
 	})
+}
 
-	// test decode config file
-	dataDir = c.MkDir()
+func (s *serverSuite) TestDecodeCfg(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dataDir := c.MkDir()
 	tmpDir := c.MkDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
@@ -208,14 +222,20 @@ num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 `, dataDir)
-	err = ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
+
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
 	c.Assert(cmd.ParseFlags([]string{"--config", configPath}), check.IsNil)
-	cfg, err = loadAndVerifyServerConfig(cmd)
+
+	err = o.complete(cmd)
 	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
+	err = o.validate()
+	c.Assert(err, check.IsNil)
+	c.Assert(o.serverConfig, check.DeepEquals, &config.ServerConfig{
 		Addr:          "128.0.0.1:1234",
 		AdvertiseAddr: "127.0.0.1:1111",
 		LogFile:       "/root/cdc1.log",
@@ -249,18 +269,54 @@ sort-dir = "/tmp/just_a_test"
 			RegionScanLimit:  40,
 		},
 	})
+}
 
-	configContent = configContent + `
+func (s *serverSuite) TestDecodeCfgWithFlags(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dataDir := c.MkDir()
+	tmpDir := c.MkDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := fmt.Sprintf(`
+addr = "128.0.0.1:1234"
+advertise-addr = "127.0.0.1:1111"
+
+log-file = "/root/cdc1.log"
+log-level = "warn"
+
+data-dir = "%+v"
+gc-ttl = 500
+tz = "US"
+capture-session-ttl = 10
+
+owner-flush-interval = "600ms"
+processor-flush-interval = "600ms"
+
+[log.file]
+max-size = 200
+max-days = 1
+max-backups = 1
+
+[sorter]
+chunk-size-limit = 10000000
+max-memory-consumption = 2000000
+max-memory-percentage = 3
+num-concurrent-worker = 4
+num-workerpool-goroutine = 5
+sort-dir = "/tmp/just_a_test"
+
 [security]
 ca-path = "aa"
 cert-path = "bb"
 key-path = "cc"
 cert-allowed-cn = ["dd","ee"]
-`
-	err = ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+`, dataDir)
+	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
-	cmd = new(cobra.Command)
-	initServerCmd(cmd)
+
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
 	c.Assert(cmd.ParseFlags([]string{
 		"--addr", "127.5.5.1:8833",
 		"--log-file", "/root/cdc.log",
@@ -277,9 +333,12 @@ cert-allowed-cn = ["dd","ee"]
 		"--sorter-num-concurrent-worker", "3",
 		"--config", configPath,
 	}), check.IsNil)
-	cfg, err = loadAndVerifyServerConfig(cmd)
+
+	err = o.complete(cmd)
 	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.DeepEquals, &config.ServerConfig{
+	err = o.validate()
+	c.Assert(err, check.IsNil)
+	c.Assert(o.serverConfig, check.DeepEquals, &config.ServerConfig{
 		Addr:          "127.5.5.1:8833",
 		AdvertiseAddr: "127.0.0.1:1111",
 		LogFile:       "/root/cdc.log",

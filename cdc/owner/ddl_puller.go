@@ -52,6 +52,7 @@ type ddlPullerImpl struct {
 	mu             sync.Mutex
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
+	lastDDLJobID   int64
 	cancel         context.CancelFunc
 	lastDDLJobID   int64
 }
@@ -116,6 +117,10 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		}
 		if h.filter.ShouldDiscardDDL(job.Type) {
 			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
+			return nil
+		}
+		if job.ID == h.lastDDLJobID {
+			log.Warn("ignore duplicated DDL job", zap.Any("job", job))
 			return nil
 		}
 		h.mu.Lock()

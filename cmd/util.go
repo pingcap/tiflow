@@ -58,7 +58,7 @@ var (
 
 var errOwnerNotFound = liberrors.New("owner not found")
 
-var tsGapWarnning int64 = 86400 * 1000 // 1 day in milliseconds
+var tsGapWarning int64 = 86400 * 1000 // 1 day in milliseconds
 
 // Endpoint schemes.
 const (
@@ -164,11 +164,11 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 	if job.Opts != nil && job.Opts.ForceRemove {
 		forceRemoveOpt = "true"
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID:       {job.CfID},
 		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
-	}))
+	})
 	if err != nil {
 		return err
 	}
@@ -198,9 +198,9 @@ func applyOwnerChangefeedQuery(
 	if err != nil {
 		return "", err
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarChangefeedID: {cid},
-	}))
+	})
 	if err != nil {
 		return "", err
 	}
@@ -365,7 +365,7 @@ func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64
 		return err
 	}
 	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
-	if tsGap > tsGapWarnning {
+	if tsGap > tsGapWarning {
 		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
 			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
 			time.Duration(tsGap)*time.Millisecond,
