@@ -189,15 +189,9 @@ func NewTablePipeline(ctx cdcContext.Context,
 		runnerSize++
 	}
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-<<<<<<< HEAD
-	p.AppendNode(ctx, "puller", newPullerNode(limitter, tableID, replicaInfo, tableName))
+	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController))
 	p.AppendNode(ctx, "mounter", newMounterNode(mounter))
-=======
-	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
-	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
-	p.AppendNode(ctx, "mounter", newMounterNode())
->>>>>>> c9e0f1aa (puller: remove memory buffer and buffer limitter (#2328))
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
 	}
