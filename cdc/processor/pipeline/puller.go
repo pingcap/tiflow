@@ -29,8 +29,6 @@ import (
 )
 
 type pullerNode struct {
-	limitter *puller.BlurResourceLimitter
-
 	tableName string // quoted schema and table, used in metircs only
 
 	tableID     model.TableID
@@ -40,10 +38,8 @@ type pullerNode struct {
 }
 
 func newPullerNode(
-	limitter *puller.BlurResourceLimitter,
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
 	return &pullerNode{
-		limitter:    limitter,
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
