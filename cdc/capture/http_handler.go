@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	chttputil "github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -91,7 +90,7 @@ func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 			return
 		}
 
-		if !chttputil.IsListState(state, cfInfo.State) {
+		if !cfInfo.State.IsNeeded(state) {
 			continue
 		}
 
