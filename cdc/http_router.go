@@ -28,8 +28,8 @@ import (
 	_ "github.com/pingcap/ticdc/docs/api"
 )
 
-// NewRouter create a router for OpenAPI
-func NewRouter(capture2 *capture.Capture) *gin.Engine {
+// newRouter create a router for OpenAPI
+func newRouter(capture2 *capture.Capture) *gin.Engine {
 	router := gin.New()
 
 	// discard gin log output

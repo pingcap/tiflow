@@ -31,16 +31,16 @@ import (
 )
 
 const (
-	// APIOpVarChangefeedState is the key of changefeed state in HTTP API
-	APIOpVarChangefeedState = "state"
-	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
-	APIOpVarChangefeedID = "changefeed_id"
-	// APIOpVarCaptureID is the key of capture ID in HTTP API
-	APIOpVarCaptureID = "capture_id"
-	// APIOpVarTableID is the key of table ID in HTTP API
-	APIOpVarTableID = "table_id"
-	// ForwardFromCapture is a header to be set when a request is forwarded from another capture
-	ForwardFromCapture = "TiCDC-ForwardFromCapture"
+	// apiOpVarChangefeedState is the key of changefeed state in HTTP API
+	apiOpVarChangefeedState = "state"
+	// apiOpVarChangefeedID is the key of changefeed ID in HTTP API
+	apiOpVarChangefeedID = "changefeed_id"
+	// apiOpVarCaptureID is the key of capture ID in HTTP API
+	apiOpVarCaptureID = "capture_id"
+	// apiOpVarTableID is the key of table ID in HTTP API
+	apiOpVarTableID = "table_id"
+	// forWardFromCapture is a header to be set when a request is forwarded from another capture
+	forWardFromCapture = "TiCDC-ForwardFromCapture"
 )
 
 // HTTPHandler is a  HTTPHandler of capture
@@ -66,7 +66,7 @@ func NewHTTPHandler(capture *Capture) HTTPHandler {
 // @Failure 500 {object} model.HTTPError
 // @Router /api/v1/changefeeds [get]
 func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
-	state := c.Query(APIOpVarChangefeedState)
+	state := c.Query(apiOpVarChangefeedState)
 	statuses, err := h.capture.etcdClient.GetAllChangeFeedStatus(c.Request.Context())
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
@@ -135,7 +135,7 @@ func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [get]
 func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
-	changefeedID := c.Param(APIOpVarChangefeedID)
+	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
@@ -215,7 +215,7 @@ func (h *HTTPHandler) PauseChangefeed(c *gin.Context) {
 		return
 	}
 
-	changefeedID := c.Param(APIOpVarChangefeedID)
+	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
@@ -257,7 +257,7 @@ func (h *HTTPHandler) ResumeChangefeed(c *gin.Context) {
 		return
 	}
 
-	changefeedID := c.Param(APIOpVarChangefeedID)
+	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
@@ -313,7 +313,7 @@ func (h *HTTPHandler) RemoveChangefeed(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	changefeedID := c.Param(APIOpVarChangefeedID)
+	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
@@ -354,7 +354,7 @@ func (h *HTTPHandler) RebalanceTable(c *gin.Context) {
 		h.forwardToOwner(c)
 		return
 	}
-	changefeedID := c.Param(APIOpVarChangefeedID)
+	changefeedID := c.Param(apiOpVarChangefeedID)
 
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
@@ -393,7 +393,7 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 		h.forwardToOwner(c)
 	}
 
-	changefeedID := c.Param(APIOpVarChangefeedID)
+	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
@@ -406,14 +406,14 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 		return
 	}
 
-	captureID := c.PostForm(APIOpVarCaptureID)
+	captureID := c.PostForm(apiOpVarCaptureID)
 	if err := model.ValidateChangefeedID(captureID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", captureID)))
 		return
 	}
 
-	tableIDStr := c.PostForm(APIOpVarTableID)
+	tableIDStr := c.PostForm(apiOpVarTableID)
 	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
 	if err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
@@ -461,14 +461,14 @@ func (h *HTTPHandler) ResignOwner(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors/{changefeed_id}/{capture_id} [get]
 func (h *HTTPHandler) GetProcessor(c *gin.Context) {
-	changefeedID := c.Param(APIOpVarChangefeedID)
+	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
 		return
 	}
 
-	captureID := c.Param(APIOpVarCaptureID)
+	captureID := c.Param(apiOpVarCaptureID)
 	if err := model.ValidateChangefeedID(captureID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", changefeedID)))
@@ -591,11 +591,11 @@ func (h *HTTPHandler) Health(c *gin.Context) {
 // forwardToOwner forward an request to owner
 func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	// every request can only forward to owner one time
-	if len(c.GetHeader(ForwardFromCapture)) != 0 {
+	if len(c.GetHeader(forWardFromCapture)) != 0 {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(cerror.ErrRequestForwardErr.FastGenByArgs()))
 		return
 	}
-	c.Header(ForwardFromCapture, h.capture.Info().ID)
+	c.Header(forWardFromCapture, h.capture.Info().ID)
 
 	owner, err := h.capture.GetOwner(c)
 	if err != nil {
