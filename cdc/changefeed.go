@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -107,7 +108,7 @@ type changeFeed struct {
 	taskStatus       model.ProcessorsInfos
 	taskPositions    map[model.CaptureID]*model.TaskPosition
 	filter           *filter.Filter
-	sink             sink.Sink
+	sink             AsyncSink
 	scheduler        scheduler.Scheduler
 
 	cyclicEnabled bool
@@ -116,6 +117,9 @@ type changeFeed struct {
 	ddlResolvedTs uint64
 	ddlJobHistory []*timodel.Job
 	ddlExecutedTs uint64
+	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
+	// After the DDL event has been executed, ddlEventCache will be set to nil.
+	ddlEventCache *model.DDLEvent
 
 	schemas map[model.SchemaID]tableIDMap
 	tables  map[model.TableID]model.TableName
@@ -642,6 +646,22 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (c *changeFeed) handleDDL(ctx context.Context) error {
+	// async ddl
+	if c.ddlState == model.ChangeFeedExecDDL && c.ddlEventCache != nil {
+		cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
+		done, err := c.sink.EmitDDLEvent(cdcCtx, c.ddlEventCache)
+		if err != nil {
+			return cerror.ErrExecDDLFailed.GenWithStackByArgs()
+		}
+		if done {
+			c.ddlExecutedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
+			c.ddlJobHistory = c.ddlJobHistory[1:]
+			c.ddlState = model.ChangeFeedSyncDML
+			c.ddlEventCache = nil
+		}
+		return nil
+	}
+
 	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
@@ -706,10 +726,10 @@ func (c *changeFeed) handleDDL(ctx context.Context) error {
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedSyncDML
+		c.ddlEventCache = nil
 		return nil
 	}
 
-	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
 		failpoint.Inject("InjectChangefeedDDLError", func() {
 			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
@@ -717,31 +737,23 @@ func (c *changeFeed) handleDDL(ctx context.Context) error {
 
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
-		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+
+		c.ddlEventCache = ddlEvent
+		cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
+		log.Info("sent ddl to asyncSink", zap.Reflect("ddlEvent", c.ddlEventCache))
+		done, err := c.sink.EmitDDLEvent(cdcCtx, c.ddlEventCache)
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
-			if cerror.ErrDDLEventIgnored.NotEqual(err) {
-				c.ddlState = model.ChangeFeedDDLExecuteFailed
-				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", c.id),
-					zap.Error(err),
-					zap.Reflect("ddlJob", todoDDLJob))
-				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
-			}
-		} else {
-			executed = true
+			return cerror.ErrExecDDLFailed.GenWithStackByArgs()
+		}
+		if done {
+			c.ddlJobHistory = c.ddlJobHistory[1:]
+			c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+			c.ddlState = model.ChangeFeedSyncDML
+			c.ddlEventCache = nil
 		}
 	}
-	if executed {
-		log.Info("Execute DDL succeeded", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
-	} else {
-		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
-	}
-
-	c.ddlJobHistory = c.ddlJobHistory[1:]
-	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }
 
@@ -937,9 +949,10 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			failpoint.Inject("InjectEmitCheckpointTsError", func() {
 				failpoint.Return(cerror.ErrEmitCheckpointTsFailed.GenWithStackByArgs())
 			})
-			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
+			cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
+			err := c.sink.EmitCheckpointTs(cdcCtx, minCheckpointTs)
 			if err != nil {
-				return errors.Trace(err)
+				return err
 			}
 		}
 		tsUpdated = true

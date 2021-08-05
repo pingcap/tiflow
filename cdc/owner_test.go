@@ -31,8 +31,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -122,14 +122,14 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 }
 
 type mockSink struct {
-	sink.Sink
+	AsyncSink
 	checkpointTs model.Ts
 
 	checkpointMu    sync.Mutex
 	checkpointError error
 }
 
-func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (m *mockSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) error {
 	m.checkpointMu.Lock()
 	defer m.checkpointMu.Unlock()
 	atomic.StoreUint64(&m.checkpointTs, ts)
@@ -191,6 +191,9 @@ func (s *ownerSuite) TestOwnerCalcResolvedTs(c *check.C) {
 	}
 
 	err = mockOwner.calcResolvedTs(s.ctx)
+	c.Assert(err, check.IsNil)
+
+	err = mockOwner.handleDDL(s.ctx)
 	c.Assert(err, check.IsNil)
 
 	err = mockOwner.handleAdminJob(s.ctx)
@@ -874,12 +877,10 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	errg, _ := errgroup.WithContext(cctx)
 
 	replicaConf := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(replicaConf)
-	c.Assert(err, check.IsNil)
 
 	sampleCF := &changeFeed{
 		id:       cfID,
-		info:     &model.ChangeFeedInfo{},
+		info:     &model.ChangeFeedInfo{Config: replicaConf, SinkURI: "blackhole://"},
 		status:   &model.ChangeFeedStatus{},
 		ddlState: model.ChangeFeedSyncDML,
 		taskStatus: model.ProcessorsInfos{
@@ -896,8 +897,13 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		},
 		cancel: cancel,
 	}
-	errCh := make(chan error, 1)
-	sink, err := sink.NewSink(ctx, cfID, "blackhole://", f, replicaConf, map[string]string{}, errCh)
+	// new asyncSink
+	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
+	cdcCtx = cdcContext.WithChangefeedVars(cdcCtx, &cdcContext.ChangefeedVars{
+		ID:   cfID,
+		Info: sampleCF.info,
+	})
+	sink, err := newAsyncSink(cdcCtx)
 	c.Assert(err, check.IsNil)
 	defer sink.Close() //nolint:errcheck
 	sampleCF.sink = sink

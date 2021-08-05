@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -428,15 +429,31 @@ func (o *Owner) newChangeFeed(
 	}
 	errCh := make(chan error, 1)
 
-	primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	// primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	// new asyncSink
+	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
+	cdcCtx = cdcContext.WithChangefeedVars(cdcCtx, &cdcContext.ChangefeedVars{
+		ID:   id,
+		Info: info,
+	})
+	primaryAsyncSink, err := newAsyncSink(cdcCtx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && primarySink != nil {
-			primarySink.Close()
+		if resultErr != nil && primaryAsyncSink != nil {
+			primaryAsyncSink.Close()
 		}
 	}()
+
+	err = primaryAsyncSink.Initialize(cdcCtx, sinkTableInfo)
+	if err != nil {
+		log.Error("error on running owner", zap.Error(err))
+	}
+
 	go func() {
 		var err error
 		select {
@@ -450,11 +467,6 @@ func (o *Owner) newChangeFeed(
 			log.Info("changefeed exited", zap.String("changfeed", id))
 		}
 	}()
-
-	err = primarySink.Initialize(ctx, sinkTableInfo)
-	if err != nil {
-		log.Error("error on running owner", zap.Error(err))
-	}
 
 	var syncpointStore sink.SyncpointStore
 	if info.SyncPointEnabled {
@@ -493,7 +505,7 @@ func (o *Owner) newChangeFeed(
 		etcdCli:             o.etcdClient,
 		leaseID:             o.session.Lease(),
 		filter:              filter,
-		sink:                primarySink,
+		sink:                primaryAsyncSink,
 		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime:   time.Now(),
 		cancel:              cancel,
