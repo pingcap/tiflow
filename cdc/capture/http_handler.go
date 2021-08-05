@@ -21,13 +21,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/br/pkg/httputil"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 )
 
 const (
@@ -41,6 +44,8 @@ const (
 	apiOpVarTableID = "table_id"
 	// forWardFromCapture is a header to be set when a request is forwarded from another capture
 	forWardFromCapture = "TiCDC-ForwardFromCapture"
+	// getOwnerRetryMaxTime is the retry max time to get an owner
+	getOwnerRetryMaxTime = 3
 )
 
 // HTTPHandler is a  HTTPHandler of capture
@@ -583,7 +588,17 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	}
 	c.Header(forWardFromCapture, h.capture.Info().ID)
 
-	owner, err := h.capture.GetOwner(c)
+	var owner *model.CaptureInfo
+	// get owner
+	err := retry.Do(c, func() error {
+		o, err := h.capture.GetOwner(c)
+		if err != nil {
+			log.Info("get owner failed, retry later", zap.Error(err))
+			return err
+		}
+		owner = o
+		return nil
+	}, retry.WithBackoffBaseDelay(300), retry.WithMaxTries(getOwnerRetryMaxTime))
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 	}
