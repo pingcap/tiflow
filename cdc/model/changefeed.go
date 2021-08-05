@@ -72,6 +72,24 @@ func (s FeedState) ToInt() int {
 	return -1
 }
 
+// IsNeeded return true if the given feedState matches the listState.
+func (s FeedState) IsNeeded(need string) bool {
+	if need == "all" {
+		return true
+	}
+	if need == "" {
+		switch s {
+		case StateNormal:
+			return true
+		case StateStopped:
+			return true
+		case StateFailed:
+			return true
+		}
+	}
+	return need == string(s)
+}
+
 const (
 	// errorHistoryGCInterval represents how long we keep error record in changefeed info
 	errorHistoryGCInterval = time.Minute * 10
