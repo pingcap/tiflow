@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -33,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -726,10 +726,10 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	defer cancel0()
 	cctx, cancel := context.WithCancel(ctx)
 	errg, _ := errgroup.WithContext(cctx)
-
+	replicaConf := config.GetDefaultReplicaConfig()
 	sampleCF := &changeFeed{
 		id:       cfID,
-		info:     &model.ChangeFeedInfo{},
+		info:     &model.ChangeFeedInfo{Config: replicaConf, SinkURI: "blackhole://"},
 		status:   &model.ChangeFeedStatus{},
 		ddlState: model.ChangeFeedSyncDML,
 		taskStatus: model.ProcessorsInfos{

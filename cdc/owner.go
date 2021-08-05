@@ -16,13 +16,14 @@ package cdc
 import (
 	"context"
 	"fmt"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"io"
 	"math"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"

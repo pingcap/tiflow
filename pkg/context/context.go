@@ -15,12 +15,13 @@ package context
 
 import (
 	"context"
-	"github.com/pingcap/ticdc/cdc/model"
 	"log"
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -177,4 +178,21 @@ func (ctx *throwContext) Throw(err error) {
 	if err := ctx.f(err); err != nil {
 		ctx.Context.Throw(err)
 	}
+}
+
+// NewBackendContext4Test returns a new pipeline context for test
+func NewBackendContext4Test(withChangefeedVars bool) Context {
+	ctx := NewContext(context.Background(), &Vars{
+		CaptureAddr: "127.0.0.1:0000",
+	})
+	if withChangefeedVars {
+		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
+			ID: "changefeed-id-test",
+			Info: &model.ChangeFeedInfo{
+				StartTs: oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0),
+				Config:  config.GetDefaultReplicaConfig(),
+			},
+		})
+	}
+	return ctx
 }
