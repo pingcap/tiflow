@@ -292,9 +292,17 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 
 func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
+<<<<<<< HEAD
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
 			return errors.Trace(err)
+=======
+		kvStorage := util.KVStorageFromCtx(ctx)
+		if s.capture != nil && s.capture.session != nil {
+			if err := s.capture.session.Close(); err != nil {
+				log.Warn("close old capture session failed", zap.Error(err))
+			}
+>>>>>>> 14174fbe (server: close session if old capture dead. (#2447))
 		}
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 		if err != nil {
@@ -302,6 +310,14 @@ func (s *Server) run(ctx context.Context) (err error) {
 		}
 		s.capture = capture
 		s.etcdClient = &capture.etcdClient
+		conf := config.GetGlobalServerConfig()
+		defer func() {
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.CaptureSessionTTL)*time.Second)
+			if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
+				log.Warn("failed to delete capture info when capture exited", zap.Error(err))
+			}
+			cancel()
+		}()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
