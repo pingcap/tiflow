@@ -161,11 +161,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	err := gcManager.checkStaleCheckpointTs(ctx, 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 
-<<<<<<< HEAD
-	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0))
-=======
-	err = gcManager.checkStaleCheckpointTs(ctx, oracle.GoTimeToTS(time.Now()))
->>>>>>> 9006bca2 (changefeed: Fix cannot remove changefeed when err gcttl exceeded (#2429))
+	err = gcManager.checkStaleCheckpointTs(ctx, oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
