@@ -219,7 +219,6 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 
 	log.Info("Create changefeed successfully!", zap.String("id", config.ID), zap.String("changefeed", infoStr))
 	c.Status(http.StatusAccepted)
-	return
 }
 
 // PauseChangefeed pauses a changefeed
@@ -348,7 +347,12 @@ func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	h.capture.etcdClient.SaveChangeFeedInfo(c, newInfo, changefeedID)
+	err = h.capture.etcdClient.SaveChangeFeedInfo(c, newInfo, changefeedID)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+
 	c.Status(http.StatusAccepted)
 }
 
