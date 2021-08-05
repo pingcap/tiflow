@@ -31,7 +31,6 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -612,35 +611,32 @@ func (worker *EtcdWorker) applyUpdates() error {
 }
 
 func logEtcdOps(ops []clientv3.Op, commited bool) {
-	if log.GetLevel() != zapcore.DebugLevel || len(ops) == 0 {
+	if len(ops) == 0 {
 		return
 	}
-	log.Debug("[etcd worker]" +
+	log.Info("[etcd worker]" +
 		" ==========Update State to ETCD==========")
 	for _, op := range ops {
 		if op.IsDelete() {
-			log.Debug("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+			log.Info("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
 		} else {
-			log.Debug("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+			log.Info("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
 		}
 	}
-	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+	log.Info("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
 }
 
 func logEtcdChangeSet(changeSet txnChangeSet, committed bool) {
-	if log.GetLevel() != zapcore.DebugLevel {
-		return
-	}
-	log.Debug("[etcd worker]" +
+	log.Info("[etcd worker]" +
 		" ==========Update State to ETCD==========")
 	for _, change := range changeSet {
 		if change.new == nil {
-			log.Debug("[etcd worker] delete key", zap.ByteString("key", change.key.Bytes()))
+			log.Info("[etcd worker] delete key", zap.ByteString("key", change.key.Bytes()))
 		} else {
-			log.Debug("[etcd worker] put key", zap.ByteString("key", change.key.Bytes()), zap.ByteString("value", change.new))
+			log.Info("[etcd worker] put key", zap.ByteString("key", change.key.Bytes()), zap.ByteString("value", change.new))
 		}
 	}
-	log.Debug("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
+	log.Info("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
 }
 
 func (worker *EtcdWorker) cleanUp() {
