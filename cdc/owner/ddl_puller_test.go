@@ -187,9 +187,8 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(25))
 	c.Assert(ddl.ID, check.Equals, int64(3))
-	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(25))
-	c.Assert(ddl.ID, check.Equals, int64(3))
+	_, ddl = p.PopFrontDDL()
+	c.Assert(ddl, check.IsNil)
 
 	waitResolvedTsGrowing(c, p, 30)
 	resolvedTs, ddl = p.PopFrontDDL()
