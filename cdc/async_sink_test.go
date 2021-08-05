@@ -109,9 +109,11 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 			return nil
 		})
 	}
-	sink.EmitCheckpointTs(ctx, 1)
+	err := sink.EmitCheckpointTs(ctx, 1)
+	c.Assert(err, check.IsNil)
 	c.Assert(waitCheckpointGrowingUp(mSink, 1), check.IsNil)
-	sink.EmitCheckpointTs(ctx, 10)
+	err = sink.EmitCheckpointTs(ctx, 10)
+	c.Assert(err, check.IsNil)
 	c.Assert(waitCheckpointGrowingUp(mSink, 10), check.IsNil)
 }
 
