@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -31,7 +32,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -727,10 +727,6 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	cctx, cancel := context.WithCancel(ctx)
 	errg, _ := errgroup.WithContext(cctx)
 
-	replicaConf := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(replicaConf)
-	c.Assert(err, check.IsNil)
-
 	sampleCF := &changeFeed{
 		id:       cfID,
 		info:     &model.ChangeFeedInfo{},
@@ -750,11 +746,16 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		},
 		cancel: cancel,
 	}
-	errCh := make(chan error, 1)
-	sink, err := sink.NewSink(ctx, cfID, "blackhole://", f, replicaConf, map[string]string{}, errCh)
+	// new asyncSink
+	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.Vars{})
+	cdcCtx = cdcContext.WithChangefeedVars(cdcCtx, &cdcContext.ChangefeedVars{
+		ID:   cfID,
+		Info: sampleCF.info,
+	})
+	asyncSink, err := newAsyncSink(cdcCtx)
 	c.Assert(err, check.IsNil)
-	defer sink.Close() //nolint:errcheck
-	sampleCF.sink = sink
+	defer asyncSink.Close() //nolint:errcheck
+	sampleCF.asyncSink = asyncSink
 
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil,
 		&security.Credential{}, "127.0.0.1:12034", &captureOpts{flushCheckpointInterval: time.Millisecond * 200})

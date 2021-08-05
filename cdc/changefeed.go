@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"math"
 	"sync"
 	"time"
@@ -107,7 +108,7 @@ type changeFeed struct {
 	taskStatus       model.ProcessorsInfos
 	taskPositions    map[model.CaptureID]*model.TaskPosition
 	filter           *filter.Filter
-	sink             sink.Sink
+	asyncSink        AsyncSink
 	scheduler        scheduler.Scheduler
 
 	cyclicEnabled bool
@@ -116,6 +117,10 @@ type changeFeed struct {
 	ddlResolvedTs uint64
 	ddlJobHistory []*timodel.Job
 	ddlExecutedTs uint64
+
+	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
+	// After the DDL event has been executed, ddlEventCache will be set to nil.
+	ddlEventCache *model.DDLEvent
 
 	schemas map[model.SchemaID]tableIDMap
 	tables  map[model.TableID]model.TableName
@@ -644,7 +649,23 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 // handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
-func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
+func (c *changeFeed) handleDDL(ctx context.Context) error {
+	// async ddl
+	if c.ddlState == model.ChangeFeedExecDDL && c.ddlEventCache != nil {
+		cdcCtx := cdcContext.NewContext(ctx, &cdcContext.Vars{})
+		done, err := c.asyncSink.EmitDDLEvent(cdcCtx, c.ddlEventCache)
+		if err != nil {
+			return err
+		}
+		if done {
+			c.ddlExecutedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
+			c.ddlJobHistory = c.ddlJobHistory[1:]
+			c.ddlState = model.ChangeFeedSyncDML
+			c.ddlEventCache = nil
+		}
+		return nil
+	}
+
 	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
@@ -694,7 +715,6 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	}
 
 	ddlEvent.FromJob(todoDDLJob, preTableInfo)
-
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
 
@@ -708,10 +728,10 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedSyncDML
+		c.ddlEventCache = nil
 		return nil
 	}
 
-	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
 		failpoint.Inject("InjectChangefeedDDLError", func() {
 			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
@@ -719,31 +739,23 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
-		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+
+		c.ddlEventCache = ddlEvent
+		cdcCtx := cdcContext.NewContext(ctx, &cdcContext.Vars{})
+		log.Info("sent ddl to asyncSink", zap.Reflect("ddlEvent", c.ddlEventCache))
+		done, err := c.asyncSink.EmitDDLEvent(cdcCtx, c.ddlEventCache)
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
-			if cerror.ErrDDLEventIgnored.NotEqual(err) {
-				c.ddlState = model.ChangeFeedDDLExecuteFailed
-				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", c.id),
-					zap.Error(err),
-					zap.Reflect("ddlJob", todoDDLJob))
-				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
-			}
-		} else {
-			executed = true
+			return cerror.ErrExecDDLFailed.GenWithStackByArgs()
+		}
+		if done {
+			c.ddlJobHistory = c.ddlJobHistory[1:]
+			c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+			c.ddlState = model.ChangeFeedSyncDML
+			c.ddlEventCache = nil
 		}
 	}
-	if executed {
-		log.Info("Execute DDL succeeded", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
-	} else {
-		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
-	}
-
-	c.ddlJobHistory = c.ddlJobHistory[1:]
-	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }
 
@@ -794,6 +806,7 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
+		log.Info("skip update resolved ts", zap.String("ddlState", c.ddlState.String()), zap.String("ddlState", c.ddlState.String()))
 		log.Debug("skip update resolved ts", zap.String("ddlState", c.ddlState.String()))
 		return nil
 	}
@@ -936,10 +949,8 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		// some DDL is waiting to executed, we can't ensure whether the DDL has been executed.
 		// so we can't emit checkpoint to sink
 		if c.ddlState != model.ChangeFeedWaitToExecDDL {
-			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			cdcCtx := cdcContext.NewContext(ctx, &cdcContext.Vars{})
+			c.asyncSink.EmitCheckpointTs(cdcCtx, minCheckpointTs)
 		}
 		tsUpdated = true
 	}
@@ -1008,8 +1019,8 @@ func (c *changeFeed) Close() {
 		}
 	}
 
-	if c.sink != nil {
-		err := c.sink.Close()
+	if c.asyncSink != nil {
+		err := c.asyncSink.Close()
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("failed to close owner sink", zap.Error(err))
 		}

@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"io"
 	"math"
 	"os"
@@ -430,15 +431,26 @@ func (o *Owner) newChangeFeed(
 	}
 	errCh := make(chan error, 1)
 
-	primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	// primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	// new asyncSink
+	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.Vars{})
+	cdcCtx = cdcContext.WithChangefeedVars(cdcCtx, &cdcContext.ChangefeedVars{
+		ID:   id,
+		Info: info,
+	})
+	primaryAsyncSink, err := newAsyncSink(cdcCtx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && primarySink != nil {
-			primarySink.Close()
+		if resultErr != nil && primaryAsyncSink != nil {
+			primaryAsyncSink.Close()
 		}
 	}()
+
 	go func() {
 		var err error
 		select {
@@ -452,8 +464,8 @@ func (o *Owner) newChangeFeed(
 			log.Info("changefeed exited", zap.String("changfeed", id))
 		}
 	}()
-
-	err = primarySink.Initialize(ctx, sinkTableInfo)
+	// init asyncSink
+	err = primaryAsyncSink.Initialize(cdcCtx, sinkTableInfo)
 	if err != nil {
 		log.Error("error on running owner", zap.Error(err))
 	}
@@ -495,10 +507,11 @@ func (o *Owner) newChangeFeed(
 		etcdCli:             o.etcdClient,
 		leaseID:             o.session.Lease(),
 		filter:              filter,
-		sink:                primarySink,
-		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
-		lastRebalanceTime:   time.Now(),
-		cancel:              cancel,
+		//sink:                primarySink,
+		asyncSink:         primaryAsyncSink,
+		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
+		lastRebalanceTime: time.Now(),
+		cancel:            cancel,
 	}
 	return cf, nil
 }
@@ -854,7 +867,7 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 // handleDDL call handleDDL of every changefeeds
 func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		err := cf.handleDDL(ctx, o.captures)
+		err := cf.handleDDL(ctx)
 		if err != nil {
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
