@@ -296,12 +296,25 @@ func (s *Server) run(ctx context.Context) (err error) {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		if s.capture != nil && s.capture.session != nil {
+			if err := s.capture.session.Close(); err != nil {
+				log.Warn("close old capture session failed", zap.Error(err))
+			}
+		}
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 		if err != nil {
 			return err
 		}
 		s.capture = capture
 		s.etcdClient = &capture.etcdClient
+		conf := config.GetGlobalServerConfig()
+		defer func() {
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.CaptureSessionTTL)*time.Second)
+			if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
+				log.Warn("failed to delete capture info when capture exited", zap.Error(err))
+			}
+			cancel()
+		}()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
