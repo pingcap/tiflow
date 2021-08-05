@@ -187,7 +187,39 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds [post]
 func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
-	// TODO
+	if !h.capture.IsOwner() {
+		h.forwardToOwner(c)
+		return
+	}
+
+	var config model.ChangefeedConfig
+	if err := c.BindJSON(&config); err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+	log.Info("changefeedConfig", zap.Reflect("config", config))
+
+	info, err := verifyChangefeedCreateParameters(c, h.capture, config)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+
+	infoStr, err := info.Marshal()
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+
+	err = h.capture.etcdClient.CreateChangefeedInfo(c, info, config.ID)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+
+	log.Info("Create changefeed successfully!", zap.String("id", config.ID), zap.String("changefeed", infoStr))
+	c.Status(http.StatusAccepted)
+	return
 }
 
 // PauseChangefeed pauses a changefeed
@@ -286,7 +318,38 @@ func (h *HTTPHandler) ResumeChangefeed(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [put]
 func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
-	// TODO
+	if !h.capture.IsOwner() {
+		h.forwardToOwner(c)
+		return
+	}
+
+	changefeedID := c.Param(apiOpVarChangefeedID)
+	info, err := h.capture.etcdClient.GetChangeFeedInfo(c, changefeedID)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+	if info.State != model.StateStopped {
+		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped")))
+		return
+	}
+
+	// can only update target-ts, sink-uri
+	// filter_rules, ignore_txn_start_ts, mounter_worker_num, sink_config
+	var config model.ChangefeedConfig
+	if err = c.BindJSON(&config); err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+
+	newInfo, err := verifyUpdateChangefeedParameters(c, info, config)
+	if err != nil {
+		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+		return
+	}
+
+	h.capture.etcdClient.SaveChangeFeedInfo(c, newInfo, changefeedID)
+	c.Status(http.StatusAccepted)
 }
 
 // RemoveChangefeed removes a changefeed
