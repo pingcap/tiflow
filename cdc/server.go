@@ -311,7 +311,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 		s.etcdClient = &capture.etcdClient
 		conf := config.GetGlobalServerConfig()
 		defer func() {
-			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.CaptureSessionTTL+5)*time.Second)
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.CaptureSessionTTL)*time.Second)
 			if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
 				log.Warn("failed to delete capture info when capture exited", zap.Error(err))
 			}
