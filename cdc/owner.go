@@ -437,6 +437,8 @@ func (o *Owner) newChangeFeed(
 	}
 	defer func() {
 		if resultErr != nil && primarySink != nil {
+			// The Close of backend sink here doesn't use context, it is ok to pass
+			// a canceled context here.
 			primarySink.Close(ctx)
 		}
 	}()
