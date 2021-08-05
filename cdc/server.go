@@ -292,17 +292,14 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 
 func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
-<<<<<<< HEAD
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
 			return errors.Trace(err)
-=======
-		kvStorage := util.KVStorageFromCtx(ctx)
+		}
 		if s.capture != nil && s.capture.session != nil {
 			if err := s.capture.session.Close(); err != nil {
 				log.Warn("close old capture session failed", zap.Error(err))
 			}
->>>>>>> 14174fbe (server: close session if old capture dead. (#2447))
 		}
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 		if err != nil {
