@@ -306,11 +306,24 @@ func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
 		kvStorage := util.KVStorageFromCtx(ctx)
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage, s.conns)
+		if s.capture != nil && s.capture.session != nil {
+			if err := s.capture.session.Close(); err != nil {
+				log.Warn("close old capture session failed", zap.Error(err))
+			}
+		}
 		if err != nil {
 			return err
 		}
 		s.capture = capture
 		s.etcdClient = &capture.etcdClient
+		conf := config.GetGlobalServerConfig()
+		defer func() {
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.CaptureSessionTTL)*time.Second)
+			if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
+				log.Warn("failed to delete capture info when capture exited", zap.Error(err))
+			}
+			cancel()
+		}()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

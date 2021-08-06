@@ -52,9 +52,6 @@ import (
 )
 
 const (
-	// defaultMemBufferCapacity is the default memory buffer per change feed.
-	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
 	defaultSyncResolvedBatch = 1024
 
 	schemaStorageGCLag = time.Minute * 20
@@ -70,7 +67,6 @@ type oldProcessor struct {
 	captureInfo  model.CaptureInfo
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
-	limitter     *puller.BlurResourceLimitter
 	stopped      int32
 
 	conns   *kv.ConnArray
@@ -162,7 +158,6 @@ func newProcessor(
 ) (*oldProcessor, error) {
 	etcdCli := session.Client()
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
-	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts",
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
@@ -192,7 +187,6 @@ func newProcessor(
 
 	p := &oldProcessor{
 		id:            uuid.New().String(),
-		limitter:      limitter,
 		captureInfo:   captureInfo,
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
