@@ -13,6 +13,8 @@
 
 package cdc
 
+// TODO: to remove this file once new owner is enabled.
+
 import (
 	"context"
 	"sync"
@@ -34,7 +36,7 @@ const (
 	defaultErrChSize = 1024
 )
 
-// AsyncSink is a async sink design for owner
+// AsyncSink is an async sink design for owner
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
@@ -42,6 +44,7 @@ type AsyncSink interface {
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
+	// return err here for the unit test TestOwnerCalcResolvedTs in owner_test
 	EmitCheckpointTs(ctx cdcContext.Context, ts uint64) error
 	// EmitDDLEvent emits DDL event asynchronously and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
@@ -125,7 +128,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
-			if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+			if err == nil || cerror.ErrDDLEventIgnored.Equal(err) {
 				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
 				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 			} else {

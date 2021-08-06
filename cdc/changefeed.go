@@ -136,6 +136,8 @@ type changeFeed struct {
 	etcdCli kv.CDCEtcdClient
 	leaseID clientv3.LeaseID
 
+	// cdcCtx for all
+	cdcCtx cdcContext.Context
 	// context cancel function for all internal goroutines
 	cancel context.CancelFunc
 }
@@ -648,8 +650,7 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 func (c *changeFeed) handleDDL(ctx context.Context) error {
 	// async ddl
 	if c.ddlState == model.ChangeFeedExecDDL && c.ddlEventCache != nil {
-		cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
-		done, err := c.sink.EmitDDLEvent(cdcCtx, c.ddlEventCache)
+		done, err := c.sink.EmitDDLEvent(c.cdcCtx, c.ddlEventCache)
 		if err != nil {
 			return cerror.ErrExecDDLFailed.GenWithStackByArgs()
 		}
@@ -739,9 +740,7 @@ func (c *changeFeed) handleDDL(ctx context.Context) error {
 		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 
 		c.ddlEventCache = ddlEvent
-		cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
-		log.Info("sent ddl to asyncSink", zap.Reflect("ddlEvent", c.ddlEventCache))
-		done, err := c.sink.EmitDDLEvent(cdcCtx, c.ddlEventCache)
+		done, err := c.sink.EmitDDLEvent(c.cdcCtx, c.ddlEventCache)
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
@@ -753,6 +752,11 @@ func (c *changeFeed) handleDDL(ctx context.Context) error {
 			c.ddlState = model.ChangeFeedSyncDML
 			c.ddlEventCache = nil
 		}
+	} else {
+		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+		c.ddlJobHistory = c.ddlJobHistory[1:]
+		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+		c.ddlState = model.ChangeFeedSyncDML
 	}
 	return nil
 }
@@ -949,8 +953,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			failpoint.Inject("InjectEmitCheckpointTsError", func() {
 				failpoint.Return(cerror.ErrEmitCheckpointTsFailed.GenWithStackByArgs())
 			})
-			cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
-			err := c.sink.EmitCheckpointTs(cdcCtx, minCheckpointTs)
+			err := c.sink.EmitCheckpointTs(c.cdcCtx, minCheckpointTs)
 			if err != nil {
 				return err
 			}

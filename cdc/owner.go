@@ -351,6 +351,7 @@ func (o *Owner) newChangeFeed(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
 	defer func() {
 		if resultErr != nil {
 			cancel()
@@ -427,29 +428,27 @@ func (o *Owner) newChangeFeed(
 		}
 
 	}
-	errCh := make(chan error, 1)
 
-	// primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	// new asyncSink
-	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
 	cdcCtx = cdcContext.WithChangefeedVars(cdcCtx, &cdcContext.ChangefeedVars{
 		ID:   id,
 		Info: info,
 	})
-	primaryAsyncSink, err := newAsyncSink(cdcCtx)
+	errCh := make(chan error, 1)
+	cdcCtx = cdcContext.WithErrorHandler(cdcCtx, func(err error) error {
+		errCh <- errors.Trace(err)
+		return nil
+	})
+	asyncSink, err := newAsyncSink(cdcCtx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && primaryAsyncSink != nil {
-			primaryAsyncSink.Close()
+		if resultErr != nil && asyncSink != nil {
+			asyncSink.Close()
 		}
 	}()
 
-	err = primaryAsyncSink.Initialize(cdcCtx, sinkTableInfo)
+	err = asyncSink.Initialize(cdcCtx, sinkTableInfo)
 	if err != nil {
 		log.Error("error on running owner", zap.Error(err))
 	}
@@ -505,9 +504,10 @@ func (o *Owner) newChangeFeed(
 		etcdCli:             o.etcdClient,
 		leaseID:             o.session.Lease(),
 		filter:              filter,
-		sink:                primaryAsyncSink,
+		sink:                asyncSink,
 		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime:   time.Now(),
+		cdcCtx:              cdcCtx,
 		cancel:              cancel,
 	}
 	return cf, nil
