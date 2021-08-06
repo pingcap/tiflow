@@ -647,7 +647,7 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 // handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
-func (c *changeFeed) handleDDL(ctx context.Context) error {
+func (c *changeFeed) handleDDL() error {
 	// async ddl
 	if c.ddlState == model.ChangeFeedExecDDL && c.ddlEventCache != nil {
 		done, err := c.sink.EmitDDLEvent(c.cdcCtx, c.ddlEventCache)
@@ -806,7 +806,7 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 }
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
-func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
+func (c *changeFeed) calcResolvedTs() error {
 	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
 		log.Debug("skip update resolved ts", zap.String("ddlState", c.ddlState.String()))
 		return nil

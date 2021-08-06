@@ -861,7 +861,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 // calcResolvedTs call calcResolvedTs of every changefeeds
 func (o *Owner) calcResolvedTs(ctx context.Context) error {
 	for id, cf := range o.changeFeeds {
-		if err := cf.calcResolvedTs(ctx); err != nil {
+		if err := cf.calcResolvedTs(); err != nil {
 			log.Error("fail to calculate checkpoint ts, so it will be stopped", zap.String("changefeed", cf.id), zap.Error(err))
 			// error may cause by sink.EmitCheckpointTs`, just stop the changefeed at the moment
 			// todo: make the method mentioned above more robust.
@@ -893,7 +893,7 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 // handleDDL call handleDDL of every changefeeds
 func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		err := cf.handleDDL(ctx)
+		err := cf.handleDDL()
 		if err != nil {
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
