@@ -210,7 +210,8 @@ func newBufferSink(
 	drawbackChan chan drawbackMsg,
 ) Sink {
 	sink := &bufferSink{
-		Sink:         backendSink,
+		Sink: backendSink,
+		// buffer shares the same flow control with table sink
 		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
 		checkpointTs: checkpointTs,
 		flushTsChan:  make(chan uint64, 128),
