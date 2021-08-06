@@ -37,7 +37,7 @@ const (
 	defaultFileMode = 0o644
 
 	defaultMetaFileName = "meta"
-	//100 megabytes
+	// 100 megabytes
 	defaultMaxLogSize    = 100 * 1024 * 1024
 	defaultFlushInterval = 2
 )
