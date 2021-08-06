@@ -376,7 +376,7 @@ func BenchmarkWorkerpool(b *testing.B) {
 	defer cancel()
 
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
-	go pool.Run(ctx)
+	go func() { _ = pool.Run(ctx) }()
 
 	ch := make(chan int)
 	handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
