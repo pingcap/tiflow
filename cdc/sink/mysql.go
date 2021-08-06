@@ -901,6 +901,8 @@ func (s *mysqlSink) Barrier(ctx context.Context) error {
 			if checkpointTs >= maxResolvedTs {
 				return nil
 			}
+			// short sleep to avoid cpu spin
+			time.Sleep(time.Second)
 		}
 	}
 }
