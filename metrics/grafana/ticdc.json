@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1628230248371,
+  "iteration": 1628258198185,
   "links": [],
   "panels": [
     {
@@ -2848,6 +2848,7 @@
         },
         {
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Average processor memory consumption per capture within the last 30 seconds",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2915,8 +2916,9 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_processor_table_memory_consumption_bucket{}[1m])) by (capture)",
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture)",
               "format": "time_series",
+              "hide": false,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}",
@@ -2930,6 +2932,7 @@
         },
         {
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Average processor memory consumption per changefeed within the last 30 seconds",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2970,7 +2973,7 @@
                   }
                 ]
               },
-              "unit": "short"
+              "unit": "bytes"
             },
             "overrides": []
           },
@@ -2980,7 +2983,7 @@
             "x": 12,
             "y": 61
           },
-          "id": 151,
+          "id": 169,
           "links": [],
           "options": {
             "graph": {},
@@ -2997,7 +3000,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_processor_table_memory_consumption_bucket{}[1m])) by (capture, changefeed)",
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture, changefeed)",
               "hide": false,
               "interval": "",
               "legendFormat": "{{capture}} - {{changefeed}}",
@@ -3006,7 +3009,7 @@
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Processor Memory Consumption Per Changefeed",
+          "title": "Processor Memory Consumption Per Changfeed",
           "type": "timeseries"
         }
       ],
