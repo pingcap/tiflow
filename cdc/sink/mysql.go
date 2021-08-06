@@ -885,7 +885,6 @@ func (s *mysqlSink) Barrier(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			ticker.Reset(warnDuration)
 			log.Warn("Barrier doesn't return in time, may be stuck",
 				zap.Uint64("resolved-ts", atomic.LoadUint64(&s.maxResolvedTs)),
 				zap.Uint64("checkpoint-ts", s.checkpointTs()))
