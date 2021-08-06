@@ -36,7 +36,7 @@ type EtcdWorker struct {
 	state   ReactorState
 	// rawState is the local cache of the latest Etcd state.
 	rawState map[util.EtcdKey][]byte
-	// pendingUpdates stores updates initiated by the Reactor that have not yet been uploaded to Etcd.
+	// pendingUpdates stores Etcd updates that the Reactor has not been notified of.
 	pendingUpdates []*etcdUpdate
 	// revision is the Etcd revision of the latest event received from Etcd
 	// (which has not necessarily been applied to the ReactorState)
@@ -70,7 +70,7 @@ const etcdRequestProgressDuration = 2 * time.Second
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
-// And the specified etcd session is nil-safty.
+// And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration) error {
 	defer worker.cleanUp()
 
@@ -134,10 +134,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
-				err := worker.handleEvent(ctx, event)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				worker.handleEvent(ctx, event)
 			}
 		}
 
@@ -179,7 +176,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	}
 }
 
-func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
+func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
 	worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
 		key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
 		value:    event.Kv.Value,
@@ -196,7 +193,6 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 	case mvccpb.DELETE:
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
-	return nil
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {

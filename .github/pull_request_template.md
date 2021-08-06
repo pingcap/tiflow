@@ -36,13 +36,9 @@ Related changes
  - Need to update the documentation
  - Need to update key monitor metrics in both TiCDC document and official document
 
-### Release note
+### Release note <!-- bugfixes or new feature need a release note -->
 
-<!-- bugfixes or new feature need a release note, must in the form of a list, such as
-
-- owner: add table in batch when start a changefeed to speed up scheduling
-
-or if no need to be included in the release note, just add the following line
-
-- No release note
--->
+```release-note
+Please add a release note.
+If you don't think this PR needs a release note then fill it with `None`.
+```

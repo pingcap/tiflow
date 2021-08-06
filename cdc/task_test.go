@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
@@ -70,28 +69,6 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 func (s *taskSuite) TearDownTest(c *check.C) {
 	s.s.Close()
 	s.c.Close()
-}
-
-func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-	// Create a capture instance by initialize the struct,
-	// NewCapture can not be used because it requires to
-	// initialize the PD service witch does not support to
-	// be embeded.
-	if config.NewReplicaImpl {
-		c.Skip("this case is designed for old processor")
-	}
-	capture := &Capture{
-		etcdClient: kv.NewCDCEtcdClient(context.TODO(), s.c),
-		processors: make(map[string]*oldProcessor),
-		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
-	}
-	c.Assert(capture, check.NotNil)
-	c.Assert(NewTaskWatcher(capture, &TaskWatcherConfig{
-		Prefix: kv.TaskStatusKeyPrefix + "/" + capture.info.ID,
-	}), check.NotNil)
-	capture.Close(context.Background())
 }
 
 func (s *taskSuite) setupFeedInfo(c *check.C, changeFeedID string) {
@@ -149,7 +126,7 @@ func (s *taskSuite) TestParseTask(c *check.C) {
 	}
 	for _, t := range tests {
 		c.Log("testing ", t.Desc)
-		task, err := s.w.parseTask(ctx, t.Key, nil)
+		task, err := s.w.parseTask(ctx, t.Key)
 		if t.Expected == nil {
 			c.Assert(err, check.NotNil)
 			c.Assert(task, check.IsNil)

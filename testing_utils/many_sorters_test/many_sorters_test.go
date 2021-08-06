@@ -15,6 +15,6 @@ package main
 
 import "testing"
 
-func TestFoo(t *testing.T) {
+func TestFoo(_ *testing.T) {
 	main()
 }

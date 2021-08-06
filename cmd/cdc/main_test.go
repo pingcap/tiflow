@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func TestRunMain(t *testing.T) {
+func TestRunMain(_ *testing.T) {
 	var args []string
 	for _, arg := range os.Args {
 		switch {

@@ -34,8 +34,15 @@ const (
 	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
-// gcSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
+// gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
+
+// GcManager is an interface for gc manager
+type GcManager interface {
+	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
+	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
+	checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error
+}
 
 type gcManager struct {
 	gcTTL int64
@@ -94,6 +101,9 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
 		actual = uint64(val.(int))
 	})
+	if actual == minCheckpointTs {
+		log.Info("update gc safe point success", zap.Uint64("gcSafePointTs", minCheckpointTs))
+	}
 	if actual > minCheckpointTs {
 		log.Warn("update gc safe point failed, the gc safe point is larger than checkpointTs", zap.Uint64("actual", actual), zap.Uint64("checkpointTs", minCheckpointTs))
 	}
@@ -118,7 +128,7 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 	return m.pdPhysicalTimeCache, nil
 }
 
-func (m *gcManager) CheckStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)
 		if err != nil {

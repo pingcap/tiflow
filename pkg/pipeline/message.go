@@ -41,32 +41,33 @@ type Message struct {
 }
 
 // PolymorphicEventMessage creates the message of PolymorphicEvent
-func PolymorphicEventMessage(event *model.PolymorphicEvent) *Message {
-	return &Message{
+func PolymorphicEventMessage(event *model.PolymorphicEvent) Message {
+	return Message{
 		Tp:               MessageTypePolymorphicEvent,
 		PolymorphicEvent: event,
 	}
 }
 
 // CommandMessage creates the message of Command
-func CommandMessage(command *Command) *Message {
-	return &Message{
+func CommandMessage(command *Command) Message {
+	return Message{
 		Tp:      MessageTypeCommand,
 		Command: command,
 	}
 }
 
 // BarrierMessage creates the message of Command
-func BarrierMessage(barrierTs model.Ts) *Message {
-	return &Message{
+func BarrierMessage(barrierTs model.Ts) Message {
+	return Message{
 		Tp:        MessageTypeBarrier,
 		BarrierTs: barrierTs,
 	}
 }
 
 // TickMessage creates the message of Tick
-func TickMessage() *Message {
-	return &Message{
+// Note: the returned message is READ-ONLY.
+func TickMessage() Message {
+	return Message{
 		Tp: MessageTypeTick,
 	}
 }

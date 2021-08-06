@@ -39,7 +39,7 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        *gcManager
+	gcManager        GcManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -68,7 +68,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -86,7 +86,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager *gcManager,
+	id model.ChangeFeedID, gcManager GcManager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -119,20 +119,29 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	}
 }
 
-func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
-	c.state = state
-	c.feedStateManager.Tick(state)
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	switch c.state.Info.State {
-	case model.StateNormal, model.StateStopped, model.StateError:
-		if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
+func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
+	state := c.state.Info.State
+	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
+		if err := c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
+	return nil
+}
+
+func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+	c.state = state
+	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
 		c.releaseResources()
 		return nil
 	}
+
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		return errors.Trace(err)
+	}
+
 	if !c.preflightCheck(captures) {
 		return nil
 	}
@@ -183,11 +192,9 @@ LOOP:
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
-
 	failpoint.Inject("NewChangefeedRetryError", func() {
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
-
 	if c.state.Info.Config.CheckGCSafePoint {
 		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
 		if err != nil {
@@ -214,7 +221,10 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs)
+	// Since we wait for checkpoint == ddlJob.FinishTs before executing the DDL,
+	// when there is a recovery, there is no guarantee that the DDL at the checkpoint
+	// has been executed. So we need to start the DDL puller from (checkpoint-1).
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -262,10 +272,8 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			if status == nil {
 				status = &model.ChangeFeedStatus{
 					// the changefeed status is nil when the changefeed is just created.
-					// the txn in start ts is not replicated at that time,
-					// so the checkpoint ts and resolved ts should less than start ts.
-					ResolvedTs:   c.state.Info.StartTs - 1,
-					CheckpointTs: c.state.Info.StartTs - 1,
+					ResolvedTs:   c.state.Info.StartTs,
+					CheckpointTs: c.state.Info.StartTs,
 					AdminJobType: model.AdminNone,
 				}
 				return status, true, nil
@@ -321,6 +329,9 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
 		if ddlJob == nil || ddlResolvedTs != barrierTs {
+			if ddlResolvedTs < barrierTs {
+				return barrierTs, nil
+			}
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}
