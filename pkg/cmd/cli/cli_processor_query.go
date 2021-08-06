@@ -77,6 +77,7 @@ func (o *queryProcessorOptions) run(cmd *cobra.Command) error {
 	}
 
 	meta := &processorMeta{Status: status, Position: position}
+
 	return util.JSONPrint(cmd, meta)
 }
 
