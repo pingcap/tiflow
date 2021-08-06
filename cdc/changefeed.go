@@ -731,6 +731,7 @@ func (c *changeFeed) handleDDL() error {
 		return nil
 	}
 
+	// check if ddl should be sync to down stream
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
 		failpoint.Inject("InjectChangefeedDDLError", func() {
 			failpoint.Return(cerror.ErrExecDDLFailed.GenWithStackByArgs())
@@ -752,12 +753,13 @@ func (c *changeFeed) handleDDL() error {
 			c.ddlState = model.ChangeFeedSyncDML
 			c.ddlEventCache = nil
 		}
-	} else {
-		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
-		c.ddlJobHistory = c.ddlJobHistory[1:]
-		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-		c.ddlState = model.ChangeFeedSyncDML
+		return nil
 	}
+
+	log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+	c.ddlJobHistory = c.ddlJobHistory[1:]
+	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }
 
