@@ -78,6 +78,7 @@ func NewCmdCli() *cobra.Command {
 
 	// Add subcommands.
 	cmds.AddCommand(newCmdCapture(f))
+	cmds.AddCommand(newCmdProcessor(f))
 
 	return cmds
 }
