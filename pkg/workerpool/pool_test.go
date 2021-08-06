@@ -368,3 +368,28 @@ func (s *workerPoolSuite) TestBasics(c *check.C) {
 	err := errg.Wait()
 	c.Assert(err, check.ErrorMatches, "context canceled")
 }
+
+// Benchmark workerpool with ping-pong workflow.
+// go test -benchmem -run='^$' -bench '^(BenchmarkWorkerpool)$' github.com/pingcap/ticdc/pkg/workerpool
+func BenchmarkWorkerpool(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	go pool.Run(ctx)
+
+	ch := make(chan int)
+	handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		ch <- event.(int)
+		return nil
+	})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := handler.AddEvent(ctx, i)
+		if err != nil {
+			b.Fatal(err)
+		}
+		<-ch
+	}
+}
