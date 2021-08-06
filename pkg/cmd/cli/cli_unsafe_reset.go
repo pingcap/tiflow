@@ -93,6 +93,7 @@ func newCmdReset(f factory.Factory, commonOptions *unsafeCommonOptions) *cobra.C
 			if err := commonOptions.confirmMetaDelete(cmd); err != nil {
 				return err
 			}
+
 			err := o.complete(f)
 			if err != nil {
 				return err
