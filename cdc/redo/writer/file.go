@@ -98,7 +98,7 @@ func newWriter(ctx context.Context, cfg *writerConfig, host, path string, uri *u
 	w.storage = s3storage
 
 	w.state.Store(started)
-	go w.runFlusherToDisk(ctx, cfg.flushIntervalInSec)
+	go w.runFlushToDisk(ctx, cfg.flushIntervalInSec)
 	go w.runFlushToS3(ctx, cfg.flushIntervalInSec)
 	return w
 }
@@ -133,14 +133,14 @@ func (w *writer) initS3storage(ctx context.Context, host, path string, uri *url.
 	return s3storage, nil
 }
 
-func (w *writer) runFlusherToDisk(ctx context.Context, flushIntervalInSec int64) {
+func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInSec int64) {
 	ticker := time.NewTicker(time.Duration(flushIntervalInSec) * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("runFlusherToDisk canceled", zap.Error(ctx.Err()))
+			log.Info("runFlushToDisk canceled", zap.Error(ctx.Err()))
 			return
 		case <-ticker.C:
 			err := w.flush()
