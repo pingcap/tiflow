@@ -80,6 +80,8 @@ func NewCmdCli() *cobra.Command {
 	cmds.AddCommand(newCmdCapture(f))
 	cmds.AddCommand(newCmdProcessor(f))
 	cmds.AddCommand(newCmdTso(f))
+	cmds.AddCommand(newCmdUnsafe(f))
+
 	return cmds
 }
 
