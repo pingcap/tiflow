@@ -181,23 +181,22 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 // TiCDCClusterVersion is the version of TiCDC cluster
 type TiCDCClusterVersion struct {
 	*semver.Version
-	isUnknown bool
 }
 
 // IsUnknown returns whether this is an unknown version
 func (v *TiCDCClusterVersion) IsUnknown() bool {
-	return v.isUnknown
+	return v.Version == nil
 }
 
 // ShouldEnableOldValueByDefault returns whether old value should be enabled by default
 func (v *TiCDCClusterVersion) ShouldEnableOldValueByDefault() bool {
 	// we assume the unknown version to be the latest version
-	return v.isUnknown || !v.LessThan(*semver.New("5.0.0-rc"))
+	return v.Version == nil || !v.LessThan(*semver.New("5.0.0-rc"))
 }
 
 // ShouldEnableUnifiedSorterByDefault returns whether Unified Sorter should be enabled by default
 func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
-	if v.isUnknown {
+	if v.Version == nil {
 		// we assume the unknown version to be the latest version
 		return true
 	}
@@ -208,13 +207,13 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
 }
 
-// ticdcClusterVersionUnknown is a read-only variable to represent the unknown cluster version
-var ticdcClusterVersionUnknown = TiCDCClusterVersion{isUnknown: true}
+// TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version
+var TiCDCClusterVersionUnknown = TiCDCClusterVersion{}
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
 func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVersion, error) {
 	if len(captureInfos) == 0 {
-		return ticdcClusterVersionUnknown, nil
+		return TiCDCClusterVersionUnknown, nil
 	}
 	var minVer *semver.Version
 	for _, captureInfo := range captureInfos {
@@ -226,18 +225,18 @@ func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVers
 			ver = defaultTiCDCVersion
 		}
 		if err != nil {
-			return ticdcClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
+			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		if minVer == nil || ver.Compare(*minVer) < 0 {
 			minVer = ver
 		}
 	}
-	return TiCDCClusterVersion{minVer, false}, nil
+	return TiCDCClusterVersion{minVer}, nil
 }
 
 // CheckTiCDCClusterVersion returns the version of ticdc cluster
 func CheckTiCDCClusterVersion(cdcClusterVer TiCDCClusterVersion) (unknown bool, err error) {
-	if cdcClusterVer.isUnknown {
+	if cdcClusterVer.Version == nil {
 		return true, nil
 	}
 	ver := cdcClusterVer.Version

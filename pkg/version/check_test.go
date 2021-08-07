@@ -201,7 +201,7 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 	}{
 		{
 			captureInfos: []*model.CaptureInfo{},
-			expected:     ticdcClusterVersionUnknown,
+			expected:     TiCDCClusterVersionUnknown,
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
@@ -209,7 +209,7 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 				{ID: "capture2", Version: ""},
 				{ID: "capture3", Version: ""},
 			},
-			expected: TiCDCClusterVersion{defaultTiCDCVersion, false},
+			expected: TiCDCClusterVersion{defaultTiCDCVersion},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
@@ -217,31 +217,31 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 				{ID: "capture2", Version: "4.0.7"},
 				{ID: "capture3", Version: "5.0.0-rc"},
 			},
-			expected: TiCDCClusterVersion{semver.New("4.0.7"), false},
+			expected: TiCDCClusterVersion{semver.New("4.0.7")},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "5.0.0-rc"},
 			},
-			expected: TiCDCClusterVersion{semver.New("5.0.0-rc"), false},
+			expected: TiCDCClusterVersion{semver.New("5.0.0-rc")},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "5.0.0"},
 			},
-			expected: TiCDCClusterVersion{semver.New("5.0.0"), false},
+			expected: TiCDCClusterVersion{semver.New("5.0.0")},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "4.1.0"},
 			},
-			expected: TiCDCClusterVersion{semver.New("4.1.0"), false},
+			expected: TiCDCClusterVersion{semver.New("4.1.0")},
 		},
 		{
 			captureInfos: []*model.CaptureInfo{
 				{ID: "capture1", Version: "4.0.10"},
 			},
-			expected: TiCDCClusterVersion{semver.New("4.0.10"), false},
+			expected: TiCDCClusterVersion{semver.New("4.0.10")},
 		},
 	}
 	for _, tc := range testCases {
@@ -254,48 +254,48 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 func (s *checkSuite) TestTiCDCClusterVersionFeaturesCompatible(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	ver := TiCDCClusterVersion{semver.New("4.0.10"), false}
+	ver := TiCDCClusterVersion{semver.New("4.0.10")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
 
-	ver = TiCDCClusterVersion{semver.New("4.0.12"), false}
+	ver = TiCDCClusterVersion{semver.New("4.0.12")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
 
-	ver = TiCDCClusterVersion{semver.New("4.0.13"), false}
+	ver = TiCDCClusterVersion{semver.New("4.0.13")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
 
-	ver = TiCDCClusterVersion{semver.New("4.0.13-hotfix"), false}
+	ver = TiCDCClusterVersion{semver.New("4.0.13-hotfix")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
 
-	ver = TiCDCClusterVersion{semver.New("4.0.14"), false}
+	ver = TiCDCClusterVersion{semver.New("4.0.14")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
 
-	ver = TiCDCClusterVersion{semver.New("5.0.0-rc"), false}
+	ver = TiCDCClusterVersion{semver.New("5.0.0-rc")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
 
-	ver = TiCDCClusterVersion{semver.New("5.0.0"), false}
+	ver = TiCDCClusterVersion{semver.New("5.0.0")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
 
-	ver = TiCDCClusterVersion{semver.New("5.1.0"), false}
+	ver = TiCDCClusterVersion{semver.New("5.1.0")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
 
-	ver = TiCDCClusterVersion{semver.New("5.2.0-alpha"), false}
+	ver = TiCDCClusterVersion{semver.New("5.2.0-alpha")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
 
-	ver = TiCDCClusterVersion{semver.New("5.2.0-master"), false}
+	ver = TiCDCClusterVersion{semver.New("5.2.0-master")}
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
 
-	c.Assert(ticdcClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ticdcClusterVersionUnknown.ShouldEnableOldValueByDefault(), check.Equals, true)
+	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
+	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), check.Equals, true)
 }
 
 func (s *checkSuite) TestCheckTiCDCClusterVersion(c *check.C) {
@@ -307,7 +307,7 @@ func (s *checkSuite) TestCheckTiCDCClusterVersion(c *check.C) {
 		expectedUnknown   bool
 	}{
 		{
-			cdcClusterVersion: TiCDCClusterVersion{isUnknown: true},
+			cdcClusterVersion: TiCDCClusterVersionUnknown,
 			expectedErr:       "",
 			expectedUnknown:   true,
 		},
