@@ -16,6 +16,7 @@ package util
 import (
 	"context"
 	"encoding/json"
+	liberrors "errors"
 	"net/url"
 	"os"
 	"os/signal"
@@ -37,6 +38,9 @@ const (
 	HTTP  = "http"
 	HTTPS = "https"
 )
+
+// ErrOwnerNotFound specifies the error that the owner could not be found.
+var ErrOwnerNotFound = liberrors.New("owner not found")
 
 // InitCmd initializes the logger, the default context and returns its cancel function.
 func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {

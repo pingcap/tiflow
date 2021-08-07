@@ -107,3 +107,19 @@ func listCaptures(ctx context.Context, etcdClient *kv.CDCEtcdClient) ([]*capture
 
 	return captures, nil
 }
+
+// getOwnerCapture returns the owner capture.
+func getOwnerCapture(ctx context.Context, etcdClient *kv.CDCEtcdClient) (*capture, error) {
+	captures, err := listCaptures(ctx, etcdClient)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, c := range captures {
+		if c.IsOwner {
+			return c, nil
+		}
+	}
+
+	return nil, errors.Trace(util.ErrOwnerNotFound)
+}

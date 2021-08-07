@@ -161,7 +161,12 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 
 	// TODO: we need to check all pd endpoint and make sure they belong to the same cluster.
 	// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673021305.
-	err = version.CheckClusterVersion(ctx, pdClient, pdEndpoints[0], credential, true)
+	for _, pdEndpoint := range pdEndpoints {
+		err = version.CheckClusterVersion(ctx, pdClient, pdEndpoint, credential, true)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
