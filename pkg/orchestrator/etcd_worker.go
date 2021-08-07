@@ -610,33 +610,53 @@ func (worker *EtcdWorker) applyUpdates() error {
 	return nil
 }
 
-func logEtcdOps(ops []clientv3.Op, commited bool) {
+func logEtcdOps(ops []clientv3.Op, committed bool) {
 	if len(ops) == 0 {
 		return
 	}
-	log.Info("[etcd worker]" +
-		" ==========Update State to ETCD==========")
+	opsBuffer := strings.Builder{}
+	opsBuffer.WriteString("[etcd worker] ==========Update State to ETCD==========\n")
 	for _, op := range ops {
 		if op.IsDelete() {
-			log.Info("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+			opsBuffer.WriteString("[etcd worker] delete key: ")
+			opsBuffer.WriteString(string(op.KeyBytes()))
+			opsBuffer.WriteString("\n")
 		} else {
-			log.Info("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+			opsBuffer.WriteString("[etcd worker] put key: ")
+			opsBuffer.WriteString(string(op.KeyBytes()))
+			opsBuffer.WriteString(" value: ")
+			opsBuffer.WriteString(string(op.ValueBytes()))
+			opsBuffer.WriteString("\n")
 		}
 	}
-	log.Info("[etcd worker] ============State Commit=============", zap.Bool("committed", commited))
+	opsBuffer.WriteString("[etcd worker] ============State Commit============= committed: ")
+	opsBuffer.WriteString(strconv.FormatBool(committed))
+	opsBuffer.WriteString("\n")
+
+	log.Info(opsBuffer.String())
 }
 
 func logEtcdChangeSet(changeSet txnChangeSet, committed bool) {
-	log.Info("[etcd worker]" +
-		" ==========Update State to ETCD==========")
+	opsBuffer := strings.Builder{}
+	opsBuffer.WriteString("[etcd worker] ==========Update State to ETCD==========\n")
 	for _, change := range changeSet {
 		if change.new == nil {
-			log.Info("[etcd worker] delete key", zap.ByteString("key", change.key.Bytes()))
+			opsBuffer.WriteString("[etcd worker] delete key: ")
+			opsBuffer.WriteString(string(change.key.Bytes()))
+			opsBuffer.WriteString("\n")
 		} else {
-			log.Info("[etcd worker] put key", zap.ByteString("key", change.key.Bytes()), zap.ByteString("value", change.new))
+			opsBuffer.WriteString("[etcd worker] put key: ")
+			opsBuffer.WriteString(string(change.key.Bytes()))
+			opsBuffer.WriteString(" value: ")
+			opsBuffer.WriteString(string(change.new))
+			opsBuffer.WriteString("\n")
 		}
 	}
-	log.Info("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
+	opsBuffer.WriteString("[etcd worker] ============State Commit============= committed: ")
+	opsBuffer.WriteString(strconv.FormatBool(committed))
+	opsBuffer.WriteString("\n")
+
+	log.Info(opsBuffer.String())
 }
 
 func (worker *EtcdWorker) cleanUp() {
