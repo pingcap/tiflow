@@ -242,14 +242,16 @@ func CheckTiCDCClusterVersion(cdcClusterVer TiCDCClusterVersion) (unknown bool, 
 	ver := cdcClusterVer.Version
 	minOrd := ver.Compare(*minTiCDCVersion)
 	if minOrd < 0 {
-		arg := fmt.Sprintf("TiCDC %s is not supported, the minimal compatible version is %s",
-			ver, minTiCDCVersion)
+		arg := fmt.Sprintf("TiCDC %s is not supported, the minimal compatible version is %s"+
+			"try tiup ctl:%s cdc [COMMAND]",
+			ver, minTiCDCVersion, ver)
 		return false, cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	maxOrd := ver.Compare(*maxTiCDCVersion)
 	if maxOrd >= 0 {
-		arg := fmt.Sprintf("TiCDC %s is not supported, the maximum compatible version is %s",
-			ver, maxTiCDCVersion)
+		arg := fmt.Sprintf("TiCDC %s is not supported, the maximum compatible version is %s"+
+			"try tiup ctl:%s cdc [COMMAND]",
+			ver, maxTiCDCVersion, ver)
 		return false, cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	return false, nil
