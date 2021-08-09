@@ -249,7 +249,6 @@ func (w *writer) openNew() error {
 	err := os.MkdirAll(w.cfg.dir, defaultDirMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("can't make dir for new redo logfile: %s", err))
-
 	}
 
 	path := w.filePath()
