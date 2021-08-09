@@ -126,6 +126,7 @@ type processorMeta struct {
 }
 
 func newCliCommand() *cobra.Command {
+	verifyCDCClusterVersionList := make([]string, 0)
 	command := &cobra.Command{
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
@@ -195,33 +196,24 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", cliPdAddr)
 			}
-			ctx := defaultContext
-			_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
-			if err != nil {
-				return err
-			}
-			cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
-			if err != nil {
-				return err
-			}
-			isUnknownVersion, err := version.CheckTiCDCClusterVersion(cdcClusterVer)
-			if err != nil {
-				return err
-			}
-			if isUnknownVersion {
-				return errors.NewNoStackError("TiCDC cluster is unknown, please start TiCDC cluster")
-			}
-			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			for _, pdEndpoint := range pdEndpoints {
-				err = version.CheckClusterVersion(ctx, pdCli, pdEndpoint, credential, errorTiKVIncompatible)
-				if err == nil {
-					break
+			if needVerifyCmd(cmd, verifyCDCClusterVersionList) {
+				ctx := defaultContext
+				_, err = verifyAndGetTiCDCClusterVersion(ctx, cdcEtcdCli)
+				if err != nil {
+					return err
+				}
+				errorTiKVIncompatible := true // Error if TiKV is incompatible.
+				for _, pdEndpoint := range pdEndpoints {
+					err = version.CheckClusterVersion(
+						ctx, pdCli, pdEndpoint, credential, errorTiKVIncompatible)
+					if err == nil {
+						break
+					}
+				}
+				if err != nil {
+					return err
 				}
 			}
-			if err != nil {
-				return err
-			}
-
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -230,14 +222,20 @@ func newCliCommand() *cobra.Command {
 			}
 		},
 	}
-	command.AddCommand(
-		newCaptureCommand(),
-		newChangefeedCommand(),
-		newProcessorCommand(),
-		newUnsafeCommand(),
-		newTsoCommand(),
-	)
 
+	capture := newCaptureCommand()
+	command.AddCommand(capture)
+	verifyCDCClusterVersionList = append(verifyCDCClusterVersionList, capture.Name())
+
+	changefeed := newChangefeedCommand()
+	command.AddCommand(changefeed)
+	verifyCDCClusterVersionList = append(verifyCDCClusterVersionList, changefeed.Name())
+
+	processor := newProcessorCommand()
+	command.AddCommand(processor)
+	verifyCDCClusterVersionList = append(verifyCDCClusterVersionList, processor.Name())
+
+	command.AddCommand(newUnsafeCommand(), newTsoCommand())
 	return command
 }
 

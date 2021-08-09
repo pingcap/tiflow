@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/tikv/client-go/v2/oracle"
@@ -400,4 +401,37 @@ func verifyPdEndpoint(pdEndpoint string, useTLS bool) error {
 		}
 	}
 	return nil
+}
+
+func needVerifyCmd(cmd *cobra.Command, verifyList []string) bool {
+	for ; cmd != nil; cmd = cmd.Parent() {
+		for _, verifyName := range verifyList {
+			if cmd.Name() == verifyName || cmd.HasAlias(verifyName) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func verifyAndGetTiCDCClusterVersion(
+	ctx context.Context, cdcEtcdCli kv.CDCEtcdClient,
+) (version.TiCDCClusterVersion, error) {
+	_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
+	if err != nil {
+		return version.TiCDCClusterVersion{}, err
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	if err != nil {
+		return version.TiCDCClusterVersion{}, err
+	}
+	// Check TiCDC cluster version.
+	isUnknownVersion, err := version.CheckTiCDCClusterVersion(cdcClusterVer)
+	if err != nil {
+		return version.TiCDCClusterVersion{}, err
+	}
+	if isUnknownVersion {
+		return version.TiCDCClusterVersion{}, errors.NewNoStackError("TiCDC cluster is unknown, please start TiCDC cluster")
+	}
+	return cdcClusterVer, nil
 }
