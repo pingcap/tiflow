@@ -218,7 +218,7 @@ func (s *eventFeedSession) receiveFromStreamV2(
 					zap.Uint64("storeID", storeID),
 				)
 			} else {
-				log.Error(
+				log.Warn(
 					"failed to receive from stream",
 					zap.String("addr", addr),
 					zap.Uint64("storeID", storeID),

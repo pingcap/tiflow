@@ -865,7 +865,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
 		// to do extra work here.
 		if err != nil {
-			log.Error("send request to stream failed",
+			log.Warn("send request to stream failed",
 				zap.String("addr", rpcCtx.Addr),
 				zap.Uint64("storeID", getStoreID(rpcCtx)),
 				zap.Uint64("regionID", sri.verID.GetID()),
@@ -873,7 +873,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.Error(err))
 			err1 := stream.CloseSend()
 			if err1 != nil {
-				log.Error("failed to close stream", zap.Error(err1))
+				log.Warn("failed to close stream", zap.Error(err1))
 			}
 			// Delete the stream from the map so that the next time the store is accessed, the stream will be
 			// re-established.
@@ -1270,7 +1270,7 @@ func (s *eventFeedSession) receiveFromStream(
 					zap.Uint64("storeID", storeID),
 				)
 			} else {
-				log.Error(
+				log.Warn(
 					"failed to receive from stream",
 					zap.String("addr", addr),
 					zap.Uint64("storeID", storeID),
