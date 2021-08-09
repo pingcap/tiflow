@@ -51,7 +51,7 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 	// Create a task watcher
 	capture := &Capture{
 		etcdClient: kv.NewCDCEtcdClient(context.TODO(), client),
-		processors: make(map[string]*processor),
+		processors: make(map[string]*oldProcessor),
 		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
@@ -69,25 +69,6 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 func (s *taskSuite) TearDownTest(c *check.C) {
 	s.s.Close()
 	s.c.Close()
-}
-
-func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-	// Create a capture instance by initialize the struct,
-	// NewCapture can not be used because it requires to
-	// initialize the PD service witch does not support to
-	// be embeded.
-	capture := &Capture{
-		etcdClient: kv.NewCDCEtcdClient(context.TODO(), s.c),
-		processors: make(map[string]*processor),
-		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
-	}
-	c.Assert(capture, check.NotNil)
-	c.Assert(NewTaskWatcher(capture, &TaskWatcherConfig{
-		Prefix: kv.TaskStatusKeyPrefix + "/" + capture.info.ID,
-	}), check.NotNil)
-	capture.Close(context.Background())
 }
 
 func (s *taskSuite) setupFeedInfo(c *check.C, changeFeedID string) {
@@ -145,7 +126,7 @@ func (s *taskSuite) TestParseTask(c *check.C) {
 	}
 	for _, t := range tests {
 		c.Log("testing ", t.Desc)
-		task, err := s.w.parseTask(ctx, t.Key, nil)
+		task, err := s.w.parseTask(ctx, t.Key)
 		if t.Expected == nil {
 			c.Assert(err, check.NotNil)
 			c.Assert(task, check.IsNil)

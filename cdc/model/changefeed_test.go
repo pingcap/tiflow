@@ -23,7 +23,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type configSuite struct{}
@@ -190,6 +190,30 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
 }
 
+func (s *configSuite) TestChangeFeedInfoClone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	info := &ChangeFeedInfo{
+		SinkURI: "blackhole://",
+		Opts:    map[string]string{},
+		StartTs: 417257993615179777,
+		Config: &config.ReplicaConfig{
+			CaseSensitive:    true,
+			EnableOldValue:   true,
+			CheckGCSafePoint: true,
+		},
+	}
+
+	cloned, err := info.Clone()
+	c.Assert(err, check.IsNil)
+	sinkURI := "mysql://unix:/var/run/tidb.sock"
+	cloned.SinkURI = sinkURI
+	cloned.Config.EnableOldValue = false
+	c.Assert(cloned.SinkURI, check.Equals, sinkURI)
+	c.Assert(cloned.Config.EnableOldValue, check.IsFalse)
+	c.Assert(info.SinkURI, check.Equals, "blackhole://")
+	c.Assert(info.Config.EnableOldValue, check.IsTrue)
+}
+
 type changefeedSuite struct{}
 
 var _ = check.Suite(&changefeedSuite{})
@@ -205,7 +229,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}
-	for i := 0; i < errorHistoryThreshold-1; i++ {
+	for i := 0; i < ErrorHistoryThreshold-1; i++ {
 		info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 		time.Sleep(time.Millisecond)
 	}
@@ -213,7 +237,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 	needSave, canInit := info.CheckErrorHistory()
 	c.Assert(needSave, check.IsTrue)
 	c.Assert(canInit, check.IsTrue)
-	c.Assert(info.ErrorHis, check.HasLen, errorHistoryThreshold-1)
+	c.Assert(info.ErrorHis, check.HasLen, ErrorHistoryThreshold-1)
 
 	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
 	needSave, canInit = info.CheckErrorHistory()
@@ -233,24 +257,80 @@ func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
 
 func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
 	defer testleak.AfterTest(c)()
-	validIDs := []string{
-		"test",
-		"1",
-		"9ff52aca-aea6-4022-8ec4-fbee3f2c7890",
-	}
-	for _, id := range validIDs {
-		err := ValidateChangefeedID(id)
-		c.Assert(err, check.IsNil)
-	}
 
-	invalidIDs := []string{
-		"",
-		"test_task",
-		"job$",
+	tests := []struct {
+		name    string
+		id      string
+		wantErr bool
+	}{
+		{
+			name:    "alphabet",
+			id:      "testTtTT",
+			wantErr: false,
+		},
+		{
+			name:    "number",
+			id:      "01131323",
+			wantErr: false,
+		},
+		{
+			name:    "mixed",
+			id:      "9ff52acaA-aea6-4022-8eVc4-fbee3fD2c7890",
+			wantErr: false,
+		},
+		{
+			name:    "len==128",
+			id:      "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890123456789012345678901234567890",
+			wantErr: false,
+		},
+		{
+			name:    "empty string 1",
+			id:      "",
+			wantErr: true,
+		},
+		{
+			name:    "empty string 2",
+			id:      "   ",
+			wantErr: true,
+		},
+		{
+			name:    "test_task",
+			id:      "test_task ",
+			wantErr: true,
+		},
+		{
+			name:    "job$",
+			id:      "job$ ",
+			wantErr: true,
+		},
+		{
+			name:    "test-",
+			id:      "test-",
+			wantErr: true,
+		},
+		{
+			name:    "-",
+			id:      "-",
+			wantErr: true,
+		},
+		{
+			name:    "-sfsdfdf1",
+			id:      "-sfsdfdf1",
+			wantErr: true,
+		},
+		{
+			name:    "len==129",
+			id:      "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-123456789012345678901234567890",
+			wantErr: true,
+		},
 	}
-	for _, id := range invalidIDs {
-		err := ValidateChangefeedID(id)
-		c.Assert(cerror.ErrInvalidChangefeedID.Equal(err), check.IsTrue)
+	for _, tt := range tests {
+		err := ValidateChangefeedID(tt.id)
+		if !tt.wantErr {
+			c.Assert(err, check.IsNil, check.Commentf("case:%s", tt.name))
+		} else {
+			c.Assert(cerror.ErrInvalidChangefeedID.Equal(err), check.IsTrue, check.Commentf("case:%s", tt.name))
+		}
 	}
 }
 
@@ -266,7 +346,7 @@ func (s *changefeedSuite) TestGetTs(c *check.C) {
 			CreateTime: createTime,
 		}
 	)
-	c.Assert(info.GetStartTs(), check.Equals, oracle.EncodeTSO(createTime.Unix()*1000))
+	c.Assert(info.GetStartTs(), check.Equals, oracle.GoTimeToTS(createTime))
 	info.StartTs = startTs
 	c.Assert(info.GetStartTs(), check.Equals, startTs)
 

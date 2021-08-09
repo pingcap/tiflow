@@ -108,9 +108,9 @@ func (l *logSink) startFlush(ctx context.Context) error {
 				uReplica := u
 				eg.Go(func() error {
 					log.Info("start Flush asynchronously to storage by caller",
-						zap.Int64("table id", u.TableID()),
-						zap.Int64("size", u.Size().Load()),
-						zap.Int64("event count", u.Events().Load()),
+						zap.Int64("table id", uReplica.TableID()),
+						zap.Int64("size", uReplica.Size().Load()),
+						zap.Int64("event count", uReplica.Events().Load()),
 					)
 					return uReplica.flush(ectx, l)
 				})
@@ -129,9 +129,9 @@ func (l *logSink) startFlush(ctx context.Context) error {
 				if u.shouldFlush() {
 					eg.Go(func() error {
 						log.Info("start Flush asynchronously to storage",
-							zap.Int64("table id", u.TableID()),
-							zap.Int64("size", u.Size().Load()),
-							zap.Int64("event count", u.Events().Load()),
+							zap.Int64("table id", uReplica.TableID()),
+							zap.Int64("size", uReplica.Size().Load()),
+							zap.Int64("event count", uReplica.Events().Load()),
 						)
 						return uReplica.flush(ectx, l)
 					})

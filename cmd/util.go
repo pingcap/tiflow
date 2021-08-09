@@ -24,6 +24,9 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
+
+	"golang.org/x/net/http/httpproxy"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
@@ -41,6 +44,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
@@ -54,13 +58,20 @@ var (
 
 var errOwnerNotFound = liberrors.New("owner not found")
 
+var tsGapWarning int64 = 86400 * 1000 // 1 day in milliseconds
+
+// Endpoint schemes.
+const (
+	HTTP  = "http"
+	HTTPS = "https"
+)
+
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 	if isServer {
-		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity "+
-			"(cert Common Name). Use `,` to separate multiple CN")
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 	}
 }
 
@@ -85,7 +96,7 @@ func initCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
 	}
-	log.Info("init log", zap.String("file", logFile), zap.String("level", logCfg.Level))
+	log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -153,11 +164,11 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 	if job.Opts != nil && job.Opts.ForceRemove {
 		forceRemoveOpt = "true"
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID:       {job.CfID},
 		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
-	}))
+	})
 	if err != nil {
 		return err
 	}
@@ -187,9 +198,9 @@ func applyOwnerChangefeedQuery(
 	if err != nil {
 		return "", err
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarChangefeedID: {cid},
-	}))
+	})
 	if err != nil {
 		return "", err
 	}
@@ -212,21 +223,21 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	return nil
 }
 
-func verifyStartTs(ctx context.Context, startTs uint64) error {
+func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) error {
 	if disableGCSafePointCheck {
 		return nil
 	}
-	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
+	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
 }
 
-func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
+func verifyTargetTs(startTs, targetTs uint64) error {
 	if targetTs > 0 && targetTs <= startTs {
 		return errors.Errorf("target-ts %d must be larger than start-ts: %d", targetTs, startTs)
 	}
 	return nil
 }
 
-func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+func verifyTables(credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
@@ -247,9 +258,9 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 	}
 
 	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(int64(tID))
+		tableInfo, exist := snap.TableByID(tID)
 		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", int64(tID))
+			return nil, nil, errors.NotFoundf("table %d", tID)
 		}
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
@@ -289,6 +300,16 @@ func verifySink(
 	return nil
 }
 
+// verifyReplicaConfig do strictDecodeFile check and only verify the rules for now
+func verifyReplicaConfig(path, component string, cfg *config.ReplicaConfig) error {
+	err := strictDecodeFile(path, component, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = filter.VerifyRules(cfg)
+	return err
+}
+
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
 // into the Config struct, issue an error and stop the server from starting.
 func strictDecodeFile(path, component string, cfg interface{}) error {
@@ -310,4 +331,76 @@ func strictDecodeFile(path, component string, cfg interface{}) error {
 	}
 
 	return errors.Trace(err)
+}
+
+// logHTTPProxies logs HTTP proxy relative environment variables.
+func logHTTPProxies() {
+	fields := proxyFields()
+	if len(fields) > 0 {
+		log.Info("using proxy config", fields...)
+	}
+}
+
+func proxyFields() []zap.Field {
+	proxyCfg := httpproxy.FromEnvironment()
+	fields := make([]zap.Field, 0, 3)
+	if proxyCfg.HTTPProxy != "" {
+		fields = append(fields, zap.String("http_proxy", proxyCfg.HTTPProxy))
+	}
+	if proxyCfg.HTTPSProxy != "" {
+		fields = append(fields, zap.String("https_proxy", proxyCfg.HTTPSProxy))
+	}
+	if proxyCfg.NoProxy != "" {
+		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
+	}
+	return fields
+}
+
+func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64) error {
+	if noConfirm {
+		return nil
+	}
+	currentPhysical, _, err := pdCli.GetTS(ctx)
+	if err != nil {
+		return err
+	}
+	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
+	if tsGap > tsGapWarning {
+		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
+			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
+			time.Duration(tsGap)*time.Millisecond,
+		)
+		var yOrN string
+		_, err := fmt.Scan(&yOrN)
+		if err != nil {
+			return err
+		}
+		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+			return errors.NewNoStackError("abort changefeed create or resume")
+		}
+	}
+	return nil
+}
+
+// verifyPdEndpoint verifies whether the pd endpoint is a valid http or https URL.
+// The certificate is required when using https.
+func verifyPdEndpoint(pdEndpoint string, useTLS bool) error {
+	u, err := url.Parse(pdEndpoint)
+	if err != nil {
+		return errors.Annotate(err, "parse PD endpoint")
+	}
+	if (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
+		return errors.New("PD endpoint should be a valid http or https URL")
+	}
+
+	if useTLS {
+		if u.Scheme == HTTP {
+			return errors.New("PD endpoint scheme should be https")
+		}
+	} else {
+		if u.Scheme == HTTPS {
+			return errors.New("PD endpoint scheme is https, please provide certificate")
+		}
+	}
+	return nil
 }

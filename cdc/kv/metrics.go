@@ -13,9 +13,14 @@
 
 package kv
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var (
+	grpcMetrics = grpc_prometheus.NewClientMetrics()
+
 	eventFeedErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -67,6 +72,13 @@ var (
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
 		}, []string{"id", "channel"})
+	clientRegionTokenSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_token",
+			Help:      "size of region token in kv client",
+		}, []string{"store", "table", "changefeed"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -93,6 +105,10 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
+	registry.MustRegister(clientRegionTokenSize)
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(etcdRequestCounter)
+
+	// Register client metrics to registry.
+	registry.MustRegister(grpcMetrics)
 }

@@ -32,11 +32,15 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/filelock"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
 const (
-	backgroundJobInterval = time.Second * 5
+	backgroundJobInterval      = time.Second * 15
+	sortDirLockFileName        = "ticdc_lock"
+	sortDirDataFileMagicPrefix = "sort"
 )
 
 var (
@@ -53,6 +57,9 @@ type backEndPool struct {
 	dir               string
 	filePrefix        string
 
+	// to prevent `dir` from being accidentally used by another TiCDC server process.
+	fileLock *filelock.FileLock
+
 	// cancelCh needs to be unbuffered to prevent races
 	cancelCh chan struct{}
 	// cancelRWLock protects cache against races when the backEnd is exiting
@@ -60,13 +67,27 @@ type backEndPool struct {
 	isTerminating bool
 }
 
-func newBackEndPool(dir string, captureAddr string) *backEndPool {
+func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 	ret := &backEndPool{
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
 		dir:               dir,
 		cancelCh:          make(chan struct{}),
-		filePrefix:        fmt.Sprintf("%s/sort-%d-", dir, os.Getpid()),
+		filePrefix:        fmt.Sprintf("%s/%s-%d-", dir, sortDirDataFileMagicPrefix, os.Getpid()),
+	}
+
+	err := ret.lockSortDir()
+	if err != nil {
+		log.Warn("failed to lock file prefix",
+			zap.String("prefix", ret.filePrefix),
+			zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	err = ret.cleanUpStaleFiles()
+	if err != nil {
+		log.Warn("Unified Sorter: failed to clean up stale temporary files. Report a bug if you believe this is unexpected", zap.Error(err))
+		return nil, errors.Trace(err)
 	}
 
 	go func() {
@@ -91,27 +112,37 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 
 			// update memPressure
 			m, err := memory.Get()
+
+			failpoint.Inject("getMemoryPressureFails", func() {
+				m = nil
+				err = errors.New("injected get memory pressure failure")
+			})
+
 			if err != nil {
 				failpoint.Inject("sorterDebug", func() {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
 				})
 
 				log.Warn("unified sorter: getting system memory usage failed", zap.Error(err))
+				// Reports a 100% memory pressure, so that the backEndPool will allocate fileBackEnds.
+				// We default to fileBackEnds because they are unlikely to cause OOMs. If IO errors are
+				// encountered, we can fail gracefully.
+				atomic.StoreInt32(&ret.memPressure, 100)
+			} else {
+				memPressure := m.Used * 100 / m.Total
+				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			}
-
-			memPressure := m.Used * 100 / m.Total
-			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 
 			if memPressure := ret.memoryPressure(); memPressure > 50 {
 				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
 					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
 				// Increase GC frequency to avoid unnecessary OOMs
 				debug.SetGCPercent(10)
-				if memPressure > 95 {
+				if memPressure > 80 {
 					runtime.GC()
 				}
 			} else {
-				debug.SetGCPercent(100)
+				debug.SetGCPercent(50)
 			}
 
 			// garbage collect temporary files in batches
@@ -127,7 +158,7 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 				if err != nil {
 					log.Warn("Cannot remove temporary file for sorting", zap.String("file", backEnd.fileName), zap.Error(err))
 				} else {
-					log.Info("Temporary file removed", zap.String("file", backEnd.fileName))
+					log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
 					freedCount += 1
 				}
 				if freedCount >= 16 {
@@ -138,11 +169,11 @@ func newBackEndPool(dir string, captureAddr string) *backEndPool {
 		}
 	}()
 
-	return ret
+	return ret, nil
 }
 
 func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
-	sorterConfig := config.GetSorterConfig()
+	sorterConfig := config.GetGlobalServerConfig().Sorter
 	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
 		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
 
@@ -166,9 +197,15 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	}
 
 	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
+	tableID, tableName := util.TableIDFromCtx(ctx)
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
-		zap.String("table", tableNameFromCtx(ctx)))
+		zap.Int64("table-id", tableID),
+		zap.String("table-name", tableName))
+
+	if err := util.CheckDataDirSatisfied(); err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
@@ -224,14 +261,26 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 }
 
 func (p *backEndPool) terminate() {
+	defer func() {
+		if p.fileLock == nil {
+			return
+		}
+		err := p.unlockSortDir()
+		if err != nil {
+			log.Warn("failed to unlock file prefix", zap.String("prefix", p.filePrefix))
+		}
+	}()
+
 	p.cancelCh <- struct{}{}
 	defer close(p.cancelCh)
 	// the background goroutine can be considered terminated here
 
+	log.Debug("Unified Sorter terminating...")
 	p.cancelRWLock.Lock()
 	defer p.cancelRWLock.Unlock()
 	p.isTerminating = true
 
+	log.Debug("Unified Sorter cleaning up before exiting")
 	// any new allocs and deallocs will not succeed from this point
 	// accessing p.cache without atomics is safe from now
 
@@ -254,11 +303,14 @@ func (p *backEndPool) terminate() {
 		log.Warn("Unified Sorter clean-up failed", zap.Error(err))
 	}
 	for _, file := range files {
+		log.Debug("Unified Sorter backEnd removing file", zap.String("file", file))
 		err = os.RemoveAll(file)
 		if err != nil {
 			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
 		}
 	}
+
+	log.Debug("Unified Sorter backEnd terminated")
 }
 
 func (p *backEndPool) sorterMemoryUsage() int64 {
@@ -273,4 +325,68 @@ func (p *backEndPool) memoryPressure() int32 {
 		failpoint.Return(int32(val.(int)))
 	})
 	return atomic.LoadInt32(&p.memPressure)
+}
+
+func (p *backEndPool) lockSortDir() error {
+	lockFileName := fmt.Sprintf("%s/%s", p.dir, sortDirLockFileName)
+	fileLock, err := filelock.NewFileLock(lockFileName)
+	if err != nil {
+		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByCause()
+	}
+
+	err = fileLock.Lock()
+	if err != nil {
+		if cerrors.ErrConflictingFileLocks.Equal(err) {
+			log.Warn("TiCDC failed to lock sorter temporary file directory. "+
+				"Make sure that another instance of TiCDC, or any other program, is not using the directory. "+
+				"If you believe you should not see this error, try deleting the lock file and resume the changefeed. "+
+				"Report a bug or contact support if the problem persists.",
+				zap.String("lock-file", lockFileName))
+			return errors.Trace(err)
+		}
+		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByCause()
+	}
+
+	p.fileLock = fileLock
+	return nil
+}
+
+func (p *backEndPool) unlockSortDir() error {
+	err := p.fileLock.Unlock()
+	if err != nil {
+		return cerrors.ErrSortDirLockError.Wrap(err).FastGenWithCause()
+	}
+	return nil
+}
+
+func (p *backEndPool) cleanUpStaleFiles() error {
+	if p.dir == "" {
+		// guard against programmer error. Must be careful when we are deleting user files.
+		log.Panic("unexpected sort-dir", zap.String("sort-dir", p.dir))
+	}
+
+	files, err := filepath.Glob(filepath.Join(p.dir, fmt.Sprintf("%s-*", sortDirDataFileMagicPrefix)))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, toRemoveFilePath := range files {
+		log.Debug("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
+		err := os.Remove(toRemoveFilePath)
+		if err != nil {
+			// In production, we do not want an error here to interfere with normal operation,
+			// because in most situations, failure to remove files only indicates non-fatal misconfigurations
+			// such as permission problems, rather than fatal errors.
+			// If the directory is truly unusable, other errors would be raised when we try to write to it.
+			log.Warn("failed to remove file",
+				zap.String("file", toRemoveFilePath),
+				zap.Error(err))
+			// For fail-fast in integration tests
+			failpoint.Inject("sorterDebug", func() {
+				log.Panic("panicking", zap.Error(err))
+			})
+		}
+	}
+
+	return nil
 }

@@ -28,16 +28,16 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	defaultPullerEventChanSize  = 128000
-	defaultPullerOutputChanSize = 128000
+	defaultPullerEventChanSize  = 128
+	defaultPullerOutputChanSize = 128
 )
 
 // Puller pull data from tikv and push changes into a buffer
@@ -56,7 +56,6 @@ type pullerImpl struct {
 	kvStorage      tikv.Storage
 	checkpointTs   uint64
 	spans          []regionspan.ComparableSpan
-	buffer         *memBuffer
 	outputCh       chan *model.RawKVEntry
 	tsTracker      frontier.Frontier
 	resolvedTs     uint64
@@ -73,7 +72,6 @@ func NewPuller(
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	limitter *BlurResourceLimitter,
 	enableOldValue bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
@@ -96,7 +94,6 @@ func NewPuller(
 		kvStorage:      tikvStorage,
 		checkpointTs:   checkpointTs,
 		spans:          comparableSpans,
-		buffer:         makeMemBuffer(limitter),
 		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:      tsTracker,
 		resolvedTs:     checkpointTs,
@@ -133,10 +130,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	tableID, tableName := util.TableIDFromCtx(ctx)
 	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
 	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
 	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
-	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
 	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "resolved")
 	defer func() {
@@ -156,33 +150,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				return nil
 			case <-time.After(15 * time.Second):
 				metricEventChanSize.Set(float64(len(eventCh)))
-				metricMemBufferSize.Set(float64(p.buffer.Size()))
 				metricOutputChanSize.Set(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-			}
-		}
-	})
-
-	g.Go(func() error {
-		for {
-			select {
-			case e := <-eventCh:
-				// Note: puller will process anything received from event channel.
-				// If one key is not expected in given region, it must be filtered
-				// out before sending to puller.
-				if e.Val != nil {
-					metricEventCounterKv.Inc()
-					if err := p.buffer.AddEntry(ctx, *e); err != nil {
-						return errors.Trace(err)
-					}
-				} else if e.Resolved != nil {
-					metricEventCounterResolved.Inc()
-					if err := p.buffer.AddEntry(ctx, *e); err != nil {
-						return errors.Trace(err)
-					}
-				}
-			case <-ctx.Done():
-				return ctx.Err()
 			}
 		}
 	})
@@ -190,12 +159,18 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
+			// even after https://github.com/pingcap/ticdc/pull/2038, kv client
+			// could still miss region change notification, which leads to resolved
+			// ts update missing in puller, however resolved ts fallback here can
+			// be ignored since no late data is received and the guarantee of
+			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Panic("The CRTs must be greater than the resolvedTs",
+				log.Warn("The CRTs is fallen back in pulelr",
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
 					zap.Int64("tableID", tableID))
+				return nil
 			}
 			select {
 			case <-ctx.Done():
@@ -208,9 +183,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		start := time.Now()
 		initialized := false
 		for {
-			e, err := p.buffer.Get(ctx)
-			if err != nil {
-				return errors.Trace(err)
+			var e *model.RegionFeedEvent
+			select {
+			case e = <-eventCh:
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+			if e == nil {
+				continue
 			}
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()

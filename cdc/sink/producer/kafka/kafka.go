@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -43,8 +44,7 @@ type Config struct {
 	Compression     string
 	ClientID        string
 	Credential      *security.Credential
-	// TODO support SASL authentication
-
+	SaslScram       *security.SaslScram
 	// control whether to create topic and verify partition number
 	TopicPreProcess bool
 }
@@ -57,6 +57,7 @@ func NewKafkaConfig() Config {
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
+		SaslScram:         &security.SaslScram{},
 		TopicPreProcess:   true,
 	}
 }
@@ -84,19 +85,19 @@ type kafkaSaramaProducer struct {
 	closed  int32
 }
 
-func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
-		Key:       sarama.ByteEncoder(key),
-		Value:     sarama.ByteEncoder(value),
+		Key:       sarama.ByteEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
 	}
 	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
 
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
-		// simulate sending message to intput channel successfully but flushing
+		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
 		log.Info("failpoint error injected")
 		k.failpointCh <- errors.New("kafka sink injected error")
@@ -119,15 +120,15 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
 	for i := 0; i < int(k.partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
 			Topic:     k.topic,
-			Key:       sarama.ByteEncoder(key),
-			Value:     sarama.ByteEncoder(value),
+			Key:       sarama.ByteEncoder(message.Key),
+			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
 		}
 	}
@@ -179,7 +180,7 @@ flushLoop:
 			if checkAllPartitionFlushed() {
 				return nil
 			}
-			return cerror.ErrKafkaFlushUnfished.GenWithStackByArgs()
+			return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
 		case <-k.flushedReceiver.C:
 			if !checkAllPartitionFlushed() {
 				continue flushLoop
@@ -379,7 +380,7 @@ func init() {
 }
 
 var (
-	validClienID      *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	validClientID     *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
 	commonInvalidChar *regexp.Regexp = regexp.MustCompile(`[\?:,"]`)
 )
 
@@ -390,7 +391,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
 		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
 	}
-	if !validClienID.MatchString(clientID) {
+	if !validClientID.MatchString(clientID) {
 		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
 	}
 	return
@@ -460,6 +461,20 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+	}
+
+	if c.SaslScram != nil && len(c.SaslScram.SaslUser) != 0 {
+		config.Net.SASL.Enable = true
+		config.Net.SASL.User = c.SaslScram.SaslUser
+		config.Net.SASL.Password = c.SaslScram.SaslPassword
+		config.Net.SASL.Mechanism = sarama.SASLMechanism(c.SaslScram.SaslMechanism)
+		if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-256") {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256} }
+		} else if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-512") {
+			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512} }
+		} else {
+			return nil, errors.New("Unsupported sasl-mechanism, should be SCRAM-SHA-256 or SCRAM-SHA-512")
 		}
 	}
 

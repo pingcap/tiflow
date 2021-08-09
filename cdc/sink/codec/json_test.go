@@ -15,6 +15,7 @@ package codec
 
 import (
 	"math"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -33,58 +34,32 @@ type batchSuite struct {
 }
 
 var _ = check.Suite(&batchSuite{
-	rowCases: [][]*model.RowChangedEvent{{{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}}, {{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}, {
-		CommitTs: 2,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-	}, {
-		CommitTs: 3,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-	}, {
-		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-	}}, {}},
-	ddlCases: [][]*model.DDLEvent{{{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table a",
-		Type:  1,
-	}}, {{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table a",
-		Type:  1,
-	}, {
-		CommitTs: 2,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table b",
-		Type:  2,
-	}, {
-		CommitTs: 3,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table c",
-		Type:  3,
-	}}, {}},
-	resolvedTsCases: [][]uint64{{1}, {1, 2, 3}, {}},
+	rowCases:        codecRowCases,
+	ddlCases:        codecDDLCases,
+	resolvedTsCases: codecResolvedTSCases,
 })
+
+type columnsArray []*model.Column
+
+func (a columnsArray) Len() int {
+	return len(a)
+}
+
+func (a columnsArray) Less(i, j int) bool {
+	return a[i].Name < a[j].Name
+}
+
+func (a columnsArray) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func sortColumnsArrays(arrays ...[]*model.Column) {
+	for _, array := range arrays {
+		if array != nil {
+			sort.Sort(columnsArray(array))
+		}
+	}
+}
 
 func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
 	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
@@ -98,6 +73,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
 			row, err := decoder.NextRowChangedEvent()
 			c.Assert(err, check.IsNil)
+			sortColumnsArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
 			c.Assert(row, check.DeepEquals, cs[index])
 			index++
 		}
@@ -226,7 +202,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxBatchSize, check.Equals, 16)
 	c.Assert(encoder.maxKafkaMessageSize, check.Equals, 64*1024*1024)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
@@ -237,12 +213,12 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxBatchSize, check.Equals, 16)
 	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxInt32)
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, 4096)
+	c.Assert(encoder.maxBatchSize, check.Equals, 16)
 	c.Assert(encoder.maxKafkaMessageSize, check.Equals, math.MaxUint32)
 
 	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})

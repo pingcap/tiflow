@@ -54,6 +54,14 @@ func (s ComparableSpan) Hack() ComparableSpan {
 	return s
 }
 
+// Clone clones a ComparableSpan
+func (s ComparableSpan) Clone() ComparableSpan {
+	return ComparableSpan{
+		Start: append(make([]byte, 0, len(s.Start)), s.Start...),
+		End:   append(make([]byte, 0, len(s.End)), s.End...),
+	}
+}
+
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s Span) Hack() Span {
 	s.Start, s.End = hackSpan(s.Start, s.End)
@@ -75,19 +83,14 @@ func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
 }
 
 // GetTableSpan returns the span to watch for the specified table
-func GetTableSpan(tableID int64, exceptIndexSpan bool) Span {
+func GetTableSpan(tableID int64) Span {
 	sep := byte('_')
 	recordMarker := byte('r')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	var start, end kv.Key
-	// ignore index keys if we don't need them
-	if exceptIndexSpan {
-		start = append(tablePrefix, sep, recordMarker)
-		end = append(tablePrefix, sep, recordMarker+1)
-	} else {
-		start = append(tablePrefix, sep)
-		end = append(tablePrefix, sep+1)
-	}
+	// ignore index keys.
+	start = append(tablePrefix, sep, recordMarker)
+	end = append(tablePrefix, sep, recordMarker+1)
 	return Span{
 		Start: start,
 		End:   end,

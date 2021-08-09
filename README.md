@@ -24,10 +24,6 @@ See a detailed introduction to [the TiCDC architecture](https://docs.pingcap.com
 - [English](https://pingcap.com/blog/)
 - [Chinese](https://pingcap.com/blog-cn/)
 
-## TiDB Monthly
-
-[TiDB Monthly](https://pingcap.com/weekly/)
-
 ## Building
 
 To check the source code, run test cases and build binaries, you can simply run:
@@ -37,7 +33,7 @@ $ make
 $ make test
 ```
 
-Note that TiCDC supports building with Go version `Go >= 1.13`.
+Note that TiCDC supports building with Go version `Go >= 1.16`.
 
 When TiCDC is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](tests/README.md).
 
@@ -55,7 +51,7 @@ For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticd
 
 ```sh
 # Start TiDB cluster
-$ docker-compose -f docker-compose.yml up -d
+$ docker-compose -f docker-compose-mysql.yml up -d
 
 # Attach to control container to run TiCDC
 $ docker exec -it ticdc_controller_1 sh

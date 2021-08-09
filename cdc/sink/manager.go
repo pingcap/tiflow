@@ -21,13 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 const (
@@ -45,6 +43,8 @@ type Manager struct {
 	checkpointTs model.Ts
 	tableSinks   map[model.TableID]*tableSink
 	tableSinksMu sync.Mutex
+
+	flushMu sync.Mutex
 }
 
 // NewManager creates a new Sink manager
@@ -58,6 +58,8 @@ func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpo
 
 // CreateTableSink creates a table sink
 func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) Sink {
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	if _, exist := m.tableSinks[tableID]; exist {
 		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
 	}
@@ -67,8 +69,6 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 		buffer:    make([]*model.RowChangedEvent, 0, 128),
 		emittedTs: checkpointTs,
 	}
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
 	m.tableSinks[tableID] = sink
 	return sink
 }
@@ -95,6 +95,8 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
+	m.flushMu.Lock()
+	defer m.flushMu.Unlock()
 	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {

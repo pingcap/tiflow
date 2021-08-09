@@ -17,7 +17,7 @@ function run() {
     TOPIC_NAME="ticdc-capture-session-done-during-task-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
-        *) SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1";;
+        *) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1";;
     esac
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
@@ -31,7 +31,8 @@ function run() {
     run_sql "CREATE table capture_session_done_during_task.t (id int primary key auto_increment, a int)" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
     run_sql "INSERT INTO capture_session_done_during_task.t values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/captureHandleTaskDelay=sleep(2000)'
+    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/captureHandleTaskDelay=sleep(2000)' # old processor
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/processorManagerHandleNewChangefeedDelay=sleep(2000)' # new processor
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     # wait task is dispatched

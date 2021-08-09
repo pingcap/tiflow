@@ -20,14 +20,16 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/pprof"
 	"os"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -36,52 +38,47 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
-	serverMux := http.NewServeMux()
+	router := newRouter(s.capture)
 
-	serverMux.HandleFunc("/debug/pprof/", pprof.Index)
-	serverMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	serverMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	serverMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	serverMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	router.GET("/status", gin.WrapF(s.handleStatus))
+	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))
+	router.POST("/capture/owner/resign", gin.WrapF(s.handleResignOwner))
+	router.POST("/capture/owner/admin", gin.WrapF(s.handleChangefeedAdmin))
+	router.POST("/capture/owner/rebalance_trigger", gin.WrapF(s.handleRebalanceTrigger))
+	router.POST("/capture/owner/move_table", gin.WrapF(s.handleMoveTable))
+	router.POST("/capture/owner/changefeed/query", gin.WrapF(s.handleChangefeedQuery))
+	router.Any("/admin/log", gin.WrapF(handleAdminLogLevel))
 
-	serverMux.HandleFunc("/status", s.handleStatus)
-	serverMux.HandleFunc("/debug/info", s.handleDebugInfo)
-	serverMux.HandleFunc("/capture/owner/resign", s.handleResignOwner)
-	serverMux.HandleFunc("/capture/owner/admin", s.handleChangefeedAdmin)
-	serverMux.HandleFunc("/capture/owner/rebalance_trigger", s.handleRebalanceTrigger)
-	serverMux.HandleFunc("/capture/owner/move_table", s.handleMoveTable)
-	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
-
-	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
+	if util.FailpointBuild {
+		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
+		router.Any("/debug/fail/*any", gin.WrapH(http.StripPrefix("/debug/fail", &failpoint.HttpHandler{})))
+	}
 
 	prometheus.DefaultGatherer = registry
-	serverMux.Handle("/metrics", promhttp.Handler())
+	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
-	credential := &security.Credential{}
-	if s.opts.credential != nil {
-		credential = s.opts.credential
-	}
-	tlsConfig, err := credential.ToTLSConfigWithVerify()
+	conf := config.GetGlobalServerConfig()
+	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return errors.Trace(err)
 	}
-	addr := s.opts.addr
-	s.statusServer = &http.Server{Addr: addr, Handler: serverMux, TLSConfig: tlsConfig}
 
-	ln, err := net.Listen("tcp", addr)
+	s.statusServer = &http.Server{Addr: conf.Addr, Handler: router, TLSConfig: tlsConfig}
+
+	ln, err := net.Listen("tcp", conf.Addr)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrServeHTTP, err)
 	}
 	go func() {
-		log.Info("status http server is running", zap.String("addr", addr))
+		log.Info("http server is running", zap.String("addr", conf.Addr))
 		if tlsConfig != nil {
-			err = s.statusServer.ServeTLS(ln, credential.CertPath, credential.KeyPath)
+			err = s.statusServer.ServeTLS(ln, conf.Security.CertPath, conf.Security.KeyPath)
 		} else {
 			err = s.statusServer.Serve(ln)
 		}
 		if err != nil && err != http.ErrServerClosed {
-			log.Error("status server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
+			log.Error("http server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
 		}
 	}()
 	return nil
@@ -96,7 +93,7 @@ type status struct {
 	IsOwner bool   `json:"is_owner"`
 }
 
-func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
+func (s *Server) writeEtcdInfo(ctx context.Context, cli *kv.CDCEtcdClient, w io.Writer) {
 	resp, err := cli.Client.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
@@ -109,35 +106,22 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.W
 }
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
-	if s.owner != nil {
-		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
-		s.owner.writeDebugInfo(w)
-	}
-
-	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-	for _, p := range s.capture.processors {
-		p.writeDebugInfo(w)
-		fmt.Fprintf(w, "\n")
-	}
-
+	s.capture.WriteDebugInfo(w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	s.writeEtcdInfo(req.Context(), s.capture.etcdClient, w)
+	s.writeEtcdInfo(req.Context(), s.etcdClient, w)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
-	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
 	st := status{
 		Version: version.ReleaseVersion,
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
+
 	if s.capture != nil {
-		st.ID = s.capture.info.ID
+		st.ID = s.capture.Info().ID
+		st.IsOwner = s.capture.IsOwner()
 	}
-	st.IsOwner = s.owner != nil
 	writeData(w, st)
 }
 

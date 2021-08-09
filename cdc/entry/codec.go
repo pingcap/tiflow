@@ -31,7 +31,6 @@ import (
 var (
 	tablePrefix  = []byte{'t'}
 	recordPrefix = []byte("_r")
-	indexPrefix  = []byte("_i")
 	metaPrefix   = []byte("m")
 )
 
@@ -39,11 +38,9 @@ var (
 	intLen            = 8
 	tablePrefixLen    = len(tablePrefix)
 	recordPrefixLen   = len(recordPrefix)
-	indexPrefixLen    = len(indexPrefix)
 	metaPrefixLen     = len(metaPrefix)
 	prefixTableIDLen  = tablePrefixLen + intLen  /*tableID*/
 	prefixRecordIDLen = recordPrefixLen + intLen /*recordID*/
-	prefixIndexLen    = indexPrefixLen + intLen  /*indexID*/
 )
 
 // MetaType is for data structure meta/data flag.
@@ -116,22 +113,6 @@ func decodeRecordID(key []byte) (rest []byte, recordID int64, err error) {
 	rest, recordID, err = codec.DecodeInt(key)
 	if err != nil {
 		return nil, 0, cerror.WrapError(cerror.ErrCodecDecode, err)
-	}
-	return
-}
-
-func decodeIndexKey(key []byte) (indexID int64, indexValue []types.Datum, err error) {
-	if len(key) < prefixIndexLen || !bytes.HasPrefix(key, indexPrefix) {
-		return 0, nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
-	}
-	key = key[indexPrefixLen:]
-	key, indexID, err = codec.DecodeInt(key)
-	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrCodecDecode, err)
-	}
-	indexValue, err = codec.Decode(key, 2)
-	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	return
 }
@@ -270,11 +251,11 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 	case mysql.TypeFloat:
 		datum.SetFloat32(float32(datum.GetFloat64()))
 		return datum, nil
-	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
 		datum.SetString(datum.GetString(), ft.Collate)
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
-		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
-		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
+		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble:
 		return datum, nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
 		t := types.NewTime(types.ZeroCoreTime, ft.Tp, int8(ft.Decimal))

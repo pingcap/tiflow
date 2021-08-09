@@ -105,16 +105,9 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 
 func (s *spanSuite) TestGetTableSpan(c *check.C) {
 	defer testleak.AfterTest(c)()
-	span := GetTableSpan(123, false)
+	span := GetTableSpan(123)
 	c.Assert(span.Start, check.Less, span.End)
-	prefix := []byte(tablecodec.GenTablePrefix(123))
-	c.Assert(span.Start, check.Greater, prefix)
-	prefix[len(prefix)-1]++
-	c.Assert(span.End, check.Less, prefix)
-
-	span = GetTableSpan(123, true)
-	c.Assert(span.Start, check.Less, span.End)
-	prefix = []byte(tablecodec.GenTableRecordPrefix(123))
+	prefix := []byte(tablecodec.GenTableRecordPrefix(123))
 	c.Assert(span.Start, check.GreaterEqual, prefix)
 	prefix[len(prefix)-1]++
 	c.Assert(span.End, check.LessEqual, prefix)
@@ -136,4 +129,17 @@ func (s *spanSuite) TestSpanHack(c *check.C) {
 	for _, tc := range testCases {
 		c.Assert(tc.input.Hack(), check.DeepEquals, tc.expect)
 	}
+}
+
+func (s *spanSuite) TestSpanClone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	sp := ComparableSpan{
+		Start: []byte{1},
+		End:   []byte{2},
+	}
+	sp2 := sp.Clone()
+	c.Assert(sp2.String(), check.Equals, "[01, 02)")
+	sp2.End[0] = 9
+	c.Assert(sp.String(), check.Equals, "[01, 02)")
+	c.Assert(sp2.String(), check.Equals, "[01, 09)")
 }

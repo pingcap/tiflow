@@ -27,11 +27,12 @@ func (s *captureSuite) TestMarshalUnmarshal(c *check.C) {
 	info := &CaptureInfo{
 		ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7890",
 		AdvertiseAddr: "127.0.0.1:8300",
+		Version:       "dev",
 	}
-	expected := []byte(`{"id":"9ff52aca-aea6-4022-8ec4-fbee3f2c7890","address":"127.0.0.1:8300"}`)
+	expected := `{"id":"9ff52aca-aea6-4022-8ec4-fbee3f2c7890","address":"127.0.0.1:8300","version":"dev"}`
 	data, err := info.Marshal()
 	c.Assert(err, check.IsNil)
-	c.Assert(data, check.DeepEquals, expected)
+	c.Assert(string(data), check.Equals, expected)
 	decodedInfo := &CaptureInfo{}
 	err = decodedInfo.Unmarshal(data)
 	c.Assert(err, check.IsNil)

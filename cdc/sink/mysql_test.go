@@ -205,17 +205,157 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		for _, txn := range tc.txns {
 			w.appendTxn(cctx, txn)
 		}
+		var wg sync.WaitGroup
+		w.appendFinishTxn(&wg)
 		// ensure all txns are fetched from txn channel in sink worker
 		time.Sleep(time.Millisecond * 100)
 		notifier.Notify()
-		w.waitAllTxnsExecuted()
+		wg.Wait()
 		cancel()
-		c.Assert(errg.Wait(), check.IsNil)
+		c.Assert(errors.Cause(errg.Wait()), check.Equals, context.Canceled)
 		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
 		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
 	}
+}
+
+func (s MySQLSinkSuite) TestMySQLSinkWorkerExitWithError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	txns1 := []*model.SingleTableTxn{
+		{
+			CommitTs: 1,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+		},
+		{
+			CommitTs: 2,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+		},
+		{
+			CommitTs: 3,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
+		},
+		{
+			CommitTs: 4,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
+		},
+	}
+	txns2 := []*model.SingleTableTxn{
+		{
+			CommitTs: 5,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+		},
+		{
+			CommitTs: 6,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 6}},
+		},
+	}
+	maxTxnRow := 1
+	ctx := context.Background()
+
+	errExecFailed := errors.New("sink worker exec failed")
+	notifier := new(notify.Notifier)
+	cctx, cancel := context.WithCancel(ctx)
+	receiver, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
+		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		receiver,
+		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+			return errExecFailed
+		})
+	errg, cctx := errgroup.WithContext(cctx)
+	errg.Go(func() error {
+		return w.run(cctx)
+	})
+	// txn in txns1 will be sent to worker txnCh
+	for _, txn := range txns1 {
+		w.appendTxn(cctx, txn)
+	}
+
+	// simulate notify sink worker to flush existing txns
+	var wg sync.WaitGroup
+	w.appendFinishTxn(&wg)
+	time.Sleep(time.Millisecond * 100)
+	// txn in txn2 will be blocked since the worker has exited
+	for _, txn := range txns2 {
+		w.appendTxn(cctx, txn)
+	}
+	notifier.Notify()
+
+	// simulate sink shutdown and send closed singal to sink worker
+	w.closedCh <- struct{}{}
+	w.cleanup()
+
+	// the flush notification wait group should be done
+	wg.Wait()
+
+	cancel()
+	c.Assert(errg.Wait(), check.Equals, errExecFailed)
+}
+
+func (s MySQLSinkSuite) TestMySQLSinkWorkerExitCleanup(c *check.C) {
+	defer testleak.AfterTest(c)()
+	txns1 := []*model.SingleTableTxn{
+		{
+			CommitTs: 1,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
+		},
+		{
+			CommitTs: 2,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
+		},
+	}
+	txns2 := []*model.SingleTableTxn{
+		{
+			CommitTs: 5,
+			Rows:     []*model.RowChangedEvent{{CommitTs: 5}},
+		},
+	}
+
+	maxTxnRow := 1
+	ctx := context.Background()
+
+	errExecFailed := errors.New("sink worker exec failed")
+	notifier := new(notify.Notifier)
+	cctx, cancel := context.WithCancel(ctx)
+	receiver, err := notifier.NewReceiver(-1)
+	c.Assert(err, check.IsNil)
+	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
+		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		receiver,
+		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+			return errExecFailed
+		})
+	errg, cctx := errgroup.WithContext(cctx)
+	errg.Go(func() error {
+		err := w.run(cctx)
+		return err
+	})
+	for _, txn := range txns1 {
+		w.appendTxn(cctx, txn)
+	}
+
+	// sleep to let txns flushed by tick
+	time.Sleep(time.Millisecond * 100)
+
+	// simulate more txns are sent to txnCh after the sink worker run has exited
+	for _, txn := range txns2 {
+		w.appendTxn(cctx, txn)
+	}
+	var wg sync.WaitGroup
+	w.appendFinishTxn(&wg)
+	notifier.Notify()
+
+	// simulate sink shutdown and send closed singal to sink worker
+	w.closedCh <- struct{}{}
+	w.cleanup()
+
+	// the flush notification wait group should be done
+	wg.Wait()
+
+	cancel()
+	c.Assert(errg.Wait(), check.Equals, errExecFailed)
 }
 
 func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
@@ -1035,31 +1175,33 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	c.Assert(err, check.IsNil)
 
-	err = retry.Run(time.Millisecond*20, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, uint64(2))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(2) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
 	c.Assert(err, check.IsNil)
 
-	err = retry.Run(time.Millisecond*20, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, uint64(4))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(4) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
 	c.Assert(err, check.IsNil)
 
 	err = sink.Close()
 	c.Assert(err, check.IsNil)
 }
 
-func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
+func (s MySQLSinkSuite) TestExecDMLRollbackErrDatabaseNotExists(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	rows := []*model.RowChangedEvent{
@@ -1080,8 +1222,9 @@ func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
 	errDatabaseNotExists := &dmysql.MySQLError{
 		Number: uint16(infoschema.ErrDatabaseNotExists.Code()),
 	}
+
 	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
 			dbIndex++
 		}()
@@ -1094,18 +1237,16 @@ func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		c.Assert(err, check.IsNil)
-		for i := 0; i < defaultDMLMaxRetryTime+1; i++ {
-			mock.ExpectBegin()
-			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
-				WithArgs(1, 2).
-				WillReturnError(errDatabaseNotExists)
-			mock.ExpectRollback()
-		}
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+			WithArgs(1, 2).
+			WillReturnError(errDatabaseNotExists)
+		mock.ExpectRollback()
 		mock.ExpectClose()
 		return db, nil
 	}
 	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
 		getDBConnImpl = backupGetDBConn
 	}()
@@ -1123,6 +1264,144 @@ func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
 
 	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
 	c.Assert(errors.Cause(err), check.Equals, errDatabaseNotExists)
+
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func (s MySQLSinkSuite) TestExecDMLRollbackErrTableNotExists(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	rows := []*model.RowChangedEvent{
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			},
+		},
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+			},
+		},
+	}
+
+	errTableNotExists := &dmysql.MySQLError{
+		Number: uint16(infoschema.ErrTableNotExists.Code()),
+	}
+
+	dbIndex := 0
+	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+			WithArgs(1, 2).
+			WillReturnError(errTableNotExists)
+		mock.ExpectRollback()
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
+
+	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	c.Assert(errors.Cause(err), check.Equals, errTableNotExists)
+
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func (s MySQLSinkSuite) TestExecDMLRollbackErrRetryable(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	rows := []*model.RowChangedEvent{
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			},
+		},
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+			},
+		},
+	}
+
+	errLockDeadlock := &dmysql.MySQLError{
+		Number: mysql.ErrLockDeadlock,
+	}
+
+	dbIndex := 0
+	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		for i := 0; i < defaultDMLMaxRetryTime; i++ {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+				WithArgs(1, 2).
+				WillReturnError(errLockDeadlock)
+			mock.ExpectRollback()
+		}
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
+
+	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	c.Assert(errors.Cause(err), check.Equals, errLockDeadlock)
 
 	err = sink.Close()
 	c.Assert(err, check.IsNil)

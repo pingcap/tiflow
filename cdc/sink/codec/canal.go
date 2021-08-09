@@ -372,7 +372,7 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	return NewMQMessage(nil, b, e.CommitTs), nil
+	return newDDLMQMessage(ProtocolCanal, nil, b, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -390,7 +390,7 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	if err != nil {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
-	ret := NewMQMessage(nil, value, 0)
+	ret := NewMQMessage(ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
 	d.messages.Reset()
 	d.resetPacket()
 	return []*MQMessage{ret}

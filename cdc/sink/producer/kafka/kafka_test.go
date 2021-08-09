@@ -22,6 +22,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -108,13 +109,19 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	for i := 0; i < 100; i++ {
-		err = producer.SendMessage(ctx, []byte("test-key-1"), []byte("test-value"), int32(0))
+		err = producer.SendMessage(ctx, &codec.MQMessage{
+			Key:   []byte("test-key-1"),
+			Value: []byte("test-value"),
+		}, int32(0))
 		c.Assert(err, check.IsNil)
-		err = producer.SendMessage(ctx, []byte("test-key-1"), []byte("test-value"), int32(1))
+		err = producer.SendMessage(ctx, &codec.MQMessage{
+			Key:   []byte("test-key-1"),
+			Value: []byte("test-value"),
+		}, int32(1))
 		c.Assert(err, check.IsNil)
 	}
 
-	// In TiCDC logic, resovled ts event will always notify the flush loop. Here we
+	// In TiCDC logic, resolved ts event will always notify the flush loop. Here we
 	// trigger the flushedNotifier periodically to prevent the flush loop block.
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -149,7 +156,10 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	err = producer.Flush(ctx)
 	c.Assert(err, check.IsNil)
 
-	err = producer.SyncBroadcastMessage(ctx, []byte("test-broadcast"), nil)
+	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
+		Key:   []byte("test-broadcast"),
+		Value: nil,
+	})
 	c.Assert(err, check.IsNil)
 
 	err = producer.Close()
@@ -161,11 +171,17 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	wg.Wait()
 
 	// check send messages when context is canceled or producer closed
-	err = producer.SendMessage(ctx, []byte("cancel"), nil, int32(0))
+	err = producer.SendMessage(ctx, &codec.MQMessage{
+		Key:   []byte("cancel"),
+		Value: nil,
+	}, int32(0))
 	if err != nil {
 		c.Assert(err, check.Equals, context.Canceled)
 	}
-	err = producer.SyncBroadcastMessage(ctx, []byte("cancel"), nil)
+	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
+		Key:   []byte("cancel"),
+		Value: nil,
+	})
 	if err != nil {
 		c.Assert(err, check.Equals, context.Canceled)
 	}
@@ -269,6 +285,22 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	}
 	_, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
+
+	saslConfig := NewKafkaConfig()
+	saslConfig.Version = "2.6.0"
+	saslConfig.ClientID = "test-sasl-scram"
+	saslConfig.SaslScram = &security.SaslScram{
+		SaslUser:      "user",
+		SaslPassword:  "password",
+		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
+	}
+
+	cfg, err := newSaramaConfigImpl(ctx, saslConfig)
+	c.Assert(err, check.IsNil)
+	c.Assert(cfg, check.NotNil)
+	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
+	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
+	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {

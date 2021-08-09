@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -104,6 +105,7 @@ func newMqSink(
 			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
 			avroEncoder.SetKeySchemaManager(keySchemaManager)
 			avroEncoder.SetValueSchemaManager(valueSchemaManager)
+			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
 	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
@@ -231,7 +233,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if msg == nil {
 		return nil
 	}
-	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
 
@@ -255,7 +257,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
-	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
 
@@ -299,7 +301,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			}
 
 			for _, msg := range messages {
-				err := k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedAsyncWrite, partition)
+				err := k.writeToProducer(ctx, msg, codec.EncoderNeedAsyncWrite, partition)
 				if err != nil {
 					return 0, err
 				}
@@ -363,27 +365,27 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	}
 }
 
-func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, op codec.EncoderResult, partition int32) error {
+func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, op codec.EncoderResult, partition int32) error {
 	switch op {
 	case codec.EncoderNeedAsyncWrite:
 		if partition >= 0 {
-			return k.mqProducer.SendMessage(ctx, key, value, partition)
+			return k.mqProducer.SendMessage(ctx, message, partition)
 		}
-		return cerror.ErrAsyncBroadcaseNotSupport.GenWithStackByArgs()
+		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
-			err := k.mqProducer.SendMessage(ctx, key, value, partition)
+			err := k.mqProducer.SendMessage(ctx, message, partition)
 			if err != nil {
 				return err
 			}
 			return k.mqProducer.Flush(ctx)
 		}
-		return k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+		return k.mqProducer.SyncBroadcastMessage(ctx, message)
 	}
 
 	log.Warn("writeToProducer called with no-op",
-		zap.ByteString("key", key),
-		zap.ByteString("value", value),
+		zap.ByteString("key", message.Key),
+		zap.ByteString("value", message.Value),
 		zap.Int32("partition", partition))
 	return nil
 }
@@ -458,6 +460,21 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	s = sinkURI.Query().Get("key")
 	if s != "" {
 		config.Credential.KeyPath = s
+	}
+
+	s = sinkURI.Query().Get("sasl-user")
+	if s != "" {
+		config.SaslScram.SaslUser = s
+	}
+
+	s = sinkURI.Query().Get("sasl-password")
+	if s != "" {
+		config.SaslScram.SaslPassword = s
+	}
+
+	s = sinkURI.Query().Get("sasl-mechanism")
+	if s != "" {
+		config.SaslScram.SaslMechanism = s
 	}
 
 	s = sinkURI.Query().Get("auto-create-topic")

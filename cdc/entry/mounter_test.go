@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/util/testkit"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -254,7 +255,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 		tk.MustExec(insertSQL, params...)
 	}
 
-	ver, err := store.CurrentVersion()
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	mounter := NewMounter(scheamStorage, 1, false).(*mounterImpl)
@@ -384,7 +385,7 @@ func walkTableSpanInStore(c *check.C, store tidbkv.Storage, tableID int64, f fun
 	txn, err := store.Begin()
 	c.Assert(err, check.IsNil)
 	defer txn.Rollback() //nolint:errcheck
-	tableSpan := regionspan.GetTableSpan(tableID, false)
+	tableSpan := regionspan.GetTableSpan(tableID)
 	kvIter, err := txn.Iter(tableSpan.Start, tableSpan.End)
 	c.Assert(err, check.IsNil)
 	defer kvIter.Close()

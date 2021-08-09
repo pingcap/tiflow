@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -37,16 +36,21 @@ type regionStatefulEvent struct {
 	changeEvent *cdcpb.Event
 	resolvedTs  *cdcpb.ResolvedTs
 	state       *regionFeedState
+
+	// regionID is used for load balancer, we don't use fileds in state to reduce lock usage
+	regionID uint64
+
+	// finishedCounter is used to mark events that are sent from a give region
+	// worker to this worker(one of the workers in worker pool) are all processed.
+	finishedCounter *int32
 }
 
 func (s *eventFeedSession) sendRegionChangeEventV2(
 	ctx context.Context,
-	g *errgroup.Group,
 	event *cdcpb.Event,
 	worker *regionWorker,
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
-	limiter *rate.Limiter,
 ) error {
 	state, ok := worker.getRegionState(event.RegionId)
 	// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
@@ -78,29 +82,15 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		// Firstly load the region info.
 		state, ok = pendingRegions.take(event.RequestId)
 		if !ok {
-			log.Error("received an event but neither pending region nor running region was found",
+			log.Warn("drop event due to region feed is removed",
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("requestID", event.RequestId),
 				zap.String("addr", addr))
-			return cerror.ErrNoPendingRegion.GenWithStackByArgs(event.RegionId, event.RequestId, addr)
+			return nil
 		}
 
 		state.start()
-		// Then spawn the goroutine to process messages of this region.
 		worker.setRegionState(event.RegionId, state)
-
-		// send resolved event when starting a single event feed
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case s.eventCh <- &model.RegionFeedEvent{
-			RegionID: state.sri.verID.GetID(),
-			Resolved: &model.ResolvedSpan{
-				Span:       state.sri.span,
-				ResolvedTs: state.sri.ts,
-			},
-		}:
-		}
 	} else if state.isStopped() {
 		log.Warn("drop event due to region feed stopped",
 			zap.Uint64("regionID", event.RegionId),
@@ -114,6 +104,7 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 		return ctx.Err()
 	case worker.inputCh <- &regionStatefulEvent{
 		changeEvent: event,
+		regionID:    event.RegionId,
 		state:       state,
 	}:
 	}
@@ -122,7 +113,6 @@ func (s *eventFeedSession) sendRegionChangeEventV2(
 
 func (s *eventFeedSession) sendResolvedTsV2(
 	ctx context.Context,
-	g *errgroup.Group,
 	resolvedTs *cdcpb.ResolvedTs,
 	worker *regionWorker,
 	addr string,
@@ -131,7 +121,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 		state, ok := worker.getRegionState(regionID)
 		if ok {
 			if state.isStopped() {
-				log.Warn("drop resolved ts due to region feed stopped",
+				log.Debug("drop resolved ts due to region feed stopped",
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", state.requestID),
 					zap.String("addr", addr))
@@ -140,6 +130,7 @@ func (s *eventFeedSession) sendResolvedTsV2(
 			select {
 			case worker.inputCh <- &regionStatefulEvent{
 				resolvedTs: resolvedTs,
+				regionID:   regionID,
 				state:      state,
 			}:
 			case <-ctx.Done():
@@ -171,20 +162,19 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	defer func() {
 		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
+		failpoint.Inject("kvClientStreamCloseDelay", nil)
+
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
-			})
+			}, true /* revokeToken */)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return
 			}
 		}
-		s.workersLock.Lock()
-		delete(s.workers, addr)
-		s.workersLock.Unlock()
 	}()
 
 	captureAddr := util.CaptureAddrFromCtx(ctx)
@@ -193,17 +183,11 @@ func (s *eventFeedSession) receiveFromStreamV2(
 
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
-	worker := &regionWorker{
-		session:        s,
-		limiter:        limiter,
-		inputCh:        make(chan *regionStatefulEvent, 1024),
-		outputCh:       s.eventCh,
-		regionStates:   make(map[uint64]*regionFeedState),
-		enableOldValue: s.enableOldValue,
-	}
-	s.workersLock.Lock()
-	s.workers[addr] = worker
-	s.workersLock.Unlock()
+	worker := newRegionWorker(s, limiter, addr)
+
+	defer func() {
+		worker.evictAllRegions() //nolint:errcheck
+	}()
 
 	g.Go(func() error {
 		return worker.run(ctx)
@@ -212,13 +196,19 @@ func (s *eventFeedSession) receiveFromStreamV2(
 	for {
 		cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientStreamRecvError", func() {
-			err = errors.New("injected stream recv error")
+		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
+			if op.(string) == "error" {
+				worker.inputCh <- nil
+			}
 		})
-		if err == io.EOF {
-			close(worker.inputCh)
-			return nil
-		}
+		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+			errStr := msg.(string)
+			if errStr == io.EOF.Error() {
+				err = io.EOF
+			} else {
+				err = errors.New(errStr)
+			}
+		})
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(
@@ -227,7 +217,7 @@ func (s *eventFeedSession) receiveFromStreamV2(
 					zap.Uint64("storeID", storeID),
 				)
 			} else {
-				log.Error(
+				log.Warn(
 					"failed to receive from stream",
 					zap.String("addr", addr),
 					zap.Uint64("storeID", storeID),
@@ -270,14 +260,14 @@ func (s *eventFeedSession) receiveFromStreamV2(
 		}
 
 		for _, event := range cevent.Events {
-			err = s.sendRegionChangeEventV2(ctx, g, event, worker, pendingRegions, addr, limiter)
+			err = s.sendRegionChangeEventV2(ctx, event, worker, pendingRegions, addr)
 			if err != nil {
 				return err
 			}
 		}
 		if cevent.ResolvedTs != nil {
 			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			err = s.sendResolvedTsV2(ctx, g, cevent.ResolvedTs, worker, addr)
+			err = s.sendResolvedTsV2(ctx, cevent.ResolvedTs, worker, addr)
 			if err != nil {
 				return err
 			}

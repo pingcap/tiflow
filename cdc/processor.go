@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -42,7 +41,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -52,20 +51,18 @@ import (
 )
 
 const (
-	// defaultMemBufferCapacity is the default memory buffer per change feed.
-	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
 	defaultSyncResolvedBatch = 1024
 
 	schemaStorageGCLag = time.Minute * 20
+
+	maxTries = 3
 )
 
-type processor struct {
+type oldProcessor struct {
 	id           string
 	captureInfo  model.CaptureInfo
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
-	limitter     *puller.BlurResourceLimitter
 	stopped      int32
 
 	pdCli      pd.Client
@@ -78,7 +75,7 @@ type processor struct {
 	globalResolvedTs         uint64
 	localResolvedTs          uint64
 	checkpointTs             uint64
-	globalcheckpointTs       uint64
+	globalCheckpointTs       uint64
 	appliedLocalCheckpointTs uint64
 	flushCheckpointInterval  time.Duration
 
@@ -154,10 +151,9 @@ func newProcessor(
 	checkpointTs uint64,
 	errCh chan error,
 	flushCheckpointInterval time.Duration,
-) (*processor, error) {
+) (*oldProcessor, error) {
 	etcdCli := session.Client()
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
-	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts",
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
@@ -166,7 +162,7 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -188,9 +184,8 @@ func newProcessor(
 		return nil, err
 	}
 
-	p := &processor{
+	p := &oldProcessor{
 		id:            uuid.New().String(),
-		limitter:      limitter,
 		captureInfo:   captureInfo,
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
@@ -234,7 +229,7 @@ func newProcessor(
 	}
 
 	if err == nil {
-		p.globalcheckpointTs = info.CheckpointTs
+		p.globalCheckpointTs = info.CheckpointTs
 	}
 
 	for tableID, replicaInfo := range p.status.Tables {
@@ -243,7 +238,7 @@ func newProcessor(
 	return p, nil
 }
 
-func (p *processor) Run(ctx context.Context) {
+func (p *oldProcessor) Run(ctx context.Context) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	ddlPullerCtx, ddlPullerCancel :=
@@ -282,7 +277,7 @@ func (p *processor) Run(ctx context.Context) {
 }
 
 // wait blocks until all routines in processor are returned
-func (p *processor) wait() {
+func (p *oldProcessor) wait() {
 	err := p.wg.Wait()
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("processor wait error",
@@ -294,7 +289,7 @@ func (p *processor) wait() {
 	}
 }
 
-func (p *processor) writeDebugInfo(w io.Writer) {
+func (p *oldProcessor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "changefeedID:\n\t%s\ninfo:\n\t%s\nstatus:\n\t%+v\nposition:\n\t%s\n",
 		p.changefeedID, p.changefeed.String(), p.status, p.position.String())
 
@@ -311,11 +306,11 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
-func (p *processor) positionWorker(ctx context.Context) error {
+func (p *oldProcessor) positionWorker(ctx context.Context) error {
 	lastFlushTime := time.Now()
 	retryFlushTaskStatusAndPosition := func() error {
 		t0Update := time.Now()
-		err := retry.Run(500*time.Millisecond, 3, func() error {
+		err := retry.Do(ctx, func() error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
@@ -328,11 +323,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 					logError("update info failed", util.ZapFieldChangefeed(ctx), errField)
 				}
 				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
-					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
+					return cerror.ErrAdminStopProcessor.FastGenByArgs()
 				}
 			}
 			return inErr
-		})
+		}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryable))
 		updateInfoDuration.
 			WithLabelValues(p.captureInfo.AdvertiseAddr).
 			Observe(time.Since(t0Update).Seconds())
@@ -424,7 +419,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) ddlPullWorker(ctx context.Context) error {
+func isRetryable(err error) bool {
+	return cerror.IsRetryableError(err) && cerror.ErrAdminStopProcessor.NotEqual(err)
+}
+
+func (p *oldProcessor) ddlPullWorker(ctx context.Context) error {
 	ddlRawKVCh := puller.SortOutput(ctx, p.ddlPuller.Output())
 	var ddlRawKV *model.RawKVEntry
 	for {
@@ -454,7 +453,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) workloadWorker(ctx context.Context) error {
+func (p *oldProcessor) workloadWorker(ctx context.Context) error {
 	t := time.NewTicker(10 * time.Second)
 	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID, nil)
 	if err != nil {
@@ -482,7 +481,7 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) flushTaskPosition(ctx context.Context) error {
+func (p *oldProcessor) flushTaskPosition(ctx context.Context) error {
 	failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
 		time.Sleep(1 * time.Second)
 	})
@@ -507,7 +506,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 // If local cached task status is outdated (caused by new table scheduling),
 // update it to latest value, and force update task position, since add new
 // tables may cause checkpoint ts fallback in processor.
-func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
+func (p *oldProcessor) flushTaskStatusAndPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
@@ -559,7 +558,7 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 	return p.flushTaskPosition(ctx)
 }
 
-func (p *processor) removeTable(tableID int64) {
+func (p *oldProcessor) removeTable(tableID int64) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
@@ -581,7 +580,7 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
+func (p *oldProcessor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
 	for tableID, opt := range status.Operation {
 		if opt.TableProcessed() {
 			continue
@@ -660,7 +659,7 @@ done:
 }
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
-func (p *processor) globalStatusWorker(ctx context.Context) error {
+func (p *oldProcessor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started", util.ZapFieldChangefeed(ctx))
 
 	var (
@@ -672,7 +671,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	)
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
-		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
+		atomic.StoreUint64(&p.globalCheckpointTs, changefeedStatus.CheckpointTs)
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return
@@ -757,18 +756,19 @@ func createSchemaStorage(
 	return entry.NewSchemaStorage(meta, checkpointTs, filter, forceReplicate)
 }
 
-func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
+func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
 	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
+
+	err := retry.Do(ctx, func() error {
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
 			tableName = name.QuoteString()
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
+	}, retry.WithBackoffBaseDelay(5), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if err != nil {
 		log.Warn("get table name for metric", util.ZapFieldChangefeed(ctx), zap.String("error", err.Error()))
 		tableName = strconv.Itoa(int(tableID))
@@ -779,15 +779,15 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		return
 	}
 
-	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+	globalCheckpointTs := atomic.LoadUint64(&p.globalCheckpointTs)
 
-	if replicaInfo.StartTs < globalcheckpointTs {
-		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+	if replicaInfo.StartTs < globalCheckpointTs {
+		// use Warn instead of Panic in case that p.globalCheckpointTs has not been initialized.
 		// The cdc_state_checker will catch a real inconsistency in integration tests.
 		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("checkpoint", globalCheckpointTs),
 			zap.Uint64("startTs", replicaInfo.StartTs))
 	}
 
@@ -811,16 +811,17 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
-		enableOldValue := p.changefeed.Config.EnableOldValue
-		span := regionspan.GetTableSpan(tableID, enableOldValue)
+		span := regionspan.GetTableSpan(tableID)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
 			p.sendError(err)
 			return nil
 		}
+		// NOTICE: always pull the old value internally
+		// See also: TODO(hi-rustin): add issue link here.
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
-			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
-			enableOldValue)
+			replicaInfo.StartTs, []regionspan.Span{span},
+			true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -832,31 +833,29 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
-		case model.SortInFile, model.SortUnified:
-			err := util.IsDirAndWritable(p.changefeed.SortDir)
-			if err != nil {
-				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
-					if err != nil {
-						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
-						return nil
-					}
-				} else {
-					p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check"))
-					return nil
-				}
-			}
-
+		case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 			if p.changefeed.Engine == model.SortInFile {
-				sorter = puller.NewFileSorter(p.changefeed.SortDir)
-			} else {
-				// Unified Sorter
-				sorter = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName, util.CaptureAddrFromCtx(ctx))
+				log.Warn("File sorter is obsolete. Please revise your changefeed settings and use unified sorter",
+					util.ZapFieldChangefeed(ctx))
+			}
+			err := psorter.UnifiedSorterCheckDir(p.changefeed.SortDir)
+			if err != nil {
+				p.sendError(errors.Trace(err))
+				return nil
+			}
+			sorter, err = psorter.NewUnifiedSorter(p.changefeed.SortDir, p.changefeedID, tableName, tableID, util.CaptureAddrFromCtx(ctx))
+			if err != nil {
+				p.sendError(errors.Trace(err))
+				return nil
 			}
 		default:
 			p.sendError(cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine))
 			return nil
 		}
+		failpoint.Inject("ProcessorAddTableError", func() {
+			p.sendError(errors.New("processor add table injected error"))
+			failpoint.Return(nil)
+		})
 		go func() {
 			err := sorter.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -909,9 +908,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
+const maxLagWithCheckpointTs = (30 * 1000) << 18 // 30s
+
 // sorterConsume receives sorted PolymorphicEvent from sorter of each table and
 // sends to processor's output chan
-func (p *processor) sorterConsume(
+func (p *oldProcessor) sorterConsume(
 	ctx context.Context,
 	tableID int64,
 	tableName string,
@@ -921,7 +922,7 @@ func (p *processor) sorterConsume(
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 ) {
-	var lastResolvedTs uint64
+	var lastResolvedTs, lastCheckPointTs uint64
 	opDone := false
 	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
@@ -1001,7 +1002,7 @@ func (p *processor) sorterConsume(
 		return nil
 	}
 
-	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(1 * time.Second)
+	globalResolvedTsReceiver, err := p.globalResolvedTsNotifier.NewReceiver(500 * time.Millisecond)
 	if err != nil {
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- errors.Trace(err)
@@ -1010,6 +1011,40 @@ func (p *processor) sorterConsume(
 	}
 	defer globalResolvedTsReceiver.Stop()
 
+	sendResolvedTs2Sink := func() error {
+		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+		var minTs uint64
+		if localResolvedTs < globalResolvedTs {
+			minTs = localResolvedTs
+			log.Warn("the local resolved ts is less than the global resolved ts",
+				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		} else {
+			minTs = globalResolvedTs
+		}
+		if minTs == 0 {
+			return nil
+		}
+
+		checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
+		if err != nil {
+			if errors.Cause(err) != context.Canceled {
+				p.sendError(errors.Trace(err))
+			}
+			return err
+		}
+		lastCheckPointTs = checkpointTs
+
+		if checkpointTs < replicaInfo.StartTs {
+			checkpointTs = replicaInfo.StartTs
+		}
+
+		if checkpointTs != 0 {
+			atomic.StoreUint64(pCheckpointTs, checkpointTs)
+			p.localCheckpointTsNotifier.Notify()
+		}
+		return nil
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -1020,6 +1055,28 @@ func (p *processor) sorterConsume(
 		case pEvent := <-sorter.Output():
 			if pEvent == nil {
 				continue
+			}
+
+			for lastResolvedTs > maxLagWithCheckpointTs+lastCheckPointTs {
+				log.Debug("the lag between local checkpoint Ts and local resolved Ts is too lang",
+					zap.Uint64("resolvedTs", lastResolvedTs), zap.Uint64("lastCheckPointTs", lastCheckPointTs),
+					zap.Int64("tableID", tableID), util.ZapFieldChangefeed(ctx))
+				select {
+				case <-ctx.Done():
+					if ctx.Err() != context.Canceled {
+						p.sendError(errors.Trace(ctx.Err()))
+					}
+					return
+				case <-globalResolvedTsReceiver.C:
+					if err := sendResolvedTs2Sink(); err != nil {
+						// error is already sent to processor, so we can just ignore it
+						return
+					}
+				case <-checkDoneTicker.C:
+					if !opDone {
+						checkDone()
+					}
+				}
 			}
 
 			pEvent.SetUpFinishedChan()
@@ -1073,35 +1130,9 @@ func (p *processor) sorterConsume(
 				return
 			}
 		case <-globalResolvedTsReceiver.C:
-			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-			var minTs uint64
-			if localResolvedTs < globalResolvedTs {
-				minTs = localResolvedTs
-				log.Warn("the local resolved ts is less than the global resolved ts",
-					zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
-			} else {
-				minTs = globalResolvedTs
-			}
-			if minTs == 0 {
-				continue
-			}
-
-			checkpointTs, err := sink.FlushRowChangedEvents(ctx, minTs)
-			if err != nil {
-				if errors.Cause(err) != context.Canceled {
-					p.errCh <- errors.Trace(err)
-				}
+			if err := sendResolvedTs2Sink(); err != nil {
+				// error is already sent to processor, so we can just ignore it
 				return
-			}
-
-			if checkpointTs < replicaInfo.StartTs {
-				checkpointTs = replicaInfo.StartTs
-			}
-
-			if checkpointTs != 0 {
-				atomic.StoreUint64(pCheckpointTs, checkpointTs)
-				p.localCheckpointTsNotifier.Notify()
 			}
 		case <-checkDoneTicker.C:
 			if !opDone {
@@ -1113,7 +1144,7 @@ func (p *processor) sorterConsume(
 
 // pullerConsume receives RawKVEntry from a given puller and sends to sorter
 // for data sorting and mounter for data encode
-func (p *processor) pullerConsume(
+func (p *oldProcessor) pullerConsume(
 	ctx context.Context,
 	plr puller.Puller,
 	sorter puller.EventSorter,
@@ -1135,7 +1166,7 @@ func (p *processor) pullerConsume(
 	}
 }
 
-func (p *processor) stop(ctx context.Context) error {
+func (p *oldProcessor) stop(ctx context.Context) error {
 	log.Info("stop processor", zap.String("id", p.id), zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeedID))
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
@@ -1163,7 +1194,7 @@ func (p *processor) stop(ctx context.Context) error {
 	return p.sinkManager.Close()
 }
 
-func (p *processor) isStopped() bool {
+func (p *oldProcessor) isStopped() bool {
 	return atomic.LoadInt32(&p.stopped) == 1
 }
 
@@ -1180,7 +1211,7 @@ func runProcessor(
 	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
 	flushCheckpointInterval time.Duration,
-) (*processor, error) {
+) (*oldProcessor, error) {
 	opts := make(map[string]string, len(info.Opts)+2)
 	for k, v := range info.Opts {
 		opts[k] = v
@@ -1254,7 +1285,7 @@ func runProcessor(
 	return processor, nil
 }
 
-func (p *processor) sendError(err error) {
+func (p *oldProcessor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
