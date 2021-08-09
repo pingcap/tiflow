@@ -145,10 +145,6 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = s.startStatusHTTP()
-	if err != nil {
-		return err
-	}
 
 	kv.InitWorkerPool()
 	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
@@ -165,6 +161,12 @@ func (s *Server) Run(ctx context.Context) error {
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
 	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+
+	err = s.startStatusHTTP()
+	if err != nil {
+		return err
+	}
+
 	return s.run(ctx)
 }
 

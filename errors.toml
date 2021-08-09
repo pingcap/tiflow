@@ -541,6 +541,11 @@ error = '''
 owner encountered inconsistent state. report a bug if this happens frequently. %s
 '''
 
+["CDC:ErrOwnerNotFound"]
+error = '''
+owner not found
+'''
+
 ["CDC:ErrOwnerSortDir"]
 error = '''
 owner sort dir
@@ -859,6 +864,11 @@ wrong table info in unflatten, table id %d, index table id: %d
 ["ErrConflictingFileLocks"]
 error = '''
 file lock conflict: %s
+'''
+
+["ErrRequestForwardErr"]
+error = '''
+request forward error, an request can only forward to owner one time 
 '''
 
 ["ErrSortDirLockError"]
