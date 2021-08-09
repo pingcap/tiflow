@@ -71,11 +71,6 @@ func handleOwnerResp(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
-		return
-	}
-
 	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
@@ -89,11 +84,6 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
-		return
-	}
-
 	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
@@ -136,11 +126,6 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 }
 
 func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
-		return
-	}
-
 	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
@@ -168,11 +153,6 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 }
 
 func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
-		return
-	}
-
 	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
@@ -213,11 +193,6 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
-		return
-	}
-
 	if s.capture == nil {
 		// for test only
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)

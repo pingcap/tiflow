@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,32 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package cli
 
 import (
-	"os"
-
-	"github.com/pingcap/ticdc/pkg/cmd/server"
-	"github.com/pingcap/ticdc/pkg/cmd/version"
+	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/spf13/cobra"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "cdc",
-	Short: "CDC",
-	Long:  `Change Data Capture`,
-}
-
-// Execute runs the root command
-func Execute() {
-	// Outputs cmd.Print to stdout.
-	rootCmd.SetOut(os.Stdout)
-
-	rootCmd.AddCommand(server.NewCmdServer())
-	rootCmd.AddCommand(version.NewCmdVersion())
-
-	if err := rootCmd.Execute(); err != nil {
-		rootCmd.Println(err)
-		os.Exit(1)
+// newCmdTso creates the `cli tso` command.
+func newCmdTso(f factory.Factory) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "tso",
+		Short: "Manage tso",
 	}
+
+	command.AddCommand(newCmdQueryTso(f))
+
+	return command
 }

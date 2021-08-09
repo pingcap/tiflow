@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -32,6 +33,16 @@ var _ = check.Suite(&ownerSuite{})
 
 type ownerSuite struct {
 }
+
+type mockGcManager struct {
+	GcManager
+}
+
+func (m *mockGcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
+}
+
+var _ GcManager = &mockGcManager{}
 
 func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &mockPDClient{updateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -90,6 +101,34 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
+
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+
+	removeJob := model.AdminJob{
+		CfID:  changefeedID,
+		Type:  model.AdminRemove,
+		Opts:  &model.AdminJobOption{ForceRemove: true},
+		Error: nil,
+	}
+
+	// this will make changefeed always meet ErrGCTTLExceeded
+	mockedGcManager := &mockGcManager{GcManager: owner.gcManager}
+	owner.gcManager = mockedGcManager
+
+	// this tick create remove changefeed patches
+	owner.EnqueueJob(removeJob)
+	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
+
+	// apply patches and update owner's in memory changefeed states
+	tester.MustApplyPatches()
+	_, err = owner.Tick(ctx, state)
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
 func (s *ownerSuite) TestStopChangefeed(c *check.C) {
