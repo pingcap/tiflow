@@ -75,7 +75,7 @@ function check_ts_block() {
     rts2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
     checkpoint2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
     if [[ "$rts1" != "null" ]] && [[ "$rts1" != "0" ]]; then
-        if [[  "$rts1" -e "$rts2" ]] || [[ "$checkpoint1" -e "$checkpoint2" ]]; then
+        if [[  "$rts1" -eq "$rts2" ]] || [[ "$checkpoint1" -eq "$checkpoint2" ]]; then
             echo "changefeed is blocking rts: ${rts1}->${rts2} checkpoint: ${checkpoint1}->${checkpoint2}"
             return
         fi
@@ -156,7 +156,7 @@ function run() {
     # block ddl
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=return(true)'
     cdc cli changefeed create -c="changefeed-ddl-block" --sink-uri="blackhole://"
-    ensure 5 check_ts_block "changefeed-ddl-block"
+    ensure 2 check_ts_block "changefeed-ddl-block"
 
     OLDIFS=$IFS
     IFS=""
