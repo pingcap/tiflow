@@ -52,7 +52,6 @@ var forceEnableOldValueProtocols = []string{
 // createChangefeedCommonOptions defines common changefeed flags.
 type createChangefeedCommonOptions struct {
 	noConfirm              bool
-	startTs                uint64
 	targetTs               uint64
 	sinkURI                string
 	configFile             string
@@ -80,7 +79,6 @@ func (o *createChangefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	}
 
 	cmd.PersistentFlags().BoolVar(&o.noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
-	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
 	cmd.PersistentFlags().Uint64Var(&o.targetTs, "target-ts", 0, "Target ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.sinkURI, "sink-uri", "", "sink uri")
 	cmd.PersistentFlags().StringVar(&o.configFile, "config", "", "Path of the configuration file")
@@ -108,13 +106,13 @@ func (o *createChangefeedCommonOptions) validateReplicaConfig(component string, 
 	return err
 }
 
-func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig) (ineligibleTables, eligibleTables []model.TableName, err error) {
+func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	meta, err := kv.GetSnapshotMeta(kvStore, o.startTs)
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -124,7 +122,7 @@ func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credent
 		return nil, nil, errors.Trace(err)
 	}
 
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, o.startTs, false /* explicitTables */)
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -159,6 +157,7 @@ type createChangefeedOptions struct {
 
 	changefeedID            string
 	disableGCSafePointCheck bool
+	startTs                 uint64
 }
 
 // newCreateChangefeedOptions creates new options for the `cli changefeed create` command.
@@ -178,6 +177,7 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	o.commonChangefeedOptions.addFlags(cmd)
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
+	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
 }
 
 // complete adapts from the command line args to the data and client required.
@@ -207,17 +207,17 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 		if o.commonChangefeedOptions.sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
 		}
-		if o.commonChangefeedOptions.startTs == 0 {
+		if o.startTs == 0 {
 			ts, logical, err := o.pdClient.GetTS(ctx)
 			if err != nil {
 				return nil, err
 			}
-			o.commonChangefeedOptions.startTs = oracle.ComposeTS(ts, logical)
+			o.startTs = oracle.ComposeTS(ts, logical)
 		}
 		if err := o.validateStartTs(ctx, o.changefeedID); err != nil {
 			return nil, err
 		}
-		if err := confirmLargeDataGap(ctx, o.pdClient, cmd, o.commonChangefeedOptions.noConfirm, o.commonChangefeedOptions.startTs); err != nil {
+		if err := confirmLargeDataGap(ctx, o.pdClient, cmd, o.commonChangefeedOptions.noConfirm, o.startTs); err != nil {
 			return nil, err
 		}
 		if err := o.validateTargetTs(); err != nil {
@@ -312,7 +312,7 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 		SinkURI:           o.commonChangefeedOptions.sinkURI,
 		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),
-		StartTs:           o.commonChangefeedOptions.startTs,
+		StartTs:           o.startTs,
 		TargetTs:          o.commonChangefeedOptions.targetTs,
 		Config:            cfg,
 		Engine:            o.commonChangefeedOptions.sortEngine,
@@ -343,7 +343,7 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 
 	if isCreate {
 		ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
-		ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(o.pdAddr, credential, cfg)
+		ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(o.pdAddr, credential, cfg, o.startTs)
 		if err != nil {
 			return nil, err
 		}
@@ -401,12 +401,12 @@ func (o *createChangefeedOptions) validateStartTs(ctx context.Context, changefee
 		return nil
 	}
 
-	return ticdcutil.CheckSafetyOfStartTs(ctx, o.pdClient, changefeedID, o.commonChangefeedOptions.startTs)
+	return ticdcutil.CheckSafetyOfStartTs(ctx, o.pdClient, changefeedID, o.startTs)
 }
 
 func (o *createChangefeedOptions) validateTargetTs() error {
-	if o.commonChangefeedOptions.targetTs > 0 && o.commonChangefeedOptions.targetTs <= o.commonChangefeedOptions.startTs {
-		return errors.Errorf("target-ts %d must be larger than start-ts: %d", o.commonChangefeedOptions.targetTs, o.commonChangefeedOptions.startTs)
+	if o.commonChangefeedOptions.targetTs > 0 && o.commonChangefeedOptions.targetTs <= o.startTs {
+		return errors.Errorf("target-ts %d must be larger than start-ts: %d", o.commonChangefeedOptions.targetTs, o.startTs)
 	}
 	return nil
 }

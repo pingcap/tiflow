@@ -33,6 +33,7 @@ type cyclicChangefeedOptions struct {
 	pdAddr     string
 	credential *security.Credential
 
+	startTs             uint64
 	cyclicUpstreamDSN   string
 	upstreamSslCaPath   string
 	upstreamSslCertPath string
@@ -55,6 +56,7 @@ func (o *cyclicChangefeedOptions) getUpstreamCredential() *security.Credential {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *cyclicChangefeedOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upsteam TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
 	cmd.PersistentFlags().StringVar(&o.upstreamSslCaPath, "cyclic-upstream-ssl-ca", "", "CA certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&o.upstreamSslCertPath, "cyclic-upstream-ssl-cert", "", "Certificate path for TLS connection")
@@ -91,9 +93,9 @@ func (o *cyclicChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	o.createCommonOptions.startTs = oracle.ComposeTS(ts, logical)
+	o.startTs = oracle.ComposeTS(ts, logical)
 
-	_, eligibleTables, err := o.createCommonOptions.validateTables(o.pdAddr, o.credential, cfg)
+	_, eligibleTables, err := o.createCommonOptions.validateTables(o.pdAddr, o.credential, cfg, o.startTs)
 	if err != nil {
 		return err
 	}

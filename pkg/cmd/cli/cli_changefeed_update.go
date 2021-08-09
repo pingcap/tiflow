@@ -129,7 +129,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 			info.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			info.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
-		case "pd", "tz", "start-ts", "changefeed-id", "no-confirm":
+		case "tz", "changefeed-id", "no-confirm":
 			// do nothing
 		default:
 			// use this default branch to prevent new added parameter is not added
