@@ -15,14 +15,17 @@
 
 package redo
 
+// LogMeta ...
 type LogMeta struct {
 	CheckPointTs uint64           `msg:"checkPointTs"`
 	ResolvedTs   uint64           `msg:"resolvedTs"`
 	Offsets      map[int64]uint64 `msg:"offsets"`
 }
 
+// ActionType ...
 type ActionType byte
 
+// DDLEvent mapping to model.DDLEvent
 type DDLEvent struct {
 	StartTs      uint64           `msg:"startTs"`
 	CommitTs     uint64           `msg:"commitTs"`
@@ -32,11 +35,13 @@ type DDLEvent struct {
 	Type         ActionType       `msg:"type"`
 }
 
+// ColumnInfo ...
 type ColumnInfo struct {
 	Name string `msg:"name"`
 	Type byte   `msg:"type"`
 }
 
+// SimpleTableInfo ...
 type SimpleTableInfo struct {
 	// db name
 	Schema string `msg:"schema"`
@@ -47,6 +52,7 @@ type SimpleTableInfo struct {
 	ColumnInfo []*ColumnInfo `msg:"columnInfo"`
 }
 
+// RowChangedEvent mapping to model.RowChangedEvent
 type RowChangedEvent struct {
 	StartTs          uint64     `msg:"startTs"`
 	CommitTs         uint64     `msg:"commitTs"`
@@ -59,8 +65,10 @@ type RowChangedEvent struct {
 	ApproximateSize  int64      `msg:"approximateSize"`
 }
 
+// ColumnFlagType ...
 type ColumnFlagType uint64
 
+// Column ...
 type Column struct {
 	Name  string         `msg:"name"`
 	Type  byte           `msg:"type"`
@@ -68,6 +76,7 @@ type Column struct {
 	Value interface{}    `msg:"value"`
 }
 
+// TableName ...
 type TableName struct {
 	Schema      string `msg:"db-name"`
 	Table       string `msg:"tbl-name"`

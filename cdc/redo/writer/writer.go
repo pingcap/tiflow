@@ -28,12 +28,19 @@ import (
 	"go.uber.org/multierr"
 )
 
+// Writer ...
 type Writer interface {
+	// WriteLog ...
 	WriteLog(ctx context.Context, tableID int64, rows []*redo.RowChangedEvent) (offset uint64, err error)
+	// SendDDL ...
 	SendDDL(ctx context.Context, ddl *redo.DDLEvent) error
+	// 	FlushLog ...
 	FlushLog(ctx context.Context, tableID int64, ts uint64) error
+	// EmitCheckpointTs ...
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
+	// EmitResolvedTs ...
 	EmitResolvedTs(ctx context.Context, ts uint64) error
+	// GetCurrentOffset ...
 	GetCurrentOffset(ctx context.Context, tableIDs []int64) (offsets map[int64]uint64, err error)
 }
 
@@ -53,6 +60,7 @@ type LogWriterConfig struct {
 	flushIntervalInSec int64
 }
 
+// LogWriter ...
 type LogWriter struct {
 	cfg       *LogWriterConfig
 	rowWriter *writer
@@ -81,6 +89,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig, host, path string, 
 	return logWriter
 }
 
+// WriteLog implement WriteLog api
 func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.RowChangedEvent) (uint64, error) {
 	if len(rows) == 0 {
 		return 0, nil
@@ -125,6 +134,7 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 	return l.meta.Offsets[tableID]
 }
 
+// SendDDL implement SendDDL api
 func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 	select {
 	case <-ctx.Done():
@@ -146,6 +156,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 	return err
 }
 
+// FlushLog implement FlushLog api
 func (l *LogWriter) FlushLog(ctx context.Context, tableID int64, ts uint64) error {
 	if err := l.flush(); err != nil {
 		return err
@@ -154,6 +165,7 @@ func (l *LogWriter) FlushLog(ctx context.Context, tableID int64, ts uint64) erro
 	return nil
 }
 
+// EmitCheckpointTs implement EmitCheckpointTs api
 func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	select {
 	case <-ctx.Done():
@@ -168,6 +180,7 @@ func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return l.flushLogMeta()
 }
 
+// EmitResolvedTs implement EmitResolvedTs api
 func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	select {
 	case <-ctx.Done():
@@ -183,6 +196,7 @@ func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	return l.flushLogMeta()
 }
 
+// GetCurrentOffset implement GetCurrentOffset api
 func (l *LogWriter) GetCurrentOffset(ctx context.Context, tableIDs []int64) (map[int64]uint64, error) {
 	if len(tableIDs) == 0 {
 		return nil, nil

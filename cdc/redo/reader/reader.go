@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo"
 )
 
+// Reader ...
 type Reader interface {
 	ReadLog(ctx context.Context, tableID, offset int64) (log *redo.RowChangedEvent, err error)
 }
