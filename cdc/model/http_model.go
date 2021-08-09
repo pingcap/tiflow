@@ -14,11 +14,24 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/r3labs/diff"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 )
 
 // JSONTime used to wrap time into json format
@@ -38,7 +51,7 @@ type HTTPError struct {
 
 // NewHTTPError wrap a err into HTTPError
 func NewHTTPError(err error) HTTPError {
-	errCode, _ := errors.RFCCode(err)
+	errCode, _ := cerror.RFCCode(err)
 	return HTTPError{
 		Error: err.Error(),
 		Code:  string(errCode),
@@ -95,6 +108,218 @@ type ChangefeedConfig struct {
 	IgnoreTxnStartTs      []uint64           `json:"ignore_txn_start_ts"`
 	MounterWorkerNum      int                `json:"mounter_worker_num" default:"16"`
 	SinkConfig            *config.SinkConfig `json:"sink_config"`
+}
+
+// VerifyCreateChangefeedConfig verify ChangefeedConfig for create a changefeed
+func (changefeedConfig *ChangefeedConfig) VerifyCreateChangefeedConfig(ctx context.Context, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, pdClient pd.Client) (*ChangeFeedInfo, error) {
+	// verify sinkURI
+	if changefeedConfig.SinkURI == "" {
+		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs("sink-uri is empty, can't not create a changefeed without sink-uri")
+	}
+
+	// verify changefeedID
+	if err := ValidateChangefeedID(changefeedConfig.ID); err != nil {
+		return nil, err
+	}
+	_, _, err := etcdClient.GetChangeFeedStatus(ctx, changefeedConfig.ID)
+	if err != nil && err == cerror.ErrChangeFeedAlreadyExists {
+		return nil, err
+	}
+
+	// verify start-ts
+	if changefeedConfig.StartTS == 0 {
+		ts, logical, err := pdClient.GetTS(ctx)
+		if err != nil {
+			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+		}
+		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
+	}
+
+	if err = util.CheckSafetyOfStartTs(ctx, pdClient, changefeedConfig.ID, changefeedConfig.StartTS); err != nil {
+		if err != cerror.ErrStartTsBeforeGC {
+			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
+		}
+		return nil, err
+	}
+
+	// verify target-ts
+	if changefeedConfig.TargetTS > 0 && changefeedConfig.TargetTS <= changefeedConfig.StartTS {
+		return nil, cerror.ErrTargetTsBeforeStartTs.GenWithStackByArgs(changefeedConfig.TargetTS, changefeedConfig.StartTS)
+	}
+
+	// init replicaConfig
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.ForceReplicate = changefeedConfig.ForceReplicate
+	if changefeedConfig.MounterWorkerNum != 0 {
+		replicaConfig.Mounter.WorkerNum = changefeedConfig.MounterWorkerNum
+	}
+	if changefeedConfig.SinkConfig != nil {
+		replicaConfig.Sink = changefeedConfig.SinkConfig
+	}
+	if len(changefeedConfig.IgnoreTxnStartTs) != 0 {
+		replicaConfig.Filter.IgnoreTxnStartTs = changefeedConfig.IgnoreTxnStartTs
+	}
+	if len(changefeedConfig.FilterRules) != 0 {
+		replicaConfig.Filter.Rules = changefeedConfig.FilterRules
+	}
+
+	// set sortEngine and EnableOldValue
+	_, captureInfos, err := etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	if err != nil {
+		return nil, err
+	}
+	sortEngine := SortUnified
+	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
+		replicaConfig.EnableOldValue = false
+		log.Warn("The TiCDC cluster is built from unknown branch or less than 5.0.0-rc, the old-value are disabled by default.")
+		if !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
+			sortEngine = SortInMemory
+		}
+	}
+
+	// init ChangefeedInfo
+	info := &ChangeFeedInfo{
+		SinkURI:           changefeedConfig.SinkURI,
+		Opts:              make(map[string]string),
+		CreateTime:        time.Now(),
+		StartTs:           changefeedConfig.StartTS,
+		TargetTs:          changefeedConfig.TargetTS,
+		Config:            replicaConfig,
+		Engine:            sortEngine,
+		State:             StateNormal,
+		SyncPointEnabled:  false,
+		SyncPointInterval: 10 * time.Minute,
+		CreatorVersion:    version.ReleaseVersion,
+	}
+
+	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
+		ineligibleTables, _, err := changefeedConfig.verifyTables(kvStorage, replicaConfig, changefeedConfig.StartTS)
+		if err != nil {
+			return nil, err
+		}
+		if len(ineligibleTables) != 0 {
+			return nil, cerror.ErrTableIneligible.GenWithStackByArgs(ineligibleTables)
+		}
+	}
+
+	err = changefeedConfig.verifySink(ctx, info.SinkURI, info.Config, info.Opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
+}
+
+// VerifyUpdateChangefeedConfig verify ChangefeedConfig for update a changefeed
+func (changefeedConfig *ChangefeedConfig) VerifyUpdateChangefeedConfig(ctx context.Context, oldInfo *ChangeFeedInfo) (*ChangeFeedInfo, error) {
+	newInfo, err := oldInfo.Clone()
+	if err != nil {
+		return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
+	}
+	// verify target_ts
+	if changefeedConfig.TargetTS != 0 {
+		if changefeedConfig.TargetTS <= newInfo.StartTs {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStack("can not update target-ts:%d less than start-ts:%d", changefeedConfig.TargetTS, newInfo.StartTs)
+		}
+		newInfo.TargetTs = changefeedConfig.TargetTS
+	}
+
+	// verify rules
+	if len(changefeedConfig.FilterRules) != 0 {
+		newInfo.Config.Filter.Rules = changefeedConfig.FilterRules
+		_, err = filter.VerifyRules(newInfo.Config)
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
+		}
+	}
+
+	if len(changefeedConfig.IgnoreTxnStartTs) != 0 {
+		newInfo.Config.Filter.IgnoreTxnStartTs = changefeedConfig.IgnoreTxnStartTs
+	}
+
+	if changefeedConfig.MounterWorkerNum != 0 {
+		newInfo.Config.Mounter.WorkerNum = changefeedConfig.MounterWorkerNum
+	}
+
+	if changefeedConfig.SinkConfig != nil {
+		newInfo.Config.Sink = changefeedConfig.SinkConfig
+	}
+
+	// verify sink_uri
+	if changefeedConfig.SinkURI != "" {
+		newInfo.SinkURI = changefeedConfig.SinkURI
+		err = changefeedConfig.verifySink(ctx, changefeedConfig.SinkURI, newInfo.Config, newInfo.Opts)
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+	}
+
+	if !diff.Changed(oldInfo, newInfo) {
+		return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
+	}
+
+	return newInfo, nil
+}
+
+func (changefeedConfig *ChangefeedConfig) verifySink(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string) error {
+	filter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return err
+	}
+	errCh := make(chan error)
+	// TODO: find a better way to verify a sinkURI is valid
+	s, err := sink.NewSink(ctx, "sink-verify", sinkURI, filter, cfg, opts, errCh)
+	if err != nil {
+		return err
+	}
+	err = s.Close()
+	if err != nil {
+		return err
+	}
+	select {
+	case err = <-errCh:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+	return nil
+}
+
+func (changefeedConfig *ChangefeedConfig) verifyTables(kvStorage tidbkv.Storage, replicaConfig *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []TableName, err error) {
+	meta, err := kv.GetSnapshotMeta(kvStorage, startTs)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	filter, err := filter.NewFilter(replicaConfig)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	for tID, tableName := range snap.CloneTables() {
+		tableInfo, exist := snap.TableByID(tID)
+		if !exist {
+			return nil, nil, errors.NotFoundf("table %d", tID)
+		}
+		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
+			continue
+		}
+		if !tableInfo.IsEligible(false /* forceReplicate */) {
+			ineligibleTables = append(ineligibleTables, tableName)
+		} else {
+			eligibleTables = append(eligibleTables, tableName)
+		}
+	}
+	return
 }
 
 // ProcessorCommonInfo holds the common info of a processor
