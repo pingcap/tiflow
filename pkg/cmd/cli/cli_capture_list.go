@@ -15,6 +15,7 @@ package cli
 
 import (
 	"context"
+	liberrors "errors"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -24,6 +25,9 @@ import (
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
+
+// errOwnerNotFound specifies the error that the owner could not be found.
+var errOwnerNotFound = liberrors.New("owner not found")
 
 // capture holds capture information.
 type capture struct {
@@ -121,5 +125,5 @@ func getOwnerCapture(ctx context.Context, etcdClient *kv.CDCEtcdClient) (*captur
 		}
 	}
 
-	return nil, errors.Trace(util.ErrOwnerNotFound)
+	return nil, errors.Trace(errOwnerNotFound)
 }
