@@ -89,6 +89,10 @@ func (o *txnObserver) deleteLock(modifiedKey util.EtcdKey) {
 	delete(o.lockMap, modifiedKey)
 }
 
+func (o *txnObserver) getLock(modifiedKey util.EtcdKey) *EtcdWorkerLock {
+	return o.lockMap[modifiedKey]
+}
+
 func (o *txnObserver) minLockRevision() int64 {
 	if o.heap.Len() == 0 {
 		return math.MaxInt64
@@ -191,6 +195,7 @@ func (o *txnObserver) cleanUpLocks(ctx context.Context, client *clientv3.Client)
 				If(clientv3.Compare(clientv3.ModRevision(lockKey.String()), "<", lock.lockRevision+1),
 					clientv3.Compare(clientv3.ModRevision(key.String()), "<", lock.lockRevision+1)).
 				Then(op, clientv3.OpDelete(lockKey.String())).
+				Else(clientv3.OpDelete(lockKey.String())).
 				Commit()
 			if err != nil {
 				return errors.Trace(err)

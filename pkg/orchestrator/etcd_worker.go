@@ -27,6 +27,7 @@ import (
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc/mvccpb"
@@ -55,6 +56,11 @@ type EtcdWorker struct {
 
 	// for testing only
 	forceBigTxn bool
+
+	// TODO better way to manage metrics
+	metricsCounter  *prometheus.CounterVec
+	metricsDuration prometheus.ObserverVec
+	metricsSize     prometheus.ObserverVec
 }
 
 type etcdUpdate struct {
@@ -85,6 +91,18 @@ const (
 	etcdBigTxnLockPrefix        = "/meta-lock"
 )
 
+func (worker *EtcdWorker) SetUpCaptureAddrForMetrics(captureAddr string) {
+	worker.metricsCounter = etcdTxnCounter.MustCurryWith(map[string]string{
+		"capture": captureAddr,
+	})
+	worker.metricsDuration = etcdTxnDurationHistogram.MustCurryWith(map[string]string{
+		"capture": captureAddr,
+	})
+	worker.metricsSize = etcdTxnSizeHistogram.MustCurryWith(map[string]string{
+		"capture": captureAddr,
+	})
+}
+
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
@@ -103,7 +121,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		}()
 	}
 	worker.clientID = int64(session.Lease())
-
 	err := worker.syncRawState(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -194,6 +211,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			continue
 		}
 
+		failpoint.Inject("etcdApplyPatchDelay", func() {})
 		if len(pendingPatches) > 0 {
 			// Here we have some patches yet to be uploaded to Etcd.
 			pendingPatches, err = worker.applyPatchGroups(ctx, pendingPatches)
@@ -360,7 +378,7 @@ func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]
 	return patchGroups, nil
 }
 
-func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch) error {
+func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch) (ret error) {
 	if len(patches) == 0 {
 		return nil
 	}
@@ -394,12 +412,51 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 		useBigTxn = true
 	})
 	if useBigTxn {
+		startTime := time.Now()
+		defer func() {
+			var succeeded string
+			if ret == nil {
+				succeeded = "true"
+			} else {
+				succeeded = "false"
+			}
+			if worker.metricsCounter != nil {
+				worker.metricsCounter.With(map[string]string{
+					"type":      "big",
+					"succeeded": succeeded,
+				}).Inc()
+			}
+			if worker.metricsDuration != nil {
+				worker.metricsDuration.With(map[string]string{
+					"succeeded": succeeded,
+				}).Observe(float64(time.Since(startTime).Milliseconds()))
+			}
+			if worker.metricsSize != nil {
+				worker.metricsSize.With(map[string]string{
+					"type":      "big",
+					"succeeded": succeeded,
+				}).Observe(float64(numEntries))
+			}
+
+			// Read from any key to get the latest revision, so that we have a good barrierRev.
+			resp, err := worker.client.Get(ctx, "/dummy")
+			if err != nil {
+				ret = errors.Trace(err)
+				return
+			}
+			worker.barrierRev = resp.Header.GetRevision()
+		}()
+
 		return worker.applyBigTxnPatches(ctx, changeSet)
 	}
 
 	cmps := make([]clientv3.Cmp, 0, len(changedSet))
 	ops := make([]clientv3.Op, 0, len(changedSet))
 	for key := range changedSet {
+		if worker.txnManager.getLock(key) != nil {
+			log.Debug("key has lock, aborting small txn", zap.String("key", key.String()))
+			return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
+		}
 		// make sure someone else has not updated the key after the last snapshot
 		var cmp clientv3.Cmp
 		if _, ok := worker.rawState[key]; ok {
@@ -421,6 +478,33 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 		ops = append(ops, op)
 	}
 
+	startTime := time.Now()
+	defer func() {
+		var succeeded string
+		if ret == nil {
+			succeeded = "true"
+		} else {
+			succeeded = "false"
+		}
+		if worker.metricsCounter != nil {
+			worker.metricsCounter.With(map[string]string{
+				"type":      "native",
+				"succeeded": succeeded,
+			}).Inc()
+		}
+		if worker.metricsDuration != nil {
+			worker.metricsDuration.With(map[string]string{
+				"succeeded": succeeded,
+			}).Observe(float64(time.Since(startTime).Milliseconds()))
+		}
+		if worker.metricsSize != nil {
+			worker.metricsSize.With(map[string]string{
+				"type":      "native",
+				"succeeded": succeeded,
+			}).Observe(float64(numEntries))
+		}
+	}()
+
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
 	if err != nil {
 		return errors.Trace(err)
@@ -435,7 +519,13 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
-func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnChangeSet) error {
+func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnChangeSet) (ret error) {
+	defer func() {
+		if ret != nil && cerrors.ErrEtcdTryAgain.Equal(ret) {
+			log.Info("Failed to commit big txn", zap.Int64("owner-id", worker.clientID))
+			logEtcdChangeSet(changeSet, false)
+		}
+	}()
 	newTxnKey := txnKeyFromOwnerID(worker.prefix, worker.clientID)
 	newTxn := &EtcdWorkerTxn{
 		StartPhysicalTs: time.Now(),
@@ -471,12 +561,11 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 		if !needRemoveTxnKeyOnFailure {
 			return
 		}
-		resp, err := worker.client.Delete(ctx, newTxnKey.String())
+		_, err := worker.client.Delete(ctx, newTxnKey.String())
 		if err != nil {
 			log.Warn("failed to clean up big txn entry", zap.Int64("owner-id", worker.clientID))
 			return
 		}
-		worker.barrierRev = resp.Header.Revision
 	}()
 
 	var undoLog []*bigTxnUndoLogEntry
@@ -534,6 +623,7 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 			return errors.Trace(err)
 		}
 		if !resp.Succeeded {
+			log.Debug("Failed to prewrite key", zap.String("key", key.String()))
 			return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 		}
 		// Txn has been successfully committed
@@ -570,8 +660,6 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 		log.Info("Committing big txn successful")
 		logEtcdChangeSet(changeSet, true)
 	} else {
-		log.Info("Failed to commit big txn", zap.Int64("owner-id", worker.clientID))
-		logEtcdChangeSet(changeSet, false)
 		return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 	}
 

@@ -261,6 +261,9 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if ctx.GlobalVars() != nil && ctx.GlobalVars().CaptureInfo != nil {
+		etcdWorker.SetUpCaptureAddrForMetrics(ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	}
 	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -45,5 +46,6 @@ func init() {
 		initProcessorMetrics(registry)
 		initOwnerMetrics(registry)
 	}
+	orchestrator.InitMetrics(registry)
 	initServerMetrics(registry)
 }

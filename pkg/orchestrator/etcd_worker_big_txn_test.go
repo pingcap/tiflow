@@ -479,3 +479,33 @@ func (s *etcdBigTxnSuite) TestBigTxnConflictWithSameClient(c *check.C) {
 		c.Assert(resp.Kvs[0].Value, check.BytesEquals, []byte("abcdefdef"))
 	}
 }
+
+func (s *etcdBigTxnSuite) TestBigTxnDeleteEmptyRaceWithPut(c *check.C) {
+	defer testleak.AfterTest(c)()
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	newClient, closer := setUpTest(c)
+	defer closer()
+
+	cli := newClient()
+	defer cli.Unwrap().Close()
+
+	err := initKV(ctx, cli)
+	c.Assert(err, check.IsNil)
+
+	prefix := testEtcdKeyPrefix + "/big_txn"
+	initState := &commonReactorState{
+		state: make(map[string]string),
+	}
+	reactor, err := NewEtcdWorker(cli, prefix, &bigTxnReactor{}, initState)
+	c.Assert(err, check.IsNil)
+
+	err = reactor.Run(ctx, nil, time.Millisecond*100)
+	c.Assert(err, check.IsNil)
+
+	assertNoLockRemains(ctx, cli, c)
+	assertRolledForward(ctx, cli, c)
+}
