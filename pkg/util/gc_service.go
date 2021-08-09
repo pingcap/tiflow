@@ -28,7 +28,7 @@ const (
 	// cdcChangefeedCreatingServiceGCSafePointID is service GC safe point ID
 	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-creating-"
 	// cdcChangefeedCreatingServiceGCSafePointTTL is service GC safe point TTL
-	cdcChangefeedCreatingServiceGCSafePointTTL = 10 * 60 // 10 mins
+	cdcChangefeedCreatingServiceGCSafePointTTL = 60 * 60 // 60 mins
 )
 
 // CheckSafetyOfStartTs checks if the startTs less than the minimum of Service-GC-Ts
