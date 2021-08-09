@@ -23,7 +23,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type configSuite struct{}
@@ -120,6 +120,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
 		},
 		StartTs: 417136892416622595,
 		Engine:  "memory",
+		SortDir: ".",
 		Config: &config.ReplicaConfig{
 			CaseSensitive: true,
 			Filter: &config.FilterConfig{
@@ -345,7 +346,7 @@ func (s *changefeedSuite) TestGetTs(c *check.C) {
 			CreateTime: createTime,
 		}
 	)
-	c.Assert(info.GetStartTs(), check.Equals, oracle.EncodeTSO(createTime.Unix()*1000))
+	c.Assert(info.GetStartTs(), check.Equals, oracle.GoTimeToTS(createTime))
 	info.StartTs = startTs
 	c.Assert(info.GetStartTs(), check.Equals, startTs)
 

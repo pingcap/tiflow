@@ -24,13 +24,13 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 // GlobalVars contains some vars which can be used anywhere in a pipeline
-// the lifecycle of vars in the GlobalVars shoule be aligned with the ticdc server process.
+// the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
 	PDClient    pd.Client
@@ -40,7 +40,7 @@ type GlobalVars struct {
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
-// the lifecycle of vars in the ChangefeedVars shoule be aligned with the changefeed.
+// the lifecycle of vars in the ChangefeedVars should be aligned with the changefeed.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type ChangefeedVars struct {
 	ID   model.ChangeFeedID

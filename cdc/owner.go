@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,7 +37,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -52,7 +51,7 @@ type ownership struct {
 	tickTime     time.Duration
 }
 
-func newOwnersip(tickTime time.Duration) ownership {
+func newOwnership(tickTime time.Duration) ownership {
 	minTickTime := 5 * time.Second
 	if tickTime > minTickTime {
 		log.Panic("ownership counter must be incearsed every 5 seconds")
@@ -148,7 +147,7 @@ const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
 	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
-	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+	GCSafepointUpdateInterval = 2 * time.Second
 	// MinGCSafePointCacheUpdateInterval is the interval that update minGCSafePointCache
 	MinGCSafePointCacheUpdateInterval = time.Second * 2
 )
@@ -330,18 +329,6 @@ func (o *Owner) newChangeFeed(
 	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	// TODO delete
-	if info.Engine == model.SortInFile {
-		err = os.MkdirAll(info.SortDir, 0o755)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
-		err = util.IsDirAndWritable(info.SortDir)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
 	}
 
 	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
@@ -897,7 +884,7 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 // handleDDL call handleDDL of every changefeeds
 func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		err := cf.handleDDL(ctx, o.captures)
+		err := cf.handleDDL(ctx)
 		if err != nil {
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
@@ -1110,7 +1097,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-
 			err = o.dispatchJob(ctx, job)
 			if err != nil {
 				return errors.Trace(err)
@@ -1232,7 +1218,7 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 	o.stepDown = stepDown
 
 	// Close and Run should be in separated goroutines
-	// A channel is used here to sychronize the steps.
+	// A channel is used here to synchronize the steps.
 
 	// Single the Run function to exit
 	select {
@@ -1276,7 +1262,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
-	ownership := newOwnersip(tickTime)
+	ownership := newOwnership(tickTime)
 loop:
 	for {
 		select {
@@ -1578,7 +1564,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	failpoint.Inject("sleep-before-watch-capture", nil)
 
 	// When an owner just starts, changefeed information is not updated at once.
-	// Supposing a crased capture should be removed now, the owner will miss deleting
+	// Supposing a crashed capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
 	// If the task positions and status decode failed, remove them.
 	if err := o.checkAndCleanTasksInfo(ctx); err != nil {

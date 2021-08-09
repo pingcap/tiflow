@@ -41,7 +41,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -369,7 +369,7 @@ func (s *ownerSuite) TestOwnerHandleStaleChangeFeed(c *check.C) {
 			info:    &model.ChangeFeedInfo{State: model.StateNormal},
 			etcdCli: s.client,
 			status: &model.ChangeFeedStatus{
-				CheckpointTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
+				CheckpointTs: oracle.GoTimeToTS(time.Now()),
 			},
 			targetTs: 2000,
 			ddlState: model.ChangeFeedSyncDML,
@@ -1193,7 +1193,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 		c.Assert(err, check.IsNil)
 		err = cf.schema.FillSchemaName(job)
 		c.Assert(err, check.IsNil)
-		_, err = cf.applyJob(context.TODO(), job)
+		_, err = cf.applyJob(job)
 		c.Assert(err, check.IsNil)
 		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
 		c.Assert(cf.tables, check.DeepEquals, expectTables[i])

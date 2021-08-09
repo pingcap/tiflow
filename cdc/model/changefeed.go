@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -51,6 +51,44 @@ const (
 	StateRemoved  FeedState = "removed" // deprecated, will be removed in the next version
 	StateFinished FeedState = "finished"
 )
+
+// ToInt return a int for each `FeedState`, only use this for metrics.
+func (s FeedState) ToInt() int {
+	switch s {
+	case StateNormal:
+		return 0
+	case StateError:
+		return 1
+	case StateFailed:
+		return 2
+	case StateStopped:
+		return 3
+	case StateFinished:
+		return 4
+	case StateRemoved:
+		return 5
+	}
+	// -1 for unknown feed state
+	return -1
+}
+
+// IsNeeded return true if the given feedState matches the listState.
+func (s FeedState) IsNeeded(need string) bool {
+	if need == "all" {
+		return true
+	}
+	if need == "" {
+		switch s {
+		case StateNormal:
+			return true
+		case StateStopped:
+			return true
+		case StateFailed:
+			return true
+		}
+	}
+	return need == string(s)
+}
 
 const (
 	// errorHistoryGCInterval represents how long we keep error record in changefeed info
@@ -78,7 +116,9 @@ type ChangeFeedInfo struct {
 	AdminJobType AdminJobType `json:"admin-job-type"`
 	Engine       SortEngine   `json:"sort-engine"`
 	// SortDir is deprecated
-	SortDir string `json:"-"`
+	// it cannot be set by user in changefeed level, any assignment to it should be ignored.
+	// but can be fetched for backward compatibility
+	SortDir string `json:"sort-dir"`
 
 	Config   *config.ReplicaConfig `json:"config"`
 	State    FeedState             `json:"state"`
@@ -131,7 +171,7 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 		return info.StartTs
 	}
 
-	return oracle.EncodeTSO(info.CreateTime.Unix() * 1000)
+	return oracle.GoTimeToTS(info.CreateTime)
 }
 
 // GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
@@ -170,7 +210,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 			return errors.Annotatef(
 				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
-		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = cyclicCfg
 	}
 	return nil
 }

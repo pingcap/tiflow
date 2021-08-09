@@ -28,8 +28,8 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/testkit"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -385,7 +385,7 @@ func walkTableSpanInStore(c *check.C, store tidbkv.Storage, tableID int64, f fun
 	txn, err := store.Begin()
 	c.Assert(err, check.IsNil)
 	defer txn.Rollback() //nolint:errcheck
-	tableSpan := regionspan.GetTableSpan(tableID, false)
+	tableSpan := regionspan.GetTableSpan(tableID)
 	kvIter, err := txn.Iter(tableSpan.Start, tableSpan.End)
 	c.Assert(err, check.IsNil)
 	defer kvIter.Close()

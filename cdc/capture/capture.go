@@ -267,6 +267,7 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 		switch {
 		case cerror.ErrEtcdSessionDone.Equal(err),
 			cerror.ErrLeaseExpired.Equal(err):
+			log.Warn("session is disconnected", zap.Error(err))
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
@@ -357,4 +358,24 @@ func (c *Capture) IsOwner() bool {
 	return c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		return nil
 	}) == nil
+}
+
+// GetOwner return the owner of current TiCDC cluster
+func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
+	_, captureInfos, err := c.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ownerID, err := c.etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, captureInfo := range captureInfos {
+		if captureInfo.ID == ownerID {
+			return captureInfo, nil
+		}
+	}
+	return nil, cerror.ErrOwnerNotFound.FastGenByArgs()
 }

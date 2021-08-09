@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	stdCtx "context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func (e echoNode) Destroy(ctx NodeContext) error {
 
 type checkNode struct {
 	c        *check.C
-	expected []*Message
+	expected []Message
 	index    int
 }
 
@@ -107,11 +108,12 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 		c.Fatal(err)
 		return err
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 2, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
-		expected: []*Message{
+		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
@@ -218,12 +220,13 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 		c.Assert(err.Error(), check.Equals, "error node throw an error, index: 3")
 		return nil
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 3, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &errorNode{c: c})
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
-		expected: []*Message{
+		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
@@ -301,7 +304,8 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 		errs = append(errs, err)
 		return nil
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 2, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{c: c})
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -351,7 +355,8 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 		c.Fatal(err)
 		return err
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 2, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -376,7 +381,7 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 
 	p.AppendNode(ctx, "check node", &checkNode{
 		c: c,
-		expected: []*Message{
+		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
@@ -466,7 +471,72 @@ func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
 		return nil
 	})
-	p := NewPipeline(ctx, -1)
+	runnersSize, outputChannelSize := 1, 64
+	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "panic", panicNode{})
 	p.Wait()
+}
+
+type forward struct {
+	ch chan Message
+}
+
+func (n *forward) Init(ctx NodeContext) error {
+	return nil
+}
+
+func (n *forward) Receive(ctx NodeContext) error {
+	m := ctx.Message()
+	if n.ch != nil {
+		n.ch <- m
+	} else {
+		ctx.SendToNextNode(m)
+	}
+	return nil
+}
+
+func (n *forward) Destroy(ctx NodeContext) error {
+	return nil
+}
+
+// Run the benchmark
+// go test -benchmem -run=^$ -bench ^(BenchmarkPipeline)$ github.com/pingcap/ticdc/pkg/pipeline
+func BenchmarkPipeline(b *testing.B) {
+	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
+	runnersSize, outputChannelSize := 2, 64
+
+	b.Run("BenchmarkPipeline", func(b *testing.B) {
+		for i := 1; i <= 8; i++ {
+			ctx, cancel := context.WithCancel(ctx)
+			ctx = context.WithErrorHandler(ctx, func(err error) error {
+				b.Fatal(err)
+				return err
+			})
+
+			ch := make(chan Message)
+			p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
+			for j := 0; j < i; j++ {
+				if (j + 1) == i {
+					// The last node
+					p.AppendNode(ctx, "forward node", &forward{ch: ch})
+				} else {
+					p.AppendNode(ctx, "forward node", &forward{})
+				}
+			}
+
+			b.ResetTimer()
+			b.Run(fmt.Sprintf("%d node(s)", i), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					err := p.SendToFirstNode(BarrierMessage(1))
+					if err != nil {
+						b.Fatal(err)
+					}
+					<-ch
+				}
+			})
+			b.StopTimer()
+			cancel()
+			p.Wait()
+		}
+	})
 }

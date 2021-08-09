@@ -21,7 +21,7 @@ import (
 
 type runner interface {
 	run(ctx context.Context) error
-	getOutputCh() chan *Message
+	getOutputCh() chan Message
 	getNode() Node
 	getName() string
 }
@@ -30,20 +30,20 @@ type nodeRunner struct {
 	name     string
 	node     Node
 	previous runner
-	outputCh chan *Message
+	outputCh chan Message
 }
 
-func newNodeRunner(name string, node Node, previous runner) *nodeRunner {
+func newNodeRunner(name string, node Node, previous runner, outputChanSize int) *nodeRunner {
 	return &nodeRunner{
 		name:     name,
 		node:     node,
 		previous: previous,
-		outputCh: make(chan *Message, defaultOutputChannelSize),
+		outputCh: make(chan Message, outputChanSize),
 	}
 }
 
 func (r *nodeRunner) run(ctx context.Context) error {
-	nodeCtx := newNodeContext(ctx, nil, r.outputCh)
+	nodeCtx := newNodeContext(ctx, Message{}, r.outputCh)
 	defer close(r.outputCh)
 	defer func() {
 		err := r.node.Destroy(nodeCtx)
@@ -65,7 +65,7 @@ func (r *nodeRunner) run(ctx context.Context) error {
 	return nil
 }
 
-func (r *nodeRunner) getOutputCh() chan *Message {
+func (r *nodeRunner) getOutputCh() chan Message {
 	return r.outputCh
 }
 
@@ -77,7 +77,7 @@ func (r *nodeRunner) getName() string {
 	return r.name
 }
 
-type headRunner chan *Message
+type headRunner chan Message
 
 func (h headRunner) getName() string {
 	return "header"
@@ -87,7 +87,7 @@ func (h headRunner) run(ctx context.Context) error {
 	panic("unreachable")
 }
 
-func (h headRunner) getOutputCh() chan *Message {
+func (h headRunner) getOutputCh() chan Message {
 	return h
 }
 

@@ -24,13 +24,11 @@ import (
 	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"golang.org/x/sync/errgroup"
 )
 
 type pullerNode struct {
-	limitter *puller.BlurResourceLimitter
-
 	tableName string // quoted schema and table, used in metircs only
 
 	tableID     model.TableID
@@ -40,10 +38,8 @@ type pullerNode struct {
 }
 
 func newPullerNode(
-	limitter *puller.BlurResourceLimitter,
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
 	return &pullerNode{
-		limitter:    limitter,
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
@@ -54,10 +50,10 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 	// start table puller
 	config := ctx.ChangefeedVars().Info.Config
 	spans := make([]regionspan.Span, 0, 4)
-	spans = append(spans, regionspan.GetTableSpan(n.tableID, config.EnableOldValue))
+	spans = append(spans, regionspan.GetTableSpan(n.tableID))
 
 	if config.Cyclic.IsEnabled() && n.replicaInfo.MarkTableID != 0 {
-		spans = append(spans, regionspan.GetTableSpan(n.replicaInfo.MarkTableID, config.EnableOldValue))
+		spans = append(spans, regionspan.GetTableSpan(n.replicaInfo.MarkTableID))
 	}
 	return spans
 }
@@ -65,12 +61,13 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	metricTableResolvedTsGauge := tableResolvedTsGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	globalConfig := config.GetGlobalServerConfig()
-	config := ctx.ChangefeedVars().Info.Config
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
+	// NOTICE: always pull the old value internally
+	// See also: TODO(hi-rustin): add issue link here.
 	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, globalConfig.Security, ctx.GlobalVars().KVStorage,
-		n.replicaInfo.StartTs, n.tableSpan(ctx), n.limitter, config.EnableOldValue)
+		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil
