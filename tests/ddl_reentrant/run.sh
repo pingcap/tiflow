@@ -103,6 +103,7 @@ function check_ddl_executed() {
 
 export -f check_ts_forward
 export -f check_ddl_executed
+export -f check_ts_block
 
 tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
     "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
