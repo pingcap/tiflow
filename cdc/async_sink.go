@@ -128,6 +128,11 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
+			failpoint.Inject("InjectChangefeedDDLBlock", func() {
+				if ctx.ChangefeedVars().ID == "changefeed-ddl-block" {
+					time.Sleep(10 * time.Second)
+				}
+			})
 			if err == nil || cerror.ErrDDLEventIgnored.Equal(err) {
 				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
 				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
