@@ -82,7 +82,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
 	if o.simplified {
-		resp, err := applyOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
 		if err != nil {
 			return err
 		}

@@ -140,7 +140,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		return err
 	}
 
-	resp, err := applyOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
 	// if no cdc owner exists, allow user to update changefeed config
 	if err != nil && errors.Cause(err) != errOwnerNotFound {
 		return err

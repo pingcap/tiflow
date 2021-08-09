@@ -66,7 +66,7 @@ func (o *pauseChangefeedOptions) run() error {
 
 	ctx := context.GetDefaultContext()
 
-	return applyAdminChangefeed(ctx, o.etcdClient, job, o.credential)
+	return sendOwnerAdminChangeQuery(ctx, o.etcdClient, job, o.credential)
 }
 
 // newCmdPauseChangefeed creates the `cli changefeed pause` command.

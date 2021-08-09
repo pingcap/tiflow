@@ -71,7 +71,7 @@ func (o *removeChangefeedOptions) run() error {
 
 	ctx := context.GetDefaultContext()
 
-	return applyAdminChangefeed(ctx, o.etcdClient, job, o.credential)
+	return sendOwnerAdminChangeQuery(ctx, o.etcdClient, job, o.credential)
 }
 
 // newCmdRemoveChangefeed creates the `cli changefeed remove` command.

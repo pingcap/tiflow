@@ -73,7 +73,7 @@ func (o *resumeChangefeedOptions) complete(f factory.Factory) error {
 }
 
 func (o *resumeChangefeedOptions) resumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := applyOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,16 @@ func (o *resumeChangefeedOptions) resumeChangefeedCheck(ctx context.Context, cmd
 		return err
 	}
 
-	return confirmLargeDataGap(ctx, o.pdClient, cmd, o.noConfirm, info.TSO)
+	currentPhysical, _, err := o.pdClient.GetTS(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !o.noConfirm {
+		return confirmLargeDataGap(cmd, currentPhysical, info.TSO)
+	}
+
+	return nil
 }
 
 // run the `cli changefeed resume` command.
@@ -99,7 +108,7 @@ func (o *resumeChangefeedOptions) run(cmd *cobra.Command) error {
 		return err
 	}
 
-	return applyAdminChangefeed(ctx, o.etcdClient, job, o.credential)
+	return sendOwnerAdminChangeQuery(ctx, o.etcdClient, job, o.credential)
 }
 
 // newCmdResumeChangefeed creates the `cli changefeed resume` command.

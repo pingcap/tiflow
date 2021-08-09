@@ -30,13 +30,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
-	pd "github.com/tikv/pd/client"
-)
-
-const (
-	// tsGapWarning specifies the OOM threshold.
-	// 1 day in milliseconds
-	tsGapWarning = 86400 * 1000
 )
 
 // newCmdChangefeed creates the `cli changefeed` command.
@@ -59,8 +52,9 @@ func newCmdChangefeed(f factory.Factory) *cobra.Command {
 	return cmds
 }
 
-func applyOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
-	cid model.ChangeFeedID, credential *security.Credential,
+// sendOwnerChangefeedQuery sends owner changefeed query request.
+func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
+	id model.ChangeFeedID, credential *security.Credential,
 ) (string, error) {
 	owner, err := getOwnerCapture(ctx, etcdClient)
 	if err != nil {
@@ -72,21 +66,24 @@ func applyOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient
 		scheme = util.HTTPS
 	}
 
-	addr := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
-	cli, err := httputil.NewClient(credential)
+	url := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
+	httpClient, err := httputil.NewClient(credential)
 	if err != nil {
 		return "", err
 	}
-	resp, err := cli.PostForm(addr, map[string][]string{
-		cdc.APIOpVarChangefeedID: {cid},
+
+	resp, err := httpClient.PostForm(url, map[string][]string{
+		cdc.APIOpVarChangefeedID: {id},
 	})
 	if err != nil {
 		return "", err
 	}
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.BadRequestf("query changefeed simplified status")
 	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", errors.BadRequestf("%s", string(body))
 	}
@@ -94,7 +91,8 @@ func applyOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient
 	return string(body), nil
 }
 
-func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
+// sendOwnerAdminChangeQuery sends owner admin query request.
+func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
 	owner, err := getOwnerCapture(ctx, etcdClient)
 	if err != nil {
 		return err
@@ -105,16 +103,18 @@ func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job
 		scheme = util.HTTPS
 	}
 
-	addr := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
-	cli, err := httputil.NewClient(credential)
+	url := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
+	httpClient, err := httputil.NewClient(credential)
 	if err != nil {
 		return err
 	}
+
 	forceRemoveOpt := "false"
 	if job.Opts != nil && job.Opts.ForceRemove {
 		forceRemoveOpt = "true"
 	}
-	resp, err := cli.PostForm(addr, map[string][]string{
+
+	resp, err := httpClient.PostForm(url, map[string][]string{
 		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID:       {job.CfID},
 		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
@@ -122,6 +122,7 @@ func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job
 	if err != nil {
 		return err
 	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -133,17 +134,14 @@ func applyAdminChangefeed(ctx context.Context, etcdClient *kv.CDCEtcdClient, job
 	return nil
 }
 
-func confirmLargeDataGap(ctx context.Context, pdClient pd.Client, cmd *cobra.Command, noConfirm bool, startTs uint64) error {
-	if noConfirm {
-		return nil
-	}
-
-	currentPhysical, _, err := pdClient.GetTS(ctx)
-	if err != nil {
-		return err
-	}
+// confirmLargeDataGap checks if a large data gap is used.
+func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint64) error {
+	// tsGapWarning specifies the OOM threshold.
+	// 1 day in milliseconds
+	var tsGapWarning int64 = 86400 * 1000
 
 	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
+
 	if tsGap > tsGapWarning {
 		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
 			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",

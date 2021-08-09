@@ -217,9 +217,18 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 		if err := o.validateStartTs(ctx, o.changefeedID); err != nil {
 			return nil, err
 		}
-		if err := confirmLargeDataGap(ctx, o.pdClient, cmd, o.commonChangefeedOptions.noConfirm, o.startTs); err != nil {
-			return nil, err
+
+		if !o.commonChangefeedOptions.noConfirm {
+			currentPhysical, _, err := o.pdClient.GetTS(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			if err := confirmLargeDataGap(cmd, currentPhysical, o.startTs); err != nil {
+				return nil, err
+			}
 		}
+
 		if err := o.validateTargetTs(); err != nil {
 			return nil, err
 		}
