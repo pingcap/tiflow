@@ -19,13 +19,15 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/uber-go/atomic"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 )
 
 // Writer ...
@@ -44,6 +46,21 @@ type Writer interface {
 	GetCurrentOffset(ctx context.Context, tableIDs []int64) (offsets map[int64]uint64, err error)
 }
 
+const (
+	defaultMetaFileName   = "meta"
+	defaultRowLogFileName = "row"
+	defaultDDLLogFileName = "ddl"
+
+	defaultGCIntervalInMins = 5
+)
+
+const (
+	// dirty defines the state of the log meta
+	dirty int32 = 0
+	// clean defines the state of the log meta
+	clean int32 = 1
+)
+
 var (
 	initOnce  sync.Once
 	logWriter *LogWriter
@@ -58,6 +75,8 @@ type LogWriterConfig struct {
 	// maxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
 	maxLogSize         int64
 	flushIntervalInSec int64
+	s3Storage          bool
+	s3URI              *url.URL
 }
 
 // LogWriter ...
@@ -67,36 +86,83 @@ type LogWriter struct {
 	ddlWriter *writer
 	meta      *redo.LogMeta
 	metaLock  sync.RWMutex
-	state     *atomic.Uint32
+	dirtyMeta int32
 }
 
 // NewLogWriter creates a writer instance.
-func NewLogWriter(ctx context.Context, cfg *LogWriterConfig, host, path string, uri *url.URL) *LogWriter {
+func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 	initOnce.Do(func() {
-		cfg := &writerConfig{
+		rowCfg := &writerConfig{
 			dir:                cfg.dir,
 			changeFeedID:       cfg.changeFeedID,
+			fileName:           defaultRowLogFileName,
 			startTs:            cfg.startTs,
 			CreateTime:         cfg.CreateTime,
 			maxLogSize:         cfg.maxLogSize,
 			flushIntervalInSec: cfg.flushIntervalInSec,
 		}
-		logWriter.rowWriter = newWriter(ctx, cfg, host, path, uri)
-		logWriter.ddlWriter = newWriter(ctx, cfg, host, path, uri)
-		logWriter.meta = &redo.LogMeta{Offsets: map[int64]uint64{}}
+		ddlCfg := &writerConfig{
+			dir:                cfg.dir,
+			changeFeedID:       cfg.changeFeedID,
+			fileName:           defaultDDLLogFileName,
+			startTs:            cfg.startTs,
+			CreateTime:         cfg.CreateTime,
+			maxLogSize:         cfg.maxLogSize,
+			flushIntervalInSec: cfg.flushIntervalInSec,
+		}
+		logWriter = &LogWriter{
+			rowWriter: newWriter(ctx, rowCfg),
+			ddlWriter: newWriter(ctx, ddlCfg),
+			meta:      &redo.LogMeta{Offsets: map[int64]uint64{}},
+		}
+
+		go logWriter.runGC(ctx)
 	})
-	logWriter.state.Store(started)
 	return logWriter
+}
+
+func (l *LogWriter) runGC(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(defaultGCIntervalInMins) * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		if l.isStopped() {
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			log.Info("runGC got canceled", zap.Error(ctx.Err()))
+			return
+		case <-ticker.C:
+			err := l.gc()
+			if err != nil {
+				log.Error("redo log gc error", zap.Error(err))
+			}
+		}
+	}
+}
+
+func (l *LogWriter) gc() error {
+	var err error
+	err = multierr.Append(err, l.rowWriter.gc(atomic.LoadUint64(&l.meta.CheckPointTs)))
+	err = multierr.Append(err, l.ddlWriter.gc(atomic.LoadUint64(&l.meta.CheckPointTs)))
+	return err
 }
 
 // WriteLog implement WriteLog api
 func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.RowChangedEvent) (uint64, error) {
-	if len(rows) == 0 {
-		return 0, nil
+	select {
+	case <-ctx.Done():
+		return 0, errors.Trace(ctx.Err())
+	default:
 	}
 
-	if !l.rowWriter.isRunning() {
-		return 0, errors.New("writer stopped")
+	if l.isStopped() {
+		return 0, cerror.ErrRedoWriterStopped
+	}
+	if len(rows) == 0 {
+		return 0, nil
 	}
 
 	var maxCommitTs uint64
@@ -126,9 +192,11 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 	if v, ok := l.meta.Offsets[tableID]; ok {
 		if v < commitTs {
 			l.meta.Offsets[tableID] = commitTs
+			atomic.StoreInt32(&l.dirtyMeta, dirty)
 		}
 	} else {
 		l.meta.Offsets[tableID] = commitTs
+		atomic.StoreInt32(&l.dirtyMeta, dirty)
 	}
 
 	return l.meta.Offsets[tableID]
@@ -142,9 +210,8 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 	default:
 	}
 
-	if !l.ddlWriter.isRunning() {
-		// TODO: new cerror
-		return errors.New("writer stopped")
+	if l.isStopped() {
+		return cerror.ErrRedoWriterStopped
 	}
 
 	data, err := ddl.MarshalMsg(nil)
@@ -158,6 +225,16 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 
 // FlushLog implement FlushLog api
 func (l *LogWriter) FlushLog(ctx context.Context, tableID int64, ts uint64) error {
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	default:
+	}
+
+	if l.isStopped() {
+		return cerror.ErrRedoWriterStopped
+	}
+
 	if err := l.flush(); err != nil {
 		return err
 	}
@@ -172,11 +249,12 @@ func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 		return errors.Trace(ctx.Err())
 	default:
 	}
-	if !l.isRunning() {
-		// TODO: new cerror
-		return errors.New("writer stopped")
+
+	if l.isStopped() {
+		return cerror.ErrRedoWriterStopped
 	}
-	l.meta.CheckPointTs = ts
+	atomic.StoreUint64(&l.meta.CheckPointTs, ts)
+	atomic.StoreInt32(&l.dirtyMeta, dirty)
 	return l.flushLogMeta()
 }
 
@@ -188,24 +266,25 @@ func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	default:
 	}
 
-	if !l.isRunning() {
-		// TODO: new cerror
-		return errors.New("writer stopped")
+	if l.isStopped() {
+		return cerror.ErrRedoWriterStopped
 	}
-	l.meta.ResolvedTs = ts
+	atomic.StoreUint64(&l.meta.ResolvedTs, ts)
+	atomic.StoreInt32(&l.dirtyMeta, dirty)
+
 	return l.flushLogMeta()
 }
 
 // GetCurrentOffset implement GetCurrentOffset api
 func (l *LogWriter) GetCurrentOffset(ctx context.Context, tableIDs []int64) (map[int64]uint64, error) {
-	if len(tableIDs) == 0 {
-		return nil, nil
-	}
-
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
 	default:
+	}
+
+	if len(tableIDs) == 0 {
+		return nil, nil
 	}
 
 	l.metaLock.RLock()
@@ -224,29 +303,25 @@ func (l *LogWriter) GetCurrentOffset(ctx context.Context, tableIDs []int64) (map
 
 // Close implements Writer.Close.
 func (l *LogWriter) Close() error {
-	if !l.isRunning() {
-		return nil
-	}
 	var err error
-	err = multierr.Append(err, l.rowWriter.close())
-	err = multierr.Append(err, l.ddlWriter.close())
+	err = multierr.Append(err, l.rowWriter.Close())
+	err = multierr.Append(err, l.ddlWriter.Close())
 	return err
 }
 
 // flush flushes all the buffered data to the disk.
 func (l *LogWriter) flush() error {
-	// TODO: if no change, skip
 	err1 := l.flushLogMeta()
 	err2 := l.ddlWriter.flush()
 	err3 := l.rowWriter.flush()
 
 	err := multierr.Append(err1, err2)
 	err = multierr.Append(err, err3)
-	return errors.Wrap(err, "Sync")
+	return err
 }
 
-func (l *LogWriter) isRunning() bool {
-	return l.state.Load() == started
+func (l *LogWriter) isStopped() bool {
+	return l.ddlWriter.state.Load() == stopped || l.rowWriter.state.Load() == stopped
 }
 
 func (l *LogWriter) getMetafileName() string {
@@ -254,7 +329,7 @@ func (l *LogWriter) getMetafileName() string {
 }
 
 func (l *LogWriter) flushLogMeta() error {
-	if l.meta.ResolvedTs == 0 && l.meta.CheckPointTs == 0 {
+	if atomic.LoadInt32(&l.dirtyMeta) == clean {
 		return nil
 	}
 
@@ -282,5 +357,10 @@ func (l *LogWriter) flushLogMeta() error {
 	}
 
 	err = os.Rename(tmpFileName, l.getMetafileName())
-	return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
+	atomic.StoreInt32(&l.dirtyMeta, dirty)
+	return nil
 }

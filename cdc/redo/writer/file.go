@@ -16,6 +16,7 @@ package writer
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/uber-go/atomic"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
@@ -36,54 +38,63 @@ const (
 	defaultDirMode  = 0o755
 	defaultFileMode = 0o644
 
-	defaultMetaFileName = "meta"
-	// 100 megabytes
-	defaultMaxLogSize    = 100 * 1024 * 1024
-	defaultFlushInterval = 2
+	megabyte                  = 1024 * 1024
+	defaultMaxLogSize         = 100 * megabyte
+	defaultFlushIntervalInSec = 2
 )
 
 const (
 	// stopped defines the state value of a writer which has been stopped
 	stopped uint32 = 0
 	// started defines the state value of a writer which is currently started
-	started  uint32 = 1
-	megabyte        = 1024 * 1024
+	started uint32 = 1
 )
 
-// LogWriterConfig is the configuration used by a writer.
+// writerConfig is the configuration used by a writer.
 type writerConfig struct {
 	dir          string
 	changeFeedID string
+	fileName     string
 	startTs      uint64
 	CreateTime   time.Time
 	// maxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
 	maxLogSize         int64
 	flushIntervalInSec int64
+	s3Storage          bool
+	s3URI              *url.URL
 }
 
 // writer is a redo log event writer which writes redo log events to a file.
 type writer struct {
-	cfg      *writerConfig
-	size     int64
-	commitTS *atomic.Uint64
-	state    *atomic.Uint32
-	file     *os.File
-	storage  storage.ExternalStorage
-	stopChan chan struct{}
+	cfg       *writerConfig
+	size      int64
+	commitTS  *atomic.Uint64
+	state     *atomic.Uint32
+	gcRunning *atomic.Bool
+	file      *os.File
+	storage   storage.ExternalStorage
+	stopChan  chan struct{}
 	sync.RWMutex
 }
 
-func newWriter(ctx context.Context, cfg *writerConfig, host, path string, uri *url.URL) *writer {
+func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	if cfg == nil {
-		panic("FileWriterConfig can not be nil")
+		log.Panic("writerConfig can not be nil",
+			zap.String("log file", cfg.fileName))
 	}
 
 	if cfg.flushIntervalInSec == 0 {
-		cfg.flushIntervalInSec = defaultFlushInterval
+		cfg.flushIntervalInSec = defaultFlushIntervalInSec
 	}
 	cfg.maxLogSize *= megabyte
 	if cfg.maxLogSize == 0 {
 		cfg.maxLogSize = defaultMaxLogSize
+	}
+	if cfg.s3Storage {
+		if cfg.s3URI == nil {
+			log.Panic("s3URI can not be nil",
+				zap.String("log file", cfg.fileName))
+		}
 	}
 
 	w := &writer{
@@ -91,27 +102,34 @@ func newWriter(ctx context.Context, cfg *writerConfig, host, path string, uri *u
 		stopChan: make(chan struct{}),
 		commitTS: atomic.NewUint64(cfg.startTs),
 	}
-	s3storage, err := w.initS3storage(ctx, host, path, uri)
-	if err != nil {
-		panic(err)
+
+	if cfg.s3Storage {
+		s3storage, err := w.initS3storage(ctx, cfg.s3URI)
+		if err != nil {
+			log.Panic("initS3storage fail",
+				zap.Error(err),
+				zap.String("log file", cfg.fileName))
+		}
+		w.storage = s3storage
 	}
-	w.storage = s3storage
 
 	w.state.Store(started)
 	go w.runFlushToDisk(ctx, cfg.flushIntervalInSec)
-	go w.runFlushToS3(ctx, cfg.flushIntervalInSec)
+	if cfg.s3Storage {
+		go w.runFlushToS3(ctx, cfg.flushIntervalInSec)
+	}
 	return w
 }
 
-func (w *writer) initS3storage(ctx context.Context, host, path string, uri *url.URL) (storage.ExternalStorage, error) {
-	if len(host) == 0 {
-		return nil, errors.Errorf("please specify the bucket for s3 in %s", uri)
+func (w *writer) initS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage, error) {
+	if len(s3URI.Host) == 0 {
+		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %s", s3URI))
 	}
 
-	prefix := strings.Trim(path, "/")
-	s3 := &backup.S3{Bucket: host, Prefix: prefix}
+	prefix := strings.Trim(s3URI.Path, "/")
+	s3 := &backup.S3{Bucket: s3URI.Host, Prefix: prefix}
 	options := &storage.BackendOptions{}
-	storage.ExtractQueryParameters(uri, &options.S3)
+	storage.ExtractQueryParameters(s3URI, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)
 	}
@@ -138,16 +156,19 @@ func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInSec int64) {
 	defer ticker.Stop()
 
 	for {
+		if !w.isRunning() {
+			return
+		}
+
 		select {
 		case <-ctx.Done():
-			log.Info("runFlushToDisk canceled", zap.Error(ctx.Err()))
+			log.Info("runFlushToDisk got canceled", zap.Error(ctx.Err()))
 			return
 		case <-ticker.C:
 			err := w.flush()
-			log.Error("redo log flush error", zap.Error(err))
-		case <-w.stopChan:
-			log.Info("redo log writer stopped")
-			return
+			if err != nil {
+				log.Error("redo log flush error", zap.Error(err))
+			}
 		}
 	}
 }
@@ -185,13 +206,21 @@ func (w *writer) Close() error {
 	w.Lock()
 	defer w.Unlock()
 
+	err := w.close()
+	if err != nil {
+		return err
+	}
+
 	w.state.Store(stopped)
-	w.stopChan <- struct{}{}
-	return w.close()
+	return nil
 }
 
 func (w *writer) isRunning() bool {
 	return w.state.Load() == started
+}
+
+func (w *writer) isGCRunning() bool {
+	return w.gcRunning.Load()
 }
 
 func (w *writer) close() error {
@@ -205,11 +234,11 @@ func (w *writer) close() error {
 
 	err = w.file.Close()
 	w.file = nil
-	return err
+	return cerror.WrapError(cerror.ErrRedoFileOp, err)
 }
 
 func (w *writer) getLogFileName() string {
-	return fmt.Sprintf("%s_%d_%d", w.cfg.changeFeedID, w.cfg.CreateTime.Unix(), w.commitTS)
+	return fmt.Sprintf("%s_%s_%d_%d.log", w.cfg.changeFeedID, w.cfg.fileName, w.cfg.CreateTime.Unix(), w.commitTS)
 }
 
 func (w *writer) filePath() string {
@@ -219,13 +248,14 @@ func (w *writer) filePath() string {
 func (w *writer) openNew() error {
 	err := os.MkdirAll(w.cfg.dir, defaultDirMode)
 	if err != nil {
-		return errors.Errorf("can't make dir for new redo logfile: %s", err)
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("can't make dir for new redo logfile: %s", err))
+
 	}
 
 	path := w.filePath()
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
 	if err != nil {
-		return errors.Errorf("can't open new redo logfile: %s", err)
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("can't open new redo logfile: %s", err))
 	}
 	w.file = f
 	w.size = 0
@@ -239,7 +269,7 @@ func (w *writer) openOrNew(writeLen int) error {
 		return w.openNew()
 	}
 	if err != nil {
-		return errors.Errorf("error getting log file info: %s", err)
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("error getting log file info: %s", err))
 	}
 
 	if info.Size()+int64(writeLen) >= w.cfg.maxLogSize {
@@ -262,41 +292,109 @@ func (w *writer) rotate() error {
 	return w.openNew()
 }
 
+// TODO: gc in s3
+func (w *writer) gc(checkPointTs uint64) error {
+	if !w.isRunning() || w.isGCRunning() {
+		return nil
+	}
+
+	w.gcRunning.Store(true)
+	defer w.gcRunning.Store(false)
+
+	remove, err := w.getShouldRemovedFiles(checkPointTs)
+	if err != nil {
+		return err
+	}
+
+	var errs error
+	for _, f := range remove {
+		err := os.Remove(filepath.Join(w.cfg.dir, f.Name()))
+		errs = multierr.Append(errs, err)
+	}
+
+	return cerror.WrapError(cerror.ErrRedoFileOp, errs)
+}
+
+func (w *writer) parseLogFileName(name string) (commitTs uint64, err error) {
+	if !strings.HasSuffix(name, ".log") {
+		return 0, errors.New("bad log name")
+	}
+
+	// TODO: file name pattern
+	return 0, err
+}
+
+func (w *writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
+	commitTs, err := w.parseLogFileName(f.Name())
+	if err != nil {
+		return false, err
+	}
+	return commitTs < checkPointTs, nil
+}
+
+func (w *writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
+	files, err := ioutil.ReadDir(w.cfg.dir)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("can't read log file directory: %s", err))
+	}
+
+	logFiles := []os.FileInfo{}
+	for _, f := range files {
+		ret, err := w.shouldRemoved(checkPointTs, f)
+		if err != nil {
+			log.Warn("check removed log file fail",
+				zap.String("log file", f.Name()),
+				zap.Error(err))
+			continue
+		}
+
+		if ret {
+			logFiles = append(logFiles, f)
+		}
+	}
+
+	return logFiles, nil
+}
+
 // flush flushes all the buffered data to the disk.
 func (w *writer) flush() error {
 	if w.file == nil {
 		return nil
 	}
-	return errors.Wrap(w.file.Sync(), "Sync")
+
+	return cerror.WrapError(cerror.ErrRedoFileOp, w.file.Sync())
 }
 
 func (w *writer) writeToS3(ctx context.Context) error {
 	name := w.filePath()
 	w.Lock()
-	// TODO: use small file in s3, if read take too long
+	// TODO: use small file in s3, if read takes too long
 	fileData, err := os.ReadFile(name)
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 	w.Unlock()
-	return w.storage.WriteFile(ctx, name, fileData)
+	return cerror.WrapError(cerror.ErrRedoFileOp, w.storage.WriteFile(ctx, name, fileData))
 }
 
 func (w *writer) runFlushToS3(ctx context.Context, flushIntervalInSec int64) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInSec)*time.Second + time.Millisecond)
+	ticker := time.NewTicker(time.Duration(flushIntervalInSec)*time.Second + 50*time.Millisecond)
 	defer ticker.Stop()
 
 	for {
+		if !w.isRunning() {
+			return
+		}
+
 		select {
 		case <-ctx.Done():
-			log.Info("runFlushToS3 canceled", zap.Error(ctx.Err()))
+			log.Info("runFlushToS3 got canceled", zap.Error(ctx.Err()))
 			return
 		case <-ticker.C:
 			err := w.writeToS3(ctx)
-			log.Error("redo log flush to s3 error", zap.Error(err))
-		case <-w.stopChan:
-			log.Info("redo log writer stopped")
-			return
+			if err != nil {
+				log.Error("redo log flush to s3 error", zap.Error(err))
+			}
 		}
 	}
 }
