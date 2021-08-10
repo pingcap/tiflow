@@ -70,7 +70,9 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	pdCli := mocktikv.NewPDClient(cluster)
 	defer pdCli.Close() //nolint:errcheck
 
-	cli := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cli := NewCDCClient(context.Background(), pdCli, nil, grpcPool)
 	err := cli.Close()
 	c.Assert(err, check.IsNil)
 }
@@ -328,7 +330,9 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool)
 	defer cdcClient.Close() //nolint:errcheck
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -418,7 +422,9 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -521,7 +527,9 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -676,7 +684,9 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -736,7 +746,9 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1183,7 +1195,9 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1286,7 +1300,9 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 40)
 	wg.Add(1)
 	go func() {
@@ -1413,7 +1429,9 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1633,7 +1651,9 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1674,27 +1694,6 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	cancel()
 }
 
-// Use etcdSuite for some special reasons, the embed etcd uses zap as the only candidate
-// logger and in the logger initializtion it also initializes the grpclog/loggerv2, which
-// is not a thread-safe operation and it must be called before any gRPC functions
-// ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
-func (s *etcdSuite) TestConnArray(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-	addr := "127.0.0.1:2379"
-	ca, err := newConnArray(context.TODO(), 2, addr, &security.Credential{})
-	c.Assert(err, check.IsNil)
-
-	conn1 := ca.Get()
-	conn2 := ca.Get()
-	c.Assert(conn1, check.Not(check.Equals), conn2)
-
-	conn3 := ca.Get()
-	c.Assert(conn1, check.Equals, conn3)
-
-	ca.Close()
-}
-
 // TestPendingRegionError tests kv client should return an error when receiving
 // a new subscription (the first event of specific region) but the corresponding
 // region is not found in pending regions.
@@ -1727,7 +1726,9 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	var wg2 sync.WaitGroup
 	if enableKVClientV2 {
@@ -1817,7 +1818,9 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -1924,7 +1927,9 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2021,7 +2026,9 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
@@ -2167,7 +2174,9 @@ func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2343,7 +2352,9 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2571,7 +2582,9 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2663,7 +2676,9 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2742,7 +2757,9 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2802,7 +2819,9 @@ func (s *etcdSuite) TestClientV1ErrNoPendingRegion(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -2887,7 +2906,9 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -3027,7 +3048,9 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
@@ -3141,7 +3164,9 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -3262,7 +3287,9 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
