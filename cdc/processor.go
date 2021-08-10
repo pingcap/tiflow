@@ -906,10 +906,10 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	table.cancel = func() {
 		cancel()
 		if tableSink != nil {
-			tableSink.Close()
+			tableSink.Close(ctx)
 		}
 		if mTableSink != nil {
-			mTableSink.Close()
+			mTableSink.Close(ctx)
 		}
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
@@ -1400,6 +1400,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 		log.Warn("an error occurred when stopping the processor", zap.Error(err))
 		errRes = err
 	}
+<<<<<<< HEAD
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
@@ -1407,6 +1408,9 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	return errRes
+=======
+	return p.sinkManager.Close(ctx)
+>>>>>>> 1800517e (sink: add barrier in underlying sink to support accruate stop (#2417))
 }
 
 func (p *oldProcessor) isStopped() bool {
