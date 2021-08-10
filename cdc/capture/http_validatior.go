@@ -45,9 +45,12 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedConfig.ID)
 	}
 	// check if the changefeed exists && check if the etcdClient work well
-	_, _, err := capture.etcdClient.GetChangeFeedStatus(ctx, changefeedConfig.ID)
-	if err != nil {
+	cfStatus, _, err := capture.etcdClient.GetChangeFeedStatus(ctx, changefeedConfig.ID)
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
+	}
+	if cfStatus != nil {
+		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changefeedConfig.ID)
 	}
 
 	// verify start-ts
@@ -130,6 +133,11 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		}
 	}
 
+	tz, err := util.GetTimezone(changefeedConfig.TimeZone)
+	if err != nil {
+		return nil, errors.Annotate(err, "invalid timezone:"+changefeedConfig.TimeZone)
+	}
+	ctx = util.PutTimezoneInCtx(ctx, tz)
 	err = verifySink(ctx, info.SinkURI, info.Config, info.Opts)
 	if err != nil {
 		return nil, err
@@ -190,13 +198,13 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 }
 
 func verifySink(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string) error {
-	filter, err := filter.NewFilter(cfg)
+	sinkFilter, err := filter.NewFilter(cfg)
 	if err != nil {
 		return err
 	}
 	errCh := make(chan error)
 	// TODO: find a better way to verify a sinkURI is valid
-	s, err := sink.NewSink(ctx, "sink-verify", sinkURI, filter, cfg, opts, errCh)
+	s, err := sink.NewSink(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {
 		return err
 	}
