@@ -200,9 +200,8 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
-	log.Info("changefeedConfig", zap.Reflect("config", changefeedConfig))
 
-	info, err := changefeedConfig.VerifyCreateChangefeedConfig(c, h.capture.kvStorage, h.capture.etcdClient, h.capture.pdClient)
+	info, err := verifyCreateChangefeedConfig(c, changefeedConfig, h.capture)
 	if err != nil {
 		if cerror.ErrPDEtcdAPIError.Equal(err) {
 			c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
@@ -360,7 +359,7 @@ func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	newInfo, err := changefeedConfig.VerifyUpdateChangefeedConfig(c, info)
+	newInfo, err := verifyUpdateChangefeedConfig(c, changefeedConfig, info)
 	if err != nil {
 		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 		return
@@ -621,7 +620,7 @@ func (h *HTTPHandler) ListProcessor(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/captures [get]
 func (h *HTTPHandler) ListCapture(c *gin.Context) {
-	_, raw, err := h.capture.etcdClient.GetCaptures(c)
+	_, captureInfos, err := h.capture.etcdClient.GetCaptures(c)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -633,8 +632,8 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 		return
 	}
 
-	captures := make([]*model.Capture, 0, len(raw))
-	for _, c := range raw {
+	captures := make([]*model.Capture, 0, len(captureInfos))
+	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
 			&model.Capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
