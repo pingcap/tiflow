@@ -145,7 +145,8 @@ func (*mockPullerInit) IsInitialized() bool {
 // TestSplit try split on every region, and test can get value event from
 // every region after split.
 func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStore kv.Storage) {
-	cli := NewCDCClient(context.Background(), pdCli, storage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
 	defer cli.Close()
 
 	eventCh := make(chan model.RegionFeedEvent, 1<<20)
@@ -234,7 +235,8 @@ func mustDeleteKey(t require.TestingT, storage kv.Storage, key []byte) {
 
 // TestGetKVSimple test simple KV operations
 func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStore kv.Storage) {
-	cli := NewCDCClient(context.Background(), pdCli, storage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(&security.Credential{})
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
 	defer cli.Close()
 
 	checker := newEventChecker(t)
