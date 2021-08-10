@@ -18,26 +18,16 @@ import (
 	"os"
 	"sync"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
 
-<<<<<<< HEAD
-=======
-const (
-	inputChSize       = 128
-	outputChSize      = 128
-	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
-)
-
->>>>>>> e9f799b8 (*: fix deadlock in new processor (#1987))
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
 	inputCh     chan *model.PolymorphicEvent
@@ -213,18 +203,6 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		nextSorterID := 0
 		for {
-<<<<<<< HEAD
-			// tentative value 1280000
-			for atomic.LoadInt64(&mergerBufLen) > 1280000 {
-				after := time.After(1 * time.Second)
-				select {
-				case <-subctx.Done():
-					return subctx.Err()
-				case <-after:
-				}
-			}
-=======
->>>>>>> e9f799b8 (*: fix deadlock in new processor (#1987))
 			select {
 			case <-subctx.Done():
 				return subctx.Err()

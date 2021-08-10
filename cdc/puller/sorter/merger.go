@@ -130,33 +130,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
-<<<<<<< HEAD
-		defer func() {
-			// clean up
-			cleanUpCtx, cancel := context.WithTimeout(context.TODO(), 2*time.Second)
-			defer cancel()
-			for task := range workingSet {
-				select {
-				case <-cleanUpCtx.Done():
-					// This should only happen when the workerpool is being cancelled, in which case
-					// the whole CDC process is exiting, so the leaked resource should not matter.
-					log.Warn("Unified Sorter: merger cleaning up timeout.")
-					return
-				case err := <-task.finished:
-					_ = printError(err)
-				}
-
-				if task.reader != nil {
-					err := task.reader.resetAndClose()
-					task.reader = nil
-					_ = printError(err)
-				}
-				_ = printError(task.dealloc())
-			}
-		}()
-
-		for task, cache := range pendingSet {
-=======
 		// loopErr is used to return an error out of the closure taken by `pendingSet.Range`.
 		var loopErr error
 		// NOTE 1: We can block the closure passed to `pendingSet.Range` WITHOUT worrying about
@@ -173,8 +146,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if iCache != nil {
 				cache = iCache.(*model.PolymorphicEvent)
 			}
-
->>>>>>> e9f799b8 (*: fix deadlock in new processor (#1987))
 			if task.tsLowerBound > minResolvedTs {
 				// the condition above implies that for any event in task.backend, CRTs > minResolvedTs.
 				return true
