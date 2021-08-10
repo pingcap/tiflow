@@ -433,7 +433,7 @@ func (o *Owner) newChangeFeed(
 		ID:   id,
 		Info: info,
 	})
-	errCh := make(chan error, 1)
+	errCh := make(chan error, defaultErrChSize)
 	cdcCtx = cdcContext.WithErrorHandler(cdcCtx, func(err error) error {
 		errCh <- errors.Trace(err)
 		return nil
