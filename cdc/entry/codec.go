@@ -28,7 +28,6 @@ import (
 var (
 	tablePrefix  = []byte{'t'}
 	recordPrefix = []byte("_r")
-	indexPrefix  = []byte("_i")
 	metaPrefix   = []byte("m")
 )
 
@@ -36,11 +35,9 @@ var (
 	intLen            = 8
 	tablePrefixLen    = len(tablePrefix)
 	recordPrefixLen   = len(recordPrefix)
-	indexPrefixLen    = len(indexPrefix)
 	metaPrefixLen     = len(metaPrefix)
 	prefixTableIDLen  = tablePrefixLen + intLen  /*tableID*/
 	prefixRecordIDLen = recordPrefixLen + intLen /*recordID*/
-	prefixIndexLen    = indexPrefixLen + intLen  /*indexID*/
 )
 
 // MetaType is for data structure meta/data flag.
@@ -113,22 +110,6 @@ func decodeRecordID(key []byte) (rest []byte, recordID int64, err error) {
 	rest, recordID, err = codec.DecodeInt(key)
 	if err != nil {
 		return nil, 0, cerror.WrapError(cerror.ErrCodecDecode, err)
-	}
-	return
-}
-
-func decodeIndexKey(key []byte) (indexID int64, indexValue []types.Datum, err error) {
-	if len(key) < prefixIndexLen || !bytes.HasPrefix(key, indexPrefix) {
-		return 0, nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
-	}
-	key = key[indexPrefixLen:]
-	key, indexID, err = codec.DecodeInt(key)
-	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrCodecDecode, err)
-	}
-	indexValue, err = codec.Decode(key, 2)
-	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	return
 }

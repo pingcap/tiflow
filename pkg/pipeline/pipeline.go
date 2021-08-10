@@ -17,17 +17,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
-
-// TODO: processor output chan size, the accumulated data is determined by
-// the count of sorted data and unmounted data. In current benchmark a single
-// processor can reach 50k-100k QPS, and accumulated data is around
-// 200k-400k in most cases. We need a better chan cache mechanism.
-const defaultOutputChannelSize = 512
 
 // Pipeline represents a pipeline includes a number of nodes
 type Pipeline struct {
@@ -36,16 +31,21 @@ type Pipeline struct {
 	runnersWg sync.WaitGroup
 	closeMu   sync.Mutex
 	isClosed  bool
+
+	outputChSize int
 }
 
 // NewPipeline creates a new pipeline
-func NewPipeline(ctx context.Context, tickDuration time.Duration) *Pipeline {
+func NewPipeline(
+	ctx context.Context, tickDuration time.Duration, initRunnerSize, outputChSize int,
+) *Pipeline {
 	header := make(headRunner, 4)
-	runners := make([]runner, 0, 16)
+	runners := make([]runner, 0, initRunnerSize)
 	runners = append(runners, header)
 	p := &Pipeline{
-		header:  header,
-		runners: runners,
+		header:       header,
+		runners:      runners,
+		outputChSize: outputChSize,
 	}
 	go func() {
 		var tickCh <-chan time.Time
@@ -59,7 +59,11 @@ func NewPipeline(ctx context.Context, tickDuration time.Duration) *Pipeline {
 		for {
 			select {
 			case <-tickCh:
-				p.SendToFirstNode(TickMessage()) //nolint:errcheck
+				err := p.SendToFirstNode(TickMessage()) //nolint:errcheck
+				if err != nil {
+					// Errors here are innocent. It's okay for tick messages to get lost.
+					log.Debug("Error encountered when calling SendToFirstNode", zap.Error(err))
+				}
 			case <-ctx.Done():
 				p.close()
 				return
@@ -76,7 +80,7 @@ func (p *Pipeline) AppendNode(ctx context.Context, name string, node Node) {
 		return err
 	})
 	lastRunner := p.runners[len(p.runners)-1]
-	runner := newNodeRunner(name, node, lastRunner)
+	runner := newNodeRunner(name, node, lastRunner, p.outputChSize)
 	p.runners = append(p.runners, runner)
 	p.runnersWg.Add(1)
 	go p.driveRunner(ctx, lastRunner, runner)
@@ -84,7 +88,7 @@ func (p *Pipeline) AppendNode(ctx context.Context, name string, node Node) {
 
 func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runner) {
 	defer func() {
-		log.Info("a pipeline node is exiting, stop the whole pipeline", zap.String("name", runner.getName()))
+		log.Debug("a pipeline node is exiting, stop the whole pipeline", zap.String("name", runner.getName()))
 		p.close()
 		blackhole(previousRunner)
 		p.runnersWg.Done()
@@ -92,19 +96,33 @@ func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runne
 	err := runner.run(ctx)
 	if err != nil {
 		ctx.Throw(err)
-		log.Error("found error when running the node", zap.String("name", runner.getName()), zap.Error(err))
+		if cerror.ErrTableProcessorStoppedSafely.NotEqual(err) {
+			log.Error("found error when running the node", zap.String("name", runner.getName()), zap.Error(err))
+		}
 	}
 }
 
+var pipelineTryAgainError error = cerror.ErrPipelineTryAgain.FastGenByArgs()
+
 // SendToFirstNode sends the message to the first node
-func (p *Pipeline) SendToFirstNode(msg *Message) error {
+func (p *Pipeline) SendToFirstNode(msg Message) error {
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
 	if p.isClosed {
 		return cerror.ErrSendToClosedPipeline.GenWithStackByArgs()
 	}
-	// The header channel should never be blocked
-	p.header <- msg
+
+	failpoint.Inject("PipelineSendToFirstNodeTryAgain", func() {
+		failpoint.Return(cerror.ErrPipelineTryAgain.GenWithStackByArgs())
+	})
+
+	select {
+	case p.header <- msg:
+	default:
+		// Do not call `GenWithStackByArgs` in the hot path,
+		// it consumes lots of CPU.
+		return pipelineTryAgainError
+	}
 	return nil
 }
 

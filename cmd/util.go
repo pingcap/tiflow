@@ -58,7 +58,13 @@ var (
 
 var errOwnerNotFound = liberrors.New("owner not found")
 
-var tsGapWarnning int64 = 86400 * 1000 // 1 day in milliseconds
+var tsGapWarning int64 = 86400 * 1000 // 1 day in milliseconds
+
+// Endpoint schemes.
+const (
+	HTTP  = "http"
+	HTTPS = "https"
+)
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
@@ -158,11 +164,11 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 	if job.Opts != nil && job.Opts.ForceRemove {
 		forceRemoveOpt = "true"
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID:       {job.CfID},
 		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
-	}))
+	})
 	if err != nil {
 		return err
 	}
@@ -192,9 +198,9 @@ func applyOwnerChangefeedQuery(
 	if err != nil {
 		return "", err
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarChangefeedID: {cid},
-	}))
+	})
 	if err != nil {
 		return "", err
 	}
@@ -217,21 +223,21 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	return nil
 }
 
-func verifyStartTs(ctx context.Context, startTs uint64) error {
+func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) error {
 	if disableGCSafePointCheck {
 		return nil
 	}
-	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
+	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
 }
 
-func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
+func verifyTargetTs(startTs, targetTs uint64) error {
 	if targetTs > 0 && targetTs <= startTs {
 		return errors.Errorf("target-ts %d must be larger than start-ts: %d", targetTs, startTs)
 	}
 	return nil
 }
 
-func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+func verifyTables(credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
@@ -252,9 +258,9 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 	}
 
 	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(int64(tID))
+		tableInfo, exist := snap.TableByID(tID)
 		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", int64(tID))
+			return nil, nil, errors.NotFoundf("table %d", tID)
 		}
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
@@ -292,6 +298,16 @@ func verifySink(
 	default:
 	}
 	return nil
+}
+
+// verifyReplicaConfig do strictDecodeFile check and only verify the rules for now
+func verifyReplicaConfig(path, component string, cfg *config.ReplicaConfig) error {
+	err := strictDecodeFile(path, component, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = filter.VerifyRules(cfg)
+	return err
 }
 
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
@@ -349,7 +365,7 @@ func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64
 		return err
 	}
 	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
-	if tsGap > tsGapWarnning {
+	if tsGap > tsGapWarning {
 		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
 			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
 			time.Duration(tsGap)*time.Millisecond,
@@ -361,6 +377,29 @@ func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64
 		}
 		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 			return errors.NewNoStackError("abort changefeed create or resume")
+		}
+	}
+	return nil
+}
+
+// verifyPdEndpoint verifies whether the pd endpoint is a valid http or https URL.
+// The certificate is required when using https.
+func verifyPdEndpoint(pdEndpoint string, useTLS bool) error {
+	u, err := url.Parse(pdEndpoint)
+	if err != nil {
+		return errors.Annotate(err, "parse PD endpoint")
+	}
+	if (u.Scheme != HTTP && u.Scheme != HTTPS) || u.Host == "" {
+		return errors.New("PD endpoint should be a valid http or https URL")
+	}
+
+	if useTLS {
+		if u.Scheme == HTTP {
+			return errors.New("PD endpoint scheme should be https")
+		}
+	} else {
+		if u.Scheme == HTTPS {
+			return errors.New("PD endpoint scheme is https, please provide certificate")
 		}
 	}
 	return nil

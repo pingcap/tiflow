@@ -37,7 +37,7 @@ const (
 	maxCompletePartSize = 100 << 20 // rotate row changed event file if one complete file larger than 100Mb
 	maxDDLFlushSize     = 10 << 20  // rotate ddl event file if one complete file larger than 10Mb
 
-	defaultBufferChanSize               = 1280000
+	defaultBufferChanSize               = 20480
 	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
@@ -78,7 +78,8 @@ func (tb *tableBuffer) isEmpty() bool {
 }
 
 func (tb *tableBuffer) shouldFlush() bool {
-	return tb.sendSize.Load() > maxPartFlushSize
+	// if sendSize > 5 MB or data chennal is full, flush it
+	return tb.sendSize.Load() > maxPartFlushSize || tb.sendEvents.Load() == defaultBufferChanSize
 }
 
 func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {
@@ -356,7 +357,7 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	options := &storage.BackendOptions{}
 	storage.ExtractQueryParameters(sinkURI, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialize, err)
 	}
 	// we should set this to true, since br set it by default in parseBackend
 	s3.ForcePathStyle = true
@@ -365,11 +366,11 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 	}
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
-		SkipCheckPath:   false,
+		SkipCheckPath:   true,
 		HTTPClient:      nil,
 	})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialize, err)
 	}
 
 	s := &s3Sink{

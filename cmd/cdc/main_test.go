@@ -11,15 +11,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package filter
+package main
+
+// Reference: https://dzone.com/articles/measuring-integration-test-coverage-rate-in-pouchc
 
 import (
-	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"os"
+	"strings"
+	"testing"
 )
 
-// ChangefeedFastFailError checks the error, returns true if it is meaningless
-// to retry on this error
-func ChangefeedFastFailError(err error) bool {
-	return cerror.ErrStartTsBeforeGC.Equal(errors.Cause(err))
+func TestRunMain(_ *testing.T) {
+	var args []string
+	for _, arg := range os.Args {
+		switch {
+		case strings.HasPrefix(arg, "-test."):
+		default:
+			args = append(args, arg)
+		}
+	}
+
+	os.Args = args
+	main()
 }

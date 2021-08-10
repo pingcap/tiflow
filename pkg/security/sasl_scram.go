@@ -11,26 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package security
 
-// Reference: https://dzone.com/articles/measuring-integration-test-coverage-rate-in-pouchc
+// SaslScram holds necessary path parameter to support sasl-scram
+type SaslScram struct {
+	SaslUser      string `toml:"sasl-user" json:"sasl-user"`
+	SaslPassword  string `toml:"sasl-password" json:"sasl-password"`
+	SaslMechanism string `toml:"sasl-mechanism" json:"sasl-mechanism"`
+}
 
-import (
-	"os"
-	"strings"
-	"testing"
-)
-
-func TestRunMain(t *testing.T) {
-	var args []string
-	for _, arg := range os.Args {
-		switch {
-		case strings.HasPrefix(arg, "-test."):
-		default:
-			args = append(args, arg)
-		}
-	}
-
-	os.Args = args
-	main()
+// IsSaslScramEnabled checks whether SASL SCRAM is enabled or not.
+func (s *SaslScram) IsSaslScramEnabled() bool {
+	return len(s.SaslUser) != 0
 }

@@ -42,14 +42,27 @@ enable-old-value = false
 	c.Assert(err, check.IsNil)
 
 	sinkURI = "blackhole:///?protocol=maxwell"
-	info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, nil)
+	info, err := verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
-	c.Assert(info.SortDir, check.Equals, defaultSortDir)
+	c.Assert(info.SortDir, check.Equals, "")
 
 	sinkURI = ""
-	_, err = verifyChangefeedParamers(ctx, cmd, true /* isCreate */, nil)
+	_, err = verifyChangefeedParameters(ctx, cmd, true /* isCreate */, nil)
 	c.Assert(err, check.NotNil)
 
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
+
+	sortDir = "/tidb/data"
+	pdCli = &mockPDClient{}
+	disableGCSafePointCheck = true
+	_, err = verifyChangefeedParameters(ctx, cmd, false, nil)
+	c.Assert(err, check.ErrorMatches, "*Creating changefeed with `--sort-dir`, it's invalid*")
+	_, err = verifyChangefeedParameters(ctx, cmd, true, nil)
+	c.Assert(err, check.NotNil)
+
+	sortDir = ""
+	sinkURI = "blackhole:///"
+	_, err = verifyChangefeedParameters(ctx, cmd, false, nil)
+	c.Assert(err, check.IsNil)
 }

@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -54,9 +53,6 @@ import (
 )
 
 const (
-	// defaultMemBufferCapacity is the default memory buffer per change feed.
-	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
 	defaultSyncResolvedBatch = 1024
 
 	schemaStorageGCLag = time.Minute * 20
@@ -72,7 +68,6 @@ type oldProcessor struct {
 	captureInfo  model.CaptureInfo
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
-	limitter     *puller.BlurResourceLimitter
 	stopped      int32
 
 	pdCli      pd.Client
@@ -85,7 +80,7 @@ type oldProcessor struct {
 	globalResolvedTs         uint64
 	localResolvedTs          uint64
 	checkpointTs             uint64
-	globalcheckpointTs       uint64
+	globalCheckpointTs       uint64
 	appliedLocalCheckpointTs uint64
 	flushCheckpointInterval  time.Duration
 
@@ -164,13 +159,12 @@ func newProcessor(
 ) (*oldProcessor, error) {
 	etcdCli := session.Client()
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
-	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts",
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	kvStorage := util.KVStorageFromCtx(ctx)
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -194,7 +188,6 @@ func newProcessor(
 
 	p := &oldProcessor{
 		id:            uuid.New().String(),
-		limitter:      limitter,
 		captureInfo:   captureInfo,
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
@@ -238,7 +231,7 @@ func newProcessor(
 	}
 
 	if err == nil {
-		p.globalcheckpointTs = info.CheckpointTs
+		p.globalCheckpointTs = info.CheckpointTs
 	}
 
 	for tableID, replicaInfo := range p.status.Tables {
@@ -676,7 +669,7 @@ func (p *oldProcessor) globalStatusWorker(ctx context.Context) error {
 	)
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
-		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
+		atomic.StoreUint64(&p.globalCheckpointTs, changefeedStatus.CheckpointTs)
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return
@@ -783,15 +776,15 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		return
 	}
 
-	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+	globalCheckpointTs := atomic.LoadUint64(&p.globalCheckpointTs)
 
-	if replicaInfo.StartTs < globalcheckpointTs {
-		// use Warn instead of Panic in case that p.globalcheckpointTs has not been initialized.
+	if replicaInfo.StartTs < globalCheckpointTs {
+		// use Warn instead of Panic in case that p.globalCheckpointTs has not been initialized.
 		// The cdc_state_checker will catch a real inconsistency in integration tests.
 		log.Warn("addTable: startTs < checkpoint",
 			util.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("checkpoint", globalCheckpointTs),
 			zap.Uint64("startTs", replicaInfo.StartTs))
 	}
 
@@ -815,10 +808,11 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
-		enableOldValue := p.changefeed.Config.EnableOldValue
-		span := regionspan.GetTableSpan(tableID, enableOldValue)
+		span := regionspan.GetTableSpan(tableID)
 		kvStorage := util.KVStorageFromCtx(ctx)
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
+		// NOTICE: always pull the old value internally
+		// See also: TODO(hi-rustin): add issue link here.
+		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -830,23 +824,11 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
-		case model.SortInFile:
-			err := util.IsDirAndWritable(p.changefeed.SortDir)
-			if err != nil {
-				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
-					if err != nil {
-						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
-						return nil
-					}
-				} else {
-					p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check"))
-					return nil
-				}
+		case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+			if p.changefeed.Engine == model.SortInFile {
+				log.Warn("File sorter is obsolete. Please revise your changefeed settings and use unified sorter",
+					util.ZapFieldChangefeed(ctx))
 			}
-
-			sorter = puller.NewFileSorter(p.changefeed.SortDir)
-		case model.SortUnified:
 			err := psorter.UnifiedSorterCheckDir(p.changefeed.SortDir)
 			if err != nil {
 				p.sendError(errors.Trace(err))
@@ -1093,7 +1075,28 @@ func (p *oldProcessor) sorterConsume(
 			if ev.Row == nil {
 				continue
 			}
-			rows = append(rows, ev.Row)
+			colLen := len(ev.Row.Columns)
+			preColLen := len(ev.Row.PreColumns)
+
+			// This indicates that it is an update event,
+			// and after enable old value internally by default(but disable in the configuration).
+			// We need to handle the update event to be compatible with the old format.
+			if !p.changefeed.Config.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+				if shouldSplitUpdateEventRow(ev.Row) {
+					deleteEventRow, insertEventRow, err := splitUpdateEventRow(ev.Row)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					// NOTICE: Please do not change the order, the delete event always comes before the insert event.
+					rows = append(rows, deleteEventRow, insertEventRow)
+				} else {
+					// If the handle key columns are not updated, PreColumns is directly ignored.
+					ev.Row.PreColumns = nil
+					rows = append(rows, ev.Row)
+				}
+			} else {
+				rows = append(rows, ev.Row)
+			}
 		}
 		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
 			log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
@@ -1109,8 +1112,8 @@ func (p *oldProcessor) sorterConsume(
 		return nil
 	}
 
-	processRowChangedEvent := func(row *model.PolymorphicEvent) error {
-		events = append(events, row)
+	processRowChangedEvent := func(event *model.PolymorphicEvent) error {
+		events = append(events, event)
 
 		if len(events) >= defaultSyncResolvedBatch {
 			err := flushRowChangedEvents()
@@ -1265,6 +1268,61 @@ func (p *oldProcessor) sorterConsume(
 	}
 }
 
+// shouldSplitUpdateEventRow determines if the split event is needed to align the old format based on
+// whether the handle key column has been modified.
+// If the handle key column is modified,
+// we need to use splitUpdateEventRow to split the row update event into a row delete and a row insert event.
+func shouldSplitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) bool {
+	// nil row will never be split.
+	if rowUpdateChangeEvent == nil {
+		return false
+	}
+
+	handleKeyCount := 0
+	equivalentHandleKeyCount := 0
+	for i := range rowUpdateChangeEvent.Columns {
+		if rowUpdateChangeEvent.Columns[i].Flag.IsHandleKey() && rowUpdateChangeEvent.PreColumns[i].Flag.IsHandleKey() {
+			handleKeyCount++
+			colValueString := model.ColumnValueString(rowUpdateChangeEvent.Columns[i].Value)
+			preColValueString := model.ColumnValueString(rowUpdateChangeEvent.PreColumns[i].Value)
+			if colValueString == preColValueString {
+				equivalentHandleKeyCount++
+			}
+		}
+	}
+
+	// If the handle key columns are not updated, so we do **not** need to split the event row.
+	return !(handleKeyCount == equivalentHandleKeyCount)
+}
+
+// splitUpdateEventRow splits a row update event into a row delete and a row insert event.
+func splitUpdateEventRow(rowUpdateChangeEvent *model.RowChangedEvent) (*model.RowChangedEvent, *model.RowChangedEvent, error) {
+	if rowUpdateChangeEvent == nil {
+		return nil, nil, errors.New("nil row cannot be split")
+	}
+
+	// If there is an update to handle key columns,
+	// we need to split the event into two events to be compatible with the old format.
+	deleteEventRow := *rowUpdateChangeEvent
+
+	deleteEventRow.Columns = nil
+	for i := range deleteEventRow.PreColumns {
+		// NOTICE: Only the handle key pre column is retained in the delete event.
+		if !deleteEventRow.PreColumns[i].Flag.IsHandleKey() {
+			deleteEventRow.PreColumns[i] = nil
+		}
+	}
+	// Align with the old format if old value disabled.
+	deleteEventRow.TableInfoVersion = 0
+
+	insertEventRow := *rowUpdateChangeEvent
+
+	// NOTICE: clean up pre cols for insert event.
+	insertEventRow.PreColumns = nil
+
+	return &deleteEventRow, &insertEventRow, nil
+}
+
 // pullerConsume receives RawKVEntry from a given puller and sends to sorter
 // for data sorting and mounter for data encode
 func (p *oldProcessor) pullerConsume(
@@ -1326,7 +1384,12 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 		log.Warn("an error occurred when stopping the processor", zap.Error(err))
 		errRes = err
 	}
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(0)
+	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	return errRes
 }
 

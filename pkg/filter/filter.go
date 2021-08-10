@@ -22,7 +22,7 @@ import (
 	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
 
-// Filter is a event filter implementation
+// Filter is a event filter implementation.
 type Filter struct {
 	filter           filterV2.Filter
 	ignoreTxnStartTs []uint64
@@ -30,8 +30,9 @@ type Filter struct {
 	isCyclicEnabled  bool
 }
 
-// NewFilter creates a filter
-func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
+// VerifyRules checks the filter rules in the configuration
+// and returns an invalid rule error if the verification fails, otherwise it will return the parsed filter.
+func VerifyRules(cfg *config.ReplicaConfig) (filterV2.Filter, error) {
 	var f filterV2.Filter
 	var err error
 	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
@@ -46,6 +47,17 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
+
+	return f, nil
+}
+
+// NewFilter creates a filter.
+func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
+	f, err := VerifyRules(cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+	}
+
 	if !cfg.CaseSensitive {
 		f = filterV2.CaseInsensitive(f)
 	}
@@ -67,9 +79,9 @@ func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
 }
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
-// Set `tbl` to an empty string to test against the whole database.
+// NOTICE: Set `tbl` to an empty string to test against the whole database.
 func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
-	if IsSysSchema(db) {
+	if isSysSchema(db) {
 		return true
 	}
 	if f.isCyclicEnabled && mark.IsMarkTable(db, tbl) {
@@ -99,7 +111,7 @@ func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, ddlType model.ActionType, schem
 	return f.shouldIgnoreStartTs(ts) || shouldIgnoreTableOrSchema
 }
 
-// ShouldDiscardDDL returns true if this DDL should be discarded
+// ShouldDiscardDDL returns true if this DDL should be discarded.
 func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
@@ -169,7 +181,7 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 	return true
 }
 
-// IsSysSchema returns true if the given schema is a system schema
-func IsSysSchema(db string) bool {
+// isSysSchema returns true if the given schema is a system schema
+func isSysSchema(db string) bool {
 	return filterV1.IsSystemSchema(db)
 }

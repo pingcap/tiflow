@@ -29,9 +29,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewReplicaImpl is true if we using new processor
-// new owner should be also switched on after it implemented
-const NewReplicaImpl = false
+const (
+	// NewReplicaImpl is true if we using new processor
+	// new owner should be also switched on after it implemented
+	NewReplicaImpl = false
+	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
+	DefaultSortDir = "/tmp/sorter"
+)
+
+func init() {
+	StoreGlobalServerConfig(GetDefaultServerConfig())
+}
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:    true,
@@ -138,25 +146,55 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
+// LogFileConfig represents log file config for server
+type LogFileConfig struct {
+	MaxSize    int `toml:"max-size" json:"max-size"`
+	MaxDays    int `toml:"max-days" json:"max-days"`
+	MaxBackups int `toml:"max-backups" json:"max-backups"`
+}
+
+// LogConfig represents log config for server
+type LogConfig struct {
+	File *LogFileConfig `toml:"file" json:"file"`
+}
+
 var defaultServerConfig = &ServerConfig{
-	Addr:                   "127.0.0.1:8300",
-	AdvertiseAddr:          "",
-	LogFile:                "",
-	LogLevel:               "info",
-	GcTTL:                  24 * 60 * 60, // 24H
-	TZ:                     "System",
+	Addr:          "127.0.0.1:8300",
+	AdvertiseAddr: "",
+	LogFile:       "",
+	LogLevel:      "info",
+	DataDir:       "",
+	GcTTL:         24 * 60 * 60, // 24H
+	TZ:            "System",
+	Log: &LogConfig{
+		File: &LogFileConfig{
+			MaxSize:    300,
+			MaxDays:    0,
+			MaxBackups: 0,
+		},
+	},
+	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
+	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
+	// default capture session ttl to 10s to increase robust to PD jitter,
+	// however it will decrease RTO when single TiCDC node error happens.
+	CaptureSessionTTL:      10,
 	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
-		ChunkSizeLimit:         1024 * 1024 * 1024, // 1GB
-		MaxMemoryPressure:      80,
-		MaxMemoryConsumption:   8 * 1024 * 1024 * 1024, // 8GB
+		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
+		MaxMemoryPressure:      30,                      // 30% is safe on machines with memory capacity <= 16GB
+		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
-		SortDir:                "/tmp/cdc_sort",
+		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+	KVClient: &KVClientConfig{
+		WorkerConcurrent: 8,
+		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+		RegionScanLimit:  6,
+	},
 }
 
 // ServerConfig represents a config for server
@@ -164,19 +202,23 @@ type ServerConfig struct {
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
-	LogFile  string `toml:"log-file" json:"log-file"`
-	LogLevel string `toml:"log-level" json:"log-level"`
+	LogFile  string     `toml:"log-file" json:"log-file"`
+	LogLevel string     `toml:"log-level" json:"log-level"`
+	Log      *LogConfig `toml:"log" json:"log"`
+	DataDir  string     `toml:"data-dir" json:"data-dir"`
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
 
+	CaptureSessionTTL int `toml:"capture-session-ttl" json:"capture-session-ttl"`
+
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
-	Security *SecurityConfig `toml:"security" json:"security"`
-
-	PerTableMemoryQuota uint64 `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	Sorter              *SorterConfig   `toml:"sorter" json:"sorter"`
+	Security            *SecurityConfig `toml:"security" json:"security"`
+	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -241,6 +283,12 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
 	}
 
+	// 5s is minimum lease ttl in etcd(PD)
+	if c.CaptureSessionTTL < 5 {
+		log.Warn("capture session ttl too small, set to default value 10s")
+		c.CaptureSessionTTL = 10
+	}
+
 	if c.Security != nil && c.Security.IsTLSEnabled() {
 		var err error
 		_, err = c.Security.ToTLSConfig()
@@ -256,6 +304,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.Sorter == nil {
 		c.Sorter = defaultServerConfig.Sorter
 	}
+	c.Sorter.SortDir = DefaultSortDir
 
 	if c.Sorter.ChunkSizeLimit < 1*1024*1024 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
@@ -281,6 +330,16 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.PerTableMemoryQuota < 6*1024*1024 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+	}
+
+	if c.KVClient == nil {
+		c.KVClient = defaultServerConfig.KVClient
+	}
+	if c.KVClient.WorkerConcurrent <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	}
+	if c.KVClient.RegionScanLimit <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
 	}
 
 	return nil
