@@ -32,6 +32,12 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
+const (
+	// tsGapWarning specifies the OOM threshold.
+	// 1 day in milliseconds
+	tsGapWarning = 86400 * 1000
+)
+
 // newCmdChangefeed creates the `cli changefeed` command.
 func newCmdChangefeed(f factory.Factory) *cobra.Command {
 	cmds := &cobra.Command{
@@ -136,10 +142,6 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient
 
 // confirmLargeDataGap checks if a large data gap is used.
 func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint64) error {
-	// tsGapWarning specifies the OOM threshold.
-	// 1 day in milliseconds
-	var tsGapWarning int64 = 86400 * 1000
-
 	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
 
 	if tsGap > tsGapWarning {
