@@ -19,6 +19,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/pingcap/ticdc/pkg/logutil"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/br/pkg/httputil"
 	"github.com/pingcap/log"
@@ -143,6 +145,7 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
 		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -176,7 +179,7 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		TaskStatus:     taskStatus,
 	}
 
-	c.IndentedJSON(http.StatusOK, changefeedDetail)
+	c.JSON(http.StatusOK, changefeedDetail)
 }
 
 // CreateChangefeed creates a changefeed
@@ -205,9 +208,9 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 	if err != nil {
 		if cerror.ErrPDEtcdAPIError.Equal(err) {
 			c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
-		} else {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
 		}
+		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 		return
 	}
 
@@ -254,6 +257,7 @@ func (h *HTTPHandler) PauseChangefeed(c *gin.Context) {
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
 		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -342,6 +346,7 @@ func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
 		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -400,6 +405,7 @@ func (h *HTTPHandler) RemoveChangefeed(c *gin.Context) {
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
 		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -445,6 +451,7 @@ func (h *HTTPHandler) RebalanceTable(c *gin.Context) {
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
 		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -466,7 +473,7 @@ func (h *HTTPHandler) RebalanceTable(c *gin.Context) {
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
 // @Param table_id body integer true "table_id"
-// @Param capture_id body string true "target capture_id"
+// @Param capture_id body string true "target_capture_id"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/move_table [post]
@@ -486,6 +493,7 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
 		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
@@ -584,7 +592,7 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		tables = append(tables, tableID)
 	}
 	processorDetail.Tables = tables
-	c.IndentedJSON(http.StatusOK, processorDetail)
+	c.JSON(http.StatusOK, processorDetail)
 }
 
 // ListProcessor lists all processors in the TiCDC cluster
@@ -701,11 +709,13 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	}, retry.WithBackoffBaseDelay(300), retry.WithMaxTries(getOwnerRetryMaxTime))
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
 	}
 
 	tslConfig, err := config.GetGlobalServerConfig().Security.ToTLSConfigWithVerify()
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
 	}
 
 	req, _ := http.NewRequest(c.Request.Method, c.Request.RequestURI, c.Request.Body)
@@ -746,4 +756,31 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
+}
+
+// SetLogLevel changes TiCDC log level dynamically.
+// @Summary Change TiCDC log level
+// @Description change TiCDC log level dynamically
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param log_level body string true "log level"
+// @Success 200
+// @Failure 400 {object} model.HTTPError
+// @Router	/api/v1/log [post]
+func SetLogLevel(c *gin.Context) {
+	level := c.PostForm("log_level")
+	if level == "" {
+		c.IndentedJSON(http.StatusBadRequest,
+			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("empty string is an invalid log level")))
+		return
+	}
+	err := logutil.SetLogLevel(level)
+	if err != nil {
+		c.IndentedJSON(http.StatusBadRequest,
+			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err)))
+		return
+	}
+	log.Warn("log level changed", zap.String("level", level))
+	c.Status(http.StatusOK)
 }

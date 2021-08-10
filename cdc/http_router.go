@@ -47,6 +47,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 	// common API
 	router.GET("/api/v1/status", captureHandler.ServerStatus)
 	router.GET("/api/v1/health", captureHandler.Health)
+	router.POST("/api/v1/log", capture.SetLogLevel)
 
 	// changefeed API
 	changefeedGroup := router.Group("/api/v1/changefeeds")
@@ -54,6 +55,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 		changefeedGroup.GET("", captureHandler.ListChangefeed)
 		changefeedGroup.GET("/:changefeed_id", captureHandler.GetChangefeed)
 		changefeedGroup.POST("", captureHandler.CreateChangefeed)
+		changefeedGroup.PUT("/:changefeed_id", captureHandler.UpdateChangefeed)
 		changefeedGroup.POST("/:changefeed_id/pause", captureHandler.PauseChangefeed)
 		changefeedGroup.POST("/:changefeed_id/resume", captureHandler.ResumeChangefeed)
 		changefeedGroup.DELETE("/:changefeed_id", captureHandler.RemoveChangefeed)
