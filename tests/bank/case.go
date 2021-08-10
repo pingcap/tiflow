@@ -136,7 +136,7 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 		return fmt.Sprintf("INSERT IGNORE INTO accounts_seq%d (id, counter, sequence, startts) VALUES %s", tableID, strings.Join(args, ","))
 	}
 
-	_ = prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
+	prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
 	return nil
 }
 
@@ -241,7 +241,7 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 		return fmt.Sprintf("INSERT IGNORE INTO accounts%d (id, balance, startts) VALUES %s", tableID, strings.Join(args, ","))
 	}
 
-	_ = prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
+	prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
 	return nil
 }
 
@@ -294,10 +294,10 @@ func prepareImpl(
 	ctx context.Context,
 	test testcase, createTable string, batchInsertSQLF func(batchSize, offset int) string,
 	db *sql.DB, accounts, tableID, concurrency int,
-) error {
+) {
 	isDropped := test.cleanup(ctx, db, accounts, tableID, false)
 	if !isDropped {
-		return nil
+		return
 	}
 
 	mustExec(ctx, db, createTable)
@@ -347,7 +347,6 @@ func prepareImpl(
 	}
 	close(ch)
 	_ = g.Wait()
-	return nil
 }
 
 func dropDB(ctx context.Context, db *sql.DB) {

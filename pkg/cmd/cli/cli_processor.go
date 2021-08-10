@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,23 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package cli
 
 import (
-	"fmt"
-
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(versionCmd)
-}
+// newCmdProcessor creates the `cli processor` command.
+func newCmdProcessor(f factory.Factory) *cobra.Command {
+	command := &cobra.Command{
+		Use:   "processor",
+		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
+	}
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Output version information",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(version.GetRawInfo())
-	},
+	command.AddCommand(newCmdListProcessor(f))
+	command.AddCommand(newCmdQueryProcessor(f))
+
+	return command
 }
