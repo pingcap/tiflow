@@ -34,7 +34,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -46,10 +45,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	gbackoff "google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
@@ -61,7 +57,6 @@ const (
 	grpcInitialWindowSize     = 1 << 26 // 64 MB The value for initial window size on a stream
 	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
 	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
-	grpcConnCount             = 2
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
@@ -239,87 +234,6 @@ func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
 	return state
 }
 
-type connArray struct {
-	credential *security.Credential
-	target     string
-	index      uint32
-	v          []*grpc.ClientConn
-}
-
-func newConnArray(ctx context.Context, maxSize uint, addr string, credential *security.Credential) (*connArray, error) {
-	a := &connArray{
-		target:     addr,
-		credential: credential,
-		index:      0,
-		v:          make([]*grpc.ClientConn, maxSize),
-	}
-	err := a.Init(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return a, nil
-}
-
-func (a *connArray) Init(ctx context.Context) error {
-	grpcTLSOption, err := a.credential.ToGRPCDialOption()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for i := range a.v {
-		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-
-		conn, err := grpc.DialContext(
-			ctx,
-			a.target,
-			grpcTLSOption,
-			grpc.WithInitialWindowSize(grpcInitialWindowSize),
-			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
-			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcMaxCallRecvMsgSize)),
-			grpc.WithUnaryInterceptor(grpcMetrics.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(grpcMetrics.StreamClientInterceptor()),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: gbackoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-			grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				Time:                10 * time.Second,
-				Timeout:             3 * time.Second,
-				PermitWithoutStream: true,
-			}),
-		)
-		cancel()
-
-		if err != nil {
-			a.Close()
-			return cerror.WrapError(cerror.ErrGRPCDialFailed, err)
-		}
-		a.v[i] = conn
-	}
-	return nil
-}
-
-func (a *connArray) Get() *grpc.ClientConn {
-	next := atomic.AddUint32(&a.index, 1) % uint32(len(a.v))
-	return a.v[next]
-}
-
-func (a *connArray) Close() {
-	for i, c := range a.v {
-		if c != nil {
-			err := c.Close()
-			if err != nil {
-				log.Warn("close grpc conn", zap.Error(err))
-			}
-		}
-		a.v[i] = nil
-	}
-}
-
 type regionEventFeedLimiters struct {
 	sync.Mutex
 	// TODO replace with a LRU cache.
@@ -346,6 +260,12 @@ func (rl *regionEventFeedLimiters) getLimiter(regionID uint64) *rate.Limiter {
 	return limiter
 }
 
+// grpcStream stores an EventFeed stream and pointer to the underlying gRPC connection
+type eventFeedStream struct {
+	client cdcpb.ChangeData_EventFeedClient
+	conn   *sharedConn
+}
+
 // CDCKVClient is an interface to receives kv changed logs from TiKV
 type CDCKVClient interface {
 	EventFeed(
@@ -365,20 +285,17 @@ var NewCDCKVClient func(
 	ctx context.Context,
 	pd pd.Client,
 	kvStorage tikv.Storage,
-	credential *security.Credential,
+	grpcPool GrpcPool,
 ) CDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
-	pd         pd.Client
-	credential *security.Credential
+	pd pd.Client
 
 	clusterID uint64
 
-	mu struct {
-		sync.Mutex
-		conns map[string]*connArray
-	}
+	grpcPool GrpcPool
+	tableID  int64
 
 	regionCache *tikv.RegionCache
 	kvStorage   TiKVStorage
@@ -387,7 +304,7 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c CDCKVClient) {
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grpcPool GrpcPool) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
 	var store TiKVStorage
@@ -400,18 +317,15 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 		}
 	}
 
+	tableID, _ := util.TableIDFromCtx(ctx)
+
 	c = &CDCClient{
-		clusterID:   clusterID,
-		pd:          pd,
-		kvStorage:   store,
-		credential:  credential,
-		regionCache: tikv.NewRegionCache(pd),
-		mu: struct {
-			sync.Mutex
-			conns map[string]*connArray
-		}{
-			conns: make(map[string]*connArray),
-		},
+		clusterID:      clusterID,
+		pd:             pd,
+		kvStorage:      store,
+		grpcPool:       grpcPool,
+		tableID:        tableID,
+		regionCache:    tikv.NewRegionCache(pd),
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
@@ -419,41 +333,27 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 
 // Close CDCClient
 func (c *CDCClient) Close() error {
-	c.mu.Lock()
-	for _, conn := range c.mu.conns {
-		conn.Close()
-	}
-	c.mu.Unlock()
 	c.regionCache.Close()
 
 	return nil
-}
-
-func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if conns, ok := c.mu.conns[addr]; ok {
-		return conns.Get(), nil
-	}
-	ca, err := newConnArray(ctx, grpcConnCount, addr, c.credential)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	c.mu.conns[addr] = ca
-	return ca.Get(), nil
 }
 
 func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
 	return c.regionLimiters.getLimiter(regionID)
 }
 
-func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	err = retry.Do(ctx, func() error {
-		conn, err := c.getConn(ctx, addr)
+func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream *eventFeedStream, newStreamErr error) {
+	newStreamErr = retry.Do(ctx, func() (err error) {
+		var conn *sharedConn
+		defer func() {
+			if err != nil && conn != nil {
+				c.grpcPool.ReleaseConn(conn, addr, c.tableID)
+			}
+		}()
+		conn, err = c.grpcPool.GetConn(ctx, addr, c.tableID)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
-			return errors.Trace(err)
+			return
 		}
 		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
@@ -462,10 +362,11 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			// store goes away forever, the conn will be leaked, we need a better
 			// connection pool.
 			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
-			return errors.Trace(err)
+			return
 		}
-		client := cdcpb.NewChangeDataClient(conn)
-		stream, err = client.EventFeed(ctx)
+		client := cdcpb.NewChangeDataClient(conn.ClientConn)
+		var streamClient cdcpb.ChangeData_EventFeedClient
+		streamClient, err = client.EventFeed(ctx)
 		if err != nil {
 			// TODO: we don't close gPRC conn here, let it goes into TransientFailure
 			// state. If the store recovers, the gPRC conn can be reused. But if
@@ -473,7 +374,11 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			// connection pool.
 			err = cerror.WrapError(cerror.ErrTiKVEventFeed, err)
 			log.Info("establish stream to store failed, retry later", zap.String("addr", addr), zap.Error(err))
-			return err
+			return
+		}
+		stream = &eventFeedStream{
+			client: streamClient,
+			conn:   conn,
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
@@ -548,7 +453,7 @@ type eventFeedSession struct {
 	errChSizeGauge    prometheus.Gauge
 	rangeChSizeGauge  prometheus.Gauge
 
-	streams          map[string]cdcpb.ChangeData_EventFeedClient
+	streams          map[string]*eventFeedStream
 	streamsLock      sync.RWMutex
 	streamsCanceller map[string]context.CancelFunc
 }
@@ -591,7 +496,7 @@ func newEventFeedSession(
 		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
-		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
+		streams:           make(map[string]*eventFeedStream),
 		streamsCanceller:  make(map[string]context.CancelFunc),
 	}
 }
@@ -857,9 +762,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			g.Go(func() error {
 				defer s.deleteStream(rpcCtx.Addr)
 				if !s.enableKVClientV2 {
-					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions, limiter)
 				}
-				return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
+				return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions, limiter)
 			})
 		}
 
@@ -872,7 +777,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		}
 		logReq("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
 
-		err = stream.Send(req)
+		err = stream.client.Send(req)
 
 		// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
 		// to do extra work here.
@@ -883,7 +788,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Uint64("requestID", requestID),
 				zap.Error(err))
-			err1 := stream.CloseSend()
+			err1 := stream.client.CloseSend()
 			if err1 != nil {
 				log.Warn("failed to close stream", zap.Error(err1))
 			}
@@ -1675,7 +1580,7 @@ func (s *eventFeedSession) singleEventFeed(
 	}
 }
 
-func (s *eventFeedSession) addStream(storeAddr string, stream cdcpb.ChangeData_EventFeedClient, cancel context.CancelFunc) {
+func (s *eventFeedSession) addStream(storeAddr string, stream *eventFeedStream, cancel context.CancelFunc) {
 	s.streamsLock.Lock()
 	defer s.streamsLock.Unlock()
 	s.streams[storeAddr] = stream
@@ -1685,14 +1590,17 @@ func (s *eventFeedSession) addStream(storeAddr string, stream cdcpb.ChangeData_E
 func (s *eventFeedSession) deleteStream(storeAddr string) {
 	s.streamsLock.Lock()
 	defer s.streamsLock.Unlock()
-	delete(s.streams, storeAddr)
+	if stream, ok := s.streams[storeAddr]; ok {
+		s.client.grpcPool.ReleaseConn(stream.conn, storeAddr, s.client.tableID)
+		delete(s.streams, storeAddr)
+	}
 	if cancel, ok := s.streamsCanceller[storeAddr]; ok {
 		cancel()
 		delete(s.streamsCanceller, storeAddr)
 	}
 }
 
-func (s *eventFeedSession) getStream(storeAddr string) (stream cdcpb.ChangeData_EventFeedClient, ok bool) {
+func (s *eventFeedSession) getStream(storeAddr string) (stream *eventFeedStream, ok bool) {
 	s.streamsLock.RLock()
 	defer s.streamsLock.RUnlock()
 	stream, ok = s.streams[storeAddr]
