@@ -135,16 +135,7 @@ func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 			log.Panic("schema not found for table ID", zap.Int64("tid", tableID))
 		}
 
-		// TODO separate function for initializing SimpleTableInfo
-		sinkTableInfo := new(model.SimpleTableInfo)
-		sinkTableInfo.Schema = dbInfo.Name.O
-		sinkTableInfo.TableID = tableID
-		sinkTableInfo.Table = tblInfo.TableName.Table
-		sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
-		for i, colInfo := range tblInfo.Cols() {
-			sinkTableInfo.ColumnInfo[i] = new(model.ColumnInfo)
-			sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
-		}
+		sinkTableInfo := newSimpleTableInfo(dbInfo, tableID, tblInfo)
 		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
 	}
 	return sinkTableInfos
@@ -165,4 +156,20 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
 		return true
 	}
 	return false
+}
+
+func newSimpleTableInfo(dbInfo *timodel.DBInfo, tableID model.TableID, tblInfo *model.TableInfo) *model.SimpleTableInfo {
+	info := &model.SimpleTableInfo{
+		Schema:     dbInfo.Name.O,
+		TableID:    tableID,
+		Table:      tblInfo.TableName.Table,
+		ColumnInfo: make([]*model.ColumnInfo, len(tblInfo.Cols())),
+	}
+
+	for i, col := range tblInfo.Cols() {
+		info.ColumnInfo[i] = new(model.ColumnInfo)
+		info.ColumnInfo[i].FromTiColumnInfo(col)
+	}
+
+	return info
 }
