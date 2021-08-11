@@ -67,22 +67,6 @@ function check_ts_forward() {
     exit 1
 }
 
-function check_ts_block() {
-    changefeedid=$1
-    rts1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
-    checkpoint1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
-    sleep 1
-    rts2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
-    checkpoint2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
-    if [[ "$rts1" != "null" ]] && [[ "$rts1" != "0" ]]; then
-        if [[  "$rts1" -eq "$rts2" ]] || [[ "$checkpoint1" -eq "$checkpoint2" ]]; then
-            echo "changefeed is blocking rts: ${rts1}->${rts2} checkpoint: ${checkpoint1}->${checkpoint2}"
-            return
-        fi
-    fi
-    exit 1
-}
-
 function check_ddl_executed() {
     log_file="$1"
     ddl=$(cat $2)
@@ -103,7 +87,6 @@ function check_ddl_executed() {
 
 export -f check_ts_forward
 export -f check_ddl_executed
-export -f check_ts_block
 
 tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
     "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
@@ -154,10 +137,6 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     changefeedid=$(cdc cli changefeed create --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
-    # block ddl
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=return(true)'
-    cdc cli changefeed create -c="changefeed-ddl-block" --sink-uri="blackhole://"
-    ensure 2 check_ts_block "changefeed-ddl-block"
 
     OLDIFS=$IFS
     IFS=""
