@@ -251,7 +251,10 @@ func (c *changefeed) releaseResources() {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	if err := c.sink.Close(); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// We don't need to wait sink Close, pass a canceled context is ok
+	if err := c.sink.Close(ctx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()

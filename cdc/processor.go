@@ -899,10 +899,10 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	table.cancel = func() {
 		cancel()
 		if tableSink != nil {
-			tableSink.Close()
+			tableSink.Close(ctx)
 		}
 		if mTableSink != nil {
-			mTableSink.Close()
+			mTableSink.Close(ctx)
 		}
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
@@ -1191,7 +1191,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	if err := p.etcdCli.DeleteTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
-	return p.sinkManager.Close()
+	return p.sinkManager.Close(ctx)
 }
 
 func (p *oldProcessor) isStopped() bool {
