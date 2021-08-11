@@ -26,7 +26,7 @@ import (
 
 // cyclicChangefeedOptions defines flags for the `cli changefeed cyclic` command.
 type cyclicChangefeedOptions struct {
-	createCommonOptions createChangefeedCommonOptions
+	createCommonOptions changefeedCommonOptions
 
 	pdClient pd.Client
 

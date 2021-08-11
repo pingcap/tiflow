@@ -44,13 +44,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// forceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var forceEnableOldValueProtocols = []string{
 	"canal",
 	"maxwell",
 }
 
-// createChangefeedCommonOptions defines common changefeed flags.
-type createChangefeedCommonOptions struct {
+// changefeedCommonOptions defines common changefeed flags.
+type changefeedCommonOptions struct {
 	noConfirm              bool
 	targetTs               uint64
 	sinkURI                string
@@ -66,14 +67,14 @@ type createChangefeedCommonOptions struct {
 	syncPointInterval      time.Duration
 }
 
-// newCreateChangefeedCommonOptions creates new create changefeed common options.
-func newCreateChangefeedCommonOptions() *createChangefeedCommonOptions {
-	return &createChangefeedCommonOptions{}
+// newChangefeedCommonOptions creates new changefeed common options.
+func newChangefeedCommonOptions() *changefeedCommonOptions {
+	return &changefeedCommonOptions{}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *createChangefeedCommonOptions) addFlags(cmd *cobra.Command) {
+func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	if o == nil {
 		return
 	}
@@ -95,7 +96,7 @@ func (o *createChangefeedCommonOptions) addFlags(cmd *cobra.Command) {
 }
 
 // validateReplicaConfig do strictDecodeFile check and only verify the rules for now.
-func (o *createChangefeedCommonOptions) validateReplicaConfig(component string, cfg *config.ReplicaConfig) error {
+func (o *changefeedCommonOptions) validateReplicaConfig(component string, cfg *config.ReplicaConfig) error {
 	err := util.StrictDecodeFile(o.configFile, component, cfg)
 	if err != nil {
 		return err
@@ -106,7 +107,7 @@ func (o *createChangefeedCommonOptions) validateReplicaConfig(component string, 
 	return err
 }
 
-func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+func (o *changefeedCommonOptions) validateTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
@@ -127,18 +128,14 @@ func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credent
 		return nil, nil, errors.Trace(err)
 	}
 
-	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(tID)
-		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", tID)
-		}
-		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
+	for _, tableInfo := range snap.Tables() {
+		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
 			continue
 		}
 		if !tableInfo.IsEligible(false /* forceReplicate */) {
-			ineligibleTables = append(ineligibleTables, tableName)
+			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
 		} else {
-			eligibleTables = append(eligibleTables, tableName)
+			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
 	}
 
@@ -147,7 +144,7 @@ func (o *createChangefeedCommonOptions) validateTables(cliPdAddr string, credent
 
 // createChangefeedOptions defines common flags for the `cli changefeed crate` command.
 type createChangefeedOptions struct {
-	commonChangefeedOptions *createChangefeedCommonOptions
+	commonChangefeedOptions *changefeedCommonOptions
 
 	etcdClient *kv.CDCEtcdClient
 	pdClient   pd.Client
@@ -161,7 +158,7 @@ type createChangefeedOptions struct {
 }
 
 // newCreateChangefeedOptions creates new options for the `cli changefeed create` command.
-func newCreateChangefeedOptions(commonChangefeedOptions *createChangefeedCommonOptions) *createChangefeedOptions {
+func newCreateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions) *createChangefeedOptions {
 	return &createChangefeedOptions{
 		commonChangefeedOptions: commonChangefeedOptions,
 	}
@@ -490,7 +487,7 @@ func (o *createChangefeedOptions) run(cmd *cobra.Command) error {
 
 // newCmdCreateChangefeed creates the `cli changefeed create` command.
 func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
-	commonChangefeedOptions := newCreateChangefeedCommonOptions()
+	commonChangefeedOptions := newChangefeedCommonOptions()
 
 	o := newCreateChangefeedOptions(commonChangefeedOptions)
 

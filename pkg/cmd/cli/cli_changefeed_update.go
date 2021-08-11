@@ -35,12 +35,12 @@ type updateChangefeedOptions struct {
 
 	credential *security.Credential
 
-	commonChangefeedOptions *createChangefeedCommonOptions
+	commonChangefeedOptions *changefeedCommonOptions
 	changefeedID            string
 }
 
 // newUpdateChangefeedOptions creates new options for the `cli changefeed update` command.
-func newUpdateChangefeedOptions(commonChangefeedOptions *createChangefeedCommonOptions) *updateChangefeedOptions {
+func newUpdateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions) *updateChangefeedOptions {
 	return &updateChangefeedOptions{
 		commonChangefeedOptions: commonChangefeedOptions,
 	}
@@ -194,7 +194,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 
 // newCmdPauseChangefeed creates the `cli changefeed update` command.
 func newCmdUpdateChangefeed(f factory.Factory) *cobra.Command {
-	commonChangefeedOptions := newCreateChangefeedCommonOptions()
+	commonChangefeedOptions := newChangefeedCommonOptions()
 	o := newUpdateChangefeedOptions(commonChangefeedOptions)
 
 	command := &cobra.Command{
