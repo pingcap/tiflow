@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/redo"
@@ -61,22 +62,23 @@ const (
 	clean int32 = 1
 )
 
-var (
-	initOnce  sync.Once
-	logWriter *LogWriter
-)
+var redoLogPool = sync.Pool{
+	New: func() interface{} {
+		return &redo.Log{}
+	},
+}
 
 // LogWriterConfig is the configuration used by a writer.
 type LogWriterConfig struct {
-	dir          string
-	changeFeedID string
-	startTs      uint64
+	Dir          string
+	ChangeFeedID string
+	StartTs      uint64
 	CreateTime   time.Time
-	// maxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
-	maxLogSize         int64
-	flushIntervalInSec int64
-	s3Storage          bool
-	s3URI              *url.URL
+	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
+	MaxLogSize         int64
+	FlushIntervalInSec int64
+	S3Storage          bool
+	S3URI              *url.URL
 }
 
 // LogWriter ...
@@ -84,40 +86,54 @@ type LogWriter struct {
 	cfg       *LogWriterConfig
 	rowWriter *writer
 	ddlWriter *writer
+	storage   storage.ExternalStorage
 	meta      *redo.LogMeta
 	metaLock  sync.RWMutex
 	dirtyMeta int32
 }
 
-// NewLogWriter creates a writer instance.
+// NewLogWriter creates a LogWriter instance. need the client to guarantee only one LogWriter per changefeed
+// TODO: delete log files when changefeed removed
 func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
-	initOnce.Do(func() {
-		rowCfg := &writerConfig{
-			dir:                cfg.dir,
-			changeFeedID:       cfg.changeFeedID,
-			fileName:           defaultRowLogFileName,
-			startTs:            cfg.startTs,
-			CreateTime:         cfg.CreateTime,
-			maxLogSize:         cfg.maxLogSize,
-			flushIntervalInSec: cfg.flushIntervalInSec,
-		}
-		ddlCfg := &writerConfig{
-			dir:                cfg.dir,
-			changeFeedID:       cfg.changeFeedID,
-			fileName:           defaultDDLLogFileName,
-			startTs:            cfg.startTs,
-			CreateTime:         cfg.CreateTime,
-			maxLogSize:         cfg.maxLogSize,
-			flushIntervalInSec: cfg.flushIntervalInSec,
-		}
-		logWriter = &LogWriter{
-			rowWriter: newWriter(ctx, rowCfg),
-			ddlWriter: newWriter(ctx, ddlCfg),
-			meta:      &redo.LogMeta{Offsets: map[int64]uint64{}},
-		}
+	if cfg == nil {
+		log.Panic("LogWriterConfig can not be nil")
+	}
 
-		go logWriter.runGC(ctx)
-	})
+	rowCfg := &writerConfig{
+		dir:                cfg.Dir,
+		changeFeedID:       cfg.ChangeFeedID,
+		fileName:           defaultRowLogFileName,
+		startTs:            cfg.StartTs,
+		createTime:         cfg.CreateTime,
+		maxLogSize:         cfg.MaxLogSize,
+		flushIntervalInSec: cfg.FlushIntervalInSec,
+	}
+	ddlCfg := &writerConfig{
+		dir:                cfg.Dir,
+		changeFeedID:       cfg.ChangeFeedID,
+		fileName:           defaultDDLLogFileName,
+		startTs:            cfg.StartTs,
+		createTime:         cfg.CreateTime,
+		maxLogSize:         cfg.MaxLogSize,
+		flushIntervalInSec: cfg.FlushIntervalInSec,
+	}
+	logWriter := &LogWriter{
+		rowWriter: newWriter(ctx, rowCfg),
+		ddlWriter: newWriter(ctx, ddlCfg),
+		meta:      &redo.LogMeta{Offsets: map[int64]uint64{}},
+	}
+	if cfg.S3Storage {
+		s3storage, err := initS3storage(ctx, cfg.S3URI)
+		if err != nil {
+			log.Panic("initS3storage fail",
+				zap.Error(err),
+				zap.String("change feed", cfg.ChangeFeedID))
+		}
+		logWriter.storage = s3storage
+	}
+
+	go logWriter.runGC(ctx)
+	go logWriter.runFlushMetaToS3(ctx, defaultFlushIntervalInSec)
 	return logWriter
 }
 
@@ -167,7 +183,11 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 
 	var maxCommitTs uint64
 	for _, r := range rows {
-		data, err := r.MarshalMsg(nil)
+		rl := redoLogPool.Get().(*redo.Log)
+		rl.Row = r
+		rl.DDL = nil
+		rl.Type = redo.LogTypeRow
+		data, err := rl.MarshalMsg(nil)
 		if err != nil {
 			return maxCommitTs, cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
@@ -177,29 +197,13 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 			return maxCommitTs, err
 		}
 		maxCommitTs = l.setMaxCommitTs(tableID, r.CommitTs)
+		redoLogPool.Put(rl)
 	}
 	// TODO: get a better name pattern, used in file name for search
 	if maxCommitTs > l.rowWriter.commitTS.Load() {
 		l.rowWriter.commitTS.Store(maxCommitTs)
 	}
 	return maxCommitTs, nil
-}
-
-func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
-	l.metaLock.Lock()
-	defer l.metaLock.Unlock()
-
-	if v, ok := l.meta.Offsets[tableID]; ok {
-		if v < commitTs {
-			l.meta.Offsets[tableID] = commitTs
-			atomic.StoreInt32(&l.dirtyMeta, dirty)
-		}
-	} else {
-		l.meta.Offsets[tableID] = commitTs
-		atomic.StoreInt32(&l.dirtyMeta, dirty)
-	}
-
-	return l.meta.Offsets[tableID]
 }
 
 // SendDDL implement SendDDL api
@@ -214,7 +218,13 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 		return cerror.ErrRedoWriterStopped
 	}
 
-	data, err := ddl.MarshalMsg(nil)
+	rl := redoLogPool.Get().(*redo.Log)
+	defer redoLogPool.Put(rl)
+
+	rl.DDL = ddl
+	rl.Row = nil
+	rl.Type = redo.LogTypeDDL
+	data, err := rl.MarshalMsg(nil)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
@@ -309,6 +319,23 @@ func (l *LogWriter) Close() error {
 	return err
 }
 
+func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
+	l.metaLock.Lock()
+	defer l.metaLock.Unlock()
+
+	if v, ok := l.meta.Offsets[tableID]; ok {
+		if v < commitTs {
+			l.meta.Offsets[tableID] = commitTs
+			atomic.StoreInt32(&l.dirtyMeta, dirty)
+		}
+	} else {
+		l.meta.Offsets[tableID] = commitTs
+		atomic.StoreInt32(&l.dirtyMeta, dirty)
+	}
+
+	return l.meta.Offsets[tableID]
+}
+
 // flush flushes all the buffered data to the disk.
 func (l *LogWriter) flush() error {
 	err1 := l.flushLogMeta()
@@ -325,7 +352,7 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%d_%s", l.cfg.changeFeedID, l.cfg.CreateTime.Unix(), defaultMetaFileName)
+	return fmt.Sprintf("%s_%d_%s.log", l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), defaultMetaFileName)
 }
 
 func (l *LogWriter) flushLogMeta() error {
@@ -361,6 +388,40 @@ func (l *LogWriter) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	atomic.StoreInt32(&l.dirtyMeta, dirty)
+	atomic.StoreInt32(&l.dirtyMeta, clean)
 	return nil
+}
+
+func (l *LogWriter) runFlushMetaToS3(ctx context.Context, flushIntervalInSec int64) {
+	ticker := time.NewTicker(time.Duration(flushIntervalInSec)*time.Second + 50*time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if l.isStopped() {
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			log.Info("runFlushMetaToS3 got canceled", zap.Error(ctx.Err()))
+			return
+		case <-ticker.C:
+			err := l.writeMetaToS3(ctx)
+			if err != nil {
+				log.Error("redo meta log flush to s3 error", zap.Error(err))
+			}
+		}
+	}
+}
+
+func (l *LogWriter) writeMetaToS3(ctx context.Context) error {
+	l.metaLock.Lock()
+
+	name := l.getMetafileName()
+	fileData, err := os.ReadFile(name)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	l.metaLock.Unlock()
+	return cerror.WrapError(cerror.ErrRedoFileOp, l.storage.WriteFile(ctx, name, fileData))
 }

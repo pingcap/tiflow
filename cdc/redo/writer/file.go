@@ -15,7 +15,9 @@ package writer
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -30,8 +32,17 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/uber-go/atomic"
+	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+)
+
+const (
+	minSectorSize = 512
+	// pageBytes is the alignment for flushing records to the backing Writer.
+	// It should be a multiple of the minimum sector size so that log can safely
+	// distinguish between torn writes and ordinary data corruption.
+	pageBytes = 8 * minSectorSize
 )
 
 const (
@@ -39,7 +50,7 @@ const (
 	defaultFileMode = 0o644
 
 	megabyte                  = 1024 * 1024
-	defaultMaxLogSize         = 100 * megabyte
+	defaultMaxLogSize         = 64 * megabyte
 	defaultFlushIntervalInSec = 2
 )
 
@@ -56,7 +67,7 @@ type writerConfig struct {
 	changeFeedID string
 	fileName     string
 	startTs      uint64
-	CreateTime   time.Time
+	createTime   time.Time
 	// maxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
 	maxLogSize         int64
 	flushIntervalInSec int64
@@ -72,6 +83,8 @@ type writer struct {
 	state     *atomic.Uint32
 	gcRunning *atomic.Bool
 	file      *os.File
+	bw        *pioutil.PageWriter
+	uint64buf []byte
 	storage   storage.ExternalStorage
 	stopChan  chan struct{}
 	sync.RWMutex
@@ -79,8 +92,7 @@ type writer struct {
 
 func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	if cfg == nil {
-		log.Panic("writerConfig can not be nil",
-			zap.String("log file", cfg.fileName))
+		log.Panic("writerConfig can not be nil")
 	}
 
 	if cfg.flushIntervalInSec == 0 {
@@ -92,23 +104,24 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	}
 	if cfg.s3Storage {
 		if cfg.s3URI == nil {
-			log.Panic("s3URI can not be nil",
-				zap.String("log file", cfg.fileName))
+			log.Panic("S3URI can not be nil",
+				zap.String("change feed", cfg.changeFeedID))
 		}
 	}
 
 	w := &writer{
-		cfg:      cfg,
-		stopChan: make(chan struct{}),
-		commitTS: atomic.NewUint64(cfg.startTs),
+		cfg:       cfg,
+		stopChan:  make(chan struct{}),
+		commitTS:  atomic.NewUint64(cfg.startTs),
+		uint64buf: make([]byte, 8),
 	}
 
 	if cfg.s3Storage {
-		s3storage, err := w.initS3storage(ctx, cfg.s3URI)
+		s3storage, err := initS3storage(ctx, cfg.s3URI)
 		if err != nil {
 			log.Panic("initS3storage fail",
 				zap.Error(err),
-				zap.String("log file", cfg.fileName))
+				zap.String("change feed", cfg.changeFeedID))
 		}
 		w.storage = s3storage
 	}
@@ -121,7 +134,7 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	return w
 }
 
-func (w *writer) initS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage, error) {
+func initS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage, error) {
 	if len(s3URI.Host) == 0 {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %s", s3URI))
 	}
@@ -140,9 +153,9 @@ func (w *writer) initS3storage(ctx context.Context, s3URI *url.URL) (storage.Ext
 		Backend: &backup.StorageBackend_S3{S3: s3},
 	}
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
-		SendCredentials: false,
-		SkipCheckPath:   true,
-		HTTPClient:      nil,
+		SendCredentials:  false,
+		HTTPClient:       nil,
+		CheckPermissions: []storage.Permission{storage.PutObject},
 	})
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)
@@ -174,6 +187,9 @@ func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInSec int64) {
 }
 
 func (w *writer) Write(rawData []byte) (int, error) {
+	w.Lock()
+	defer w.Unlock()
+
 	writeLen := int64(len(rawData))
 	if writeLen > w.cfg.maxLogSize {
 		return 0, errors.Errorf("rawData %d exceeds maximum file size %d", writeLen, w.cfg.maxLogSize)
@@ -191,10 +207,35 @@ func (w *writer) Write(rawData []byte) (int, error) {
 		}
 	}
 
-	n, err := w.file.Write(rawData)
+	lenField, padBytes := encodeFrameSize(len(rawData))
+	if err := w.writeUint64(lenField, w.uint64buf); err != nil {
+		return 0, err
+	}
+
+	if padBytes != 0 {
+		rawData = append(rawData, make([]byte, padBytes)...)
+	}
+	n, err := w.bw.Write(rawData)
 	w.size += int64(n)
 
 	return n, err
+}
+
+func (w *writer) writeUint64(n uint64, buf []byte) error {
+	// http://golang.org/src/encoding/binary/binary.go
+	binary.LittleEndian.PutUint64(buf, n)
+	_, err := w.bw.Write(buf)
+	return err
+}
+
+func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
+	lenField = uint64(dataBytes)
+	// force 8 byte alignment so length never gets a torn write
+	padBytes = (8 - (dataBytes % 8)) % 8
+	if padBytes != 0 {
+		lenField |= uint64(0x80|padBytes) << 56
+	}
+	return lenField, padBytes
 }
 
 // Close implements Writer.Close.
@@ -202,9 +243,6 @@ func (w *writer) Close() error {
 	if !w.isRunning() {
 		return nil
 	}
-
-	w.Lock()
-	defer w.Unlock()
 
 	err := w.close()
 	if err != nil {
@@ -238,7 +276,7 @@ func (w *writer) close() error {
 }
 
 func (w *writer) getLogFileName() string {
-	return fmt.Sprintf("%s_%s_%d_%d.log", w.cfg.changeFeedID, w.cfg.fileName, w.cfg.CreateTime.Unix(), w.commitTS)
+	return fmt.Sprintf("%s_%d_%s_%d.log", w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS)
 }
 
 func (w *writer) filePath() string {
@@ -248,16 +286,20 @@ func (w *writer) filePath() string {
 func (w *writer) openNew() error {
 	err := os.MkdirAll(w.cfg.dir, defaultDirMode)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("can't make dir for new redo logfile: %s", err))
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make Dir for new redo logfile"))
 	}
 
 	path := w.filePath()
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("can't open new redo logfile: %s", err))
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redo logfile"))
 	}
 	w.file = f
 	w.size = 0
+	err = w.newPageWriter()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -268,7 +310,7 @@ func (w *writer) openOrNew(writeLen int) error {
 		return w.openNew()
 	}
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("error getting log file info: %s", err))
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "error getting log file info"))
 	}
 
 	if info.Size()+int64(writeLen) >= w.cfg.maxLogSize {
@@ -281,6 +323,20 @@ func (w *writer) openOrNew(writeLen int) error {
 	}
 	w.file = file
 	w.size = info.Size()
+	err = w.newPageWriter()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *writer) newPageWriter() error {
+	offset, err := w.file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	w.bw = pioutil.NewPageWriter(w.file, pageBytes, int(offset))
+
 	return nil
 }
 
@@ -334,7 +390,7 @@ func (w *writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 func (w *writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
 	files, err := ioutil.ReadDir(w.cfg.dir)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Errorf("can't read log file directory: %s", err))
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
 	}
 
 	logFiles := []os.FileInfo{}
@@ -357,10 +413,14 @@ func (w *writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 
 // flush flushes all the buffered data to the disk.
 func (w *writer) flush() error {
+	w.Lock()
+	defer w.Unlock()
+
 	if w.file == nil {
 		return nil
 	}
 
+	_ = w.bw.Flush()
 	return cerror.WrapError(cerror.ErrRedoFileOp, w.file.Sync())
 }
 

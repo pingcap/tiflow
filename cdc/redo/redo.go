@@ -15,6 +15,25 @@
 
 package redo
 
+// LogType is the type of message
+type LogType int
+
+const (
+	// LogTypeUnknown is unknown type of message key
+	LogTypeUnknown LogType = iota
+	// LogTypeRow is row type of message
+	LogTypeRow
+	// LogTypeDDL is ddl type of message
+	LogTypeDDL
+)
+
+// Log ...
+type Log struct {
+	Row  *RowChangedEvent `msg:"row"`
+	DDL  *DDLEvent        `msg:"ddl"`
+	Type LogType          `msg:"type"`
+}
+
 // LogMeta ...
 type LogMeta struct {
 	CheckPointTs uint64           `msg:"checkPointTs"`
