@@ -60,6 +60,8 @@ function run() {
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
+    run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # normal changefeed
     run_cdc_cli changefeed create -c="changefeed-ddl-normal" --start-ts=$start_ts --sink-uri="$SINK_URI"
@@ -67,7 +69,6 @@ function run() {
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=return(true)'
     run_cdc_cli changefeed create -c="changefeed-ddl-block" --start-ts=$start_ts --sink-uri="blackhole://" --config="$CUR/conf/cf_config.toml"
     # write ddl
-    run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     ensure 3 check_ts_block "changefeed-ddl-block"
     ensure 4 check_ts_forward "changefeed-ddl-normal"
