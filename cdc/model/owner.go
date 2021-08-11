@@ -146,7 +146,7 @@ type TableOperation struct {
 	Delete bool   `json:"delete"`
 	Flag   uint64 `json:"flag,omitempty"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
-	// if the operation is a add operation, BoundaryTs is start ts
+	// if the operation is an add operation, BoundaryTs is start ts
 	BoundaryTs uint64 `json:"boundary_ts"`
 	Status     uint64 `json:"status,omitempty"`
 }

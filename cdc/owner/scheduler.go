@@ -35,7 +35,7 @@ type schedulerJob struct {
 	Tp      schedulerJobType
 	TableID model.TableID
 	// if the operation is a delete operation, boundaryTs is checkpoint ts
-	// if the operation is a add operation, boundaryTs is start ts
+	// if the operation is an add operation, boundaryTs is start ts
 	BoundaryTs    uint64
 	TargetCapture model.CaptureID
 }
@@ -161,21 +161,27 @@ func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, err
 	return table2CaptureIndex, nil
 }
 
-// dispatchToTargetCaptures sets the the TargetCapture of scheduler jobs
-// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload and sets the TargetCapture to the capture.
-func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
-	workloads := make(map[model.CaptureID]uint64)
+func (s *scheduler) collectWorkloadPerCapture() (result map[model.CaptureID]uint64) {
+	result = make(map[model.CaptureID]uint64)
 
 	for captureID := range s.captures {
-		workloads[captureID] = 0
+		result[captureID] = 0
 		taskWorkload := s.state.Workloads[captureID]
 		if taskWorkload == nil {
 			continue
 		}
 		for _, workload := range taskWorkload {
-			workloads[captureID] += workload.Workload
+			result[captureID] += workload.Workload
 		}
 	}
+
+	return result
+}
+
+// dispatchToTargetCaptures sets the TargetCapture of scheduler jobs
+// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload and sets the TargetCapture to the capture.
+func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
+	workloads := s.collectWorkloadPerCapture()
 
 	for _, pendingJob := range pendingJobs {
 		if pendingJob.TargetCapture == "" {
