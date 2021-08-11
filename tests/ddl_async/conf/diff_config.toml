@@ -11,7 +11,7 @@ fix-sql-file = "fix.sql"
 # tables need to check.
 [[check-tables]]
     schema = "ddl_async"
-    tables = ["~.*"]
+    tables = ["many_cols1","many_cols2","many_cols3","many_cols4","many_cols5","finish_mark"]
 
 [[source-db]]
     host = "127.0.0.1"
