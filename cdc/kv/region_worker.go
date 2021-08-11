@@ -141,7 +141,7 @@ type regionWorker struct {
 	limiter   *rate.Limiter
 
 	inputCh  chan *regionStatefulEvent
-	outputCh chan<- *model.RegionFeedEvent
+	outputCh chan<- model.RegionFeedEvent
 	errorCh  chan error
 
 	// event handlers in region worker
@@ -745,7 +745,7 @@ func (w *regionWorker) handleResolvedTs(
 		return nil
 	}
 	// emit a checkpointTs
-	revent := &model.RegionFeedEvent{
+	revent := model.RegionFeedEvent{
 		RegionID: regionID,
 		Resolved: &model.ResolvedSpan{
 			Span:       state.sri.span,
