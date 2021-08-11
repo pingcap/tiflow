@@ -81,9 +81,10 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 			for _, partition := range pi.Definitions {
 				s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, partition.ID)
 			}
-		} else {
-			s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, tblInfo.ID)
+			continue
 		}
+
+		s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, tblInfo.ID)
 	}
 	return s.allPhysicalTablesCache
 }

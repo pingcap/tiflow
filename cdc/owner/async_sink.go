@@ -34,7 +34,7 @@ const (
 	defaultErrChSize = 1024
 )
 
-// AsyncSink is a async sink design for owner
+// AsyncSink is an async sink design for owner
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
