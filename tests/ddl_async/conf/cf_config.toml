@@ -2,4 +2,4 @@
 
 [filter]
 # 过滤器规则
-rules = ['ddl_async.ddl_block']
+rules = ['ddl_async.many_*','ddl_async.finish_mark']
