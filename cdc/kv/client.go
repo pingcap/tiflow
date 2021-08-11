@@ -295,7 +295,6 @@ type CDCClient struct {
 	clusterID uint64
 
 	grpcPool GrpcPool
-	tableID  int64
 
 	regionCache *tikv.RegionCache
 	kvStorage   TiKVStorage
@@ -317,14 +316,11 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 		}
 	}
 
-	tableID, _ := util.TableIDFromCtx(ctx)
-
 	c = &CDCClient{
 		clusterID:      clusterID,
 		pd:             pd,
 		kvStorage:      store,
 		grpcPool:       grpcPool,
-		tableID:        tableID,
 		regionCache:    tikv.NewRegionCache(pd),
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
@@ -347,10 +343,10 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		var conn *sharedConn
 		defer func() {
 			if err != nil && conn != nil {
-				c.grpcPool.ReleaseConn(conn, addr, c.tableID)
+				c.grpcPool.ReleaseConn(conn, addr)
 			}
 		}()
-		conn, err = c.grpcPool.GetConn(ctx, addr, c.tableID)
+		conn, err = c.grpcPool.GetConn(ctx, addr)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return
@@ -1591,7 +1587,7 @@ func (s *eventFeedSession) deleteStream(storeAddr string) {
 	s.streamsLock.Lock()
 	defer s.streamsLock.Unlock()
 	if stream, ok := s.streams[storeAddr]; ok {
-		s.client.grpcPool.ReleaseConn(stream.conn, storeAddr, s.client.tableID)
+		s.client.grpcPool.ReleaseConn(stream.conn, storeAddr)
 		delete(s.streams, storeAddr)
 	}
 	if cancel, ok := s.streamsCanceller[storeAddr]; ok {
