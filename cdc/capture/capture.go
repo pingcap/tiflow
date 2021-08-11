@@ -67,12 +67,10 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient) *Capture {
-	grpcPool := kv.NewGrpcPoolImpl(config.GetGlobalServerConfig().Security)
 	return &Capture{
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
 		etcdClient: etcdClient,
-		grpcPool:   grpcPool,
 		cancel:     func() {},
 
 		newProcessorManager: processor.NewManager,
@@ -100,6 +98,10 @@ func (c *Capture) reset() error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
+	}
+	c.grpcPool = kv.NewGrpcPoolImpl(conf.Security)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -162,7 +164,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(2)
+	wg.Add(3)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
@@ -183,6 +185,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
+	}()
+	go func() {
+		defer wg.Done()
+		c.grpcPool.RecycleConn(ctx)
 	}()
 	wg.Wait()
 	if ownerErr != nil {

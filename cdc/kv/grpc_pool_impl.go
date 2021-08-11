@@ -28,16 +28,23 @@ import (
 )
 
 const (
-	defaultConnBucket = 8
-	defaultCapacity   = 1000
+	// The default max number of TiKV concurrent streams in each connection is 1024
+	grpcConnCapacity = 1000
+
+	// resizeBucket means how many buckets will be extended when resizing an conn array
+	resizeBucketStep = 2
+
+	recycleConnInterval = 10 * time.Minute
 )
 
 // connArray is an array of sharedConn
 type connArray struct {
 	// target is TiKV storage address
 	target string
-	mu     sync.Mutex
-	conns  []*sharedConn
+
+	mu    sync.Mutex
+	conns []*sharedConn
+
 	// next is used for fetching sharedConn in a round robin way
 	next int
 }
@@ -110,14 +117,14 @@ func (ca *connArray) getNext(ctx context.Context, credential *security.Credentia
 	defer ca.mu.Unlock()
 
 	if len(ca.conns) == 0 {
-		err := ca.resize(ctx, credential, 2)
+		err := ca.resize(ctx, credential, resizeBucketStep)
 		if err != nil {
 			return nil, err
 		}
 	}
 	for current := ca.next; current < ca.next+len(ca.conns); current++ {
 		conn := ca.conns[current%len(ca.conns)]
-		if conn.active < defaultCapacity {
+		if conn.active < grpcConnCapacity {
 			conn.active++
 			ca.next = (current + 1) % len(ca.conns)
 			return conn, nil
@@ -126,13 +133,32 @@ func (ca *connArray) getNext(ctx context.Context, credential *security.Credentia
 
 	current := len(ca.conns)
 	// if there is no available conn, increase connArray size by 2.
-	err := ca.resize(ctx, credential, 2)
+	err := ca.resize(ctx, credential, resizeBucketStep)
 	if err != nil {
 		return nil, err
 	}
 	ca.conns[current].active++
 	ca.next = current + 1
 	return ca.conns[current], nil
+}
+
+// recycle removes idle sharedConn, return true if no active gPRC connections remained.
+func (ca *connArray) recycle() (empty bool) {
+	ca.mu.Lock()
+	defer ca.mu.Unlock()
+	i := 0
+	for _, sc := range ca.conns {
+		if sc.active > 0 {
+			ca.conns[i] = sc
+			i++
+		}
+	}
+	// erasing truncated values
+	for j := i; j < len(ca.conns); j++ {
+		ca.conns[i] = nil
+	}
+	ca.conns = ca.conns[:i]
+	return len(ca.conns) == 0
 }
 
 // close tears down all ClientConns maintained in connArray
@@ -146,20 +172,12 @@ func (ca *connArray) close() {
 	}
 }
 
-func getBucket(tableID int64) int {
-	// plus defaultConnBucket in case of tableID = -1
-	return int(tableID+defaultConnBucket) % defaultConnBucket
-}
-
 // GrpcPoolImpl implement GrpcPool interface
 type GrpcPoolImpl struct {
 	poolMu sync.RWMutex
-	// bucketConns maps from TiKV store address to a slice of connArray, we call
-	// it connArray bucket.
-	// Each table will be mapped to a determinated bucket and GetConn will only
-	// return gRPC connections within this bucket, which means regions from the
-	// same table tend to use the same gRPC connection.
-	bucketConns map[string][]*connArray
+	// bucketConns maps from TiKV store address to a connArray, which stores a
+	// a slice of gRPC connections.
+	bucketConns map[string]*connArray
 	credential  *security.Credential
 }
 
@@ -167,37 +185,52 @@ type GrpcPoolImpl struct {
 func NewGrpcPoolImpl(credential *security.Credential) *GrpcPoolImpl {
 	return &GrpcPoolImpl{
 		credential:  credential,
-		bucketConns: make(map[string][]*connArray),
+		bucketConns: make(map[string]*connArray),
 	}
 }
 
 // GetConn implements GrpcPool.GetConn
-func (pool *GrpcPoolImpl) GetConn(ctx context.Context, addr string, tableID int64) (*sharedConn, error) {
+func (pool *GrpcPoolImpl) GetConn(ctx context.Context, addr string) (*sharedConn, error) {
 	pool.poolMu.Lock()
 	defer pool.poolMu.Unlock()
 	if _, ok := pool.bucketConns[addr]; !ok {
-		bucketConn := make([]*connArray, 0, defaultConnBucket)
-		for i := 0; i < defaultConnBucket; i++ {
-			bucketConn = append(bucketConn, newConnArray(addr))
-		}
-		pool.bucketConns[addr] = bucketConn
+		pool.bucketConns[addr] = newConnArray(addr)
 	}
-	index := getBucket(tableID)
-	return pool.bucketConns[addr][index].getNext(ctx, pool.credential)
+	return pool.bucketConns[addr].getNext(ctx, pool.credential)
 }
 
 // ReleaseConn implements GrpcPool.ReleaseConn
-func (pool *GrpcPoolImpl) ReleaseConn(sc *sharedConn, addr string, tableID int64) {
+func (pool *GrpcPoolImpl) ReleaseConn(sc *sharedConn, addr string) {
 	pool.poolMu.RLock()
 	defer pool.poolMu.RUnlock()
 	if bucket, ok := pool.bucketConns[addr]; !ok {
 		log.Warn("resource is not found in grpc pool", zap.String("addr", addr))
 	} else {
-		index := getBucket(tableID)
-		array := bucket[index]
-		array.mu.Lock()
+		bucket.mu.Lock()
 		sc.active--
-		array.mu.Unlock()
+		bucket.mu.Unlock()
+	}
+}
+
+// RecycleConn implements GrpcPool.RecycleConn
+func (pool *GrpcPoolImpl) RecycleConn(ctx context.Context) {
+	ticker := time.NewTicker(recycleConnInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pool.poolMu.Lock()
+			for addr, bucket := range pool.bucketConns {
+				empty := bucket.recycle()
+				if empty {
+					log.Info("recycle connections in grpc pool", zap.String("address", addr))
+					delete(pool.bucketConns, addr)
+				}
+			}
+			pool.poolMu.Unlock()
+		}
 	}
 }
 
@@ -206,8 +239,6 @@ func (pool *GrpcPoolImpl) Close() {
 	pool.poolMu.Lock()
 	defer pool.poolMu.Unlock()
 	for _, bucket := range pool.bucketConns {
-		for _, ca := range bucket {
-			ca.close()
-		}
+		bucket.close()
 	}
 }
