@@ -368,3 +368,80 @@ func (s *workerPoolSuite) TestBasics(c *check.C) {
 	err := errg.Wait()
 	c.Assert(err, check.ErrorMatches, "context canceled")
 }
+<<<<<<< HEAD
+=======
+
+// TestCancelByAddEventContext makes sure that the event handle can be cancelled by the context used
+// to call `AddEvent`.
+func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	poolCtx, poolCancel := context.WithCancel(context.Background())
+	defer poolCancel()
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	go func() {
+		err := pool.Run(poolCtx)
+		c.Assert(err, check.ErrorMatches, ".*context canceled.*")
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	errg, ctx := errgroup.WithContext(ctx)
+
+	for i := 0; i < 8; i++ {
+		handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+
+		errg.Go(func() error {
+			for j := 0; j < 64; j++ {
+				err := handler.AddEvent(ctx, j)
+				if err != nil {
+					return nil
+				}
+			}
+			return nil
+		})
+
+		errg.Go(func() error {
+			select {
+			case <-ctx.Done():
+			case <-handler.ErrCh():
+			}
+			return nil
+		})
+	}
+
+	time.Sleep(5 * time.Second)
+	cancel()
+
+	err := errg.Wait()
+	c.Assert(err, check.IsNil)
+}
+
+// Benchmark workerpool with ping-pong workflow.
+// go test -benchmem -run='^$' -bench '^(BenchmarkWorkerpool)$' github.com/pingcap/ticdc/pkg/workerpool
+func BenchmarkWorkerpool(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	go func() { _ = pool.Run(ctx) }()
+
+	ch := make(chan int)
+	handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		ch <- event.(int)
+		return nil
+	})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := handler.AddEvent(ctx, i)
+		if err != nil {
+			b.Fatal(err)
+		}
+		<-ch
+	}
+}
+>>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
