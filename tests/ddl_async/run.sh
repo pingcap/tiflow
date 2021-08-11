@@ -62,7 +62,7 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # normal changefeed
-    run_cdc_cli changefeed create -c="changefeed-ddl-normal" --start-ts=$start_ts --sink-uri="$SINK_URI"
+    run_cdc_cli changefeed create -c="changefeed-ddl-normal" --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/cf_config.toml"
     # ddl blocked changefeed
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=return(true)'
     run_cdc_cli changefeed create -c="changefeed-ddl-block" --start-ts=$start_ts --sink-uri="blackhole://"
