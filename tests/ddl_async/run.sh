@@ -62,15 +62,15 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # normal changefeed
-    changefeedid=$(run_cdc_cli changefeed create --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+    changefeedid=$(run_cdc_cli changefeed create --start-ts="$start_ts" --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     # ddl blocked changefeed
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=return(true)'
-    run_cdc_cli changefeed create -c="changefeed-ddl-block" --sink-uri="blackhole://"
+    run_cdc_cli changefeed create -c="changefeed-ddl-block" --start-ts="$start_ts" --sink-uri="blackhole://"
     # write ddl
     run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     ensure 3 check_ts_block "changefeed-ddl-block"
-    ensure 4 check_ts_forward $changefeedid
+    ensure 4 check_ts_forward "$changefeedid"
     ensure 3 check_ts_block "changefeed-ddl-block"
 
     check_table_exists ddl_async.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
