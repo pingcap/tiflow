@@ -144,9 +144,9 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 			},
 		})
 		n := newCyclicMarkNode(markTableID)
-		err := n.Init(pipeline.MockNodeContext4Test(ctx, nil, nil))
+		err := n.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil))
 		c.Assert(err, check.IsNil)
-		outputCh := make(chan *pipeline.Message)
+		outputCh := make(chan pipeline.Message)
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {

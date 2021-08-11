@@ -298,12 +298,25 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	if !config.NewReplicaImpl {
 		kvStorage := util.KVStorageFromCtx(ctx)
+		if s.capture != nil && s.capture.session != nil {
+			if err := s.capture.session.Close(); err != nil {
+				log.Warn("close old capture session failed", zap.Error(err))
+			}
+		}
 		capture, err := NewCapture(ctx, s.pdEndpoints, s.pdClient, kvStorage)
 		if err != nil {
 			return err
 		}
 		s.capture = capture
 		s.etcdClient = &capture.etcdClient
+		conf := config.GetGlobalServerConfig()
+		defer func() {
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Duration(conf.CaptureSessionTTL)*time.Second)
+			if err := s.etcdClient.DeleteCaptureInfo(timeoutCtx, s.capture.info.ID); err != nil {
+				log.Warn("failed to delete capture info when capture exited", zap.Error(err))
+			}
+			cancel()
+		}()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -376,8 +389,8 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
-		"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
+	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), sort-dir=%s. "+
+		"It is recommended that the disk for data-dir at least have %dGB available space", conf.DataDir, diskInfo.Avail, conf.Sorter.SortDir, dataDirThreshold))
 
 	return nil
 }

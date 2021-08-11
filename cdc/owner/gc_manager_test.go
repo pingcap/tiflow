@@ -158,14 +158,14 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
-	err := gcManager.CheckStaleCheckpointTs(ctx, 10)
+	err := gcManager.checkStaleCheckpointTs(ctx, 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0))
+	err = gcManager.checkStaleCheckpointTs(ctx, oracle.ComposeTS(oracle.GetPhysical(time.Now()), 0))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
-	err = gcManager.CheckStaleCheckpointTs(ctx, 10)
+	err = gcManager.checkStaleCheckpointTs(ctx, 10)
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 }
