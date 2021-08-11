@@ -62,17 +62,16 @@ function run() {
 
     run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=1*return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # normal changefeed
     run_cdc_cli changefeed create -c="changefeed-ddl-normal" --start-ts=$start_ts --sink-uri="$SINK_URI"
     # ddl blocked changefeed
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=return(true)'
     run_cdc_cli changefeed create -c="changefeed-ddl-block" --start-ts=$start_ts --sink-uri="blackhole://" --config="$CUR/conf/cf_config.toml"
     # write ddl
 
-    ensure 3 check_ts_block "changefeed-ddl-block"
-    ensure 4 check_ts_forward "changefeed-ddl-normal"
-    ensure 3 check_ts_block "changefeed-ddl-block"
+    ensure 5 check_ts_forward "changefeed-ddl-normal"
+    ensure 5 check_ts_block "changefeed-ddl-block"
 
     check_table_exists ddl_async.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
