@@ -135,8 +135,7 @@ func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 			log.Panic("schema not found for table ID", zap.Int64("tid", tableID))
 		}
 
-		sinkTableInfo := newSimpleTableInfo(dbInfo, tableID, tblInfo)
-		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
+		sinkTableInfos = append(sinkTableInfos, newSimpleTableInfo(dbInfo, tableID, tblInfo))
 	}
 	return sinkTableInfos
 }
