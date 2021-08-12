@@ -448,11 +448,6 @@ func (o *Owner) newChangeFeed(
 		}
 	}()
 
-	err = asyncSink.Initialize(cdcCtx, sinkTableInfo)
-	if err != nil {
-		log.Error("error on running owner", zap.Error(err))
-	}
-
 	go func() {
 		var err error
 		select {
@@ -466,6 +461,11 @@ func (o *Owner) newChangeFeed(
 			log.Info("changefeed exited", zap.String("changfeed", id))
 		}
 	}()
+
+	err = asyncSink.Initialize(cdcCtx, sinkTableInfo)
+	if err != nil {
+		log.Error("error on running owner", zap.Error(err))
+	}
 
 	var syncpointStore sink.SyncpointStore
 	if info.SyncPointEnabled {
