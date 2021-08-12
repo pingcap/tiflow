@@ -125,7 +125,7 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 
 	failpoint.Inject("addEventDelayPoint", func() {})
 
-	task := &task{
+	task := task{
 		handle: h,
 		f: func(ctx1 context.Context) error {
 			return h.f(ctx, event)
@@ -238,7 +238,7 @@ type task struct {
 }
 
 type worker struct {
-	taskCh       chan *task
+	taskCh       chan task
 	handles      map[*defaultEventHandle]struct{}
 	handleRWLock sync.RWMutex
 	// A message is passed to handleCancelCh when we need to wait for the
@@ -252,7 +252,7 @@ type worker struct {
 
 func newWorker() *worker {
 	return &worker{
-		taskCh:         make(chan *task, 128),
+		taskCh:         make(chan task, 128),
 		handles:        make(map[*defaultEventHandle]struct{}),
 		handleCancelCh: make(chan struct{}), // this channel must be unbuffered, i.e. blocking
 	}
@@ -272,9 +272,6 @@ func (w *worker) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case task := <-w.taskCh:
-			if task == nil {
-				return cerrors.ErrWorkerPoolEmptyTask.GenWithStackByArgs()
-			}
 			if atomic.LoadInt32(&task.handle.isCancelled) == 1 {
 				// ignored cancelled handle
 				continue
