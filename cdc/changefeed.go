@@ -1027,8 +1027,12 @@ func (c *changeFeed) Close() {
 		}
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 	if c.sink != nil {
-		err := c.sink.Close()
+		// pass a canceled context is enough, since the Close of backend sink
+		// here doesn't use context actually.
+		err := c.sink.Close(ctx)
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("failed to close owner sink", zap.Error(err))
 		}

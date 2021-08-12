@@ -29,11 +29,6 @@ import (
 )
 
 const (
-	// TODO: buffer chan size, the accumulated data is determined by
-	// the count of sorted data and unmounted data. In current benchmark a single
-	// processor can reach 50k-100k QPS, and accumulated data is around
-	// 200k-400k in most cases. We need a better chan cache mechanism.
-	defaultBufferChanSize = 1280000
 	defaultMetricInterval = time.Second * 15
 )
 
@@ -45,14 +40,18 @@ type Manager struct {
 	tableSinksMu sync.Mutex
 
 	flushMu sync.Mutex
+
+	drawbackChan chan drawbackMsg
 }
 
 // NewManager creates a new Sink manager
 func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) *Manager {
+	drawbackChan := make(chan drawbackMsg, 16)
 	return &Manager{
-		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs),
+		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
 		checkpointTs: checkpointTs,
 		tableSinks:   make(map[model.TableID]*tableSink),
+		drawbackChan: drawbackChan,
 	}
 }
 
@@ -73,9 +72,9 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 	return sink
 }
 
-// Close closes the Sink manager and backend Sink
-func (m *Manager) Close() error {
-	return m.backendSink.Close()
+// Close closes the Sink manager and backend Sink, this method can be reentrantly called
+func (m *Manager) Close(ctx context.Context) error {
+	return m.backendSink.Close(ctx)
 }
 
 func (m *Manager) getMinEmittedTs() model.Ts {
@@ -106,10 +105,22 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	return checkpointTs, nil
 }
 
-func (m *Manager) destroyTableSink(tableID model.TableID) {
+func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) error {
 	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
 	delete(m.tableSinks, tableID)
+	m.tableSinksMu.Unlock()
+	callback := make(chan struct{})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case m.drawbackChan <- drawbackMsg{tableID: tableID, callback: callback}:
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-callback:
+	}
+	return m.backendSink.Barrier(ctx)
 }
 
 func (m *Manager) getCheckpointTs() uint64 {
@@ -167,28 +178,44 @@ func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
-func (t *tableSink) Close() error {
-	t.manager.destroyTableSink(t.tableID)
+// Note once the Close is called, no more events can be written to this table sink
+func (t *tableSink) Close(ctx context.Context) error {
+	return t.manager.destroyTableSink(ctx, t.tableID)
+}
+
+// Barrier is not used in table sink
+func (t *tableSink) Barrier(ctx context.Context) error {
 	return nil
+}
+
+type drawbackMsg struct {
+	tableID  model.TableID
+	callback chan struct{}
 }
 
 type bufferSink struct {
 	Sink
-	buffer chan struct {
-		rows       []*model.RowChangedEvent
-		resolvedTs model.Ts
-	}
 	checkpointTs uint64
+	buffer       map[model.TableID][]*model.RowChangedEvent
+	bufferMu     sync.Mutex
+	flushTsChan  chan uint64
+	drawbackChan chan drawbackMsg
 }
 
-func newBufferSink(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) Sink {
+func newBufferSink(
+	ctx context.Context,
+	backendSink Sink,
+	errCh chan error,
+	checkpointTs model.Ts,
+	drawbackChan chan drawbackMsg,
+) Sink {
 	sink := &bufferSink{
 		Sink: backendSink,
-		buffer: make(chan struct {
-			rows       []*model.RowChangedEvent
-			resolvedTs model.Ts
-		}, defaultBufferChanSize),
+		// buffer shares the same flow control with table sink
+		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
 		checkpointTs: checkpointTs,
+		flushTsChan:  make(chan uint64, 128),
+		drawbackChan: drawbackChan,
 	}
 	go sink.run(ctx, errCh)
 	return sink
@@ -208,37 +235,53 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				errCh <- err
 			}
 			return
-		case e := <-b.buffer:
-			if e.rows == nil {
-				// A resolved event received
+		case drawback := <-b.drawbackChan:
+			b.bufferMu.Lock()
+			delete(b.buffer, drawback.tableID)
+			b.bufferMu.Unlock()
+			close(drawback.callback)
+		case resolvedTs := <-b.flushTsChan:
+			b.bufferMu.Lock()
+			// find all rows before resolvedTs and emit to backend sink
+			for tableID, rows := range b.buffer {
+				i := sort.Search(len(rows), func(i int) bool {
+					return rows[i].CommitTs > resolvedTs
+				})
+
 				start := time.Now()
-				checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, e.resolvedTs)
+				err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
 				if err != nil {
+					b.bufferMu.Unlock()
 					if errors.Cause(err) != context.Canceled {
 						errCh <- err
 					}
 					return
 				}
-				atomic.StoreUint64(&b.checkpointTs, checkpointTs)
-
 				dur := time.Since(start)
-				metricFlushDuration.Observe(dur.Seconds())
-				if dur > 3*time.Second {
-					log.Warn("flush row changed events too slow",
-						zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
-				}
-				continue
+				metricEmitRowDuration.Observe(dur.Seconds())
+
+				// put remaining rows back to buffer
+				// append to a new, fixed slice to avoid lazy GC
+				b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
 			}
+			b.bufferMu.Unlock()
+
 			start := time.Now()
-			err := b.Sink.EmitRowChangedEvents(ctx, e.rows...)
+			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, resolvedTs)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
 					errCh <- err
 				}
 				return
 			}
+			atomic.StoreUint64(&b.checkpointTs, checkpointTs)
+
 			dur := time.Since(start)
-			metricEmitRowDuration.Observe(dur.Seconds())
+			metricFlushDuration.Observe(dur.Seconds())
+			if dur > 3*time.Second {
+				log.Warn("flush row changed events too slow",
+					zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
+			}
 		case <-time.After(defaultMetricInterval):
 			metricBufferSize.Set(float64(len(b.buffer)))
 		}
@@ -249,10 +292,14 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case b.buffer <- struct {
-		rows       []*model.RowChangedEvent
-		resolvedTs model.Ts
-	}{rows: rows}:
+	default:
+		if len(rows) == 0 {
+			return nil
+		}
+		tableID := rows[0].Table.TableID
+		b.bufferMu.Lock()
+		b.buffer[tableID] = append(b.buffer[tableID], rows...)
+		b.bufferMu.Unlock()
 	}
 	return nil
 }
@@ -261,10 +308,7 @@ func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint6
 	select {
 	case <-ctx.Done():
 		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
-	case b.buffer <- struct {
-		rows       []*model.RowChangedEvent
-		resolvedTs model.Ts
-	}{resolvedTs: resolvedTs, rows: nil}:
+	case b.flushTsChan <- resolvedTs:
 	}
 	return atomic.LoadUint64(&b.checkpointTs), nil
 }

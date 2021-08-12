@@ -136,7 +136,11 @@ func (m *mockSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) error {
 	return m.checkpointError
 }
 
-func (m *mockSink) Close() error {
+func (m *mockSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
@@ -905,7 +909,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	})
 	sink, err := newAsyncSink(cdcCtx)
 	c.Assert(err, check.IsNil)
-	defer sink.Close() //nolint:errcheck
+	defer sink.Close(cctx) //nolint:errcheck
 	sampleCF.sink = sink
 
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
