@@ -286,12 +286,13 @@ func newMockServiceSpecificAddr(
 
 // waitRequestID waits request ID larger than the given allocated ID
 func waitRequestID(c *check.C, allocatedID uint64) {
-	err := retry.Run(time.Millisecond*10, 20, func() error {
+	err := retry.Do(context.Background(), func() error {
 		if currentRequestID() > allocatedID {
 			return nil
 		}
 		return errors.Errorf("request id %d is not larger than %d", currentRequestID(), allocatedID)
-	})
+	}, retry.WithBackoffBaseDelay(10), retry.WithMaxTries(20))
+
 	c.Assert(err, check.IsNil)
 }
 
@@ -1226,14 +1227,15 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	// The expected request ids are agnostic because the kv client could retry
 	// for more than one time, so we wait until the newly started server receives
 	// requests for both two regions.
-	err = retry.Run(time.Millisecond*200, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		_, ok1 := requestIds.Load(regionID3)
 		_, ok2 := requestIds.Load(regionID4)
 		if ok1 && ok2 {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	})
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 	reqID1, _ := requestIds.Load(regionID3)
 	reqID2, _ := requestIds.Load(regionID4)
@@ -1310,12 +1312,13 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	waitRequestID(c, baseAllocatedID+1)
 	initialized1 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized1
-	err = retry.Run(time.Millisecond*200, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if len(ch1) == 0 {
 			return nil
 		}
 		return errors.New("message is not sent")
-	})
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 
 	// another stream will be established, so we notify and wait the first
@@ -1437,22 +1440,24 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 
 	// wait request id allocated with: new session, new request
 	waitRequestID(c, baseAllocatedID+1)
-	err = retry.Run(time.Millisecond*50, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if atomic.LoadUint64(&requestID) == currentRequestID() {
 			return nil
 		}
 		return errors.Errorf("request is not received, requestID: %d, expected: %d",
 			atomic.LoadUint64(&requestID), currentRequestID())
-	})
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 	initialized1 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized1
-	err = retry.Run(time.Millisecond*200, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if len(ch1) == 0 {
 			return nil
 		}
 		return errors.New("message is not sent")
-	})
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 
 	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
@@ -1463,12 +1468,13 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 		},
 	}}
 	ch1 <- resolved
-	err = retry.Run(time.Millisecond*200, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if len(ch1) == 0 {
 			return nil
 		}
 		return errors.New("message is not sent")
-	})
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError", "1*return(\"\")")
 	c.Assert(err, check.IsNil)
@@ -1488,22 +1494,24 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 
 	// wait request id allocated with: new session, new request*2
 	waitRequestID(c, baseAllocatedID+2)
-	err = retry.Run(time.Millisecond*50, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if atomic.LoadUint64(&requestID) == currentRequestID() {
 			return nil
 		}
 		return errors.Errorf("request is not received, requestID: %d, expected: %d",
 			atomic.LoadUint64(&requestID), currentRequestID())
-	})
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 	initialized2 := mockInitializedEvent(regionID, currentRequestID())
 	ch1 <- initialized2
-	err = retry.Run(time.Millisecond*200, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if len(ch1) == 0 {
 			return nil
 		}
 		return errors.New("message is not sent")
-	})
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 
 	resolved = &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
@@ -1649,20 +1657,22 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 		cdcClient.Close() //nolint:errcheck
 	}()
 
-	err = retry.Run(time.Millisecond*500, 20, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if atomic.LoadInt32(&call) >= versionGenCallBoundary {
 			return nil
 		}
 		return errors.Errorf("version generator is not updated in time, call time %d", atomic.LoadInt32(&call))
-	})
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+
 	c.Assert(err, check.IsNil)
-	err = retry.Run(time.Millisecond*200, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		_, ok := requestIds.Load(regionID)
 		if ok {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	})
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 	reqID, _ := requestIds.Load(regionID)
 	initialized := mockInitializedEvent(regionID, reqID.(uint64))
@@ -2943,13 +2953,14 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	// The second TiKV could start up slowly, which causes the kv client retries
 	// to TiKV for more than one time, so we can't determine the correct requestID
 	// here, we must use the real request ID received by TiKV server
-	err = retry.Run(time.Millisecond*300, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		_, ok := requestIds.Load(regionID3)
 		if ok {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	})
+	}, retry.WithBackoffBaseDelay(300), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(10))
+
 	c.Assert(err, check.IsNil)
 	requestID, _ := requestIds.Load(regionID3)
 
@@ -3081,7 +3092,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	// Since there exists incremental scan limit in kv client, we must wait for
 	// the ready region and send initialized event.
 	sent := make(map[uint64]bool, regionNum)
-	err = retry.Run(time.Millisecond*200, 20, func() error {
+	err = retry.Do(context.Background(), func() error {
 		count := 0
 		// send initialized event and a resolved ts event to each region
 		requestIDs.Range(func(key, value interface{}) bool {
@@ -3107,7 +3118,8 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	})
+	}, retry.WithBackoffBaseDelay(200), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+
 	c.Assert(err, check.IsNil)
 
 	resolvedCount := 0
