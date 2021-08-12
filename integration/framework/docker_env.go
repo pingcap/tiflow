@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
 )
@@ -97,7 +98,7 @@ func (e *DockerEnv) RunTest(task Task) {
 		Downstream: downstream,
 		Env:        e,
 		WaitForReady: func() error {
-			return retry.Run(time.Second, 120, e.HealthChecker)
+			return retry.Do(context.Background(), e.HealthChecker, retry.WithBackoffBaseDelay(1000), retry.WithMaxTries(120), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 		},
 		Ctx: context.Background(),
 	}
