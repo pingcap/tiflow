@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,9 @@ const (
 	megabyte                  = 1024 * 1024
 	defaultMaxLogSize         = 64 * megabyte
 	defaultFlushIntervalInSec = 2
+
+	tmpEXT = ".tmp"
+	logEXT = ".log"
 )
 
 const (
@@ -66,7 +70,6 @@ type writerConfig struct {
 	dir          string
 	changeFeedID string
 	fileName     string
-	startTs      uint64
 	createTime   time.Time
 	// maxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
 	maxLogSize         int64
@@ -77,10 +80,13 @@ type writerConfig struct {
 
 // writer is a redo log event writer which writes redo log events to a file.
 type writer struct {
-	cfg           *writerConfig
-	size          int64
-	minCommitTS   *atomic.Uint64
-	commitTS      *atomic.Uint64
+	cfg  *writerConfig
+	size int64
+	// maxCommitTS is the max value among the events in one log file
+	maxCommitTS *atomic.Uint64
+	// the ts used in file name
+	commitTS *atomic.Uint64
+	// ts send with the event
 	eventCommitTS *atomic.Uint64
 	state         *atomic.Uint32
 	gcRunning     *atomic.Bool
@@ -194,8 +200,8 @@ func (w *writer) Write(rawData []byte) (int, error) {
 		return 0, errors.Errorf("rawData %d exceeds maximum file size %d", writeLen, w.cfg.maxLogSize)
 	}
 
-	if w.minCommitTS.Load() > w.eventCommitTS.Load() {
-		w.minCommitTS.Store(w.eventCommitTS.Load())
+	if w.maxCommitTS.Load() < w.eventCommitTS.Load() {
+		w.maxCommitTS.Store(w.eventCommitTS.Load())
 	}
 
 	if w.file == nil {
@@ -273,8 +279,8 @@ func (w *writer) close() error {
 		return err
 	}
 
-	// rename the file name from commitTs.wal.tmp to minCommitTs.wal if closed safely
-	w.commitTS.Store(w.minCommitTS.Load())
+	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
+	w.commitTS.Store(w.maxCommitTS.Load())
 	err = os.Rename(w.file.Name(), w.getLogFileName())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -286,7 +292,7 @@ func (w *writer) close() error {
 }
 
 func (w *writer) getLogFileName() string {
-	return fmt.Sprintf("%s_%d_%s_%d.log", w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS)
+	return fmt.Sprintf("%s_%d_%s_%d%s", w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS, logEXT)
 }
 
 func (w *writer) filePath() string {
@@ -305,8 +311,8 @@ func (w *writer) openNew() error {
 
 	// reset ts used in file name when new file
 	w.commitTS.Store(w.eventCommitTS.Load())
-	w.minCommitTS.Store(w.eventCommitTS.Load())
-	path := w.filePath() + ".tmp"
+	w.maxCommitTS.Store(w.eventCommitTS.Load())
+	path := w.filePath() + tmpEXT
 	f, err := openTruncFile(path)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redo logfile"))
@@ -387,16 +393,28 @@ func (w *writer) gc(checkPointTs uint64) error {
 	return cerror.WrapError(cerror.ErrRedoFileOp, errs)
 }
 
-func (w *writer) parseLogFileName(name string) (commitTs uint64, err error) {
-	if !strings.HasSuffix(name, ".log") {
+func (w *writer) parseLogFileName(name string) (uint64, error) {
+	if filepath.Ext(name) != logEXT || filepath.Ext(name) != tmpEXT {
 		return 0, errors.New("bad log name")
 	}
 
-	// TODO: file name pattern
-	return 0, err
+	ss := strings.Split(name, "_")
+	if len(ss) == 0 {
+		return 0, errors.New("bad log name")
+	}
+
+	commitTs, err := strconv.ParseUint(ss[len(ss)-1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return commitTs, nil
 }
 
 func (w *writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
+	if filepath.Ext(f.Name()) == tmpEXT {
+		return false, nil
+	}
+
 	commitTs, err := w.parseLogFileName(f.Name())
 	if err != nil {
 		return false, err

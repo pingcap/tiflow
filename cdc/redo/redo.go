@@ -15,7 +15,7 @@
 
 package redo
 
-// LogType is the type of message
+// LogType is the type of log
 type LogType int
 
 const (

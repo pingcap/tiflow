@@ -72,7 +72,6 @@ var redoLogPool = sync.Pool{
 type LogWriterConfig struct {
 	Dir          string
 	ChangeFeedID string
-	StartTs      uint64
 	CreateTime   time.Time
 	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
 	MaxLogSize         int64
@@ -103,7 +102,6 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		dir:                cfg.Dir,
 		changeFeedID:       cfg.ChangeFeedID,
 		fileName:           defaultRowLogFileName,
-		startTs:            cfg.StartTs,
 		createTime:         cfg.CreateTime,
 		maxLogSize:         cfg.MaxLogSize,
 		flushIntervalInSec: cfg.FlushIntervalInSec,
@@ -112,7 +110,6 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		dir:                cfg.Dir,
 		changeFeedID:       cfg.ChangeFeedID,
 		fileName:           defaultDDLLogFileName,
-		startTs:            cfg.StartTs,
 		createTime:         cfg.CreateTime,
 		maxLogSize:         cfg.MaxLogSize,
 		flushIntervalInSec: cfg.FlushIntervalInSec,
@@ -373,7 +370,7 @@ func (l *LogWriter) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 
-	tmpFileName := l.getMetafileName() + ".tmp"
+	tmpFileName := l.getMetafileName() + tmpEXT
 	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
