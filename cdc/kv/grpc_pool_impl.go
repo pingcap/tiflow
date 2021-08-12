@@ -34,7 +34,8 @@ const (
 	// resizeBucket means how many buckets will be extended when resizing an conn array
 	resizeBucketStep = 2
 
-	recycleConnInterval = 10 * time.Minute
+	updateMetricInterval = 1 * time.Minute
+	recycleConnInterval  = 10 * time.Minute
 )
 
 // connArray is an array of sharedConn
@@ -147,9 +148,9 @@ func (ca *connArray) recycle() (empty bool) {
 	ca.mu.Lock()
 	defer ca.mu.Unlock()
 	i := 0
-	for _, sc := range ca.conns {
-		if sc.active > 0 {
-			ca.conns[i] = sc
+	for _, conn := range ca.conns {
+		if conn.active > 0 {
+			ca.conns[i] = conn
 			i++
 		}
 	}
@@ -159,6 +160,15 @@ func (ca *connArray) recycle() (empty bool) {
 	}
 	ca.conns = ca.conns[:i]
 	return len(ca.conns) == 0
+}
+
+func (ca *connArray) activeCount() (count int64) {
+	ca.mu.Lock()
+	defer ca.mu.Unlock()
+	for _, conn := range ca.conns {
+		count += conn.active
+	}
+	return
 }
 
 // close tears down all ClientConns maintained in connArray
@@ -219,22 +229,31 @@ func (pool *GrpcPoolImpl) ReleaseConn(sc *sharedConn, addr string) {
 
 // RecycleConn implements GrpcPool.RecycleConn
 func (pool *GrpcPoolImpl) RecycleConn(ctx context.Context) {
-	ticker := time.NewTicker(recycleConnInterval)
-	defer ticker.Stop()
+	recycleTicker := time.NewTicker(recycleConnInterval)
+	defer recycleTicker.Stop()
+	metricTicker := time.NewTicker(updateMetricInterval)
+	defer metricTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-recycleTicker.C:
 			pool.poolMu.Lock()
 			for addr, bucket := range pool.bucketConns {
 				empty := bucket.recycle()
 				if empty {
 					log.Info("recycle connections in grpc pool", zap.String("address", addr))
 					delete(pool.bucketConns, addr)
+					grpcPoolStreamGauge.DeleteLabelValues(addr)
 				}
 			}
 			pool.poolMu.Unlock()
+		case <-metricTicker.C:
+			pool.poolMu.RLock()
+			for addr, bucket := range pool.bucketConns {
+				grpcPoolStreamGauge.WithLabelValues(addr).Set(float64(bucket.activeCount()))
+			}
+			pool.poolMu.RUnlock()
 		}
 	}
 }
