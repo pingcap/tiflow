@@ -178,8 +178,11 @@ type GrpcPoolImpl struct {
 	// bucketConns maps from TiKV store address to a connArray, which stores a
 	// a slice of gRPC connections.
 	bucketConns map[string]*connArray
-	credential  *security.Credential
-	ctx         context.Context
+
+	credential *security.Credential
+
+	// lifecycles of all gPRC connections are bounded to this context
+	ctx context.Context
 }
 
 // NewGrpcPoolImpl creates a new GrpcPoolImpl instance
