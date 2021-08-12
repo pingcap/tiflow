@@ -38,11 +38,13 @@ type EventHandle interface {
 	// AddEvent adds an `event` object to the internal queue, so that the `f` used to register the handle can be called.
 	// Note: events are always processed in the order they are added.
 	// Unregistering the EventHandle MAY CAUSE EVENT LOSSES. But for an event lost, any event after it is guaranteed to be lost too.
+	// Cancelling `ctx` here will cancel the on-going or next execution of the event.
 	AddEvent(ctx context.Context, event interface{}) error
 
 	// SetTimer is used to provide a function that is periodic called, as long as the EventHandle has not been unregistered.
 	// The current implementation uses as the base clock source a ticker whose interval is the const workerPoolDefaultClockSourceInterval.
 	// DO NOT set an interval less than workerPoolDefaultClockSourceInterval.
+	// Cancelling `ctx` here will cancel the on-going or next execution of `f`.
 	SetTimer(ctx context.Context, interval time.Duration, f func(ctx context.Context) error) EventHandle
 
 	// Unregister removes the EventHandle from the WorkerPool.

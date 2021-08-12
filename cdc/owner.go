@@ -434,7 +434,9 @@ func (o *Owner) newChangeFeed(
 	}
 	defer func() {
 		if resultErr != nil && primarySink != nil {
-			primarySink.Close()
+			// The Close of backend sink here doesn't use context, it is ok to pass
+			// a canceled context here.
+			primarySink.Close(ctx)
 		}
 	}()
 	go func() {
@@ -1217,7 +1219,7 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 	o.stepDown = stepDown
 
 	// Close and Run should be in separated goroutines
-	// A channel is used here to sychronize the steps.
+	// A channel is used here to synchronize the steps.
 
 	// Single the Run function to exit
 	select {

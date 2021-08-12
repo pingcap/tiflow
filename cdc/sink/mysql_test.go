@@ -1007,7 +1007,7 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
 	c.Assert(err, check.IsNil)
 
-	err = sink.Close()
+	err = sink.Close(ctx)
 	c.Assert(err, check.IsNil)
 }
 
@@ -1194,10 +1194,12 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
-
 	c.Assert(err, check.IsNil)
 
-	err = sink.Close()
+	err = sink.Barrier(ctx)
+	c.Assert(err, check.IsNil)
+
+	err = sink.Close(ctx)
 	c.Assert(err, check.IsNil)
 }
 
@@ -1265,7 +1267,7 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrDatabaseNotExists(c *check.C) {
 	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
 	c.Assert(errors.Cause(err), check.Equals, errDatabaseNotExists)
 
-	err = sink.Close()
+	err = sink.Close(ctx)
 	c.Assert(err, check.IsNil)
 }
 
@@ -1333,7 +1335,7 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrTableNotExists(c *check.C) {
 	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
 	c.Assert(errors.Cause(err), check.Equals, errTableNotExists)
 
-	err = sink.Close()
+	err = sink.Close(ctx)
 	c.Assert(err, check.IsNil)
 }
 
@@ -1403,7 +1405,7 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrRetryable(c *check.C) {
 	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
 	c.Assert(errors.Cause(err), check.Equals, errLockDeadlock)
 
-	err = sink.Close()
+	err = sink.Close(ctx)
 	c.Assert(err, check.IsNil)
 }
 
@@ -1487,7 +1489,7 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 	err = sink.EmitDDLEvent(ctx, ddl1)
 	c.Assert(err, check.IsNil)
 
-	err = sink.Close()
+	err = sink.Close(ctx)
 	c.Assert(err, check.IsNil)
 }
 
@@ -1527,6 +1529,6 @@ func (s MySQLSinkSuite) TestNewMySQLSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
 	c.Assert(err, check.IsNil)
-	err = sink.Close()
+	err = sink.Close(ctx)
 	c.Assert(err, check.IsNil)
 }
