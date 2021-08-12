@@ -74,7 +74,7 @@ function run() {
     # write ddl
 
     ensure 5 check_ts_forward "changefeed-ddl-normal"
-    ensure 10 check_ts_block "changefeed-ddl-block"
+    ensure 15 check_ts_block "changefeed-ddl-block"
 
     check_table_exists ddl_async.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
