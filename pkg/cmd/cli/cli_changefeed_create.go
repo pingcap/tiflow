@@ -199,36 +199,39 @@ func (o *createChangefeedOptions) complete(f factory.Factory) error {
 	return nil
 }
 
-func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
-	if isCreate {
-		if o.commonChangefeedOptions.sinkURI == "" {
-			return nil, errors.New("Creating changefeed without a sink-uri")
+func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Command) (*model.ChangeFeedInfo, error) {
+	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if o.commonChangefeedOptions.sinkURI == "" {
+		return nil, errors.New("Creating changefeed without a sink-uri")
+	}
+	if o.startTs == 0 {
+		ts, logical, err := o.pdClient.GetTS(ctx)
+		if err != nil {
+			return nil, err
 		}
-		if o.startTs == 0 {
-			ts, logical, err := o.pdClient.GetTS(ctx)
-			if err != nil {
-				return nil, err
-			}
-			o.startTs = oracle.ComposeTS(ts, logical)
-		}
-		if err := o.validateStartTs(ctx, o.changefeedID); err != nil {
+		o.startTs = oracle.ComposeTS(ts, logical)
+	}
+	if err := o.validateStartTs(ctx, o.changefeedID); err != nil {
+		return nil, err
+	}
+
+	if !o.commonChangefeedOptions.noConfirm {
+		currentPhysical, _, err := o.pdClient.GetTS(ctx)
+		if err != nil {
 			return nil, err
 		}
 
-		if !o.commonChangefeedOptions.noConfirm {
-			currentPhysical, _, err := o.pdClient.GetTS(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			if err := confirmLargeDataGap(cmd, currentPhysical, o.startTs); err != nil {
-				return nil, err
-			}
-		}
-
-		if err := o.validateTargetTs(); err != nil {
+		if err := confirmLargeDataGap(cmd, currentPhysical, o.startTs); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := o.validateTargetTs(); err != nil {
+		return nil, err
 	}
 	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
 	if err != nil {
@@ -347,35 +350,33 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 		return nil, errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
-	if isCreate {
-		ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
-		ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(o.pdAddr, credential, cfg, o.startTs)
-		if err != nil {
-			return nil, err
-		}
-		if len(ineligibleTables) != 0 {
-			if cfg.ForceReplicate {
-				cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", ineligibleTables)
-			} else {
-				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
-				if !o.commonChangefeedOptions.noConfirm {
-					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
-					var yOrN string
-					_, err := fmt.Scan(&yOrN)
-					if err != nil {
-						return nil, err
-					}
-					if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-						cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-						return nil, nil
-					}
+	ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
+	ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(o.pdAddr, o.credential, cfg, o.startTs)
+	if err != nil {
+		return nil, err
+	}
+	if len(ineligibleTables) != 0 {
+		if cfg.ForceReplicate {
+			cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", ineligibleTables)
+		} else {
+			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
+			if !o.commonChangefeedOptions.noConfirm {
+				cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+				var yOrN string
+				_, err := fmt.Scan(&yOrN)
+				if err != nil {
+					return nil, err
+				}
+				if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+					cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
+					return nil, nil
 				}
 			}
 		}
-		if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(eligibleTables) {
-			return nil, errors.New("normal tables and mark tables are not paired, " +
-				"please run `cdc cli changefeed cyclic create-marktables`")
-		}
+	}
+	if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(eligibleTables) {
+		return nil, errors.New("normal tables and mark tables are not paired, " +
+			"please run `cdc cli changefeed cyclic create-marktables`")
 	}
 
 	for _, opt := range o.commonChangefeedOptions.opts {
@@ -451,18 +452,13 @@ func (o *createChangefeedOptions) run(cmd *cobra.Command) error {
 	if id == "" {
 		id = uuid.New().String()
 	}
-	// validate the changefeedID first
+	// getInfo the changefeedID first
 	if err := model.ValidateChangefeedID(id); err != nil {
 		return err
 	}
 
-	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
-	if err != nil {
-		return err
-	}
-
 	// TODO: Try to uncouple the parameter and get information.
-	info, err := o.validate(ctx, cmd, true /* isCreate */, o.credential, captureInfos)
+	info, err := o.getInfo(ctx, cmd)
 	if err != nil {
 		return err
 	}
