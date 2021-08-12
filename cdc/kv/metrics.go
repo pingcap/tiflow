@@ -115,6 +115,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(clientRegionTokenSize)
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(etcdRequestCounter)
+	registry.MustRegister(grpcPoolStreamGauge)
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)
