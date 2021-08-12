@@ -128,13 +128,7 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 	task := &task{
 		handle: h,
 		f: func(ctx1 context.Context) error {
-			// Here we merge the context passed down from WorkerPool.Run,
-			// with the context supplied by AddEvent,
-			// because we want operations to be cancellable by both contexts.
-			mContext, cancel := MergeContexts(ctx, ctx1)
-			// this cancels the merged context only.
-			defer cancel()
-			return h.f(mContext, event)
+			return h.f(ctx, event)
 		},
 	}
 
@@ -154,9 +148,7 @@ func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duratio
 
 	h.timerInterval = interval
 	h.timerHandler = func(ctx1 context.Context) error {
-		mContext, cancel := MergeContexts(ctx, ctx1)
-		defer cancel()
-		return f(mContext)
+		return f(ctx)
 	}
 	// mark the timer handler function as valid
 	atomic.StoreInt32(&h.hasTimer, 1)
