@@ -202,7 +202,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	}()
 
 	// wait all regions requested from cdc kv client
-	err = retry.Run(time.Millisecond*500, 20, func() error {
+	err = retry.Do(context.Background(), func() error {
 		count := 0
 		requestIDs.Range(func(_, _ interface{}) bool {
 			count++
@@ -212,7 +212,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	})
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 	if err != nil {
 		b.Error(err)
 	}
@@ -292,7 +292,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	}()
 
 	// wait all regions requested from cdc kv client
-	err = retry.Run(time.Millisecond*500, 20, func() error {
+	err = retry.Do(context.Background(), func() error {
 		count := 0
 		requestIDs.Range(func(_, _ interface{}) bool {
 			count++
@@ -302,7 +302,7 @@ func prepareBench(b *testing.B, regionNum int) (
 			return nil
 		}
 		return errors.Errorf("region number %d is not as expected %d", count, regionNum)
-	})
+	}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 	if err != nil {
 		b.Error(err)
 	}
@@ -377,13 +377,12 @@ func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
 				}
 			}
 		})
-
-		err := retry.Run(time.Millisecond*500, 20, func() error {
+		err := retry.Do(context.Background(), func() error {
 			if len(mockSrvCh) == 0 {
 				return nil
 			}
 			return errors.New("not all events are sent yet")
-		})
+		}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			b.Error(err)
 		}
@@ -498,14 +497,14 @@ func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
 			}
 		})
 
-		err := retry.Run(time.Millisecond*500, 1000, func() error {
+		err := retry.Do(context.Background(), func() error {
 			for _, input := range inputs {
 				if len(input) != 0 {
 					return errors.New("not all events are sent yet")
 				}
 			}
 			return nil
-		})
+		}, retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(1000))
 		if err != nil {
 			b.Error(err)
 		}
