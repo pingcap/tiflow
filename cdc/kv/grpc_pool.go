@@ -29,7 +29,7 @@ type sharedConn struct {
 // reference of the shared connection
 type GrpcPool interface {
 	// GetConn returns an available gRPC ClientConn
-	GetConn(ctx context.Context, target string) (*sharedConn, error)
+	GetConn(target string) (*sharedConn, error)
 
 	// ReleaseConn is called when a gRPC stream is released
 	ReleaseConn(sc *sharedConn, target string)

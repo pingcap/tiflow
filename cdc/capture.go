@@ -120,7 +120,7 @@ func NewCapture(
 		Version:       version.ReleaseVersion,
 	}
 	processorManager := processor.NewManager()
-	grpcPool := kv.NewGrpcPoolImpl(credential)
+	grpcPool := kv.NewGrpcPoolImpl(stdCtx, credential)
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(stdCtx))
 
 	c = &Capture{
