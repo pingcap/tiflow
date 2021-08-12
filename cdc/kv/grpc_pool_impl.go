@@ -179,24 +179,26 @@ type GrpcPoolImpl struct {
 	// a slice of gRPC connections.
 	bucketConns map[string]*connArray
 	credential  *security.Credential
+	ctx         context.Context
 }
 
 // NewGrpcPoolImpl creates a new GrpcPoolImpl instance
-func NewGrpcPoolImpl(credential *security.Credential) *GrpcPoolImpl {
+func NewGrpcPoolImpl(ctx context.Context, credential *security.Credential) *GrpcPoolImpl {
 	return &GrpcPoolImpl{
 		credential:  credential,
 		bucketConns: make(map[string]*connArray),
+		ctx:         ctx,
 	}
 }
 
 // GetConn implements GrpcPool.GetConn
-func (pool *GrpcPoolImpl) GetConn(ctx context.Context, addr string) (*sharedConn, error) {
+func (pool *GrpcPoolImpl) GetConn(addr string) (*sharedConn, error) {
 	pool.poolMu.Lock()
 	defer pool.poolMu.Unlock()
 	if _, ok := pool.bucketConns[addr]; !ok {
 		pool.bucketConns[addr] = newConnArray(addr)
 	}
-	return pool.bucketConns[addr].getNext(ctx, pool.credential)
+	return pool.bucketConns[addr].getNext(pool.ctx, pool.credential)
 }
 
 // ReleaseConn implements GrpcPool.ReleaseConn
