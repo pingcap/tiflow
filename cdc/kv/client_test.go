@@ -327,7 +327,8 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	kvStorage := newStorageWithCurVersionCache(tiStore, addr)
 	defer kvStorage.Close() //nolint:errcheck
 
-	cluster.AddStore(1, "localhost:1")
+	invalidStore := "localhost:1"
+	cluster.AddStore(1, invalidStore)
 	cluster.AddStore(2, addr)
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
@@ -392,6 +393,13 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
 	checkEvent(event, ver.Ver)
+
+	// check gRPC connection active counter is updated correctly
+	bucket, ok := grpcPool.bucketConns[invalidStore]
+	c.Assert(ok, check.IsTrue)
+	empty := bucket.recycle()
+	c.Assert(empty, check.IsTrue)
+
 	cancel()
 }
 
