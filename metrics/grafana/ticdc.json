@@ -8251,7 +8251,7 @@
         "options": [],
         "query": {
           "query": "label_values(go_goroutines, tidb_cluster)",
-          "refId": "lingjin-test-tidb_cluster-Variable-Query"
+          "refId": "test-cluster-tidb_cluster-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -8278,7 +8278,7 @@
         "options": [],
         "query": {
           "query": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
-          "refId": "lingjin-test-changefeed-Variable-Query"
+          "refId": "test-cluster-changefeed-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -8305,7 +8305,7 @@
         "options": [],
         "query": {
           "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
-          "refId": "lingjin-test-capture-Variable-Query"
+          "refId": "test-cluster-capture-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -8332,7 +8332,7 @@
         "options": [],
         "query": {
           "query": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
-          "refId": "lingjin-test-tikv_instance-Variable-Query"
+          "refId": "test-cluster-tikv_instance-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -8414,7 +8414,7 @@
         "options": [],
         "query": {
           "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
-          "refId": "lingjin-test-runtime_instance-Variable-Query"
+          "refId": "test-cluster-runtime_instance-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
