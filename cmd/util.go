@@ -283,7 +283,7 @@ func verifySink(
 	if err != nil {
 		return err
 	}
-	err = s.Close()
+	err = s.Close(ctx)
 	if err != nil {
 		return err
 	}
