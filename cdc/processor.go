@@ -906,10 +906,10 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	table.cancel = func() {
 		cancel()
 		if tableSink != nil {
-			tableSink.Close()
+			tableSink.Close(ctx)
 		}
 		if mTableSink != nil {
-			mTableSink.Close()
+			mTableSink.Close(ctx)
 		}
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
@@ -1377,7 +1377,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	p.localCheckpointTsNotifier.Close()
 	p.localResolvedNotifier.Close()
 	var errRes error
-	if err := p.sinkManager.Close(); err != nil {
+	if err := p.sinkManager.Close(ctx); err != nil {
 		log.Warn("an error occurred when stopping the processor", zap.Error(err))
 		errRes = err
 	}

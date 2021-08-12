@@ -345,7 +345,13 @@ func (f *fileSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTabl
 	return nil
 }
 
-func (f *fileSink) Close() error {
+func (f *fileSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (f *fileSink) Barrier(ctx context.Context) error {
+	// Barrier does nothing because FlushRowChangedEvents in file sink has flushed
+	// all buffered events forcedlly.
 	return nil
 }
 
