@@ -123,7 +123,7 @@ func (s *pullerSuite) newPullerForTest(
 		kv.NewCDCKVClient = backupNewCDCKVClient
 	}()
 	pdCli := &mockPdClientForPullerTest{clusterID: uint64(1)}
-	grpcPool := kv.NewGrpcPoolImpl(&security.Credential{})
+	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	plr := NewPuller(ctx, pdCli, grpcPool, store, checkpointTs, spans, enableOldValue)
 	wg.Add(1)

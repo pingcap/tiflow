@@ -31,10 +31,10 @@ func (s *etcdSuite) TestConnArray(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pool := NewGrpcPoolImpl(&security.Credential{})
+	pool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer pool.Close()
 	addr := "127.0.0.1:20161"
-	conn, err := pool.GetConn(ctx, addr)
+	conn, err := pool.GetConn(addr)
 	c.Assert(err, check.IsNil)
 	c.Assert(conn.active, check.Equals, int64(1))
 	pool.ReleaseConn(conn, addr)
@@ -43,7 +43,7 @@ func (s *etcdSuite) TestConnArray(c *check.C) {
 	lastConn := conn
 	// First grpcConnCapacity*2 connections will use initial two connections.
 	for i := 0; i < grpcConnCapacity*2; i++ {
-		conn, err := pool.GetConn(ctx, addr)
+		conn, err := pool.GetConn(addr)
 		c.Assert(err, check.IsNil)
 		c.Assert(lastConn.ClientConn, check.Not(check.Equals), conn.ClientConn)
 		c.Assert(conn.active, check.Equals, int64(i)/2+1)
@@ -51,7 +51,7 @@ func (s *etcdSuite) TestConnArray(c *check.C) {
 	}
 	// The following grpcConnCapacity*2 connections will trigger resize of connection array.
 	for i := 0; i < grpcConnCapacity*2; i++ {
-		conn, err := pool.GetConn(ctx, addr)
+		conn, err := pool.GetConn(addr)
 		c.Assert(err, check.IsNil)
 		c.Assert(lastConn.ClientConn, check.Not(check.Equals), conn.ClientConn)
 		c.Assert(conn.active, check.Equals, int64(i)/2+1)
@@ -65,7 +65,7 @@ func (s *etcdSuite) TestConnArrayRecycle(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pool := NewGrpcPoolImpl(&security.Credential{})
+	pool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer pool.Close()
 	addr := "127.0.0.1:20161"
 
@@ -74,7 +74,7 @@ func (s *etcdSuite) TestConnArrayRecycle(c *check.C) {
 	sharedConns := make([]*sharedConn, bucket)
 	// get conn for 6000 times, and grpc pool will create 6 buckets
 	for i := 0; i < grpcConnCapacity*bucket; i++ {
-		conn, err := pool.GetConn(ctx, addr)
+		conn, err := pool.GetConn(addr)
 		c.Assert(err, check.IsNil)
 		if i%(grpcConnCapacity*resizeBucketStep) == 0 {
 			sharedConns[i/grpcConnCapacity] = conn

@@ -260,7 +260,7 @@ func (rl *regionEventFeedLimiters) getLimiter(regionID uint64) *rate.Limiter {
 	return limiter
 }
 
-// grpcStream stores an EventFeed stream and pointer to the underlying gRPC connection
+// eventFeedStream stores an EventFeed stream and pointer to the underlying gRPC connection
 type eventFeedStream struct {
 	client cdcpb.ChangeData_EventFeedClient
 	conn   *sharedConn
@@ -346,7 +346,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 				c.grpcPool.ReleaseConn(conn, addr)
 			}
 		}()
-		conn, err = c.grpcPool.GetConn(ctx, addr)
+		conn, err = c.grpcPool.GetConn(addr)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return

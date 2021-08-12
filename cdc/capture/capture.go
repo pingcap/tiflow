@@ -78,7 +78,7 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDC
 	}
 }
 
-func (c *Capture) reset() error {
+func (c *Capture) reset(ctx context.Context) error {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	conf := config.GetGlobalServerConfig()
@@ -101,7 +101,7 @@ func (c *Capture) reset() error {
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
-	c.grpcPool = kv.NewGrpcPoolImpl(conf.Security)
+	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -126,7 +126,7 @@ func (c *Capture) Run(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		err = c.reset()
+		err = c.reset(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
