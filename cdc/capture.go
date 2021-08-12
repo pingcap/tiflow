@@ -183,6 +183,10 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			return errors.Trace(err)
 		}
 	} else {
+		defer c.grpcPool.Close()
+		go func() {
+			c.grpcPool.RecycleConn(ctx)
+		}()
 		taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
 			Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
 			ChannelSize: 128,
@@ -265,6 +269,10 @@ func (c *Capture) Close(ctx context.Context) error {
 		select {
 		case <-c.closed:
 		case <-ctx.Done():
+		}
+	} else {
+		if c.grpcPool != nil {
+			c.grpcPool.Close()
 		}
 	}
 	return errors.Trace(c.etcdClient.DeleteCaptureInfo(ctx, c.info.ID))
