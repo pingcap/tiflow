@@ -346,6 +346,9 @@ func (c *Capture) AsyncClose() {
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
+	}
 }
 
 // WriteDebugInfo writes the debug info into writer.
