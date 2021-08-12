@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1628752410828,
+  "iteration": 1628754073523,
   "links": [],
   "panels": [
     {
@@ -1043,7 +1043,6 @@
                 "filterable": false
               },
               "decimals": 2,
-              "displayName": "",
               "mappings": [],
               "thresholds": {
                 "mode": "absolute",
@@ -1064,20 +1063,32 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Time"
+                  "options": "Field"
                 },
                 "properties": [
                   {
                     "id": "displayName",
-                    "value": "Time"
-                  },
-                  {
-                    "id": "unit",
-                    "value": "time: YYYY-MM-DD HH:mm:ss"
+                    "value": "Metric"
                   },
                   {
                     "id": "custom.align",
                     "value": null
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Last"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Current"
+                  },
+                  {
+                    "id": "custom.align",
+                    "value": "left"
                   }
                 ]
               }
@@ -1130,7 +1141,7 @@
                 "mode": "thresholds"
               },
               "custom": {
-                "align": null,
+                "align": "left",
                 "filterable": false
               },
               "mappings": [],
@@ -1146,13 +1157,14 @@
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "none"
             },
             "overrides": [
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Metric"
+                  "options": "Field"
                 },
                 "properties": [
                   {
@@ -1176,7 +1188,7 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Current"
+                  "options": "Last"
                 },
                 "properties": [
                   {
@@ -1197,7 +1209,7 @@
                   },
                   {
                     "id": "custom.align",
-                    "value": null
+                    "value": "left"
                   }
                 ]
               }
@@ -1280,7 +1292,7 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Metric"
+                  "options": "Field"
                 },
                 "properties": [
                   {
@@ -1304,7 +1316,7 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Current"
+                  "options": "Last"
                 },
                 "properties": [
                   {
@@ -1325,7 +1337,7 @@
                   },
                   {
                     "id": "custom.align",
-                    "value": null
+                    "value": "left"
                   }
                 ]
               }
@@ -1414,20 +1426,36 @@
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Time"
+                  "options": "Field"
                 },
                 "properties": [
                   {
                     "id": "displayName",
-                    "value": "Time"
-                  },
-                  {
-                    "id": "unit",
-                    "value": "time: YYYY-MM-DD HH:mm:ss"
+                    "value": "Metrics"
                   },
                   {
                     "id": "custom.align",
                     "value": null
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Last"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Current"
+                  },
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 2
                   }
                 ]
               }
@@ -8430,7 +8458,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "lingjin-test-TiCDCxxx",
-  "uid": "YiGL8hBZ1xxxx",
+  "title": "lingjin-test-TiCDCxxxx",
+  "uid": "YiGL8hBZ1xxxxx",
   "version": 1
 }
