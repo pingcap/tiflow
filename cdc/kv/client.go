@@ -517,13 +517,8 @@ type eventFeedSession struct {
 	totalSpan regionspan.ComparableSpan
 
 	// The channel to send the processed events.
-<<<<<<< HEAD
-	eventCh chan<- *model.RegionFeedEvent
-	// The token based region router, it controls the uninitialzied regions with
-=======
 	eventCh chan<- model.RegionFeedEvent
-	// The token based region router, it controls the uninitialized regions with
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
+	// The token based region router, it controls the uninitialzied regions with
 	// a given size limit.
 	regionRouter LimitRegionRouter
 	// The channel to put the region that will be sent requests.

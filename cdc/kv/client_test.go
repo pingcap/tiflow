@@ -366,13 +366,8 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	ts, err := kvStorage.CurrentVersion()
 	c.Assert(err, check.IsNil)
-<<<<<<< HEAD
 	ch2 <- makeEvent(ts.Ver)
-	var event *model.RegionFeedEvent
-=======
-	ch2 <- makeEvent(ver.Ver)
 	var event model.RegionFeedEvent
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	// consume the first resolved ts event, which is sent before region starts
 	<-eventCh
 	select {
@@ -424,13 +419,8 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -534,13 +524,8 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -696,13 +681,8 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
@@ -763,13 +743,8 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1217,13 +1192,8 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1326,13 +1296,8 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 40)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 40)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1459,13 +1424,8 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1679,13 +1639,8 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1778,13 +1733,8 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	var wg2 sync.WaitGroup
 	if enableKVClientV2 {
 		wg.Add(1)
@@ -1875,13 +1825,8 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1989,13 +1934,8 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2093,13 +2033,8 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
@@ -2246,13 +2181,8 @@ func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2429,13 +2359,8 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2664,13 +2589,8 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2844,13 +2764,8 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2911,13 +2826,8 @@ func (s *etcdSuite) TestClientV1ErrNoPendingRegion(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2991,13 +2901,8 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3149,15 +3054,10 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	}()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	// The buffer size of event channel must be large enough because in the test
 	// case we send events first, and then retrive all events from this channel.
-	eventCh := make(chan *model.RegionFeedEvent, 100)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 100)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3273,13 +3173,8 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3401,13 +3296,8 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	baseAllocatedID := currentRequestID()
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 10)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 10)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
