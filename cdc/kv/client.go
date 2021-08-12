@@ -55,7 +55,6 @@ import (
 
 const (
 	dialTimeout           = 10 * time.Second
-	maxRetry              = 100
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 	// TODO find optimal values and test extensively before releasing
 	// The old values cause the gRPC stream to stall for some unknown reason.
@@ -437,7 +436,7 @@ func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	err = retry.Run(50*time.Millisecond, 3, func() error {
+	err = retry.Do(ctx, func() error {
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
@@ -465,7 +464,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(3), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	return
 }
 
@@ -1091,38 +1090,31 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			regions []*tikv.Region
 			err     error
 		)
-		retryErr := retry.Run(50*time.Millisecond, maxRetry,
-			func() error {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
-				scanT0 := time.Now()
-				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-				regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
-				scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
-				if err != nil {
-					return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
-				}
-				metas := make([]*metapb.Region, 0, len(regions))
-				for _, region := range regions {
-					if region.GetMeta() == nil {
-						err = cerror.ErrMetaNotInRegion.GenWithStackByArgs()
-						log.Warn("batch load region", zap.Stringer("span", nextSpan), zap.Error(err))
-						return err
-					}
-					metas = append(metas, region.GetMeta())
-				}
-				if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
-					err = cerror.ErrRegionsNotCoverSpan.GenWithStackByArgs(nextSpan, metas)
-					log.Warn("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
+		retryErr := retry.Do(ctx, func() error {
+			scanT0 := time.Now()
+			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+			regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
+			scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
+			if err != nil {
+				return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
+			}
+			metas := make([]*metapb.Region, 0, len(regions))
+			for _, region := range regions {
+				if region.GetMeta() == nil {
+					err = cerror.ErrMetaNotInRegion.GenWithStackByArgs()
+					log.Warn("batch load region", zap.Stringer("span", nextSpan), zap.Error(err))
 					return err
 				}
-				log.Debug("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas))
-				return nil
-			})
-
+				metas = append(metas, region.GetMeta())
+			}
+			if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
+				err = cerror.ErrRegionsNotCoverSpan.GenWithStackByArgs(nextSpan, metas)
+				log.Warn("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
+				return err
+			}
+			log.Debug("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas))
+			return nil
+		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(100), retry.WithIsRetryableErr(cerror.IsRetryableError))
 		if retryErr != nil {
 			return retryErr
 		}

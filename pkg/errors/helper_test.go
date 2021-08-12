@@ -14,6 +14,7 @@
 package errors
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -51,5 +52,25 @@ func (s *helperSuite) TestWrapError(c *check.C) {
 			c.Assert(we, check.NotNil)
 			c.Assert(we.Error(), check.Equals, tc.expected)
 		}
+	}
+}
+
+func (s *helperSuite) TestIsRetryableError(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"context Canceled err", context.Canceled, false},
+		{"context DeadlineExceeded err", context.DeadlineExceeded, false},
+		{"normal err", errors.New("test"), true},
+		{"cdc reachMaxTry err", ErrReachMaxTry, true},
+	}
+	for _, tt := range tests {
+		ret := IsRetryableError(tt.err)
+		c.Assert(ret, check.Equals, tt.want, check.Commentf("case:%s", tt.name))
 	}
 }

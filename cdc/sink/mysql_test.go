@@ -1175,31 +1175,33 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	c.Assert(err, check.IsNil)
 
-	err = retry.Run(time.Millisecond*20, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, uint64(2))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(2) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
 	c.Assert(err, check.IsNil)
 
-	err = retry.Run(time.Millisecond*20, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, uint64(4))
 		c.Assert(err, check.IsNil)
 		if ts < uint64(4) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
 	c.Assert(err, check.IsNil)
 
 	err = sink.Close()
 	c.Assert(err, check.IsNil)
 }
 
-func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
+func (s MySQLSinkSuite) TestExecDMLRollbackErrDatabaseNotExists(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	rows := []*model.RowChangedEvent{
@@ -1220,8 +1222,9 @@ func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
 	errDatabaseNotExists := &dmysql.MySQLError{
 		Number: uint16(infoschema.ErrDatabaseNotExists.Code()),
 	}
+
 	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
 			dbIndex++
 		}()
@@ -1234,18 +1237,16 @@ func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		c.Assert(err, check.IsNil)
-		for i := 0; i < defaultDMLMaxRetryTime+1; i++ {
-			mock.ExpectBegin()
-			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
-				WithArgs(1, 2).
-				WillReturnError(errDatabaseNotExists)
-			mock.ExpectRollback()
-		}
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+			WithArgs(1, 2).
+			WillReturnError(errDatabaseNotExists)
+		mock.ExpectRollback()
 		mock.ExpectClose()
 		return db, nil
 	}
 	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
 		getDBConnImpl = backupGetDBConn
 	}()
@@ -1263,6 +1264,144 @@ func (s MySQLSinkSuite) TestExecDMLRollback(c *check.C) {
 
 	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
 	c.Assert(errors.Cause(err), check.Equals, errDatabaseNotExists)
+
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func (s MySQLSinkSuite) TestExecDMLRollbackErrTableNotExists(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	rows := []*model.RowChangedEvent{
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			},
+		},
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+			},
+		},
+	}
+
+	errTableNotExists := &dmysql.MySQLError{
+		Number: uint16(infoschema.ErrTableNotExists.Code()),
+	}
+
+	dbIndex := 0
+	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+			WithArgs(1, 2).
+			WillReturnError(errTableNotExists)
+		mock.ExpectRollback()
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
+
+	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	c.Assert(errors.Cause(err), check.Equals, errTableNotExists)
+
+	err = sink.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func (s MySQLSinkSuite) TestExecDMLRollbackErrRetryable(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	rows := []*model.RowChangedEvent{
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+			},
+		},
+		{
+			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+			},
+		},
+	}
+
+	errLockDeadlock := &dmysql.MySQLError{
+		Number: mysql.ErrLockDeadlock,
+	}
+
+	dbIndex := 0
+	mockGetDBConnErrDatabaseNotExists := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB()
+			c.Assert(err, check.IsNil)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		c.Assert(err, check.IsNil)
+		for i := 0; i < defaultDMLMaxRetryTime; i++ {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+				WithArgs(1, 2).
+				WillReturnError(errLockDeadlock)
+			mock.ExpectRollback()
+		}
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := getDBConnImpl
+	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	defer func() {
+		getDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
+	c.Assert(err, check.IsNil)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	c.Assert(err, check.IsNil)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	c.Assert(err, check.IsNil)
+
+	err = sink.(*mysqlSink).execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	c.Assert(errors.Cause(err), check.Equals, errLockDeadlock)
 
 	err = sink.Close()
 	c.Assert(err, check.IsNil)

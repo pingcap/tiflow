@@ -17,13 +17,16 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"golang.org/x/sync/errgroup"
+)
+
+const (
+	backoffBaseDelayInMs = 1
+	maxTries             = 25
 )
 
 type defaultAsyncPoolImpl struct {
@@ -50,18 +53,15 @@ func (p *defaultAsyncPoolImpl) Go(ctx context.Context, f func()) error {
 	if p.doGo(ctx, f) == nil {
 		return nil
 	}
-	return errors.Trace(retry.Run(time.Millisecond*1, 25, func() error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		err := errors.Trace(p.doGo(ctx, f))
-		if err != nil && cerrors.ErrAsyncPoolExited.NotEqual(errors.Cause(err)) {
-			return backoff.Permanent(err)
-		}
-		return err
-	}))
+
+	err := retry.Do(ctx, func() error {
+		return errors.Trace(p.doGo(ctx, f))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryable))
+	return errors.Trace(err)
+}
+
+func isRetryable(err error) bool {
+	return cerrors.IsRetryableError(err) && cerrors.ErrAsyncPoolExited.Equal(err)
 }
 
 func (p *defaultAsyncPoolImpl) doGo(ctx context.Context, f func()) error {

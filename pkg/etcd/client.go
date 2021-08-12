@@ -15,18 +15,16 @@ package etcd
 
 import (
 	"context"
-	"time"
-
-	"github.com/cenkalti/backoff"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"google.golang.org/grpc/codes"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 // etcd operation names
@@ -38,6 +36,15 @@ const (
 	EtcdGrant  = "Grant"
 	EtcdRevoke = "Revoke"
 )
+
+const (
+	backoffBaseDelayInMs = 500
+	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
+	backoffMaxDelayInMs = 60 * 1000
+)
+
+// set to var instead of const for mocking the value to speedup test
+var maxTries int64 = 8
 
 // Client is a simple wrapper that adds retry to etcd RPC
 type Client struct {
@@ -61,17 +68,16 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 	// Retry at least two election timeout to handle the case that two PDs restarted
 	// (the first election maybe failed).
 	// 16s = \sum_{n=0}^{6} 0.5*1.5^n
-	return retry.Run(500*time.Millisecond, 7+1, // +1 for the inital request.
-		func() error {
-			err := etcdRPC()
-			if err != nil && errors.Cause(err) != context.Canceled {
-				log.Warn("etcd RPC failed", zap.String("RPC", rpcName), zap.Error(err))
-			}
-			if metric != nil {
-				metric.Inc()
-			}
-			return err
-		})
+	return retry.Do(context.Background(), func() error {
+		err := etcdRPC()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("etcd RPC failed", zap.String("RPC", rpcName), zap.Error(err))
+		}
+		if metric != nil {
+			metric.Inc()
+		}
+		return err
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryableError(rpcName)))
 }
 
 // Put delegates request to clientv3.KV.Put
@@ -121,17 +127,27 @@ func (c *Client) Grant(ctx context.Context, ttl int64) (resp *clientv3.LeaseGran
 	return
 }
 
+func isRetryableError(rpcName string) retry.IsRetryable {
+	return func(err error) bool {
+		if !cerrors.IsRetryableError(err) {
+			return false
+		}
+		if rpcName == EtcdRevoke {
+			if etcdErr, ok := err.(rpctypes.EtcdError); ok && etcdErr.Code() == codes.NotFound {
+				// it means the etcd lease is already expired or revoked
+				return false
+			}
+		}
+
+		return true
+	}
+}
+
 // Revoke delegates request to clientv3.Lease.Revoke
 func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv3.LeaseRevokeResponse, err error) {
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.Revoke(ctx, id)
-		if inErr == nil {
-			return nil
-		} else if etcdErr := inErr.(rpctypes.EtcdError); etcdErr.Code() == codes.NotFound {
-			// it means the etcd lease is already expired or revoked
-			return backoff.Permanent(inErr)
-		}
 		return inErr
 	})
 	return

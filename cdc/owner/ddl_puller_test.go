@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -220,12 +219,12 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 }
 
 func waitResolvedTsGrowing(c *check.C, p DDLPuller, targetTs model.Ts) {
-	err := retry.Run(20*time.Millisecond, 100, func() error {
+	err := retry.Do(context.Background(), func() error {
 		resolvedTs, _ := p.FrontDDL()
 		if resolvedTs < targetTs {
 			return errors.New("resolvedTs < targetTs")
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(100))
 	c.Assert(err, check.IsNil)
 }

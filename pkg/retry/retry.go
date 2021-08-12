@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 )
 
+// Run is Deprecated, try to use Do instead.
 // Run retries the specified function on error for at most maxRetries times.
 // It stops retry if the returned error is context.Canceled or context.DeadlineExceeded.
 func Run(initialInterval time.Duration, maxRetries uint64, f func() error) error {
@@ -38,6 +39,7 @@ func Run(initialInterval time.Duration, maxRetries uint64, f func() error) error
 	}, retryCfg)
 }
 
+// RunWithInfiniteRetry is Deprecated, try to use instead Do WithInfiniteTries option instead.
 // RunWithInfiniteRetry retries the specified function indefinitely, until a backoff.PermanentError is encountered.
 // notifyFunc will be called each time before sleeping with the total elapsed time.
 func RunWithInfiniteRetry(initialInterval time.Duration, f func() error, notifyFunc func(elapsed time.Duration)) error {

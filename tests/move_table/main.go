@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/logutil"
@@ -55,8 +56,7 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to create cluster info", zap.Error(err))
 	}
-
-	err = retry.Run(100*time.Millisecond, 20, func() error {
+	err = retry.Do(ctx, func() error {
 		err := cluster.refreshInfo(ctx)
 		if err != nil {
 			log.Warn("error refreshing cluster info", zap.Error(err))
@@ -68,7 +68,7 @@ func main() {
 			return errors.New("too few captures")
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(20), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 
 	if err != nil {
 		log.Fatal("Fail to get captures", zap.Error(err))
@@ -110,9 +110,9 @@ func main() {
 	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
 
 	for counter := 0; counter < 30; counter++ {
-		err := retry.Run(100*time.Millisecond, 5, func() error {
+		err := retry.Do(ctx, func() error {
 			return cluster.refreshInfo(ctx)
-		})
+		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(5+1), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 		if err != nil {
 			log.Warn("error refreshing cluster info", zap.Error(err))
 		}
