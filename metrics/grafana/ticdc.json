@@ -2747,7 +2747,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\\\"$tidb_cluster\\\", capture=~\\\"$capture\\\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\\\"$tidb_cluster\\\", capture=~\\\"$capture\\\"}[30s])) by (capture)",
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{ capture }}",
@@ -2896,7 +2896,7 @@
           ],
           "targets": [
             {
-              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\\\"$tidb_cluster\\\", capture=~\\\"$capture\\\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\\\"$tidb_cluster\\\", capture=~\\\"$capture\\\"}[30s])) by (capture, changefeed)",
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture, changefeed)",
               "format": "table",
               "intervalFactor": 1,
               "legendFormat": "{{ capture }} - {{ changefeed }}",
