@@ -444,7 +444,7 @@ func (o *Owner) newChangeFeed(
 	}
 	defer func() {
 		if resultErr != nil && asyncSink != nil {
-			asyncSink.Close()
+			asyncSink.Close(cdcCtx)
 		}
 	}()
 

@@ -51,7 +51,7 @@ type AsyncSink interface {
 	// the caller of this function can call again and again until a true returned
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
-	Close() error
+	Close(ctx cdcContext.Context) error
 }
 
 type asyncSinkImpl struct {
@@ -184,9 +184,9 @@ func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 	return s.syncpointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }
 
-func (s *asyncSinkImpl) Close() (err error) {
+func (s *asyncSinkImpl) Close(ctx cdcContext.Context) (err error) {
 	s.cancel()
-	err = s.sink.Close()
+	err = s.sink.Close(ctx)
 	if s.syncpointStore != nil {
 		err = s.syncpointStore.Close()
 	}
