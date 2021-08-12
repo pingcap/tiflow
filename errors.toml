@@ -831,11 +831,6 @@ error = '''
 waiting processor to handle the operation finished timeout
 '''
 
-["CDC:ErrWorkerPoolEmptyTask"]
-error = '''
-workerpool received an empty task, please report a bug
-'''
-
 ["CDC:ErrWorkerPoolHandleCancelled"]
 error = '''
 workerpool handle is cancelled

@@ -114,7 +114,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
-	eventCh := make(chan *model.RegionFeedEvent, defaultPullerEventChanSize)
+	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
 	for _, span := range p.spans {
@@ -183,14 +183,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		start := time.Now()
 		initialized := false
 		for {
-			var e *model.RegionFeedEvent
+			var e model.RegionFeedEvent
 			select {
 			case e = <-eventCh:
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-			}
-			if e == nil {
-				continue
 			}
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()
