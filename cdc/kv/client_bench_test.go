@@ -189,13 +189,8 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 1000000)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
@@ -284,13 +279,8 @@ func prepareBench(b *testing.B, regionNum int) (
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
-	eventCh := make(chan *model.RegionFeedEvent, 1000000)
-=======
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
->>>>>>> 88df0ac5 (*: use values to reduce GC pressure  (#2474))
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
