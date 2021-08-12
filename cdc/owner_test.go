@@ -909,7 +909,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	})
 	sink, err := newAsyncSink(cdcCtx)
 	c.Assert(err, check.IsNil)
-	defer sink.Close(cctx) //nolint:errcheck
+	defer sink.Close(cdcCtx) //nolint:errcheck
 	sampleCF.sink = sink
 
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)

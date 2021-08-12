@@ -62,7 +62,7 @@ func (m *mockAsyncSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 	return m.ddlError
 }
 
-func (m *mockAsyncSink) Close() error {
+func (m *mockAsyncSink) Close(ctx context.Context) error {
 	return nil
 }
 
@@ -88,7 +88,7 @@ func (s *asyncSinkSuite) TestInitialize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, sink, mockAsyncSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close()
+	defer sink.Close(ctx)
 	tableInfos := []*model.SimpleTableInfo{{Schema: "test"}}
 	err := sink.Initialize(ctx, tableInfos)
 	c.Assert(err, check.IsNil)
@@ -99,7 +99,7 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close()
+	defer sink.Close(ctx)
 
 	waitCheckpointGrowingUp := func(m *mockAsyncSink, targetTs model.Ts) error {
 		return retry.Run(100*time.Millisecond, 30, func() error {
@@ -121,7 +121,7 @@ func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close()
+	defer sink.Close(ctx)
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
 		done, err := sink.EmitDDLEvent(ctx, ddl1)
@@ -172,7 +172,7 @@ func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
 		return nil
 	})
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close()
+	defer sink.Close(ctx)
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
