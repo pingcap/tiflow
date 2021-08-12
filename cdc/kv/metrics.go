@@ -98,7 +98,7 @@ var (
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
-			Name:      "stream_count",
+			Name:      "grpc_stream_count",
 			Help:      "active stream count of each gRPC connection",
 		}, []string{"store"})
 )
