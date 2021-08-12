@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_TEST-CLUSTER",
-      "label": "test-cluster",
+      "name": "DS_LINGJIN-TEST",
+      "label": "lingjin-test",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -39,12 +39,6 @@
       "id": "table",
       "name": "Table",
       "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "timeseries",
-      "name": "Time series",
-      "version": ""
     }
   ],
   "annotations": {
@@ -66,7 +60,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "enable": true,
         "expr": "max(ticdc_processor_checkpoint_ts_lag) by (changefeed, capture) > BOOL $spike_threshold",
         "hide": true,
@@ -81,7 +75,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "enable": false,
         "expr": "delta(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}[30s]) < BOOL 0",
         "hide": false,
@@ -97,7 +91,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "enable": false,
         "expr": "sum(ALERTS{tidb_cluster=\"$tidb_cluster\", alertstate=\"firing\", alertname=~\"ticdc.*\"}) by (alertname) > BOOL 0",
         "hide": false,
@@ -111,7 +105,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "enable": false,
         "expr": "delta(tikv_cdc_region_resolve_status{status=\"resolved\"}[30s]) < BOOL -800",
         "hide": false,
@@ -131,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1628754073523,
+  "iteration": 1628758648840,
   "links": [],
   "panels": [
     {
@@ -150,7 +144,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Uptime of TiCDC and TiKV",
           "fieldConfig": {
             "defaults": {
@@ -258,7 +252,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Goroutine count of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -367,7 +361,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The count of open FD count of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -464,7 +458,7 @@
           }
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "TiCDC cluster ownership status",
           "fieldConfig": {
             "defaults": {
@@ -595,7 +589,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "CPU usage of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -697,7 +691,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Memory usage of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -806,7 +800,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The history of TiCDC cluster ownership, owner node has a value that is great than 0",
           "fieldConfig": {
             "defaults": {},
@@ -905,7 +899,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -1031,7 +1025,7 @@
       "id": 11,
       "panels": [
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of captured table of TiCDC nodes ",
           "fieldConfig": {
             "defaults": {
@@ -1133,7 +1127,7 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Internal resolved ts of TiCDC nodes",
           "fieldConfig": {
             "defaults": {
@@ -1262,7 +1256,7 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Internal resolved ts of captured tables",
           "fieldConfig": {
             "defaults": {
@@ -1393,7 +1387,7 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of replicated tables maintained in owner",
           "fieldConfig": {
             "defaults": {
@@ -1513,7 +1507,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The checkpoint ts of changefeeds.",
           "fieldConfig": {
             "defaults": {},
@@ -1628,7 +1622,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Request count of etcd operation per second",
           "fieldConfig": {
             "defaults": {
@@ -1732,7 +1726,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of errors that interrupt changefeed per minute ",
           "fieldConfig": {
             "defaults": {},
@@ -1830,7 +1824,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The lag between changefeed checkpoint ts and the latest ts of upstream TiDB.",
           "fieldConfig": {
             "defaults": {
@@ -1932,7 +1926,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The lag between internal resolved ts and the latest ts of upstream TiDB.",
           "fieldConfig": {
             "defaults": {
@@ -2032,126 +2026,53 @@
           }
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "right",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "graph": false,
-                  "legend": false,
-                  "tooltip": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 4,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "always",
-                "spanNulls": true
-              },
-              "decimals": 0,
-              "mappings": [
-                {
-                  "from": "",
-                  "id": 1,
-                  "text": "Normal",
-                  "to": "",
-                  "type": 1,
-                  "value": "0"
-                },
-                {
-                  "from": "",
-                  "id": 2,
-                  "text": "Error",
-                  "to": "",
-                  "type": 1,
-                  "value": "1"
-                },
-                {
-                  "from": "",
-                  "id": 3,
-                  "text": "Failed",
-                  "to": "",
-                  "type": 1,
-                  "value": "2"
-                },
-                {
-                  "from": "",
-                  "id": 4,
-                  "text": "Stopped",
-                  "to": "",
-                  "type": 1,
-                  "value": "3"
-                },
-                {
-                  "from": "",
-                  "id": 5,
-                  "text": "Finished",
-                  "to": "",
-                  "type": 1,
-                  "value": "4"
-                },
-                {
-                  "from": "",
-                  "id": 6,
-                  "text": "Unknown",
-                  "to": "",
-                  "type": 1,
-                  "value": "-1"
-                }
-              ],
-              "max": 4,
-              "min": -1,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
               "unit": "short"
             },
             "overrides": []
           },
+          "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
             "y": 26
           },
+          "hiddenSeries": false,
           "id": 163,
-          "links": [],
-          "options": {
-            "graph": {},
-            "legend": {
-              "calcs": [
-                "last"
-              ],
-              "displayMode": "table",
-              "placement": "right"
-            },
-            "tooltipOptions": {
-              "mode": "single"
-            }
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
           },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
           "pluginVersion": "7.5.7",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
           "targets": [
             {
               "expr": "ticdc_owner_status{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
@@ -2162,17 +2083,53 @@
               "refId": "A"
             }
           ],
+          "thresholds": [],
           "timeFrom": null,
+          "timeRegions": [],
           "timeShift": null,
           "title": "The status of changefeeds",
-          "type": "timeseries"
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         },
         {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Percentiles of sink write duration of changefeeds",
           "fieldConfig": {
             "defaults": {
@@ -2297,7 +2254,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Sink write duration of changefeeds",
           "fieldConfig": {
             "defaults": {},
@@ -2370,7 +2327,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Percentiles of sink batch size",
           "fieldConfig": {
             "defaults": {
@@ -2486,7 +2443,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of changed rows that are written to  downstream per second",
           "fieldConfig": {
             "defaults": {
@@ -2596,7 +2553,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Percentiles of asynchronous flush sink duration of changefeeds",
           "fieldConfig": {
             "defaults": {
@@ -2721,7 +2678,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Asynchronous flush sink duration of changefeeds",
           "fieldConfig": {
             "defaults": {},
@@ -2792,7 +2749,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Distribution of MySQL worker loads",
           "fieldConfig": {
             "defaults": {
@@ -2950,7 +2907,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The duration of detecting and waiting conflict of MySQL sink",
           "fieldConfig": {
             "defaults": {},
@@ -3022,7 +2979,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Percentiles of detecting and waiting conflict duration of MySQL sink",
           "fieldConfig": {
             "defaults": {
@@ -3135,72 +3092,53 @@
           }
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Average processor memory consumption per capture within the last 30 seconds",
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "graph": false,
-                  "legend": false,
-                  "tooltip": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
               "unit": "bytes"
             },
             "overrides": []
           },
+          "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 61
           },
+          "hiddenSeries": false,
           "id": 149,
-          "links": [],
-          "options": {
-            "graph": {},
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom"
-            },
-            "tooltipOptions": {
-              "mode": "single"
-            }
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
           },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
           "pluginVersion": "7.5.7",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
           "targets": [
             {
               "exemplar": true,
@@ -3213,78 +3151,95 @@
               "refId": "A"
             }
           ],
+          "thresholds": [],
           "timeFrom": null,
+          "timeRegions": [],
           "timeShift": null,
           "title": "Processor Memory Consumption Per Capture",
-          "type": "timeseries"
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Average processor memory consumption per changefeed within the last 30 seconds",
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "graph": false,
-                  "legend": false,
-                  "tooltip": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
               "unit": "bytes"
             },
             "overrides": []
           },
+          "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 61
           },
+          "hiddenSeries": false,
           "id": 169,
-          "links": [],
-          "options": {
-            "graph": {},
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom"
-            },
-            "tooltipOptions": {
-              "mode": "single"
-            }
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
           },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
           "pluginVersion": "7.5.7",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
           "targets": [
             {
               "exemplar": true,
@@ -3295,10 +3250,46 @@
               "refId": "B"
             }
           ],
+          "thresholds": [],
           "timeFrom": null,
+          "timeRegions": [],
           "timeShift": null,
           "title": "Processor Memory Consumption Per Changfeed",
-          "type": "timeseries"
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         }
       ],
       "title": "Changefeed",
@@ -3320,7 +3311,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of established Eventfeed RPC between TiCDC and TiKV",
           "fieldConfig": {
             "defaults": {
@@ -3334,7 +3325,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 3
+            "y": 70
           },
           "hiddenSeries": false,
           "id": 15,
@@ -3450,7 +3441,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": null,
           "description": "Percentiles of Eventfeed message size",
           "fieldConfig": {
@@ -3465,7 +3456,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 3
+            "y": 70
           },
           "hiddenSeries": false,
           "id": 17,
@@ -3559,7 +3550,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of errors that interrupt Eventfeed RPC",
           "fieldConfig": {
             "defaults": {
@@ -3573,7 +3564,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 3
+            "y": 70
           },
           "hiddenSeries": false,
           "id": 28,
@@ -3681,7 +3672,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of KV client received events from TiKV per seconds",
           "fieldConfig": {
             "defaults": {
@@ -3695,7 +3686,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 10
+            "y": 77
           },
           "hiddenSeries": false,
           "id": 29,
@@ -3784,7 +3775,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of events that puller outputs to sorter \n per second",
           "fieldConfig": {
             "defaults": {
@@ -3798,7 +3789,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 10
+            "y": 77
           },
           "hiddenSeries": false,
           "id": 5,
@@ -3885,7 +3876,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of rows that sink flushes to downstream per second",
           "fieldConfig": {
             "defaults": {
@@ -3899,7 +3890,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 10
+            "y": 77
           },
           "hiddenSeries": false,
           "id": 108,
@@ -3983,78 +3974,53 @@
           }
         },
         {
-          "datasource": "${DS_TEST-CLUSTER}",
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The average number of events that are buffered in Puller's memory buffer and output channel in the last 30 seconds",
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "graph": false,
-                  "legend": false,
-                  "tooltip": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
               "unit": "short"
             },
             "overrides": []
           },
+          "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 17
+            "y": 84
           },
+          "hiddenSeries": false,
           "id": 43,
-          "links": [],
-          "options": {
-            "graph": {},
-            "legend": {
-              "calcs": [
-                "mean",
-                "lastNotNull",
-                "max",
-                "min",
-                "sum"
-              ],
-              "displayMode": "table",
-              "placement": "bottom"
-            },
-            "tooltipOptions": {
-              "mode": "single"
-            }
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
           },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
           "pluginVersion": "7.5.7",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
           "targets": [
             {
               "exemplar": true,
@@ -4073,17 +4039,53 @@
               "refId": "E"
             }
           ],
+          "thresholds": [],
           "timeFrom": null,
+          "timeRegions": [],
           "timeShift": null,
           "title": "Puller buffer size",
-          "type": "timeseries"
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         },
         {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of events that are buffered in Sorter's unsorted events buffer and output channel",
           "fieldConfig": {
             "defaults": {
@@ -4097,7 +4099,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 17
+            "y": 84
           },
           "hiddenSeries": false,
           "id": 51,
@@ -4210,7 +4212,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of events that are buffered in Processor's output channel and Mounter input channel",
           "fieldConfig": {
             "defaults": {
@@ -4224,7 +4226,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 17
+            "y": 84
           },
           "hiddenSeries": false,
           "id": 107,
@@ -4324,7 +4326,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of rows(events) that are buffered in Sink's pending flush rows buffer",
           "fieldConfig": {
             "defaults": {
@@ -4338,7 +4340,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 17
+            "y": 84
           },
           "hiddenSeries": false,
           "id": 96,
@@ -4436,7 +4438,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Duration of sorting unsorted events",
           "fieldConfig": {
             "defaults": {},
@@ -4446,7 +4448,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 24
+            "y": 91
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -4507,7 +4509,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Percentiles of sorting events duration",
           "fieldConfig": {
             "defaults": {
@@ -4521,7 +4523,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 24
+            "y": 91
           },
           "hiddenSeries": false,
           "id": 53,
@@ -4626,7 +4628,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Duration of merging sorted events",
           "fieldConfig": {
             "defaults": {},
@@ -4636,7 +4638,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 31
+            "y": 98
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -4697,7 +4699,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Percentiles of merging sorted events duration",
           "fieldConfig": {
             "defaults": {
@@ -4711,7 +4713,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 31
+            "y": 98
           },
           "hiddenSeries": false,
           "id": 106,
@@ -4816,7 +4818,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Duration of unmarshal events from kv to SQL row",
           "fieldConfig": {
             "defaults": {},
@@ -4826,7 +4828,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 38
+            "y": 105
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -4887,7 +4889,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Percentiles of unmarshal events from kv to SQL row duration",
           "fieldConfig": {
             "defaults": {
@@ -4901,7 +4903,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 38
+            "y": 105
           },
           "hiddenSeries": false,
           "id": 55,
@@ -5000,7 +5002,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The number of KV client dispatched event per second",
           "fieldConfig": {
             "defaults": {
@@ -5014,7 +5016,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 45
+            "y": 112
           },
           "hiddenSeries": false,
           "id": 31,
@@ -5124,7 +5126,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The size of batch resolved ts message from TiKV",
           "fieldConfig": {
             "defaults": {},
@@ -5134,7 +5136,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 45
+            "y": 112
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5210,7 +5212,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5305,7 +5307,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5400,7 +5402,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5495,7 +5497,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5600,7 +5602,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5668,7 +5670,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5743,7 +5745,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "fill": 1,
           "gridPos": {
@@ -5836,7 +5838,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "fill": 1,
           "gridPos": {
@@ -5942,7 +5944,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The count of different kinds of gRPC message",
           "fill": 1,
@@ -6038,7 +6040,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -6202,7 +6204,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The min resolved ts of each TiKV",
           "editable": true,
@@ -6333,7 +6335,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The ID of the min resolved region of each TiKV",
           "editable": true,
@@ -6432,7 +6434,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -6536,7 +6538,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The time consumed to CDC incremental scan",
           "gridPos": {
             "h": 7,
@@ -6606,7 +6608,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -6701,7 +6703,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The number of incremental scan task in different status.",
           "fill": 1,
@@ -6810,7 +6812,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -6918,7 +6920,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The speed of TiKV CDC incremental scan",
           "editable": true,
@@ -7019,7 +7021,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The total bytes of TiKV CDC incremental scan",
           "editable": true,
@@ -7120,7 +7122,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "",
           "fill": 4,
@@ -7247,7 +7249,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "The total number of cache entries in the old value cache.",
           "fill": 1,
@@ -7365,7 +7367,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "",
           "editable": true,
@@ -7475,7 +7477,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The time consumed to get an old value (both from cache and from disk)",
           "gridPos": {
             "h": 7,
@@ -7544,7 +7546,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -7669,7 +7671,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "TiCDC process rss memory usage. TiCDC heap memory size in use ",
           "editable": true,
           "error": false,
@@ -7855,7 +7857,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "Count of live objects.",
           "editable": true,
           "error": false,
@@ -7968,7 +7970,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "TiCDC process Go garbage collection STW pause duration",
           "editable": true,
           "error": false,
@@ -8094,7 +8096,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "${DS_LINGJIN-TEST}",
           "description": "The throughput of Go's memory allocator.",
           "fill": 1,
           "gridPos": {
@@ -8239,7 +8241,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "definition": "",
         "description": null,
         "error": null,
@@ -8266,7 +8268,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "description": null,
         "error": null,
@@ -8293,7 +8295,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
         "error": null,
@@ -8320,7 +8322,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "definition": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
         "description": null,
         "error": null,
@@ -8402,7 +8404,7 @@
       {
         "allValue": "",
         "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "${DS_LINGJIN-TEST}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
         "error": null,
