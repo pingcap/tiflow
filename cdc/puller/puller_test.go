@@ -50,7 +50,7 @@ func (mc *mockPdClientForPullerTest) GetClusterID(ctx context.Context) uint64 {
 }
 
 type mockCDCKVClient struct {
-	expectations chan *model.RegionFeedEvent
+	expectations chan model.RegionFeedEvent
 }
 
 type mockInjectedPuller struct {
@@ -65,7 +65,7 @@ func newMockCDCKVClient(
 	credential *security.Credential,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
-		expectations: make(chan *model.RegionFeedEvent, 1024),
+		expectations: make(chan model.RegionFeedEvent, 1024),
 	}
 }
 
@@ -76,14 +76,14 @@ func (mc *mockCDCKVClient) EventFeed(
 	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit kv.PullerInitialization,
-	eventCh chan<- *model.RegionFeedEvent,
+	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case ev := <-mc.expectations:
-			if ev == nil {
+		case ev, ok := <-mc.expectations:
+			if !ok {
 				return nil
 			}
 			eventCh <- ev
@@ -103,7 +103,7 @@ func (mc *mockCDCKVClient) Close() error {
 	return nil
 }
 
-func (mc *mockCDCKVClient) Returns(ev *model.RegionFeedEvent) {
+func (mc *mockCDCKVClient) Returns(ev model.RegionFeedEvent) {
 	mc.expectations <- ev
 }
 
@@ -148,19 +148,19 @@ func (s *pullerSuite) TestPullerResolvedForward(c *check.C) {
 	checkpointTs := uint64(996)
 	plr, cancel, wg, store := s.newPullerForTest(c, spans, checkpointTs)
 
-	plr.cli.Returns(&model.RegionFeedEvent{
+	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_a"), End: []byte("t_c")}),
 			ResolvedTs: uint64(1001),
 		},
 	})
-	plr.cli.Returns(&model.RegionFeedEvent{
+	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_c"), End: []byte("t_d")}),
 			ResolvedTs: uint64(1002),
 		},
 	})
-	plr.cli.Returns(&model.RegionFeedEvent{
+	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
 			Span:       regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_d"), End: []byte("t_e")}),
 			ResolvedTs: uint64(1000),
@@ -193,7 +193,7 @@ func (s *pullerSuite) TestPullerRawKV(c *check.C) {
 	checkpointTs := uint64(996)
 	plr, cancel, wg, store := s.newPullerForTest(c, spans, checkpointTs)
 
-	plr.cli.Returns(&model.RegionFeedEvent{
+	plr.cli.Returns(model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
 			OpType: model.OpTypePut,
 			Key:    []byte("a"),
@@ -201,7 +201,7 @@ func (s *pullerSuite) TestPullerRawKV(c *check.C) {
 			CRTs:   uint64(1002),
 		},
 	})
-	plr.cli.Returns(&model.RegionFeedEvent{
+	plr.cli.Returns(model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
 			OpType: model.OpTypePut,
 			Key:    []byte("d"),
