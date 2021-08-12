@@ -1377,7 +1377,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	p.localCheckpointTsNotifier.Close()
 	p.localResolvedNotifier.Close()
 	var errRes error
-	if err := p.sinkManager.Close(); err != nil {
+	if err := p.sinkManager.Close(ctx); err != nil {
 		log.Warn("an error occurred when stopping the processor", zap.Error(err))
 		errRes = err
 	}
@@ -1400,7 +1400,6 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 		log.Warn("an error occurred when stopping the processor", zap.Error(err))
 		errRes = err
 	}
-<<<<<<< HEAD
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
@@ -1408,9 +1407,6 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	return errRes
-=======
-	return p.sinkManager.Close(ctx)
->>>>>>> 1800517e (sink: add barrier in underlying sink to support accruate stop (#2417))
 }
 
 func (p *oldProcessor) isStopped() bool {
