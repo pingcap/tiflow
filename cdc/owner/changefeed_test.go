@@ -90,7 +90,11 @@ func (m *mockAsyncSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 	atomic.StoreUint64(&m.checkpointTs, ts)
 }
 
-func (m *mockAsyncSink) Close() error {
+func (m *mockAsyncSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockAsyncSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
