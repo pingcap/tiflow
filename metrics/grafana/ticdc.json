@@ -7179,8 +7179,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.33:47800",
-              "value": "172.16.5.33:47800"
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
             }
           },
           "seriesOverrides": [
@@ -7365,8 +7365,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.33:47800",
-              "value": "172.16.5.33:47800"
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
             }
           },
           "seriesOverrides": [],
@@ -7472,8 +7472,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.33:47800",
-              "value": "172.16.5.33:47800"
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
             }
           },
           "seriesOverrides": [
@@ -7594,8 +7594,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "172.16.5.33:47800",
-              "value": "172.16.5.33:47800"
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
             }
           },
           "seriesOverrides": [
@@ -7693,7 +7693,7 @@
       "type": "row"
     }
   ],
-  "refresh": "2h",
+  "refresh": "1m",
   "schemaVersion": 18,
   "style": "dark",
   "tags": [],
@@ -7894,7 +7894,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Test-Cluster-TiCDC-xxx",
-  "uid": "YiGL8hBZ1x",
-  "version": 1
+  "title": "Test-Cluster-TiCDC",
+  "uid": "YiGL8hBZ1",
+  "version": 19
 }
