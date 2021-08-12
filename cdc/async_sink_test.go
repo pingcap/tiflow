@@ -66,6 +66,10 @@ func (m *mockAsyncSink) Close(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockAsyncSink) Barrier(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockAsyncSink) GetDDL() *model.DDLEvent {
 	m.ddlMu.Lock()
 	defer m.ddlMu.Unlock()
