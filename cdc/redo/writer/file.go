@@ -77,16 +77,18 @@ type writerConfig struct {
 
 // writer is a redo log event writer which writes redo log events to a file.
 type writer struct {
-	cfg       *writerConfig
-	size      int64
-	commitTS  *atomic.Uint64
-	state     *atomic.Uint32
-	gcRunning *atomic.Bool
-	file      *os.File
-	bw        *pioutil.PageWriter
-	uint64buf []byte
-	storage   storage.ExternalStorage
-	stopChan  chan struct{}
+	cfg           *writerConfig
+	size          int64
+	minCommitTS   *atomic.Uint64
+	commitTS      *atomic.Uint64
+	eventCommitTS *atomic.Uint64
+	state         *atomic.Uint32
+	gcRunning     *atomic.Bool
+	file          *os.File
+	bw            *pioutil.PageWriter
+	uint64buf     []byte
+	storage       storage.ExternalStorage
+	stopChan      chan struct{}
 	sync.RWMutex
 }
 
@@ -112,7 +114,6 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	w := &writer{
 		cfg:       cfg,
 		stopChan:  make(chan struct{}),
-		commitTS:  atomic.NewUint64(cfg.startTs),
 		uint64buf: make([]byte, 8),
 	}
 
@@ -128,9 +129,7 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 
 	w.state.Store(started)
 	go w.runFlushToDisk(ctx, cfg.flushIntervalInSec)
-	if cfg.s3Storage {
-		go w.runFlushToS3(ctx, cfg.flushIntervalInSec)
-	}
+
 	return w
 }
 
@@ -178,7 +177,7 @@ func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInSec int64) {
 			log.Info("runFlushToDisk got canceled", zap.Error(ctx.Err()))
 			return
 		case <-ticker.C:
-			err := w.flush()
+			err := w.flushAll()
 			if err != nil {
 				log.Error("redo log flush error", zap.Error(err))
 			}
@@ -195,6 +194,10 @@ func (w *writer) Write(rawData []byte) (int, error) {
 		return 0, errors.Errorf("rawData %d exceeds maximum file size %d", writeLen, w.cfg.maxLogSize)
 	}
 
+	if w.minCommitTS.Load() > w.eventCommitTS.Load() {
+		w.minCommitTS.Store(w.eventCommitTS.Load())
+	}
+
 	if w.file == nil {
 		if err := w.openOrNew(len(rawData)); err != nil {
 			return 0, err
@@ -206,7 +209,7 @@ func (w *writer) Write(rawData []byte) (int, error) {
 			return 0, err
 		}
 	}
-
+	// TODO: crc check
 	lenField, padBytes := encodeFrameSize(len(rawData))
 	if err := w.writeUint64(lenField, w.uint64buf); err != nil {
 		return 0, err
@@ -265,9 +268,16 @@ func (w *writer) close() error {
 	if w.file == nil {
 		return nil
 	}
-	err := w.flush()
+	err := w.flushAll()
 	if err != nil {
 		return err
+	}
+
+	// rename the file name from commitTs.wal.tmp to minCommitTs.wal if closed safely
+	w.commitTS.Store(w.minCommitTS.Load())
+	err = os.Rename(w.file.Name(), w.getLogFileName())
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
 	err = w.file.Close()
@@ -283,14 +293,21 @@ func (w *writer) filePath() string {
 	return filepath.Join(w.cfg.dir, w.getLogFileName())
 }
 
+func openTruncFile(name string) (*os.File, error) {
+	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
+}
+
 func (w *writer) openNew() error {
 	err := os.MkdirAll(w.cfg.dir, defaultDirMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
-	path := w.filePath()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
+	// reset ts used in file name when new file
+	w.commitTS.Store(w.eventCommitTS.Load())
+	w.minCommitTS.Store(w.eventCommitTS.Load())
+	path := w.filePath() + ".tmp"
+	f, err := openTruncFile(path)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redo logfile"))
 	}
@@ -411,7 +428,17 @@ func (w *writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 	return logFiles, nil
 }
 
-// flush flushes all the buffered data to the disk.
+func (w *writer) flushAll() error {
+	err := w.flush()
+	if err != nil {
+		return err
+	}
+	if !w.cfg.s3Storage {
+		return nil
+	}
+	return w.writeToS3(context.Background())
+}
+
 func (w *writer) flush() error {
 	w.Lock()
 	defer w.Unlock()
@@ -434,26 +461,4 @@ func (w *writer) writeToS3(ctx context.Context) error {
 	}
 	w.Unlock()
 	return cerror.WrapError(cerror.ErrRedoFileOp, w.storage.WriteFile(ctx, name, fileData))
-}
-
-func (w *writer) runFlushToS3(ctx context.Context, flushIntervalInSec int64) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInSec)*time.Second + 50*time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if !w.isRunning() {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			log.Info("runFlushToS3 got canceled", zap.Error(ctx.Err()))
-			return
-		case <-ticker.C:
-			err := w.writeToS3(ctx)
-			if err != nil {
-				log.Error("redo log flush to s3 error", zap.Error(err))
-			}
-		}
-	}
 }

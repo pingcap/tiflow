@@ -181,8 +181,12 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 		return 0, nil
 	}
 
-	var maxCommitTs uint64
+	maxCommitTs := l.setMaxCommitTs(tableID, 0)
 	for _, r := range rows {
+		if r == nil {
+			continue
+		}
+
 		rl := redoLogPool.Get().(*redo.Log)
 		rl.Row = r
 		rl.DDL = nil
@@ -192,16 +196,13 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 			return maxCommitTs, cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
 
+		l.rowWriter.eventCommitTS.Store(r.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
 			return maxCommitTs, err
 		}
 		maxCommitTs = l.setMaxCommitTs(tableID, r.CommitTs)
 		redoLogPool.Put(rl)
-	}
-	// TODO: get a better name pattern, used in file name for search
-	if maxCommitTs > l.rowWriter.commitTS.Load() {
-		l.rowWriter.commitTS.Store(maxCommitTs)
 	}
 	return maxCommitTs, nil
 }
@@ -217,6 +218,9 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 	if l.isStopped() {
 		return cerror.ErrRedoWriterStopped
 	}
+	if ddl == nil {
+		return nil
+	}
 
 	rl := redoLogPool.Get().(*redo.Log)
 	defer redoLogPool.Put(rl)
@@ -229,6 +233,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 
+	l.ddlWriter.eventCommitTS.Store(ddl.CommitTs)
 	_, err = l.ddlWriter.Write(data)
 	return err
 }
@@ -339,8 +344,8 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 // flush flushes all the buffered data to the disk.
 func (l *LogWriter) flush() error {
 	err1 := l.flushLogMeta()
-	err2 := l.ddlWriter.flush()
-	err3 := l.rowWriter.flush()
+	err2 := l.ddlWriter.flushAll()
+	err3 := l.rowWriter.flushAll()
 
 	err := multierr.Append(err1, err2)
 	err = multierr.Append(err, err3)
@@ -369,7 +374,7 @@ func (l *LogWriter) flushLogMeta() error {
 	}
 
 	tmpFileName := l.getMetafileName() + ".tmp"
-	tmpFile, err := os.OpenFile(tmpFileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
+	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
