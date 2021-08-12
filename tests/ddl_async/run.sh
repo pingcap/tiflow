@@ -33,6 +33,9 @@ function check_ts_block() {
     sleep 1
     rts2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
     checkpoint2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
+
+    echo "changefeed is blocking rts: ${rts1}->${rts2} checkpoint: ${checkpoint1}->${checkpoint2}"
+
     if [[ "$rts1" != "null" ]] && [[ "$rts1" != "0" ]]; then
         if [[  "$rts1" -eq "$rts2" ]] || [[ "$checkpoint1" -eq "$checkpoint2" ]]; then
             echo "changefeed is blocking rts: ${rts1}->${rts2} checkpoint: ${checkpoint1}->${checkpoint2}"
@@ -65,13 +68,13 @@ function run() {
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=1*return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # normal changefeed
-    run_cdc_cli changefeed create -c="changefeed-ddl-normal" --start-ts=$start_ts --sink-uri="$SINK_URI"
+    run_cdc_cli changefeed create -c="changefeed-ddl-normal" --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal_cf_config.toml"
     # ddl blocked changefeed
-    run_cdc_cli changefeed create -c="changefeed-ddl-block" --start-ts=$start_ts --sink-uri="blackhole://" --config="$CUR/conf/cf_config.toml"
+    run_cdc_cli changefeed create -c="changefeed-ddl-block" --start-ts=$start_ts --sink-uri="blackhole://" --config="$CUR/conf/block_cf_config.toml"
     # write ddl
 
     ensure 5 check_ts_forward "changefeed-ddl-normal"
-    ensure 5 check_ts_block "changefeed-ddl-block"
+    ensure 10 check_ts_block "changefeed-ddl-block"
 
     check_table_exists ddl_async.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml

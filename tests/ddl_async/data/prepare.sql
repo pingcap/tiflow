@@ -2,13 +2,30 @@ drop database if exists `ddl_async`;
 create database `ddl_async`;
 use `ddl_async`;
 
-CREATE TABLE ddl_block (
+CREATE TABLE ddl_block1 (
     id INT AUTO_INCREMENT PRIMARY KEY,
     val INT DEFAULT 0,
     col0 INT NOT NULL
 );
-ALTER TABLE ddl_block DROP COLUMN col0;
-INSERT INTO ddl_block (val) VALUES (1);
+ALTER TABLE ddl_block1 DROP COLUMN col0;
+INSERT INTO ddl_block1 (val) VALUES (1);
+
+CREATE TABLE ddl_block2 (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    val INT DEFAULT 0,
+    col0 INT NOT NULL
+);
+ALTER TABLE ddl_block2 DROP COLUMN col0;
+INSERT INTO ddl_block2 (val) VALUES (1);
+
+CREATE TABLE ddl_block3 (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    val INT DEFAULT 0,
+    col0 INT NOT NULL
+);
+ALTER TABLE ddl_block3 DROP COLUMN col0;
+INSERT INTO ddl_block3 (val) VALUES (1);
+
 
 CREATE TABLE many_cols1 (
     id INT AUTO_INCREMENT PRIMARY KEY,

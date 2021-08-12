@@ -130,6 +130,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			})
 			failpoint.Inject("InjectChangefeedDDLBlock", func() {
 				if ctx.ChangefeedVars().ID == "changefeed-ddl-block" {
+					log.Info("step into failpoint")
 					// ensure tests/ddl_async will fail if here blocks the owner
 					time.Sleep(10 * time.Minute)
 				}
