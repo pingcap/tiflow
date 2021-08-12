@@ -343,7 +343,13 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 	return nil
 }
 
-func (s *s3Sink) Close() error {
+func (s *s3Sink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (s *s3Sink) Barrier(ctx context.Context) error {
+	// Barrier does nothing because FlushRowChangedEvents in s3 sink has flushed
+	// all buffered events forcedlly.
 	return nil
 }
 
