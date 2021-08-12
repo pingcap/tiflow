@@ -19,11 +19,11 @@ package redo
 type LogType int
 
 const (
-	// LogTypeUnknown is unknown type of message key
+	// LogTypeUnknown is unknown type of log
 	LogTypeUnknown LogType = iota
-	// LogTypeRow is row type of message
+	// LogTypeRow is row type of log
 	LogTypeRow
-	// LogTypeDDL is ddl type of message
+	// LogTypeDDL is ddl type of log
 	LogTypeDDL
 )
 

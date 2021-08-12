@@ -93,7 +93,7 @@ type LogWriter struct {
 }
 
 // NewLogWriter creates a LogWriter instance. need the client to guarantee only one LogWriter per changefeed
-// TODO: delete log files when changefeed removed
+// TODO: delete log files when changefeed removed, metric
 func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 	if cfg == nil {
 		log.Panic("LogWriterConfig can not be nil")
