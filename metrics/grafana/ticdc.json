@@ -1,8 +1,8 @@
 {
   "__inputs": [
     {
-      "name": "DS_LINGJIN-TEST",
-      "label": "lingjin-test",
+      "name": "DS_TEST-CLUSTER",
+      "label": "test-cluster",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -60,7 +60,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "enable": true,
         "expr": "max(ticdc_processor_checkpoint_ts_lag) by (changefeed, capture) > BOOL $spike_threshold",
         "hide": true,
@@ -75,7 +75,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "enable": false,
         "expr": "delta(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}[30s]) < BOOL 0",
         "hide": false,
@@ -91,7 +91,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "enable": false,
         "expr": "sum(ALERTS{tidb_cluster=\"$tidb_cluster\", alertstate=\"firing\", alertname=~\"ticdc.*\"}) by (alertname) > BOOL 0",
         "hide": false,
@@ -105,7 +105,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "enable": false,
         "expr": "delta(tikv_cdc_region_resolve_status{status=\"resolved\"}[30s]) < BOOL -800",
         "hide": false,
@@ -144,7 +144,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Uptime of TiCDC and TiKV",
           "fieldConfig": {
             "defaults": {
@@ -252,7 +252,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Goroutine count of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -361,7 +361,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The count of open FD count of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -458,7 +458,7 @@
           }
         },
         {
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "TiCDC cluster ownership status",
           "fieldConfig": {
             "defaults": {
@@ -589,7 +589,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "CPU usage of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -691,7 +691,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Memory usage of TiCDC",
           "fieldConfig": {
             "defaults": {
@@ -800,7 +800,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The history of TiCDC cluster ownership, owner node has a value that is great than 0",
           "fieldConfig": {
             "defaults": {},
@@ -899,7 +899,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -1025,7 +1025,7 @@
       "id": 11,
       "panels": [
         {
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of captured table of TiCDC nodes ",
           "fieldConfig": {
             "defaults": {
@@ -1127,7 +1127,7 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Internal resolved ts of TiCDC nodes",
           "fieldConfig": {
             "defaults": {
@@ -1256,7 +1256,7 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Internal resolved ts of captured tables",
           "fieldConfig": {
             "defaults": {
@@ -1387,7 +1387,7 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of replicated tables maintained in owner",
           "fieldConfig": {
             "defaults": {
@@ -1507,7 +1507,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The checkpoint ts of changefeeds.",
           "fieldConfig": {
             "defaults": {},
@@ -1622,7 +1622,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Request count of etcd operation per second",
           "fieldConfig": {
             "defaults": {
@@ -1726,7 +1726,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of errors that interrupt changefeed per minute ",
           "fieldConfig": {
             "defaults": {},
@@ -1824,7 +1824,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The lag between changefeed checkpoint ts and the latest ts of upstream TiDB.",
           "fieldConfig": {
             "defaults": {
@@ -1926,7 +1926,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The lag between internal resolved ts and the latest ts of upstream TiDB.",
           "fieldConfig": {
             "defaults": {
@@ -2030,7 +2030,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fieldConfig": {
             "defaults": {
@@ -2129,7 +2129,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Percentiles of sink write duration of changefeeds",
           "fieldConfig": {
             "defaults": {
@@ -2254,7 +2254,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Sink write duration of changefeeds",
           "fieldConfig": {
             "defaults": {},
@@ -2327,7 +2327,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Percentiles of sink batch size",
           "fieldConfig": {
             "defaults": {
@@ -2443,7 +2443,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of changed rows that are written to  downstream per second",
           "fieldConfig": {
             "defaults": {
@@ -2553,7 +2553,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Percentiles of asynchronous flush sink duration of changefeeds",
           "fieldConfig": {
             "defaults": {
@@ -2678,7 +2678,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Asynchronous flush sink duration of changefeeds",
           "fieldConfig": {
             "defaults": {},
@@ -2749,7 +2749,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Distribution of MySQL worker loads",
           "fieldConfig": {
             "defaults": {
@@ -2907,7 +2907,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The duration of detecting and waiting conflict of MySQL sink",
           "fieldConfig": {
             "defaults": {},
@@ -2979,7 +2979,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Percentiles of detecting and waiting conflict duration of MySQL sink",
           "fieldConfig": {
             "defaults": {
@@ -3096,7 +3096,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Average processor memory consumption per capture within the last 30 seconds",
           "fieldConfig": {
             "defaults": {
@@ -3197,7 +3197,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Average processor memory consumption per changefeed within the last 30 seconds",
           "fieldConfig": {
             "defaults": {
@@ -3311,7 +3311,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of established Eventfeed RPC between TiCDC and TiKV",
           "fieldConfig": {
             "defaults": {
@@ -3441,7 +3441,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": null,
           "description": "Percentiles of Eventfeed message size",
           "fieldConfig": {
@@ -3550,7 +3550,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of errors that interrupt Eventfeed RPC",
           "fieldConfig": {
             "defaults": {
@@ -3672,7 +3672,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of KV client received events from TiKV per seconds",
           "fieldConfig": {
             "defaults": {
@@ -3775,7 +3775,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of events that puller outputs to sorter \n per second",
           "fieldConfig": {
             "defaults": {
@@ -3876,7 +3876,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of rows that sink flushes to downstream per second",
           "fieldConfig": {
             "defaults": {
@@ -3978,7 +3978,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The average number of events that are buffered in Puller's memory buffer and output channel in the last 30 seconds",
           "fieldConfig": {
             "defaults": {
@@ -4085,7 +4085,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of events that are buffered in Sorter's unsorted events buffer and output channel",
           "fieldConfig": {
             "defaults": {
@@ -4212,7 +4212,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of events that are buffered in Processor's output channel and Mounter input channel",
           "fieldConfig": {
             "defaults": {
@@ -4326,7 +4326,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of rows(events) that are buffered in Sink's pending flush rows buffer",
           "fieldConfig": {
             "defaults": {
@@ -4438,7 +4438,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Duration of sorting unsorted events",
           "fieldConfig": {
             "defaults": {},
@@ -4509,7 +4509,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Percentiles of sorting events duration",
           "fieldConfig": {
             "defaults": {
@@ -4628,7 +4628,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Duration of merging sorted events",
           "fieldConfig": {
             "defaults": {},
@@ -4699,7 +4699,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Percentiles of merging sorted events duration",
           "fieldConfig": {
             "defaults": {
@@ -4818,7 +4818,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Duration of unmarshal events from kv to SQL row",
           "fieldConfig": {
             "defaults": {},
@@ -4889,7 +4889,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Percentiles of unmarshal events from kv to SQL row duration",
           "fieldConfig": {
             "defaults": {
@@ -5002,7 +5002,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of KV client dispatched event per second",
           "fieldConfig": {
             "defaults": {
@@ -5126,7 +5126,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The size of batch resolved ts message from TiKV",
           "fieldConfig": {
             "defaults": {},
@@ -5212,7 +5212,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5307,7 +5307,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5402,7 +5402,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5497,7 +5497,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5602,7 +5602,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5670,7 +5670,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5745,7 +5745,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "fill": 1,
           "gridPos": {
@@ -5838,7 +5838,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "fill": 1,
           "gridPos": {
@@ -5944,7 +5944,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The count of different kinds of gRPC message",
           "fill": 1,
@@ -6040,7 +6040,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -6204,7 +6204,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The min resolved ts of each TiKV",
           "editable": true,
@@ -6335,7 +6335,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The ID of the min resolved region of each TiKV",
           "editable": true,
@@ -6434,7 +6434,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -6538,7 +6538,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The time consumed to CDC incremental scan",
           "gridPos": {
             "h": 7,
@@ -6608,7 +6608,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -6703,7 +6703,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The number of incremental scan task in different status.",
           "fill": 1,
@@ -6812,7 +6812,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -6920,7 +6920,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The speed of TiKV CDC incremental scan",
           "editable": true,
@@ -7021,7 +7021,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The total bytes of TiKV CDC incremental scan",
           "editable": true,
@@ -7122,7 +7122,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
           "fill": 4,
@@ -7249,7 +7249,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The total number of cache entries in the old value cache.",
           "fill": 1,
@@ -7367,7 +7367,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
           "editable": true,
@@ -7477,7 +7477,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The time consumed to get an old value (both from cache and from disk)",
           "gridPos": {
             "h": 7,
@@ -7546,7 +7546,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -7671,7 +7671,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "TiCDC process rss memory usage. TiCDC heap memory size in use ",
           "editable": true,
           "error": false,
@@ -7857,7 +7857,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Count of live objects.",
           "editable": true,
           "error": false,
@@ -7970,7 +7970,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "TiCDC process Go garbage collection STW pause duration",
           "editable": true,
           "error": false,
@@ -8096,7 +8096,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_LINGJIN-TEST}",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The throughput of Go's memory allocator.",
           "fill": 1,
           "gridPos": {
@@ -8241,7 +8241,7 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "",
         "description": null,
         "error": null,
@@ -8268,7 +8268,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "description": null,
         "error": null,
@@ -8295,7 +8295,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
         "error": null,
@@ -8322,7 +8322,7 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
         "description": null,
         "error": null,
@@ -8404,7 +8404,7 @@
       {
         "allValue": "",
         "current": {},
-        "datasource": "${DS_LINGJIN-TEST}",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
         "error": null,
