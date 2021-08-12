@@ -19,8 +19,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/pingcap/ticdc/pkg/logutil"
-
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/br/pkg/httputil"
 	"github.com/pingcap/log"
@@ -29,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
@@ -325,7 +324,12 @@ func (h *HTTPHandler) ResumeChangefeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
-// @Param changefeed body model.ChangefeedConfig true "update changefeed"
+// @Param target_ts body integer false "changefeed target ts"
+// @Param sink_uri body string false "sink uri"
+// @Param filter_rules body []string false "filter rules"
+// @Param ignore_txn_start_ts body integer false "ignore transaction start ts"
+// @Param mounter_worker_num body integer false "mounter worker nums"
+// @Param sink_config body config.SinkConfig false "sink config"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [put]
