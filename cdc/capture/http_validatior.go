@@ -208,7 +208,7 @@ func verifySink(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, 
 	if err != nil {
 		return err
 	}
-	err = s.Close()
+	err = s.Close(ctx)
 	if err != nil {
 		return err
 	}
