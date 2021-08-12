@@ -72,7 +72,6 @@ func NewPuller(
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	limitter *BlurResourceLimitter,
 	enableOldValue bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)

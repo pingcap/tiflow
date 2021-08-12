@@ -83,19 +83,14 @@ func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
 }
 
 // GetTableSpan returns the span to watch for the specified table
-func GetTableSpan(tableID int64, exceptIndexSpan bool) Span {
+func GetTableSpan(tableID int64) Span {
 	sep := byte('_')
 	recordMarker := byte('r')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	var start, end kv.Key
-	// ignore index keys if we don't need them
-	if exceptIndexSpan {
-		start = append(tablePrefix, sep, recordMarker)
-		end = append(tablePrefix, sep, recordMarker+1)
-	} else {
-		start = append(tablePrefix, sep)
-		end = append(tablePrefix, sep+1)
-	}
+	// ignore index keys.
+	start = append(tablePrefix, sep, recordMarker)
+	end = append(tablePrefix, sep, recordMarker+1)
 	return Span{
 		Start: start,
 		End:   end,

@@ -96,12 +96,16 @@ func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runne
 	err := runner.run(ctx)
 	if err != nil {
 		ctx.Throw(err)
-		log.Error("found error when running the node", zap.String("name", runner.getName()), zap.Error(err))
+		if cerror.ErrTableProcessorStoppedSafely.NotEqual(err) {
+			log.Error("found error when running the node", zap.String("name", runner.getName()), zap.Error(err))
+		}
 	}
 }
 
+var pipelineTryAgainError error = cerror.ErrPipelineTryAgain.FastGenByArgs()
+
 // SendToFirstNode sends the message to the first node
-func (p *Pipeline) SendToFirstNode(msg *Message) error {
+func (p *Pipeline) SendToFirstNode(msg Message) error {
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
 	if p.isClosed {
@@ -115,7 +119,9 @@ func (p *Pipeline) SendToFirstNode(msg *Message) error {
 	select {
 	case p.header <- msg:
 	default:
-		return cerror.ErrPipelineTryAgain.GenWithStackByArgs()
+		// Do not call `GenWithStackByArgs` in the hot path,
+		// it consumes lots of CPU.
+		return pipelineTryAgainError
 	}
 	return nil
 }
