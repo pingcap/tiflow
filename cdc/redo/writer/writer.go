@@ -35,7 +35,7 @@ import (
 // Writer ...
 type Writer interface {
 	// WriteLog ...
-	WriteLog(ctx context.Context, tableID int64, rows []*redo.RowChangedEvent) (offset uint64, err error)
+	WriteLog(ctx context.Context, tableID int64, rows []*redo.RowChangedEvent) (resolvedTs uint64, err error)
 	// SendDDL ...
 	SendDDL(ctx context.Context, ddl *redo.DDLEvent) error
 	// 	FlushLog ...
@@ -44,8 +44,8 @@ type Writer interface {
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
 	// EmitResolvedTs ...
 	EmitResolvedTs(ctx context.Context, ts uint64) error
-	// GetCurrentOffset ...
-	GetCurrentOffset(ctx context.Context, tableIDs []int64) (offsets map[int64]uint64, err error)
+	// GetCurrentResolvedTs ...
+	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
 }
 
 const (
@@ -119,7 +119,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 	logWriter := &LogWriter{
 		rowWriter: newWriter(ctx, rowCfg),
 		ddlWriter: newWriter(ctx, ddlCfg),
-		meta:      &redo.LogMeta{Offsets: map[int64]uint64{}},
+		meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
 	}
 	if cfg.S3Storage {
 		s3storage, err := initS3storage(ctx, cfg.S3URI)
@@ -290,8 +290,8 @@ func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	return l.flushLogMeta()
 }
 
-// GetCurrentOffset implement GetCurrentOffset api
-func (l *LogWriter) GetCurrentOffset(ctx context.Context, tableIDs []int64) (map[int64]uint64, error) {
+// GetCurrentResolvedTs implement GetCurrentResolvedTs api
+func (l *LogWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (map[int64]uint64, error) {
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
@@ -308,7 +308,7 @@ func (l *LogWriter) GetCurrentOffset(ctx context.Context, tableIDs []int64) (map
 	ret := map[int64]uint64{}
 	for i := 0; i < len(tableIDs); i++ {
 		id := tableIDs[i]
-		if v, ok := l.meta.Offsets[id]; ok {
+		if v, ok := l.meta.ResolvedTsList[id]; ok {
 			ret[id] = v
 		}
 	}
@@ -328,17 +328,17 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
-	if v, ok := l.meta.Offsets[tableID]; ok {
+	if v, ok := l.meta.ResolvedTsList[tableID]; ok {
 		if v < commitTs {
-			l.meta.Offsets[tableID] = commitTs
+			l.meta.ResolvedTsList[tableID] = commitTs
 			atomic.StoreInt32(&l.dirtyMeta, dirty)
 		}
 	} else {
-		l.meta.Offsets[tableID] = commitTs
+		l.meta.ResolvedTsList[tableID] = commitTs
 		atomic.StoreInt32(&l.dirtyMeta, dirty)
 	}
 
-	return l.meta.Offsets[tableID]
+	return l.meta.ResolvedTsList[tableID]
 }
 
 // flush flushes all the buffered data to the disk.

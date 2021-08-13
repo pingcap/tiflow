@@ -36,9 +36,9 @@ type Log struct {
 
 // LogMeta ...
 type LogMeta struct {
-	CheckPointTs uint64           `msg:"checkPointTs"`
-	ResolvedTs   uint64           `msg:"resolvedTs"`
-	Offsets      map[int64]uint64 `msg:"offsets"`
+	CheckPointTs   uint64           `msg:"checkPointTs"`
+	ResolvedTs     uint64           `msg:"resolvedTs"`
+	ResolvedTsList map[int64]uint64 `msg:"resolvedTsList"`
 }
 
 // ActionType ...
