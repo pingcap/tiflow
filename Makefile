@@ -199,7 +199,7 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen cdc/redo/redo_gen.go cdc/redo/redo_gen_test.go
+	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg

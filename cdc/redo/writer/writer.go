@@ -16,7 +16,6 @@ package writer
 import (
 	"context"
 	"fmt"
-	"hash"
 	"net/url"
 	"os"
 	"sync"
@@ -89,7 +88,6 @@ type LogWriter struct {
 	storage   storage.ExternalStorage
 	meta      *redo.LogMeta
 	metaLock  sync.RWMutex
-	crc       hash.Hash32
 	dirtyMeta int32
 }
 
