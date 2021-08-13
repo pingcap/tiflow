@@ -203,8 +203,7 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 			zap.String("version", cdcClusterVer.String()))
 	}
 
-	sortEngineFlag := cmd.Flag("sort-engine")
-	if !sortEngineFlag.Changed && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
+	if o.commonChangefeedOptions.sortEngine == model.SortUnified && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
 		o.commonChangefeedOptions.sortEngine = model.SortInMemory
 		log.Warn("The TiCDC cluster is built from an older version, disabling Unified Sorter by default",
 			zap.String("version", cdcClusterVer.String()))
