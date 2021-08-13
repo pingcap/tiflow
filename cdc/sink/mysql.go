@@ -159,8 +159,8 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		case <-receiver.C:
 		}
 		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
-		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
-		if len(resolvedTxnsMap) == 0 {
+		resolvedTxnMap := s.txnCache.Resolved(resolvedTs)
+		if len(resolvedTxnMap) == 0 {
 			s.updateWorkersCheckpointTs(resolvedTs)
 			s.txnCache.UpdateCheckpoint(resolvedTs)
 			continue
@@ -169,10 +169,10 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		if s.canCyclic() {
 			// Filter rows if it is originated from downstream.
 			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+				resolvedTxnMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
-		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		s.dispatchAndExecTxns(ctx, resolvedTxnMap)
 		s.updateWorkersCheckpointTs(resolvedTs)
 		s.txnCache.UpdateCheckpoint(resolvedTs)
 	}
@@ -693,7 +693,7 @@ func (s *mysqlSink) broadcastFinishTxn() {
 	}
 }
 
-func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
+func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnGroup map[model.TableID][]*model.SingleTableTxn) {
 	nWorkers := s.params.workerCount
 	causality := newCausality()
 	rowsChIdx := 0
@@ -716,7 +716,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		rowsChIdx++
 		rowsChIdx = rowsChIdx % nWorkers
 	}
-	h := newTxnsHeap(txnsGroup)
+	h := newTxnsHeap(txnGroup)
 	h.iter(func(txn *model.SingleTableTxn) {
 		startTime := time.Now()
 		resolveConflict(txn)
