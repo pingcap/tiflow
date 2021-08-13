@@ -7896,10 +7896,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 18
-}
-=======
   "version": 19
 }
->>>>>>> 2359aaf4b (metrics: optimize prometheus metrics label (#2453))
