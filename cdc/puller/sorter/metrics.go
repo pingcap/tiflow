@@ -23,28 +23,28 @@ var (
 		Subsystem: "sorter",
 		Name:      "consume_count",
 		Help:      "the number of events consumed by the sorter",
-	}, []string{"capture", "changefeed", "table", "type"})
+	}, []string{"capture", "changefeed", "type"})
 
 	sorterEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "event_count",
 		Help:      "the number of events output by the sorter",
-	}, []string{"capture", "changefeed", "table", "type"})
+	}, []string{"capture", "changefeed", "type"})
 
 	sorterResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "resolved_ts_gauge",
 		Help:      "the resolved ts of the sorter",
-	}, []string{"capture", "changefeed", "table"})
+	}, []string{"capture", "changefeed"})
 
 	sorterMergerStartTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "merger_start_ts_gauge",
 		Help:      "the start TS of each merge in the sorter",
-	}, []string{"capture", "changefeed", "table"})
+	}, []string{"capture", "changefeed"})
 
 	sorterInMemoryDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
@@ -73,7 +73,7 @@ var (
 		Name:      "flush_count_histogram",
 		Help:      "Bucketed histogram of the number of events in individual flushes performed by the sorter",
 		Buckets:   prometheus.ExponentialBuckets(4, 4, 10),
-	}, []string{"capture", "changefeed", "table"})
+	}, []string{"capture", "changefeed"})
 
 	sorterMergeCountHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
@@ -81,7 +81,7 @@ var (
 		Name:      "merge_count_histogram",
 		Help:      "Bucketed histogram of the number of events in individual merges performed by the sorter",
 		Buckets:   prometheus.ExponentialBuckets(16, 4, 10),
-	}, []string{"capture", "changefeed", "table"})
+	}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
