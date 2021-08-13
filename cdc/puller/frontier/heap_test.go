@@ -42,23 +42,30 @@ func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	rand.Seed(0xdeadbeaf)
 	var heap fibonacciHeap
-	nodes := make([]*fibonacciHeapNode, 50000)
+	nodes := make([]*fibonacciHeapNode, 20)
+	expectedMin := uint64(math.MaxUint64)
 	for i := range nodes {
-		nodes[i] = heap.Insert(10000 + uint64(rand.Intn(len(nodes)/2)))
+		key := 10000 + uint64(rand.Intn(len(nodes)/2))
+		nodes[i] = heap.Insert(key)
+		if expectedMin > key {
+			expectedMin = key
+		}
 	}
+
+	var key uint64
 	for i := range nodes {
 		min := heap.GetMinKey()
-		expectedMin := uint64(math.MaxUint64)
-		for _, n := range nodes {
-			if expectedMin > n.key {
-				expectedMin = n.key
-			}
-		}
 		c.Assert(min, check.Equals, expectedMin)
 		if rand.Intn(2) == 0 {
-			heap.UpdateKey(nodes[i], nodes[i].key+uint64(10000))
+			key = nodes[i].key + uint64(10000)
+			heap.UpdateKey(nodes[i], key)
+
 		} else {
-			heap.UpdateKey(nodes[i], nodes[i].key-uint64(10000))
+			key = nodes[i].key - uint64(10000)
+			heap.UpdateKey(nodes[i], key)
+		}
+		if expectedMin > key {
+			expectedMin = key
 		}
 	}
 }
