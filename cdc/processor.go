@@ -1140,7 +1140,6 @@ func (p *oldProcessor) sorterConsume(
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
 	log.Debug("creating table flow controller",
-		zap.String("table-name", tableName),
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota),
 		util.ZapFieldChangefeed(ctx))
@@ -1148,7 +1147,7 @@ func (p *oldProcessor) sorterConsume(
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	defer func() {
 		flowController.Abort()
-		tableMemoryGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+		tableMemoryGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	}()
 
 	sendResolvedTs2Sink := func() error {
@@ -1192,7 +1191,7 @@ func (p *oldProcessor) sorterConsume(
 		close(flowControlOutCh)
 	}()
 
-	metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 	defer metricsTicker.Stop()
 
