@@ -756,7 +756,6 @@ func newMySQLSinkWorker(
 
 func (w *mysqlSinkWorker) updateCheckpointTs(ts uint64) {
 	atomic.StoreUint64(&w.checkpointTs, ts)
-
 }
 
 func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
