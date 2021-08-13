@@ -588,9 +588,9 @@ func newEventFeedSession(
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
 		id:                id,
-		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
-		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
-		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
+		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
+		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
+		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
 		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
 		streamsCanceller:  make(map[string]context.CancelFunc),
 	}

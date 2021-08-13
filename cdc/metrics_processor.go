@@ -38,7 +38,7 @@ var (
 			Subsystem: "processor",
 			Name:      "table_resolved_ts",
 			Help:      "local resolved ts of processor",
-		}, []string{"changefeed", "capture", "table"})
+		}, []string{"changefeed", "capture"})
 	checkpointTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
