@@ -84,7 +84,7 @@ func (o *cyclicChangefeedOptions) run(cmd *cobra.Command) error {
 
 	cfg := config.GetDefaultReplicaConfig()
 	if len(o.createCommonOptions.configFile) > 0 {
-		if err := o.createCommonOptions.validateReplicaConfig("TiCDC changefeed", cfg); err != nil {
+		if err := o.createCommonOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 			return err
 		}
 	}

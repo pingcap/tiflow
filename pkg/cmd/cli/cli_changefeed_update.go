@@ -95,7 +95,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 			info.SinkURI = o.commonChangefeedOptions.sinkURI
 		case "config":
 			cfg := info.Config
-			if err = o.commonChangefeedOptions.validateReplicaConfig("TiCDC changefeed", cfg); err != nil {
+			if err = o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 				log.Error("decode config file error", zap.Error(err))
 			}
 		case "opts":

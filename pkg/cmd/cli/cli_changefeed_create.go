@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tikv/client-go/v2/oracle"
+
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -39,7 +41,6 @@ import (
 	ticdcutil "github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
-	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -95,8 +96,8 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	_ = cmd.PersistentFlags().MarkHidden("sort-dir")
 }
 
-// validateReplicaConfig do strictDecodeFile check and only verify the rules for now.
-func (o *changefeedCommonOptions) validateReplicaConfig(component string, cfg *config.ReplicaConfig) error {
+// strictDecodeConfig do strictDecodeFile check and only verify the rules for now.
+func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *config.ReplicaConfig) error {
 	err := util.StrictDecodeFile(o.configFile, component, cfg)
 	if err != nil {
 		return err
@@ -178,7 +179,7 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 // complete adapts from the command line args to the data and client required.
-func (o *createChangefeedOptions) complete(f factory.Factory) error {
+func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factory) error {
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return err
@@ -196,7 +197,27 @@ func (o *createChangefeedOptions) complete(f factory.Factory) error {
 	o.pdAddr = f.GetPdAddr()
 	o.credential = f.GetCredential()
 
+	if o.startTs == 0 {
+		ts, logical, err := o.pdClient.GetTS(ctx)
+		if err != nil {
+			return err
+		}
+		o.startTs = oracle.ComposeTS(ts, logical)
+	}
+
 	return nil
+}
+
+func (o *createChangefeedOptions) validate(ctx context.Context) error {
+	if o.commonChangefeedOptions.sinkURI == "" {
+		return errors.New("Creating changefeed without a sink-uri")
+	}
+
+	if err := o.validateStartTs(ctx); err != nil {
+		return err
+	}
+
+	return o.validateTargetTs()
 }
 
 func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Command) (*model.ChangeFeedInfo, error) {
@@ -205,38 +226,11 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 		return nil, err
 	}
 
-	if o.commonChangefeedOptions.sinkURI == "" {
-		return nil, errors.New("Creating changefeed without a sink-uri")
-	}
-	if o.startTs == 0 {
-		ts, logical, err := o.pdClient.GetTS(ctx)
-		if err != nil {
-			return nil, err
-		}
-		o.startTs = oracle.ComposeTS(ts, logical)
-	}
-	if err := o.validateStartTs(ctx, o.changefeedID); err != nil {
-		return nil, err
-	}
-
-	if !o.commonChangefeedOptions.noConfirm {
-		currentPhysical, _, err := o.pdClient.GetTS(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := confirmLargeDataGap(cmd, currentPhysical, o.startTs); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := o.validateTargetTs(); err != nil {
-		return nil, err
-	}
 	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	cfg := config.GetDefaultReplicaConfig()
 
 	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
@@ -251,23 +245,28 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 		log.Warn("The TiCDC cluster is built from an older version, disabling Unified Sorter by default",
 			zap.String("version", cdcClusterVer.String()))
 	}
+
 	if len(o.commonChangefeedOptions.configFile) > 0 {
-		if err := o.commonChangefeedOptions.validateReplicaConfig("TiCDC changefeed", cfg); err != nil {
+		if err := o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 			return nil, err
 		}
 	}
+
 	if o.disableGCSafePointCheck {
 		cfg.CheckGCSafePoint = false
 	}
+
 	if o.commonChangefeedOptions.cyclicReplicaID != 0 || len(o.commonChangefeedOptions.cyclicFilterReplicaIDs) != 0 {
 		if !(o.commonChangefeedOptions.cyclicReplicaID != 0 && len(o.commonChangefeedOptions.cyclicFilterReplicaIDs) != 0) {
 			return nil, errors.New("invalid cyclic config, please make sure using " +
 				"nonzero replica ID and specify filter replica IDs")
 		}
+
 		filter := make([]uint64, 0, len(o.commonChangefeedOptions.cyclicFilterReplicaIDs))
 		for _, id := range o.commonChangefeedOptions.cyclicFilterReplicaIDs {
 			filter = append(filter, uint64(id))
 		}
+
 		cfg.Cyclic = &config.CyclicConfig{
 			Enable:          true,
 			ReplicaID:       o.commonChangefeedOptions.cyclicReplicaID,
@@ -317,6 +316,7 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 		return nil, errors.Errorf("Creating changefeed with an invalid sort engine(%s), "+
 			"`%s` and `%s` are the only valid options.", o.commonChangefeedOptions.sortEngine, model.SortUnified, model.SortInMemory)
 	}
+
 	info := &model.ChangeFeedInfo{
 		SinkURI:           o.commonChangefeedOptions.sinkURI,
 		Opts:              make(map[string]string),
@@ -351,10 +351,12 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 	}
 
 	ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
+
 	ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(o.pdAddr, o.credential, cfg, o.startTs)
 	if err != nil {
 		return nil, err
 	}
+
 	if len(ineligibleTables) != 0 {
 		if cfg.ForceReplicate {
 			cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", ineligibleTables)
@@ -374,6 +376,7 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 			}
 		}
 	}
+
 	if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(eligibleTables) {
 		return nil, errors.New("normal tables and mark tables are not paired, " +
 			"please run `cdc cli changefeed cyclic create-marktables`")
@@ -400,15 +403,16 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 	if err != nil {
 		return nil, err
 	}
+
 	return info, nil
 }
 
-func (o *createChangefeedOptions) validateStartTs(ctx context.Context, changefeedID string) error {
+func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 	if o.disableGCSafePointCheck {
 		return nil
 	}
 
-	return ticdcutil.CheckSafetyOfStartTs(ctx, o.pdClient, changefeedID, o.startTs)
+	return ticdcutil.CheckSafetyOfStartTs(ctx, o.pdClient, o.changefeedID, o.startTs)
 }
 
 func (o *createChangefeedOptions) validateTargetTs() error {
@@ -445,9 +449,7 @@ func (o *createChangefeedOptions) validateSink(
 }
 
 // run the `cli changefeed create` command.
-func (o *createChangefeedOptions) run(cmd *cobra.Command) error {
-	ctx := cmdcontext.GetDefaultContext()
-
+func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	id := o.changefeedID
 	if id == "" {
 		id = uuid.New().String()
@@ -457,7 +459,17 @@ func (o *createChangefeedOptions) run(cmd *cobra.Command) error {
 		return err
 	}
 
-	// TODO: Try to uncouple the parameter and get information.
+	if !o.commonChangefeedOptions.noConfirm {
+		currentPhysical, _, err := o.pdClient.GetTS(ctx)
+		if err != nil {
+			return err
+		}
+
+		if err := confirmLargeDataGap(cmd, currentPhysical, o.startTs); err != nil {
+			return err
+		}
+	}
+
 	info, err := o.getInfo(ctx, cmd)
 	if err != nil {
 		return err
@@ -491,12 +503,19 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 		Use:   "create",
 		Short: "Create a new replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := o.complete(f)
+			ctx := cmdcontext.GetDefaultContext()
+
+			err := o.complete(ctx, f)
 			if err != nil {
 				return err
 			}
 
-			return o.run(cmd)
+			err = o.validate(ctx)
+			if err != nil {
+				return err
+			}
+
+			return o.run(ctx, cmd)
 		},
 	}
 
