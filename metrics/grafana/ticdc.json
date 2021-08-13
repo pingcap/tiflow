@@ -3608,7 +3608,7 @@
               "refId": "B"
             },
             {
-              "expr": "sum(rate(ticdc_puller_event_chan_size_sum{tidb_cluster=\\\"$tidb_cluster\\\", changefeed=~\\\"$changefeed\\\",capture=~\\\"$capture\\\"}[30s]) / rate(ticdc_puller_event_chan_size_count{tidb_cluster=\\\"$tidb_cluster\\\", changefeed=~\\\"$changefeed\\\",capture=~\\\"$capture\\\"}[30s])) by (capture)",
+              "expr": "sum(rate(ticdc_puller_event_chan_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s]) / rate(ticdc_puller_event_chan_size_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s])) by (capture)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 1,
