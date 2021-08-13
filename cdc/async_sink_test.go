@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package cdc
 
 import (
 	"context"
@@ -35,7 +35,7 @@ var _ = check.Suite(&asyncSinkSuite{})
 type asyncSinkSuite struct {
 }
 
-type mockSink struct {
+type mockAsyncSink struct {
 	sink.Sink
 	initTableInfo []*model.SimpleTableInfo
 	checkpointTs  model.Ts
@@ -44,17 +44,17 @@ type mockSink struct {
 	ddlError      error
 }
 
-func (m *mockSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
+func (m *mockAsyncSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	m.initTableInfo = tableInfo
 	return nil
 }
 
-func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (m *mockAsyncSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	atomic.StoreUint64(&m.checkpointTs, ts)
 	return nil
 }
 
-func (m *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *mockAsyncSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	m.ddlMu.Lock()
 	defer m.ddlMu.Unlock()
 	time.Sleep(1 * time.Second)
@@ -62,41 +62,41 @@ func (m *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	return m.ddlError
 }
 
-func (m *mockSink) Close(ctx context.Context) error {
+func (m *mockAsyncSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockSink) Barrier(ctx context.Context) error {
+func (m *mockAsyncSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockSink) GetDDL() *model.DDLEvent {
+func (m *mockAsyncSink) GetDDL() *model.DDLEvent {
 	m.ddlMu.Lock()
 	defer m.ddlMu.Unlock()
 	return m.ddl
 }
 
-func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, AsyncSink, *mockSink) {
+func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, AsyncSink, *mockAsyncSink) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   "test-changefeed",
 		Info: &model.ChangeFeedInfo{SinkURI: "blackhole://", Config: config.GetDefaultReplicaConfig()},
 	})
 	sink, err := newAsyncSink(ctx)
 	c.Assert(err, check.IsNil)
-	mockSink := &mockSink{}
-	sink.(*asyncSinkImpl).sink = mockSink
-	return ctx, sink, mockSink
+	mockAsyncSink := &mockAsyncSink{}
+	sink.(*asyncSinkImpl).sink = mockAsyncSink
+	return ctx, sink, mockAsyncSink
 }
 
 func (s *asyncSinkSuite) TestInitialize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mockSink := newAsyncSink4Test(ctx, c)
+	ctx, sink, mockAsyncSink := newAsyncSink4Test(ctx, c)
 	defer sink.Close(ctx)
 	tableInfos := []*model.SimpleTableInfo{{Schema: "test"}}
 	err := sink.Initialize(ctx, tableInfos)
 	c.Assert(err, check.IsNil)
-	c.Assert(tableInfos, check.DeepEquals, mockSink.initTableInfo)
+	c.Assert(tableInfos, check.DeepEquals, mockAsyncSink.initTableInfo)
 }
 
 func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
@@ -105,17 +105,19 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
 	defer sink.Close(ctx)
 
-	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
-		return retry.Do(context.Background(), func() error {
+	waitCheckpointGrowingUp := func(m *mockAsyncSink, targetTs model.Ts) error {
+		return retry.Run(100*time.Millisecond, 30, func() error {
 			if targetTs != atomic.LoadUint64(&m.checkpointTs) {
 				return errors.New("targetTs!=checkpointTs")
 			}
 			return nil
-		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(30))
+		})
 	}
-	sink.EmitCheckpointTs(ctx, 1)
+	err := sink.EmitCheckpointTs(ctx, 1)
+	c.Assert(err, check.IsNil)
 	c.Assert(waitCheckpointGrowingUp(mSink, 1), check.IsNil)
-	sink.EmitCheckpointTs(ctx, 10)
+	err = sink.EmitCheckpointTs(ctx, 10)
+	c.Assert(err, check.IsNil)
 	c.Assert(waitCheckpointGrowingUp(mSink, 10), check.IsNil)
 }
 

@@ -263,7 +263,7 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 }
 
 func (o *Owner) handleJobs() {
-	jobs := o.takeOnwerJobs()
+	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
@@ -285,7 +285,7 @@ func (o *Owner) handleJobs() {
 	}
 }
 
-func (o *Owner) takeOnwerJobs() []*ownerJob {
+func (o *Owner) takeOwnerJobs() []*ownerJob {
 	o.ownerJobQueueMu.Lock()
 	defer o.ownerJobQueueMu.Unlock()
 

@@ -55,7 +55,6 @@ import (
 
 const (
 	dialTimeout           = 10 * time.Second
-	maxRetry              = 100
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 	// TODO find optimal values and test extensively before releasing
 	// The old values cause the gRPC stream to stall for some unknown reason.
@@ -148,10 +147,13 @@ type regionEvent struct {
 	resolvedTs  *cdcpb.ResolvedTs
 }
 
+// A special event that indicates singleEventFeed is closed.
+var emptyRegionEvent = regionEvent{}
+
 type regionFeedState struct {
 	sri           singleRegionInfo
 	requestID     uint64
-	regionEventCh chan *regionEvent
+	regionEventCh chan regionEvent
 	stopped       int32
 
 	lock           sync.RWMutex
@@ -165,7 +167,7 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 	return &regionFeedState{
 		sri:           sri,
 		requestID:     requestID,
-		regionEventCh: make(chan *regionEvent, 16),
+		regionEventCh: make(chan regionEvent, 16),
 		stopped:       0,
 	}
 }
@@ -379,7 +381,7 @@ type CDCKVClient interface {
 		enableOldValue bool,
 		lockResolver txnutil.LockResolver,
 		isPullerInit PullerInitialization,
-		eventCh chan<- *model.RegionFeedEvent,
+		eventCh chan<- model.RegionFeedEvent,
 	) error
 	Close() error
 }
@@ -437,7 +439,7 @@ func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	err = retry.Run(50*time.Millisecond, 3, func() error {
+	err = retry.Do(ctx, func() error {
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
@@ -465,7 +467,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(8), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	return
 }
 
@@ -483,7 +485,7 @@ func (c *CDCClient) EventFeed(
 	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
-	eventCh chan<- *model.RegionFeedEvent,
+	eventCh chan<- model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(ctx, c, c.regionCache, c.kvStorage, span,
 		lockResolver, isPullerInit,
@@ -514,8 +516,8 @@ type eventFeedSession struct {
 	totalSpan regionspan.ComparableSpan
 
 	// The channel to send the processed events.
-	eventCh chan<- *model.RegionFeedEvent
-	// The token based region router, it controls the uninitialzied regions with
+	eventCh chan<- model.RegionFeedEvent
+	// The token based region router, it controls the uninitialized regions with
 	// a given size limit.
 	regionRouter LimitRegionRouter
 	// The channel to put the region that will be sent requests.
@@ -556,7 +558,7 @@ func newEventFeedSession(
 	isPullerInit PullerInitialization,
 	enableOldValue bool,
 	startTs uint64,
-	eventCh chan<- *model.RegionFeedEvent,
+	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	kvClientCfg := config.GetGlobalServerConfig().KVClient
@@ -613,8 +615,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				// possible, we create a new goroutine to handle it.
 				// The sequence of region range we process is not matter, the
 				// region lock keeps the region access sequence.
-				// Besides the count or frequency of range request is limitted,
-				// we use ephemeral goroutine instead of permanent gourotine.
+				// Besides the count or frequency of range request is limited,
+				// we use ephemeral goroutine instead of permanent goroutine.
 				g.Go(func() error {
 					return s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
 				})
@@ -740,7 +742,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 }
 
 // requestRegionToStore gets singleRegionInfo from regionRouter, which is a token
-// based limitter, sends request to TiKV.
+// based limiter, sends request to TiKV.
 // If the send request to TiKV returns error, fail the region with sendRequestToStoreErr
 // and kv client will redispatch the region.
 // If initialize gPRC stream with an error, fail the region with connectToStoreErr
@@ -865,7 +867,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
 		// to do extra work here.
 		if err != nil {
-			log.Error("send request to stream failed",
+			log.Warn("send request to stream failed",
 				zap.String("addr", rpcCtx.Addr),
 				zap.Uint64("storeID", getStoreID(rpcCtx)),
 				zap.Uint64("regionID", sri.verID.GetID()),
@@ -873,7 +875,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.Error(err))
 			err1 := stream.CloseSend()
 			if err1 != nil {
-				log.Error("failed to close stream", zap.Error(err1))
+				log.Warn("failed to close stream", zap.Error(err1))
 			}
 			// Delete the stream from the map so that the next time the store is accessed, the stream will be
 			// re-established.
@@ -941,7 +943,7 @@ func (s *eventFeedSession) dispatchRequest(
 		//    distribution in puller, so this resolved ts event is needed.
 		// After this resolved ts event is sent, we don't need to send one more
 		// resolved ts event when the region starts to work.
-		resolvedEv := &model.RegionFeedEvent{
+		resolvedEv := model.RegionFeedEvent{
 			RegionID: sri.verID.GetID(),
 			Resolved: &model.ResolvedSpan{
 				Span:       sri.span,
@@ -1090,38 +1092,31 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			regions []*tikv.Region
 			err     error
 		)
-		retryErr := retry.Run(50*time.Millisecond, maxRetry,
-			func() error {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
-				scanT0 := time.Now()
-				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-				regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
-				scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
-				if err != nil {
-					return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
-				}
-				metas := make([]*metapb.Region, 0, len(regions))
-				for _, region := range regions {
-					if region.GetMeta() == nil {
-						err = cerror.ErrMetaNotInRegion.GenWithStackByArgs()
-						log.Warn("batch load region", zap.Stringer("span", nextSpan), zap.Error(err))
-						return err
-					}
-					metas = append(metas, region.GetMeta())
-				}
-				if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
-					err = cerror.ErrRegionsNotCoverSpan.GenWithStackByArgs(nextSpan, metas)
-					log.Warn("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
+		retryErr := retry.Do(ctx, func() error {
+			scanT0 := time.Now()
+			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+			regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
+			scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
+			if err != nil {
+				return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
+			}
+			metas := make([]*metapb.Region, 0, len(regions))
+			for _, region := range regions {
+				if region.GetMeta() == nil {
+					err = cerror.ErrMetaNotInRegion.GenWithStackByArgs()
+					log.Warn("batch load region", zap.Stringer("span", nextSpan), zap.Error(err))
 					return err
 				}
-				log.Debug("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas))
-				return nil
-			})
-
+				metas = append(metas, region.GetMeta())
+			}
+			if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
+				err = cerror.ErrRegionsNotCoverSpan.GenWithStackByArgs(nextSpan, metas)
+				log.Warn("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
+				return err
+			}
+			log.Debug("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas))
+			return nil
+		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(100), retry.WithIsRetryableErr(cerror.IsRetryableError))
 		if retryErr != nil {
 			return retryErr
 		}
@@ -1269,7 +1264,7 @@ func (s *eventFeedSession) receiveFromStream(
 					zap.Uint64("storeID", storeID),
 				)
 			} else {
-				log.Error(
+				log.Warn(
 					"failed to receive from stream",
 					zap.String("addr", addr),
 					zap.Uint64("storeID", storeID),
@@ -1280,7 +1275,7 @@ func (s *eventFeedSession) receiveFromStream(
 			// Use the same delay mechanism as `stream.Send` error handling, since
 			// these two errors often mean upstream store suffers an accident, which
 			// needs time to recover, kv client doesn't need to retry frequently.
-			// TODO: add a better retry backoff or rate limitter
+			// TODO: add a better retry backoff or rate limiter
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
 
 			// TODO: better to closes the send direction of the stream to notify
@@ -1290,7 +1285,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 			for _, state := range regionStates {
 				select {
-				case state.regionEventCh <- nil:
+				case state.regionEventCh <- emptyRegionEvent:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -1389,7 +1384,7 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 	}
 
 	select {
-	case state.regionEventCh <- &regionEvent{
+	case state.regionEventCh <- regionEvent{
 		changeEvent: event,
 	}:
 	case <-ctx.Done():
@@ -1415,7 +1410,7 @@ func (s *eventFeedSession) sendResolvedTs(
 				continue
 			}
 			select {
-			case state.regionEventCh <- &regionEvent{
+			case state.regionEventCh <- regionEvent{
 				resolvedTs: resolvedTs,
 			}:
 			case <-ctx.Done():
@@ -1437,7 +1432,7 @@ func (s *eventFeedSession) singleEventFeed(
 	span regionspan.ComparableSpan,
 	startTs uint64,
 	storeAddr string,
-	receiverCh <-chan *regionEvent,
+	receiverCh <-chan regionEvent,
 ) (lastResolvedTs uint64, initialized bool, err error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
@@ -1470,7 +1465,7 @@ func (s *eventFeedSession) singleEventFeed(
 			return nil
 		}
 		// emit a checkpointTs
-		revent := &model.RegionFeedEvent{
+		revent := model.RegionFeedEvent{
 			RegionID: regionID,
 			Resolved: &model.ResolvedSpan{
 				Span:       span,
@@ -1494,7 +1489,7 @@ func (s *eventFeedSession) singleEventFeed(
 	})
 
 	for {
-		var event *regionEvent
+		var event regionEvent
 		var ok bool
 		select {
 		case <-ctx.Done():
@@ -1542,12 +1537,12 @@ func (s *eventFeedSession) singleEventFeed(
 		case event, ok = <-receiverCh:
 		}
 
-		if !ok || event == nil {
+		if !ok || event == emptyRegionEvent {
 			log.Debug("singleEventFeed closed by error")
 			err = cerror.ErrEventFeedAborted.GenWithStackByArgs()
 			return
 		}
-		var revent *model.RegionFeedEvent
+		var revent model.RegionFeedEvent
 		lastReceivedEventTime = time.Now()
 		if event.changeEvent != nil {
 			metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
@@ -1702,7 +1697,7 @@ func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.Can
 	return
 }
 
-func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (*model.RegionFeedEvent, error) {
+func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1710,10 +1705,10 @@ func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bo
 	case cdcpb.Event_Row_PUT:
 		opType = model.OpTypePut
 	default:
-		return nil, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
+		return model.RegionFeedEvent{}, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
 	}
 
-	revent := &model.RegionFeedEvent{
+	revent := model.RegionFeedEvent{
 		RegionID: regionID,
 		Val: &model.RawKVEntry{
 			OpType:   opType,

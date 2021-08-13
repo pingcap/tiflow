@@ -11,7 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package cdc
+
+// TODO: to remove this file once new owner is enabled.
 
 import (
 	"context"
@@ -34,7 +36,7 @@ const (
 	defaultErrChSize = 1024
 )
 
-// AsyncSink is a async sink design for owner
+// AsyncSink is an async sink design for owner
 // The EmitCheckpointTs and EmitDDLEvent is asynchronous function for now
 // Other functions are still synchronization
 type AsyncSink interface {
@@ -42,7 +44,8 @@ type AsyncSink interface {
 	// EmitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
-	EmitCheckpointTs(ctx cdcContext.Context, ts uint64)
+	// return err here for the unit test TestOwnerCalcResolvedTs in owner_test
+	EmitCheckpointTs(ctx cdcContext.Context, ts uint64) error
 	// EmitDDLEvent emits DDL event asynchronously and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
@@ -87,15 +90,7 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 		errCh:  errCh,
 		cancel: cancel,
 	}
-	if changefeedInfo.SyncPointEnabled {
-		asyncSink.syncpointStore, err = sink.NewSyncpointStore(ctx, changefeedID, changefeedInfo.SinkURI)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if err := asyncSink.syncpointStore.CreateSynctable(ctx); err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
+
 	asyncSink.wg.Add(1)
 	go asyncSink.run(ctx)
 	return asyncSink, nil
@@ -133,7 +128,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
-			if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+			if err == nil || cerror.ErrDDLEventIgnored.Equal(err) {
 				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
 				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 			} else {
@@ -149,12 +144,22 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 	}
 }
 
-func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
+func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) error {
 	atomic.StoreUint64(&s.checkpointTs, ts)
+	return nil
 }
 
 func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
+	failpoint.Inject("InjectChangefeedDDLBlock", func() {
+		if ctx.ChangefeedVars().ID == "changefeed-ddl-block" {
+			log.Info("step into failpoint")
+			// make the func EmitDDLEvent always return false
+			// tests/ddl_async will fail if ddl block the owner
+			ddlFinishedTs = ddl.CommitTs - 10
+			ddl.CommitTs = s.ddlSentTs - 10
+		}
+	})
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
 		return true, nil

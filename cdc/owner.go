@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -349,6 +350,7 @@ func (o *Owner) newChangeFeed(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
 	defer func() {
 		if resultErr != nil {
 			cancel()
@@ -425,17 +427,26 @@ func (o *Owner) newChangeFeed(
 		}
 
 	}
-	errCh := make(chan error, 1)
 
-	primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	cdcCtx = cdcContext.WithChangefeedVars(cdcCtx, &cdcContext.ChangefeedVars{
+		ID:   id,
+		Info: info,
+	})
+	errCh := make(chan error, defaultErrChSize)
+	cdcCtx = cdcContext.WithErrorHandler(cdcCtx, func(err error) error {
+		errCh <- errors.Trace(err)
+		return nil
+	})
+	asyncSink, err := newAsyncSink(cdcCtx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && primarySink != nil {
-			primarySink.Close()
+		if resultErr != nil && asyncSink != nil {
+			asyncSink.Close(cdcCtx)
 		}
 	}()
+
 	go func() {
 		var err error
 		select {
@@ -450,7 +461,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}()
 
-	err = primarySink.Initialize(ctx, sinkTableInfo)
+	err = asyncSink.Initialize(cdcCtx, sinkTableInfo)
 	if err != nil {
 		log.Error("error on running owner", zap.Error(err))
 	}
@@ -492,9 +503,10 @@ func (o *Owner) newChangeFeed(
 		etcdCli:             o.etcdClient,
 		leaseID:             o.session.Lease(),
 		filter:              filter,
-		sink:                primarySink,
+		sink:                asyncSink,
 		cyclicEnabled:       info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime:   time.Now(),
+		cdcCtx:              cdcCtx,
 		cancel:              cancel,
 	}
 	return cf, nil
@@ -848,7 +860,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 // calcResolvedTs call calcResolvedTs of every changefeeds
 func (o *Owner) calcResolvedTs(ctx context.Context) error {
 	for id, cf := range o.changeFeeds {
-		if err := cf.calcResolvedTs(ctx); err != nil {
+		if err := cf.calcResolvedTs(); err != nil {
 			log.Error("fail to calculate checkpoint ts, so it will be stopped", zap.String("changefeed", cf.id), zap.Error(err))
 			// error may cause by sink.EmitCheckpointTs`, just stop the changefeed at the moment
 			// todo: make the method mentioned above more robust.
@@ -880,7 +892,7 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 // handleDDL call handleDDL of every changefeeds
 func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		err := cf.handleDDL(ctx)
+		err := cf.handleDDL()
 		if err != nil {
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
@@ -1216,7 +1228,7 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 	o.stepDown = stepDown
 
 	// Close and Run should be in separated goroutines
-	// A channel is used here to sychronize the steps.
+	// A channel is used here to synchronize the steps.
 
 	// Single the Run function to exit
 	select {

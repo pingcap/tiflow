@@ -500,7 +500,7 @@ func (n *forward) Destroy(ctx NodeContext) error {
 }
 
 // Run the benchmark
-// go test -benchmem -run=^$ -bench ^(BenchmarkPipeline)$ github.com/pingcap/ticdc/pkg/pipeline
+// go test -benchmem -run='^$' -bench '^(BenchmarkPipeline)$' github.com/pingcap/ticdc/pkg/pipeline
 func BenchmarkPipeline(b *testing.B) {
 	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	runnersSize, outputChannelSize := 2, 64

@@ -60,6 +60,7 @@ const (
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
 	flushMemoryMetricsDuration    = time.Second * 5
 	flowControlOutChSize          = 128
+	maxTries                      = 3
 )
 
 type oldProcessor struct {
@@ -313,7 +314,7 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 	lastFlushTime := time.Now()
 	retryFlushTaskStatusAndPosition := func() error {
 		t0Update := time.Now()
-		err := retry.Run(500*time.Millisecond, 3, func() error {
+		err := retry.Do(ctx, func() error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
@@ -326,11 +327,11 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 					logError("update info failed", util.ZapFieldChangefeed(ctx), errField)
 				}
 				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
-					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
+					return cerror.ErrAdminStopProcessor.FastGenByArgs()
 				}
 			}
 			return inErr
-		})
+		}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryable))
 		updateInfoDuration.
 			WithLabelValues(p.captureInfo.AdvertiseAddr).
 			Observe(time.Since(t0Update).Seconds())
@@ -420,6 +421,10 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 			lastFlushTime = time.Now()
 		}
 	}
+}
+
+func isRetryable(err error) bool {
+	return cerror.IsRetryableError(err) && cerror.ErrAdminStopProcessor.NotEqual(err)
 }
 
 func (p *oldProcessor) ddlPullWorker(ctx context.Context) error {
@@ -758,13 +763,14 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	defer p.stateMu.Unlock()
 
 	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
+
+	err := retry.Do(ctx, func() error {
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
 			tableName = name.QuoteString()
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
+	}, retry.WithBackoffBaseDelay(5), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if err != nil {
 		log.Warn("get table name for metric", util.ZapFieldChangefeed(ctx), zap.String("error", err.Error()))
 		tableName = strconv.Itoa(int(tableID))
@@ -889,10 +895,10 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	table.cancel = func() {
 		cancel()
 		if tableSink != nil {
-			tableSink.Close()
+			tableSink.Close(ctx)
 		}
 		if mTableSink != nil {
-			mTableSink.Close()
+			mTableSink.Close(ctx)
 		}
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
@@ -1360,7 +1366,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	p.localCheckpointTsNotifier.Close()
 	p.localResolvedNotifier.Close()
 	var errRes error
-	if err := p.sinkManager.Close(); err != nil {
+	if err := p.sinkManager.Close(ctx); err != nil {
 		log.Warn("an error occurred when stopping the processor", zap.Error(err))
 		errRes = err
 	}

@@ -34,7 +34,7 @@ const (
 	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
-// gcSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
+// gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
 // GcManager is an interface for gc manager
