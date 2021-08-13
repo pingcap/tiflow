@@ -212,7 +212,12 @@ func newCliCommand() *cobra.Command {
 				return errors.NewNoStackError("TiCDC cluster is unknown, please start TiCDC cluster")
 			}
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			err = version.CheckClusterVersion(ctx, pdCli, pdEndpoints[0], credential, errorTiKVIncompatible)
+			for _, pdEndpoint := range pdEndpoints {
+				err = version.CheckClusterVersion(ctx, pdCli, pdEndpoint, credential, errorTiKVIncompatible)
+				if err == nil {
+					break
+				}
+			}
 			if err != nil {
 				return err
 			}

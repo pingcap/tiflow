@@ -71,14 +71,14 @@ var (
 			Subsystem: "kvclient",
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
-		}, []string{"id", "channel"})
+		}, []string{"channel"})
 	clientRegionTokenSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "region_token",
 			Help:      "size of region token in kv client",
-		}, []string{"store", "table", "changefeed"})
+		}, []string{"store", "changefeed"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

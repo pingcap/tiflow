@@ -47,16 +47,13 @@ type LimitRegionRouter interface {
 
 type srrMetrics struct {
 	changefeed string
-	table      string
 	tokens     map[string]prometheus.Gauge
 }
 
 func newSrrMetrics(ctx context.Context) *srrMetrics {
 	changefeed := util.ChangefeedIDFromCtx(ctx)
-	_, table := util.TableIDFromCtx(ctx)
 	return &srrMetrics{
 		changefeed: changefeed,
-		table:      table,
 		tokens:     make(map[string]prometheus.Gauge),
 	}
 }
@@ -105,7 +102,7 @@ func (r *sizedRegionRouter) Acquire(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]++
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.table, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
 	}
 	r.metrics.tokens[id].Inc()
 }
@@ -115,7 +112,7 @@ func (r *sizedRegionRouter) Release(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]--
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.table, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
 	}
 	r.metrics.tokens[id].Dec()
 }
