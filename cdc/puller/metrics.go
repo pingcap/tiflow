@@ -37,35 +37,37 @@ var (
 			Subsystem: "puller",
 			Name:      "txn_collect_event_count",
 			Help:      "The number of events received from txn collector",
-		}, []string{"capture", "changefeed", "table", "type"})
+		}, []string{"capture", "changefeed", "type"})
 	pullerResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "resolved_ts",
 			Help:      "puller forward resolved ts",
-		}, []string{"capture", "changefeed", "table"})
-	outputChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+		}, []string{"capture", "changefeed"})
+	outputChanSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "output_chan_size",
 			Help:      "Puller entry buffer size",
-		}, []string{"capture", "changefeed", "table"})
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
+		}, []string{"capture", "changefeed"})
 	memBufferSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "mem_buffer_size",
 			Help:      "Puller in memory buffer size",
-		}, []string{"capture", "changefeed", "table"})
-	eventChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+		}, []string{"capture", "changefeed"})
+	eventChanSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "event_chan_size",
 			Help:      "Puller event channel size",
-		}, []string{"capture", "changefeed", "table"})
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
+		}, []string{"capture", "changefeed"})
 	entrySorterResolvedChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -85,7 +87,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "entry_sorter_unsorted_size",
-			Help:      "Puller entry sorter unsoreted items size",
+			Help:      "Puller entry sorter unsorted items size",
 		}, []string{"capture", "changefeed", "table"})
 	entrySorterSortDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -111,8 +113,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(txnCollectCounter)
 	registry.MustRegister(pullerResolvedTsGauge)
 	registry.MustRegister(memBufferSizeGauge)
-	registry.MustRegister(outputChanSizeGauge)
-	registry.MustRegister(eventChanSizeGauge)
+	registry.MustRegister(outputChanSizeHistogram)
+	registry.MustRegister(eventChanSizeHistogram)
 	registry.MustRegister(entrySorterResolvedChanSizeGauge)
 	registry.MustRegister(entrySorterOutputChanSizeGauge)
 	registry.MustRegister(entrySorterUnsortedSizeGauge)

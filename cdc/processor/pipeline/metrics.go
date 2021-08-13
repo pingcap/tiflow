@@ -32,18 +32,19 @@ var (
 			Name:      "txn_count",
 			Help:      "txn count received/executed by this processor",
 		}, []string{"type", "changefeed", "capture"})
-	tableMemoryGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	tableMemoryHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "table_memory_consumption",
 			Help:      "estimated memory consumption for a table after the sorter",
-		}, []string{"changefeed", "capture", "table"})
+			Buckets:   prometheus.ExponentialBuckets(1*1024*1024 /* mb */, 2, 10),
+		}, []string{"changefeed", "capture"})
 )
 
 // InitMetrics registers all metrics used in processor
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(tableResolvedTsGauge)
 	registry.MustRegister(txnCounter)
-	registry.MustRegister(tableMemoryGauge)
+	registry.MustRegister(tableMemoryHistogram)
 }
