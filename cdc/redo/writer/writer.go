@@ -96,6 +96,7 @@ type LogWriter struct {
 func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 	if cfg == nil {
 		log.Panic("LogWriterConfig can not be nil")
+		return nil
 	}
 
 	rowCfg := &writerConfig{

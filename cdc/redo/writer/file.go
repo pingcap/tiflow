@@ -101,6 +101,7 @@ type writer struct {
 func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	if cfg == nil {
 		log.Panic("writerConfig can not be nil")
+		return nil
 	}
 
 	if cfg.flushIntervalInSec == 0 {
