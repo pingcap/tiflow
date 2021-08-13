@@ -14,6 +14,9 @@
 package pipeline
 
 import (
+	stdContext "context"
+
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/context"
 	"go.uber.org/zap"
@@ -47,7 +50,7 @@ func (r *nodeRunner) run(ctx context.Context) error {
 	defer close(r.outputCh)
 	defer func() {
 		err := r.node.Destroy(nodeCtx)
-		if err != nil {
+		if err != nil && errors.Cause(err) != stdContext.Canceled {
 			log.Error("found an error when stopping node", zap.String("node name", r.name), zap.Error(err))
 		}
 	}()
