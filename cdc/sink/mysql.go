@@ -1041,10 +1041,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			continue
 		}
 
-		// Case for delete event or update event
 		// If old value is enabled and not in safe mode,
 		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
-		if len(row.PreColumns) != 0 {
+		if row.IsDelete() || row.IsUpdate() {
 			flushCacheDMLs()
 			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
 			if query != "" {
@@ -1054,8 +1053,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 
-		// Case for insert event or update event
-		if len(row.Columns) != 0 {
+		if row.IsInsert() || row.IsUpdate() {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
 				if query != "" {
