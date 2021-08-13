@@ -84,6 +84,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 	pprofGroup := router.Group("/debug/pprof")
 	{
 		pprofGroup.GET("", gin.WrapF(pprof.Index))
+		pprofGroup.GET("/:any", gin.WrapF(pprof.Index))
 		pprofGroup.GET("/cmdline", gin.WrapF(pprof.Cmdline))
 		pprofGroup.GET("/profile", gin.WrapF(pprof.Profile))
 		pprofGroup.GET("/symbol", gin.WrapF(pprof.Symbol))
