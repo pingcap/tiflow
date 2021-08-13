@@ -80,16 +80,16 @@ type writerConfig struct {
 
 // writer is a redo log event writer which writes redo log events to a file.
 type writer struct {
-	cfg  *writerConfig
-	size int64
-	// maxCommitTS is the max value among the events in one log file
+	cfg *writerConfig
+	// maxCommitTS is the max commitTS among the events in one log file
 	maxCommitTS *atomic.Uint64
 	// the ts used in file name
 	commitTS *atomic.Uint64
-	// ts send with the event
+	// the ts send with the event
 	eventCommitTS *atomic.Uint64
 	state         *atomic.Uint32
 	gcRunning     *atomic.Bool
+	size          int64
 	file          *os.File
 	bw            *pioutil.PageWriter
 	uint64buf     []byte
@@ -203,7 +203,6 @@ func (w *writer) Write(rawData []byte) (int, error) {
 	if w.maxCommitTS.Load() < w.eventCommitTS.Load() {
 		w.maxCommitTS.Store(w.eventCommitTS.Load())
 	}
-
 	if w.file == nil {
 		if err := w.openOrNew(len(rawData)); err != nil {
 			return 0, err
@@ -215,7 +214,7 @@ func (w *writer) Write(rawData []byte) (int, error) {
 			return 0, err
 		}
 	}
-	// TODO: crc check
+	// ref: https://github.com/etcd-io/etcd/pull/5250
 	lenField, padBytes := encodeFrameSize(len(rawData))
 	if err := w.writeUint64(lenField, w.uint64buf); err != nil {
 		return 0, err
@@ -231,7 +230,6 @@ func (w *writer) Write(rawData []byte) (int, error) {
 }
 
 func (w *writer) writeUint64(n uint64, buf []byte) error {
-	// http://golang.org/src/encoding/binary/binary.go
 	binary.LittleEndian.PutUint64(buf, n)
 	_, err := w.bw.Write(buf)
 	return err

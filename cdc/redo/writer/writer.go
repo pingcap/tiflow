@@ -16,6 +16,7 @@ package writer
 import (
 	"context"
 	"fmt"
+	"hash"
 	"net/url"
 	"os"
 	"sync"
@@ -88,6 +89,7 @@ type LogWriter struct {
 	storage   storage.ExternalStorage
 	meta      *redo.LogMeta
 	metaLock  sync.RWMutex
+	crc       hash.Hash32
 	dirtyMeta int32
 }
 
@@ -188,6 +190,7 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 		rl.Row = r
 		rl.DDL = nil
 		rl.Type = redo.LogTypeRow
+		// TODO: crc check
 		data, err := rl.MarshalMsg(nil)
 		if err != nil {
 			return maxCommitTs, cerror.WrapError(cerror.ErrMarshalFailed, err)
@@ -354,7 +357,7 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%d_%s.log", l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), defaultMetaFileName)
+	return fmt.Sprintf("%s_%d_%s.meta", l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), defaultMetaFileName)
 }
 
 func (l *LogWriter) flushLogMeta() error {
