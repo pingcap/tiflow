@@ -128,13 +128,6 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
-			failpoint.Inject("InjectChangefeedDDLBlock", func() {
-				if ctx.ChangefeedVars().ID == "changefeed-ddl-block" {
-					log.Info("step into failpoint")
-					// ensure tests/ddl_async will fail if here blocks the owner
-					time.Sleep(10 * time.Minute)
-				}
-			})
 			if err == nil || cerror.ErrDDLEventIgnored.Equal(err) {
 				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
 				atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
@@ -158,6 +151,15 @@ func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) erro
 
 func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
+	failpoint.Inject("InjectChangefeedDDLBlock", func() {
+		if ctx.ChangefeedVars().ID == "changefeed-ddl-block" {
+			log.Info("step into failpoint")
+			// make the func EmitDDLEvent always return false
+			// tests/ddl_async will fail if ddl block the owner
+			ddlFinishedTs = ddl.CommitTs - 10
+			ddl.CommitTs = s.ddlSentTs - 10
+		}
+	})
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
 		return true, nil
