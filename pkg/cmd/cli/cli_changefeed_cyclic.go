@@ -95,7 +95,7 @@ func (o *cyclicChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 	o.startTs = oracle.ComposeTS(ts, logical)
 
-	_, eligibleTables, err := o.createCommonOptions.validateTables(o.pdAddr, o.credential, cfg, o.startTs)
+	_, eligibleTables, err := getTables(o.pdAddr, o.credential, cfg, o.startTs)
 	if err != nil {
 		return err
 	}

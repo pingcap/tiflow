@@ -20,8 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tikv/client-go/v2/oracle"
-
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -41,6 +39,7 @@ import (
 	ticdcutil "github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -106,41 +105,6 @@ func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *conf
 	_, err = filter.VerifyRules(cfg)
 
 	return err
-}
-
-func (o *changefeedCommonOptions) validateTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	filter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	for _, tableInfo := range snap.Tables() {
-		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			continue
-		}
-		if !tableInfo.IsEligible(false /* forceReplicate */) {
-			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
-		} else {
-			eligibleTables = append(eligibleTables, tableInfo.TableName)
-		}
-	}
-
-	return
 }
 
 // createChangefeedOptions defines common flags for the `cli changefeed crate` command.
@@ -307,6 +271,7 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 			}
 		}
 	}
+
 	switch o.commonChangefeedOptions.sortEngine {
 	case model.SortUnified, model.SortInMemory:
 	case model.SortInFile:
@@ -352,7 +317,7 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 
 	ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
 
-	ineligibleTables, eligibleTables, err := o.commonChangefeedOptions.validateTables(o.pdAddr, o.credential, cfg, o.startTs)
+	ineligibleTables, eligibleTables, err := getTables(o.pdAddr, o.credential, cfg, o.startTs)
 	if err != nil {
 		return nil, err
 	}
@@ -446,6 +411,41 @@ func (o *createChangefeedOptions) validateSink(
 	default:
 	}
 	return nil
+}
+
+func getTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	filter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	for _, tableInfo := range snap.Tables() {
+		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
+			continue
+		}
+		if !tableInfo.IsEligible(false /* forceReplicate */) {
+			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
+		} else {
+			eligibleTables = append(eligibleTables, tableInfo.TableName)
+		}
+	}
+
+	return
 }
 
 // run the `cli changefeed create` command.
