@@ -161,25 +161,31 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
 		if len(resolvedTxnsMap) == 0 {
-			for _, worker := range s.workers {
-				atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
-			}
+			s.updateWorkersCheckpointTs(resolvedTs)
 			s.txnCache.UpdateCheckpoint(resolvedTs)
 			continue
 		}
 
-		if !config.NewReplicaImpl && s.cyclic != nil {
-			// Filter rows if it is origined from downstream.
+		if s.canCyclic() {
+			// Filter rows if it is originated from downstream.
 			skippedRowCount := cyclic.FilterAndReduceTxns(
 				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for _, worker := range s.workers {
-			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
-		}
+		s.updateWorkersCheckpointTs(resolvedTs)
 		s.txnCache.UpdateCheckpoint(resolvedTs)
 	}
+}
+
+func (s *mysqlSink) updateWorkersCheckpointTs(ts uint64) {
+	for _, worker := range s.workers {
+		worker.updateCheckpointTs(ts)
+	}
+}
+
+func (s *mysqlSink) canCyclic() bool {
+	return !config.NewReplicaImpl && s.cyclic != nil
 }
 
 func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -746,6 +752,11 @@ func newMySQLSinkWorker(
 		receiver:         receiver,
 		closedCh:         make(chan struct{}, 1),
 	}
+}
+
+func (w *mysqlSinkWorker) updateCheckpointTs(ts uint64) {
+	atomic.StoreUint64(&w.checkpointTs, ts)
+
 }
 
 func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
