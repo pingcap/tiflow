@@ -1030,7 +1030,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
 		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
-		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+		if translateToInsert && row.IsUpdate() {
 			flushCacheDMLs()
 			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
 			if query != "" {
