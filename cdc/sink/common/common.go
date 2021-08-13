@@ -101,8 +101,8 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 	return appendRows
 }
 
-// Resolved returns resolved txns according to resolvedTs
-// The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
+// Resolved returns resolved transactions according to resolvedTs
+// The returned map contains many transaction grouped by tableID. for each table, the commitTs of txn in the txn slice is strictly increasing
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
 	if resolvedTs <= atomic.LoadUint64(&c.checkpointTs) {
 		return nil
@@ -114,8 +114,8 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*mo
 		return nil
 	}
 
-	_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, c.unresolvedTxns)
-	return resolvedTxnsMap
+	_, allResolved := c.collectResolved(resolvedTs)
+	return allResolved
 }
 
 // UpdateCheckpoint updates the checkpoint ts
@@ -123,12 +123,10 @@ func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
 	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
 }
 
-func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
-	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
+func (c *UnresolvedTxnCache) collectResolved(resolvedTs uint64) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(c.unresolvedTxns))
 	minTs = resolvedTs
-	for tableID, txns := range unresolvedTxns {
+	for tableID, txns := range c.unresolvedTxns {
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].commitTs > resolvedTs
 		})
@@ -138,10 +136,10 @@ func splitResolvedTxn(
 		var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
 		if i == len(txns) {
 			resolvedTxnsWithTheSameCommitTs = txns
-			delete(unresolvedTxns, tableID)
+			delete(c.unresolvedTxns, tableID)
 		} else {
 			resolvedTxnsWithTheSameCommitTs = txns[:i]
-			unresolvedTxns[tableID] = txns[i:]
+			c.unresolvedTxns[tableID] = txns[i:]
 		}
 		var txnsLength int
 		for _, txns := range resolvedTxnsWithTheSameCommitTs {
