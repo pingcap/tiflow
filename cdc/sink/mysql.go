@@ -166,7 +166,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			continue
 		}
 
-		if s.canCyclic() {
+		if !config.NewReplicaImpl && s.cyclic != nil {
 			// Filter rows if it is originated from downstream.
 			skippedRowCount := cyclic.FilterAndReduceTxns(
 				resolvedTxnMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
@@ -182,10 +182,6 @@ func (s *mysqlSink) updateWorkersCheckpointTs(ts uint64) {
 	for _, worker := range s.workers {
 		worker.updateCheckpointTs(ts)
 	}
-}
-
-func (s *mysqlSink) canCyclic() bool {
-	return !config.NewReplicaImpl && s.cyclic != nil
 }
 
 func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
