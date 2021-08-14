@@ -66,7 +66,7 @@ func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 }
 
 // Append adds unresolved rows to cache
-// the rows inputed into this function will go through the following handling logic
+// the input rows will go through the following handling logic
 // 1. group by tableID from one input stream
 // 2. for each tableID stream, the callers of this function should **make sure** that the CommitTs of rows is **strictly increasing**
 // 3. group by CommitTs, according to CommitTs cut the rows into many group of rows in the same CommitTs
@@ -123,6 +123,7 @@ func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
 	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
 }
 
+// collectResolved fetch all resolved transactions by the given resolvedTs, and group them by TableID, and keep strictly increasing order.
 func (c *UnresolvedTxnCache) collectResolved(resolvedTs uint64) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(c.unresolvedTxns))
 	minTs = resolvedTs
@@ -133,27 +134,27 @@ func (c *UnresolvedTxnCache) collectResolved(resolvedTs uint64) (minTs uint64, r
 		if i == 0 {
 			continue
 		}
-		var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
+		var resolved []*txnsWithTheSameCommitTs
 		if i == len(txns) {
-			resolvedTxnsWithTheSameCommitTs = txns
+			resolved = txns
 			delete(c.unresolvedTxns, tableID)
 		} else {
-			resolvedTxnsWithTheSameCommitTs = txns[:i]
+			resolved = txns[:i]
 			c.unresolvedTxns[tableID] = txns[i:]
 		}
 		var txnsLength int
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
+		for _, txns := range resolved {
 			txnsLength += len(txns.txns)
 		}
 		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
+		for _, txns := range resolved {
 			for _, txn := range txns.txns {
 				resolvedTxns = append(resolvedTxns, txn)
 			}
 		}
 		resolvedRowsMap[tableID] = resolvedTxns
-		if len(resolvedTxnsWithTheSameCommitTs) > 0 && resolvedTxnsWithTheSameCommitTs[0].commitTs < minTs {
-			minTs = resolvedTxnsWithTheSameCommitTs[0].commitTs
+		if len(resolved) > 0 && resolved[0].commitTs < minTs {
+			minTs = resolved[0].commitTs
 		}
 	}
 	return
