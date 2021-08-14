@@ -160,19 +160,15 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		}
 		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 		resolvedTxnMap := s.txnCache.Resolved(resolvedTs)
-		if len(resolvedTxnMap) == 0 {
-			s.updateWorkersCheckpointTs(resolvedTs)
-			s.txnCache.UpdateCheckpoint(resolvedTs)
-			continue
+		if len(resolvedTxnMap) != 0 {
+			if !config.NewReplicaImpl && s.cyclic != nil {
+				// Filter rows if it is originated from downstream.
+				skippedRowCount := cyclic.FilterAndReduceTxns(
+					resolvedTxnMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+				s.statistics.SubRowsCount(skippedRowCount)
+			}
+			s.dispatchAndExecTxns(ctx, resolvedTxnMap)
 		}
-
-		if !config.NewReplicaImpl && s.cyclic != nil {
-			// Filter rows if it is originated from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
-		}
-		s.dispatchAndExecTxns(ctx, resolvedTxnMap)
 		s.updateWorkersCheckpointTs(resolvedTs)
 		s.txnCache.UpdateCheckpoint(resolvedTs)
 	}
