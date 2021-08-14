@@ -90,6 +90,7 @@ func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
 
 func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	var keys [][]byte
+	// for update or insert event
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
 			key := genKeyList(row.Columns, iIdx, idxCol, row.Table.TableID)
@@ -99,6 +100,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 			keys = append(keys, key)
 		}
 	}
+	// for update or delete event
 	if len(row.PreColumns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
 			key := genKeyList(row.PreColumns, iIdx, idxCol, row.Table.TableID)
@@ -124,7 +126,7 @@ func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) 
 	for _, i := range colIdx {
 		// if a column value is null, we can ignore this index
 		// If the index contain generated column, we can't use this key to detect conflict with other DML,
-		// Because such as insert can't specified the generated value.
+		// Because such as insert can't specify the generated value.
 		if columns[i] == nil || columns[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
 			return nil
 		}
@@ -134,9 +136,16 @@ func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) 
 	if len(key) == 0 {
 		return nil
 	}
-	tableKey := make([]byte, 16)
-	binary.BigEndian.PutUint64(tableKey[:8], uint64(iIdx))
-	binary.BigEndian.PutUint64(tableKey[8:], uint64(tableID))
+	tableKey := genTableKey(uint64(tableID), uint64(iIdx))
 	key = append(key, tableKey...)
+	return key
+}
+
+// TODO (Ling Jin): why we need iIdx, which is the index of IndexColumn slice?
+func genTableKey(tableID, iIdx uint64) []byte {
+	key := make([]byte, 16)
+	binary.BigEndian.PutUint64(key[:8], iIdx)
+	binary.BigEndian.PutUint64(key[8:], tableID)
+
 	return key
 }

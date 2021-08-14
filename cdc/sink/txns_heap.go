@@ -82,6 +82,7 @@ func (h *txnsHeap) iter(fn func(txn *model.SingleTableTxn)) {
 		bucket := minEntry.bucket
 		fn(h.txnsGroup[bucket][0])
 		h.txnsGroup[bucket] = h.txnsGroup[bucket][1:]
+		// TODO (Ling Jin): why we need this
 		if len(h.txnsGroup[bucket]) > 0 {
 			heap.Push(h.inner, innerHeapEntry{
 				ts:     h.txnsGroup[bucket][0].CommitTs,
