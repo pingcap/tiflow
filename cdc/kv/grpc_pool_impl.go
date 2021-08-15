@@ -152,13 +152,14 @@ func (ca *connArray) recycle() (empty bool) {
 		if conn.active > 0 {
 			ca.conns[i] = conn
 			i++
+		} else {
+			// tear down this grpc.ClientConn, we don't use it anymore, the returned
+			// not-nil error can be ignored
+			conn.Close() //nolint:errcheck
 		}
 	}
 	// erasing truncated values
 	for j := i; j < len(ca.conns); j++ {
-		// tear down this grpc.ClientConn, we don't use it anymore, the returned
-		// not-nil error can be ignored
-		ca.conns[j].Close() //nolint:errcheck
 		ca.conns[j] = nil
 	}
 	ca.conns = ca.conns[:i]
