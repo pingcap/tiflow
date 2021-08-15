@@ -348,3 +348,21 @@ func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 		}
 	}
 }
+
+func (s *backendPoolSuite) TestGlobalPool(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	// terminateGlobalPool smoke testing to make sure calling it multiple times
+	// does not cause panic.
+	terminateGlobalPool()
+
+	setGlobalPool(func() *backEndPool {
+		dir := c.MkDir()
+		backEndPool, err := newBackEndPool(dir, "")
+		c.Assert(err, check.IsNil)
+		c.Assert(backEndPool, check.NotNil)
+		return backEndPool
+	})
+	terminateGlobalPool()
+	terminateGlobalPool()
+}

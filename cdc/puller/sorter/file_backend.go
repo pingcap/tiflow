@@ -38,13 +38,14 @@ const (
 var openFDCount int64
 
 type fileBackEnd struct {
+	pool     *backEndPool
 	fileName string
 	serde    serializerDeserializer
 	borrowed int32
 	size     int64
 }
 
-func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd, error) {
+func newFileBackEnd(fileName string, serde serializerDeserializer, pool *backEndPool) (*fileBackEnd, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return nil, errors.Trace(wrapIOError(err))
@@ -57,6 +58,7 @@ func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd
 
 	log.Debug("new FileSorterBackEnd created", zap.String("filename", fileName))
 	return &fileBackEnd{
+		pool:     pool,
 		fileName: fileName,
 		serde:    serde,
 		borrowed: 0,
@@ -153,9 +155,7 @@ func (f *fileBackEnd) free() error {
 }
 
 func (f *fileBackEnd) cleanStats() {
-	if pool != nil {
-		atomic.AddInt64(&pool.onDiskDataSize, -f.size)
-	}
+	atomic.AddInt64(&f.pool.onDiskDataSize, -f.size)
 	f.size = 0
 }
 
@@ -259,7 +259,7 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 		return nil, errors.Trace(err)
 	}
 
-	r.readEvents += 1
+	r.readEvents++
 
 	failpoint.Inject("sorterDebug", func() {
 		r.readBytes += int64(4 + 4 + int(size))
@@ -428,7 +428,7 @@ func (w *fileBackEndWriter) flushAndClose() error {
 
 	atomic.AddInt64(&openFDCount, -1)
 	w.backEnd.size = w.bytesWritten
-	atomic.AddInt64(&pool.onDiskDataSize, w.bytesWritten)
+	atomic.AddInt64(&w.backEnd.pool.onDiskDataSize, w.bytesWritten)
 
 	failpoint.Inject("sorterDebug", func() {
 		atomic.StoreInt32(&w.backEnd.borrowed, 0)

@@ -72,6 +72,7 @@ func (t *flushTask) GetBackEnd() backEnd {
 }
 
 type heapSorter struct {
+	pool        *backEndPool
 	id          int
 	taskCounter int
 	inputCh     chan *model.PolymorphicEvent
@@ -83,8 +84,9 @@ type heapSorter struct {
 	internalState *heapSorterInternalState
 }
 
-func newHeapSorter(id int, out chan *flushTask) *heapSorter {
+func newHeapSorter(id int, out chan *flushTask, pool *backEndPool) *heapSorter {
 	return &heapSorter{
+		pool:      pool,
 		id:        id,
 		inputCh:   make(chan *model.PolymorphicEvent, sortHeapInputChSize),
 		outputCh:  out,
@@ -129,7 +131,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		})
 
 		var err error
-		backEnd, err = pool.alloc(ctx)
+		backEnd, err = h.pool.alloc(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -155,7 +157,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			backEnd := task.GetBackEnd()
 			if backEnd != nil {
 				defer task.markDeallocated()
-				return pool.dealloc(backEnd)
+				return h.pool.dealloc(backEnd)
 			}
 			return nil
 		}

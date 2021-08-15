@@ -90,20 +90,19 @@ func NewUnifiedSorter(
 	tableName string,
 	tableID model.TableID,
 	captureAddr string) (*UnifiedSorter, error) {
-	poolMu.Lock()
-	defer poolMu.Unlock()
 
-	if pool == nil {
+	var err error
+	setGlobalPool(func() (pool *backEndPool) {
 		sorterConfig := config.GetGlobalServerConfig().Sorter
 		if sorterConfig.SortDir != "" {
 			// Let the local setting override the changefeed setting
 			dir = sorterConfig.SortDir
 		}
-		var err error
 		pool, err = newBackEndPool(dir, captureAddr)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		return pool
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	lazyInitWorkerPool()
@@ -111,7 +110,7 @@ func NewUnifiedSorter(
 		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
 		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
-		pool:     pool,
+		pool:     getGlobalPool(),
 		metricsInfo: &metricsInfo{
 			changeFeedID: changeFeedID,
 			tableName:    tableName,
@@ -124,14 +123,7 @@ func NewUnifiedSorter(
 
 // UnifiedSorterCleanUp cleans up the files that might have been used.
 func UnifiedSorterCleanUp() {
-	poolMu.Lock()
-	defer poolMu.Unlock()
-
-	if pool != nil {
-		log.Info("Unified Sorter: starting cleaning up files")
-		pool.terminate()
-		pool = nil
-	}
+	terminateGlobalPool()
 }
 
 // Run implements the EventSorter interface
@@ -163,7 +155,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	heapSorterErrOnce := &sync.Once{}
 	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
 	for i := range heapSorters {
-		heapSorters[i] = newHeapSorter(i, heapSorterCollectCh)
+		heapSorters[i] = newHeapSorter(i, heapSorterCollectCh, s.pool)
 		heapSorters[i].init(subctx, func(err error) {
 			heapSorterErrOnce.Do(func() {
 				heapSorterErrCh <- err

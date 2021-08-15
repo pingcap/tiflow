@@ -211,7 +211,7 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 						panic("regressed")
 					}
 					lastTs = event.CRTs
-					counter += 1
+					counter++
 					if counter%10000 == 0 {
 						log.Debug("Messages received", zap.Int("counter", counter))
 					}
@@ -233,10 +233,8 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer UnifiedSorterCleanUp()
 
-	poolMu.Lock()
 	// Clean up the back-end pool if one has been created
-	pool = nil
-	poolMu.Unlock()
+	terminateGlobalPool()
 
 	baseDir := c.MkDir()
 	dir := filepath.Join(baseDir, "sorter_local")
@@ -252,9 +250,7 @@ func (s *sorterSuite) TestSortDirConfigLocal(c *check.C) {
 		"0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
-	poolMu.Lock()
-	defer poolMu.Unlock()
-
+	pool := getGlobalPool()
 	c.Assert(pool, check.NotNil)
 	c.Assert(pool.dir, check.Equals, dir)
 }
@@ -263,10 +259,8 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer UnifiedSorterCleanUp()
 
-	poolMu.Lock()
 	// Clean up the back-end pool if one has been created
-	pool = nil
-	poolMu.Unlock()
+	terminateGlobalPool()
 
 	dir := c.MkDir()
 	// We expect the changefeed setting to take effect
@@ -279,9 +273,7 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 		"0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
-	poolMu.Lock()
-	defer poolMu.Unlock()
-
+	pool := getGlobalPool()
 	c.Assert(pool, check.NotNil)
 	c.Assert(pool.dir, check.Equals, dir)
 }

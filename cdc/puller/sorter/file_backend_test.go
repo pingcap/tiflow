@@ -46,7 +46,13 @@ func (s *fileBackendSuite) TestWrapIOError(c *check.C) {
 func (s *fileBackendSuite) TestNoSpace(c *check.C) {
 	defer testleak.AfterTest(c)()
 
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
+
 	fb := &fileBackEnd{
+		pool:     backEndPool,
 		fileName: "/dev/full",
 		serde:    &msgPackGenSerde{},
 	}

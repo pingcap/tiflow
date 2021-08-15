@@ -36,8 +36,8 @@ type mockFlushTaskBuilder struct {
 
 var backEndCounterForTest int64
 
-func newMockFlushTaskBuilder() *mockFlushTaskBuilder {
-	backEnd := newMemoryBackEnd()
+func newMockFlushTaskBuilder(pool *backEndPool) *mockFlushTaskBuilder {
+	backEnd := newMemoryBackEnd(pool)
 	atomic.AddInt64(&backEndCounterForTest, 1)
 
 	task := &flushTask{
@@ -108,14 +108,18 @@ func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
 	totalCount := 0
-	builder := newMockFlushTaskBuilder()
+	builder := newMockFlushTaskBuilder(backEndPool)
 	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
 	totalCount += builder.totalCount
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task2 := builder.generateRowChanges(100002, 200000, 2048).addResolved(200001).build()
 	totalCount += builder.totalCount
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task3 := builder.generateRowChanges(200002, 300000, 2048).addResolved(300001).build()
 	totalCount += builder.totalCount
 
@@ -179,14 +183,18 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
 	totalCount := 0
-	builder := newMockFlushTaskBuilder()
+	builder := newMockFlushTaskBuilder(backEndPool)
 	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
 	totalCount += builder.totalCount
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task2 := builder.generateRowChanges(100002, 200000, 2048).build()
 	totalCount += builder.totalCount
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task3 := builder.generateRowChanges(200002, 300000, 2048).addResolved(300001).build()
 	totalCount += builder.totalCount
 
@@ -260,8 +268,12 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
 	totalCount := 0
-	builder := newMockFlushTaskBuilder()
+	builder := newMockFlushTaskBuilder(backEndPool)
 	task1 := builder.generateRowChanges(1000, 1000000, 1024).addResolved(1000001).build()
 	totalCount += builder.totalCount
 
@@ -340,11 +352,15 @@ func (s *sorterSuite) TestMergerCancel(c *check.C) {
 		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
-	builder := newMockFlushTaskBuilder()
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
+	builder := newMockFlushTaskBuilder(backEndPool)
 	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task2 := builder.generateRowChanges(100002, 200000, 2048).addResolved(200001).build()
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task3 := builder.generateRowChanges(200002, 300000, 2048).addResolved(300001).build()
 
 	wg.Go(func() error {
@@ -395,11 +411,15 @@ func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
-	builder := newMockFlushTaskBuilder()
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
+	builder := newMockFlushTaskBuilder(backEndPool)
 	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task2 := builder.generateRowChanges(100002, 200000, 2048).addResolved(200001).build()
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task3 := builder.generateRowChanges(200002, 300000, 2048).addResolved(300001).build()
 
 	wg.Go(func() error {
@@ -448,7 +468,11 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	inChan := make(chan *flushTask, 1024)
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
-	builder := newMockFlushTaskBuilder()
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
+	builder := newMockFlushTaskBuilder(backEndPool)
 	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
 
 	inChan <- task1
@@ -498,14 +522,18 @@ func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
 		return runMerger(ctx, 1, inChan, outChan, func() {})
 	})
 
+	dir := c.MkDir()
+	backEndPool, err := newBackEndPool(dir, "")
+	c.Assert(err, check.IsNil)
+	c.Assert(backEndPool, check.NotNil)
 	totalCount := 0
-	builder := newMockFlushTaskBuilder()
+	builder := newMockFlushTaskBuilder(backEndPool)
 	task1 := builder.generateRowChanges(1000, 100000, 2048).addResolved(100001).build()
 	totalCount += builder.totalCount
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task2 := builder.generateRowChanges(100002, 200000, 2048).addResolved(200001).build()
 	totalCount += builder.totalCount
-	builder = newMockFlushTaskBuilder()
+	builder = newMockFlushTaskBuilder(backEndPool)
 	task3 := builder.generateRowChanges(200002, 300000, 2048).addResolved(300001).build()
 	totalCount += builder.totalCount
 

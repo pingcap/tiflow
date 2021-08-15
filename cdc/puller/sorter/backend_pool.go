@@ -44,9 +44,38 @@ const (
 )
 
 var (
-	pool   *backEndPool // this is the singleton instance of backEndPool
-	poolMu sync.Mutex   // this mutex is for delayed initialization of `pool` only
+	gPool   *backEndPool // this is the singleton instance of backEndPool
+	gPoolMu sync.Mutex   // this mutex is for delayed initialization of `pool` only
 )
+
+func getGlobalPool() (pool *backEndPool) {
+	gPoolMu.Lock()
+	if gPool == nil {
+		log.Panic("global backend pool is not initialized yet")
+	}
+	pool = gPool
+	gPoolMu.Unlock()
+	return
+}
+
+func setGlobalPool(fn func() *backEndPool) {
+	gPoolMu.Lock()
+	if gPool == nil {
+		gPool = fn()
+	}
+	gPoolMu.Unlock()
+	return
+}
+
+func terminateGlobalPool() {
+	gPoolMu.Lock()
+	if gPool != nil {
+		log.Info("Unified Sorter: starting cleaning up files")
+		gPool.terminate()
+		gPool = nil
+	}
+	gPoolMu.Unlock()
+}
 
 type backEndPool struct {
 	memoryUseEstimate int64
@@ -177,7 +206,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
 		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
 
-		ret := newMemoryBackEnd()
+		ret := newMemoryBackEnd(p)
 		return ret, nil
 	}
 
@@ -207,7 +236,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		return nil, errors.Trace(err)
 	}
 
-	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
+	ret, err := newFileBackEnd(fname, &msgPackGenSerde{}, p)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

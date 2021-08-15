@@ -23,13 +23,14 @@ import (
 )
 
 type memoryBackEnd struct {
+	pool          *backEndPool
 	events        []*model.PolymorphicEvent
 	estimatedSize int64
 	borrowed      int32
 }
 
-func newMemoryBackEnd() *memoryBackEnd {
-	return &memoryBackEnd{}
+func newMemoryBackEnd(pool *backEndPool) *memoryBackEnd {
+	return &memoryBackEnd{pool: pool}
 }
 
 func (m *memoryBackEnd) reader() (backEndReader, error) {
@@ -62,9 +63,7 @@ func (m *memoryBackEnd) free() error {
 		}
 	})
 
-	if pool != nil {
-		atomic.AddInt64(&pool.memoryUseEstimate, -m.estimatedSize)
-	}
+	atomic.AddInt64(&m.pool.memoryUseEstimate, -m.estimatedSize)
 
 	return nil
 }
@@ -90,9 +89,7 @@ func (r *memoryBackEndReader) resetAndClose() error {
 		atomic.StoreInt32(&r.backEnd.borrowed, 0)
 	})
 
-	if pool != nil {
-		atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
-	}
+	atomic.AddInt64(&r.backEnd.pool.memoryUseEstimate, -r.backEnd.estimatedSize)
 	r.backEnd.estimatedSize = 0
 
 	return nil
@@ -136,9 +133,7 @@ func (w *memoryBackEndWriter) flushAndClose() error {
 	})
 
 	w.backEnd.estimatedSize = w.bytesWritten
-	if pool != nil {
-		atomic.AddInt64(&pool.memoryUseEstimate, w.bytesWritten)
-	}
+	atomic.AddInt64(&w.backEnd.pool.memoryUseEstimate, w.bytesWritten)
 
 	return nil
 }
