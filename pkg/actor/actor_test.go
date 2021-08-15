@@ -20,7 +20,7 @@ type actorSuite struct{}
 var _ = check.Suite(&actorSuite{})
 
 func (s *actorSuite) TestSystemBuilder(c *check.C) {
-	b := NewSystemBuilder()
+	b := NewSystemBuilder("test")
 	c.Assert(b.numWorker, check.LessEqual, maxWorkerNum)
 	c.Assert(b.numWorker, check.Greater, 0)
 
@@ -114,7 +114,7 @@ func wait(c *check.C, timeout time.Duration, f func()) {
 
 func (s *actorSuite) TestSystemStartStop(c *check.C) {
 	ctx := context.Background()
-	sys, _ := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, _ := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 	err := sys.Stop()
 	c.Assert(err, check.IsNil)
@@ -122,7 +122,7 @@ func (s *actorSuite) TestSystemStartStop(c *check.C) {
 
 func (s *actorSuite) TestSystemSpawnDuplicateActor(c *check.C) {
 	ctx := context.Background()
-	sys, _ := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, _ := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	id := 1
@@ -159,7 +159,7 @@ func (f *forwardActor) Receive(ctx context.Context, msgs []pipeline.Message) boo
 
 func (s *actorSuite) TestActorSendReceive(c *check.C) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	// Send to a non-existing actor.
@@ -196,7 +196,7 @@ func (s *actorSuite) TestActorSendReceive(c *check.C) {
 
 func testBroadcast(c *check.C, actorNum, workerNum int) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(workerNum).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(workerNum).Build()
 	sys.Start(ctx)
 
 	ch := make(chan pipeline.Message, 1)
@@ -241,7 +241,7 @@ func (s *actorSuite) TestBroadcast(c *check.C) {
 
 func (s *actorSuite) TestSystemStopCancelActors(c *check.C) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -276,7 +276,7 @@ func (s *actorSuite) TestSystemStopCancelActors(c *check.C) {
 
 func (s *actorSuite) TestActorManyMessageOneSchedule(c *check.C) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -351,7 +351,7 @@ func (f *flipflopActor) Receive(ctx context.Context, msgs []pipeline.Message) bo
 // An actor can only be polled by one goroutine at the same time.
 func (s *actorSuite) TestConcurrentPollSameActor(c *check.C) {
 	concurrency := 4
-	sys, router := NewSystemBuilder().WorkerNumber(concurrency).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(concurrency).Build()
 	sys.Start(context.Background())
 
 	syncCount := 1_000_000
@@ -400,7 +400,7 @@ func (c *closedActor) Receive(ctx context.Context, msgs []pipeline.Message) bool
 
 func (s *actorSuite) TestPollStoppedActor(c *check.C) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -436,7 +436,7 @@ func (s *actorSuite) TestPollStoppedActor(c *check.C) {
 
 func (s *actorSuite) TestStoppedActorIsRemovedFromRouter(c *check.C) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -477,7 +477,7 @@ func (s *actorSuite) TestMustNotReopenActor(c *check.C) {
 		default:
 		}
 	}
-	sys, router := NewSystemBuilder().WorkerNumber(1).handleFatal(handler).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(1).handleFatal(handler).Build()
 	ctx := context.Background()
 	sys.Start(ctx)
 
@@ -511,7 +511,7 @@ func (s *actorSuite) TestMustNotReopenActor(c *check.C) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/ticdc/pkg/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -553,7 +553,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/ticdc/pkg/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder().WorkerNumber(2).Build()
+	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
 
 	actorCount := int(math.Exp2(15))
