@@ -223,7 +223,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 		}
 		captureID := s.capture.info.ID
 		log.Info("campaign owner successfully", zap.String("capture-id", captureID))
-		owner, err := NewOwner(ctx, s.pdClient, conf.Security, s.capture.session, conf.GcTTL, time.Duration(conf.OwnerFlushInterval))
+		owner, err := NewOwner(ctx, s.pdClient, s.capture.grpcPool, s.capture.session, conf.GcTTL, time.Duration(conf.OwnerFlushInterval))
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
