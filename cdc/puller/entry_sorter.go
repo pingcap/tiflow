@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
@@ -96,66 +95,62 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 		}
 	}
 
-	errg, ctx := errgroup.WithContext(ctx)
 	receiver, err := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
 	if err != nil {
 		return err
 	}
 	defer es.resolvedNotifier.Close()
-	errg.Go(func() error {
-		var sorted []*model.PolymorphicEvent
-		for {
-			select {
-			case <-ctx.Done():
-				atomic.StoreInt32(&es.closed, 1)
-				close(es.outputCh)
-				return errors.Trace(ctx.Err())
-			case <-time.After(defaultMetricInterval):
-				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
-				es.lock.Lock()
-				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
-				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
+	var sorted []*model.PolymorphicEvent
+	for {
+		select {
+		case <-ctx.Done():
+			atomic.StoreInt32(&es.closed, 1)
+			close(es.outputCh)
+			return errors.Trace(ctx.Err())
+		case <-time.After(defaultMetricInterval):
+			metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
+			es.lock.Lock()
+			metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
+			metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
+			es.lock.Unlock()
+		case <-receiver.C:
+			es.lock.Lock()
+			if len(es.resolvedTsGroup) == 0 {
 				es.lock.Unlock()
-			case <-receiver.C:
-				es.lock.Lock()
-				if len(es.resolvedTsGroup) == 0 {
-					es.lock.Unlock()
-					continue
-				}
-				resolvedTsGroup := es.resolvedTsGroup
-				es.resolvedTsGroup = nil
-				toSort := es.unsorted
-				es.unsorted = nil
-				es.lock.Unlock()
-
-				resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
-				for i, rts := range resolvedTsGroup {
-					// regionID = 0 means the event is produced by TiCDC
-					resEvents[i] = model.NewResolvedPolymorphicEvent(0, rts)
-				}
-				toSort = append(toSort, resEvents...)
-				startTime := time.Now()
-				sort.Slice(toSort, func(i, j int) bool {
-					return lessFunc(toSort[i], toSort[j])
-				})
-				metricEntrySorterSortDuration.Observe(time.Since(startTime).Seconds())
-				maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
-
-				startTime = time.Now()
-				var merged []*model.PolymorphicEvent
-				mergeFunc(toSort, sorted, func(entry *model.PolymorphicEvent) {
-					if entry.CRTs <= maxResolvedTs {
-						output(ctx, entry)
-					} else {
-						merged = append(merged, entry)
-					}
-				})
-				metricEntrySorterMergeDuration.Observe(time.Since(startTime).Seconds())
-				sorted = merged
+				continue
 			}
+			resolvedTsGroup := es.resolvedTsGroup
+			es.resolvedTsGroup = nil
+			toSort := es.unsorted
+			es.unsorted = nil
+			es.lock.Unlock()
+
+			resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
+			for i, rts := range resolvedTsGroup {
+				// regionID = 0 means the event is produced by TiCDC
+				resEvents[i] = model.NewResolvedPolymorphicEvent(0, rts)
+			}
+			toSort = append(toSort, resEvents...)
+			startTime := time.Now()
+			sort.Slice(toSort, func(i, j int) bool {
+				return lessFunc(toSort[i], toSort[j])
+			})
+			metricEntrySorterSortDuration.Observe(time.Since(startTime).Seconds())
+			maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
+
+			startTime = time.Now()
+			var merged []*model.PolymorphicEvent
+			mergeFunc(toSort, sorted, func(entry *model.PolymorphicEvent) {
+				if entry.CRTs <= maxResolvedTs {
+					output(ctx, entry)
+				} else {
+					merged = append(merged, entry)
+				}
+			})
+			metricEntrySorterMergeDuration.Observe(time.Since(startTime).Seconds())
+			sorted = merged
 		}
-	})
-	return errg.Wait()
+	}
 }
 
 // AddEntry adds an RawKVEntry to the EntryGroup

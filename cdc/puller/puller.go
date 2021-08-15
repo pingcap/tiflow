@@ -143,18 +143,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
 	}()
-	g.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(15 * time.Second):
-				metricEventChanSize.Observe(float64(len(eventCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-			}
-		}
-	})
 
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
@@ -180,6 +168,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			return nil
 		}
 
+		const metricsInterval = 15 * time.Second
+		metricsTimer := time.NewTimer(metricsInterval)
+		defer metricsTimer.Stop()
 		start := time.Now()
 		initialized := false
 		for {
@@ -188,6 +179,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case e = <-eventCh:
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
+			case <-metricsTimer.C:
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
+				metricsTimer.Reset(metricsInterval)
+				continue
 			}
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()
