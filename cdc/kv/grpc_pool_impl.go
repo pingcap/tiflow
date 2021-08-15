@@ -156,7 +156,10 @@ func (ca *connArray) recycle() (empty bool) {
 	}
 	// erasing truncated values
 	for j := i; j < len(ca.conns); j++ {
-		ca.conns[i] = nil
+		// tear down this grpc.ClientConn, we don't use it anymore, the returned
+		// not-nil error can be ignored
+		ca.conns[j].Close() //nolint:errcheck
+		ca.conns[j] = nil
 	}
 	ca.conns = ca.conns[:i]
 	return len(ca.conns) == 0
