@@ -703,6 +703,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnGroup map[model.
 			}
 			s.notifyAndWaitExec(ctx)
 			causality.reset()
+			rowsChIdx = 0
 		}
 		sendFn(txn, keys, rowsChIdx)
 		rowsChIdx++

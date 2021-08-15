@@ -23,8 +23,8 @@ import (
 )
 
 // causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
-// causality groups SQLs that maybe contain causal relationships, and syncer executes them linearly.
-// if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causality.
+// causality groups SQLs that maybe contain causal relationships, and executes them linearly.
+// if some conflicts exist in more than one groups, then waits all SQLs that are grouped be executed and reset causality.
 // this mechanism meets quiescent consistency to ensure correctness.
 type causality struct {
 	relations map[string]int
