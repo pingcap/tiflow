@@ -51,7 +51,8 @@ func (c *causality) reset() {
 }
 
 // detectConflict detects whether there is a conflict
-// return whether it's conflict, and also the index of what ?
+// return whether it's conflict, and also the index of the conflicted key
+// if return -1, means that multiple key conflicted, caller should reset before add the new key.
 func (c *causality) detectConflict(keys [][]byte) (bool, int) {
 	if len(keys) == 0 {
 		return false, 0
