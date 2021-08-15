@@ -95,6 +95,8 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 		}
 	}
 
+	const metricsInterval = 15 * time.Second
+	metricsTimer := time.NewTimer(metricsInterval)
 	receiver, err := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
 	if err != nil {
 		return err
@@ -107,12 +109,13 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			atomic.StoreInt32(&es.closed, 1)
 			close(es.outputCh)
 			return errors.Trace(ctx.Err())
-		case <-time.After(defaultMetricInterval):
+		case <-metricsTimer.C:
 			metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 			es.lock.Lock()
 			metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
 			metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 			es.lock.Unlock()
+			metricsTimer.Reset(metricsInterval)
 		case <-receiver.C:
 			es.lock.Lock()
 			if len(es.resolvedTsGroup) == 0 {

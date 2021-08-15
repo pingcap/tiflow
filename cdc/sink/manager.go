@@ -227,6 +227,8 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush")
 	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
 	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
+	const metricsInterval = 15 * time.Second
+	metricsTimer := time.NewTimer(metricsInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -282,8 +284,9 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				log.Warn("flush row changed events too slow",
 					zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
 			}
-		case <-time.After(defaultMetricInterval):
+		case <-metricsTimer.C:
 			metricBufferSize.Set(float64(len(b.buffer)))
+			metricsTimer.Reset(metricsInterval)
 		}
 	}
 }
