@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -71,10 +70,10 @@ type oldProcessor struct {
 	changefeed   model.ChangeFeedInfo
 	stopped      int32
 
-	pdCli      pd.Client
-	credential *security.Credential
-	etcdCli    kv.CDCEtcdClient
-	session    *concurrency.Session
+	pdCli    pd.Client
+	etcdCli  kv.CDCEtcdClient
+	grpcPool kv.GrpcPool
+	session  *concurrency.Session
 
 	sinkManager *sink.Manager
 
@@ -148,7 +147,7 @@ func (t *tableInfo) loadCheckpointTs() uint64 {
 func newProcessor(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
 	sinkManager *sink.Manager,
@@ -165,7 +164,7 @@ func newProcessor(
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	kvStorage := util.KVStorageFromCtx(ctx)
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, grpcPool, kvStorage, checkpointTs, ddlspans, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -193,7 +192,7 @@ func newProcessor(
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
-		credential:    credential,
+		grpcPool:      grpcPool,
 		etcdCli:       cdcEtcdCli,
 		session:       session,
 		sinkManager:   sinkManager,
@@ -818,7 +817,13 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		kvStorage := util.KVStorageFromCtx(ctx)
 		// NOTICE: always pull the old value internally
 		// See also: TODO(hi-rustin): add issue link here.
+<<<<<<< HEAD
 		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true)
+=======
+		plr := puller.NewPuller(ctx, p.pdCli, p.grpcPool, kvStorage,
+			replicaInfo.StartTs, []regionspan.Span{span},
+			true)
+>>>>>>> 4f7c0b96 (kv/client: add global grpc connection pool (#2511))
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -1409,7 +1414,7 @@ var runProcessorImpl = runProcessor
 func runProcessor(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	session *concurrency.Session,
 	info model.ChangeFeedInfo,
 	changefeedID string,
@@ -1438,7 +1443,7 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	sinkManager := sink.NewManager(ctx, s, errCh, checkpointTs)
-	processor, err := newProcessor(ctx, pdCli, credential, session, info, sinkManager,
+	processor, err := newProcessor(ctx, pdCli, grpcPool, session, info, sinkManager,
 		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
 		cancel()
