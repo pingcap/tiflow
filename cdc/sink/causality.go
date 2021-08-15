@@ -51,6 +51,7 @@ func (c *causality) reset() {
 }
 
 // detectConflict detects whether there is a conflict
+// return whether it's conflict, and also the index of what ?
 func (c *causality) detectConflict(keys [][]byte) (bool, int) {
 	if len(keys) == 0 {
 		return false, 0
