@@ -95,8 +95,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 		}
 	}
 
-	const metricsInterval = 15 * time.Second
-	metricsTimer := time.NewTimer(metricsInterval)
+	metricsTimer := time.NewTimer(defaultMetricInterval)
 	receiver, err := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
 	if err != nil {
 		return err
@@ -115,7 +114,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
 			metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 			es.lock.Unlock()
-			metricsTimer.Reset(metricsInterval)
+			metricsTimer.Reset(defaultMetricInterval)
 		case <-receiver.C:
 			es.lock.Lock()
 			if len(es.resolvedTsGroup) == 0 {

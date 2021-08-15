@@ -168,8 +168,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			return nil
 		}
 
-		const metricsInterval = 15 * time.Second
-		metricsTimer := time.NewTimer(metricsInterval)
+		metricsTimer := time.NewTimer(defaultMetricInterval)
 		defer metricsTimer.Stop()
 		start := time.Now()
 		initialized := false
@@ -183,7 +182,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricEventChanSize.Observe(float64(len(eventCh)))
 				metricOutputChanSize.Observe(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-				metricsTimer.Reset(metricsInterval)
+				metricsTimer.Reset(defaultMetricInterval)
 				continue
 			}
 			if e.Val != nil {
