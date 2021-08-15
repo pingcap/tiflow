@@ -817,13 +817,8 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		kvStorage := util.KVStorageFromCtx(ctx)
 		// NOTICE: always pull the old value internally
 		// See also: TODO(hi-rustin): add issue link here.
-<<<<<<< HEAD
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true)
-=======
 		plr := puller.NewPuller(ctx, p.pdCli, p.grpcPool, kvStorage,
-			replicaInfo.StartTs, []regionspan.Span{span},
-			true)
->>>>>>> 4f7c0b96 (kv/client: add global grpc connection pool (#2511))
+			replicaInfo.StartTs, []regionspan.Span{span}, true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {

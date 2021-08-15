@@ -307,25 +307,11 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, grp
 	clusterID := pd.GetClusterID(ctx)
 
 	c = &CDCClient{
-<<<<<<< HEAD
-		clusterID:   clusterID,
-		pd:          pd,
-		credential:  credential,
-		kvStorage:   kvStorage,
-		regionCache: tikv.NewRegionCache(pd),
-		mu: struct {
-			sync.Mutex
-			conns map[string]*connArray
-		}{
-			conns: make(map[string]*connArray),
-		},
-=======
 		clusterID:      clusterID,
 		pd:             pd,
-		kvStorage:      store,
+		kvStorage:      kvStorage,
 		grpcPool:       grpcPool,
 		regionCache:    tikv.NewRegionCache(pd),
->>>>>>> 4f7c0b96 (kv/client: add global grpc connection pool (#2511))
 		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
@@ -493,17 +479,10 @@ func newEventFeedSession(
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
 		id:                id,
-<<<<<<< HEAD
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
-		streams:           make(map[string]cdcpb.ChangeData_EventFeedClient),
-=======
-		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
-		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
-		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
 		streams:           make(map[string]*eventFeedStream),
->>>>>>> 4f7c0b96 (kv/client: add global grpc connection pool (#2511))
 		streamsCanceller:  make(map[string]context.CancelFunc),
 	}
 }
