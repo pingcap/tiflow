@@ -60,6 +60,7 @@ if [ "$test_case" == "*" ]; then
         run_case $test_name $script $sink_type
     done
 else
+    test_case="capture_session_done_during_task"
     for name in $test_case; do
         script="$CUR/$name/run.sh"
         run_case $name $script $sink_type

@@ -410,6 +410,11 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 
 func (c *changefeed) updateStatus(barrierTs model.Ts) {
 	resolvedTs := barrierTs
+	log.Debug("changefeed update status",
+		zap.Any("task positions", c.state.TaskPositions),
+		zap.Uint64("barrierTs", barrierTs),
+		zap.Any("task status", c.state.TaskStatuses),
+	)
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
 			resolvedTs = position.ResolvedTs
