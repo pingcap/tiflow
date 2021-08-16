@@ -363,6 +363,7 @@ func (s *backendPoolSuite) TestGlobalPool(c *check.C) {
 		c.Assert(backEndPool, check.NotNil)
 		return backEndPool
 	})
+	c.Assert(getGlobalPool(), check.NotNil)
 	terminateGlobalPool()
 	terminateGlobalPool()
 }
