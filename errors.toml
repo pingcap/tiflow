@@ -758,7 +758,7 @@ this api supports POST method only
 
 ["CDC:ErrTableIneligible"]
 error = '''
-some tables are not eligible to replicat(%v), if you want to ignore these table, please set ignore_ineligible_table to true
+some tables are not eligible to replicate(%v), if you want to ignore these tables, please set ignore_ineligible_table to true
 '''
 
 ["CDC:ErrTableListenReplicated"]
