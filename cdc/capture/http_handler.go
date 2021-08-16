@@ -40,8 +40,6 @@ const (
 	apiOpVarChangefeedID = "changefeed_id"
 	// apiOpVarCaptureID is the key of capture ID in HTTP API
 	apiOpVarCaptureID = "capture_id"
-	// apiOpVarTableID is the key of table ID in HTTP API
-	apiOpVarTableID = "table_id"
 	// forWardFromCapture is a header to be set when a request is forwarded from another capture
 	forWardFromCapture = "TiCDC-ForwardFromCapture"
 	// getOwnerRetryMaxTime is the retry max time to get an owner
@@ -476,7 +474,7 @@ func (h *HTTPHandler) RebalanceTable(c *gin.Context) {
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
 // @Param table_id body integer true "table_id"
-// @Param capture_id body string true "target_capture_id"
+// @Param capture_id body string true "capture_id"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/move_table [post]

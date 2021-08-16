@@ -439,7 +439,7 @@ var doc = `{
                         }
                     },
                     {
-                        "description": "target_capture_id",
+                        "description": "capture_id",
                         "name": "capture_id",
                         "in": "body",
                         "required": true,
