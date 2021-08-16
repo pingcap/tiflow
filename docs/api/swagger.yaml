@@ -459,7 +459,7 @@ paths:
           required: true
           schema:
             type: integer
-        - description: target_capture_id
+        - description: capture_id
           in: body
           name: capture_id
           required: true
