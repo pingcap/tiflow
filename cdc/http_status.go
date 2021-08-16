@@ -47,7 +47,7 @@ func (s *Server) startStatusHTTP() error {
 	router.POST("/capture/owner/rebalance_trigger", gin.WrapF(s.handleRebalanceTrigger))
 	router.POST("/capture/owner/move_table", gin.WrapF(s.handleMoveTable))
 	router.POST("/capture/owner/changefeed/query", gin.WrapF(s.handleChangefeedQuery))
-	router.Any("/admin/log", gin.WrapF(handleAdminLogLevel))
+	router.POST("/admin/log", gin.WrapF(handleAdminLogLevel))
 
 	if util.FailpointBuild {
 		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // JSONTime used to wrap time into json format
@@ -38,7 +38,7 @@ type HTTPError struct {
 
 // NewHTTPError wrap a err into HTTPError
 func NewHTTPError(err error) HTTPError {
-	errCode, _ := errors.RFCCode(err)
+	errCode, _ := cerror.RFCCode(err)
 	return HTTPError{
 		Error: err.Error(),
 		Code:  string(errCode),
