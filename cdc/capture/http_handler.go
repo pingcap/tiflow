@@ -17,7 +17,6 @@ import (
 	"bufio"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/br/pkg/httputil"
@@ -503,23 +502,23 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 		return
 	}
 
-	captureID := c.PostForm(apiOpVarCaptureID)
-	if err := model.ValidateChangefeedID(captureID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", captureID)))
-		return
+	data := struct {
+		CaptureID string `json:"capture_id"`
+		TableID   int64  `json:"table_id"`
+	}{}
+	err = c.BindJSON(&data)
+	if err != nil {
+		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 	}
 
-	tableIDStr := c.PostForm(apiOpVarTableID)
-	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
-	if err != nil {
+	if err := model.ValidateChangefeedID(data.CaptureID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid table_id: %s", tableIDStr))
+			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", data.CaptureID)))
 		return
 	}
 
 	_ = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.ManualSchedule(changefeedID, captureID, tableID)
+		owner.ManualSchedule(changefeedID, data.CaptureID, data.TableID)
 		return nil
 	})
 
@@ -773,18 +772,22 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 // @Failure 400 {object} model.HTTPError
 // @Router	/api/v1/log [post]
 func SetLogLevel(c *gin.Context) {
-	level := c.PostForm("log_level")
-	if level == "" {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("empty string is an invalid log level")))
+	// get json data from request body
+	data := struct {
+		Level string `json:"log_level"`
+	}{}
+	err := c.BindJSON(&data)
+	if err != nil {
+		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 		return
 	}
-	err := logutil.SetLogLevel(level)
+
+	err = logutil.SetLogLevel(data.Level)
 	if err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
 			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err)))
 		return
 	}
-	log.Warn("log level changed", zap.String("level", level))
+	log.Warn("log level changed", zap.String("level", data.Level))
 	c.Status(http.StatusOK)
 }
