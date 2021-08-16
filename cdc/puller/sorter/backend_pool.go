@@ -45,17 +45,17 @@ const (
 
 var (
 	gPool   *backEndPool // this is the singleton instance of backEndPool
-	gPoolMu sync.Mutex   // this mutex is for delayed initialization of `pool` only
+	gPoolMu sync.Mutex   // this mutex is for delayed initialization of `gPool` only
 )
 
-func getGlobalPool() (pool *backEndPool) {
+func getGlobalPool() *backEndPool {
 	gPoolMu.Lock()
+	defer gPoolMu.Unlock()
+
 	if gPool == nil {
 		log.Panic("global backend pool is not initialized yet")
 	}
-	pool = gPool
-	gPoolMu.Unlock()
-	return
+	return gPool
 }
 
 func setGlobalPool(fn func() *backEndPool) {
