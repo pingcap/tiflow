@@ -31,7 +31,6 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -441,11 +440,10 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	conf := config.GetGlobalServerConfig()
 	ddlPuller := puller.NewPuller(
 		ctx,
 		ctx.GlobalVars().PDClient,
-		conf.Security,
+		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
@@ -779,7 +777,10 @@ func (p *processor) Close() error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
-		return p.sinkManager.Close()
+		// pass a canceled context is ok here, since we don't need to wait Close
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return p.sinkManager.Close(ctx)
 	}
 	return nil
 }
