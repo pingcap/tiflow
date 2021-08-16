@@ -64,7 +64,6 @@ func setGlobalPool(fn func() *backEndPool) {
 		gPool = fn()
 	}
 	gPoolMu.Unlock()
-	return
 }
 
 func terminateGlobalPool() {

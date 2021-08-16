@@ -90,7 +90,6 @@ func NewUnifiedSorter(
 	tableName string,
 	tableID model.TableID,
 	captureAddr string) (*UnifiedSorter, error) {
-
 	var err error
 	setGlobalPool(func() (pool *backEndPool) {
 		sorterConfig := config.GetGlobalServerConfig().Sorter
