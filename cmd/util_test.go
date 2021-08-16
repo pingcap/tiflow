@@ -100,7 +100,7 @@ func (s *utilsSuite) TestNeedVerifyCmd(c *check.C) {
 	// Test command tree:
 	//      root
 	//   l        r
-	//     ll   rr  rl
+	// ll       rr  rl
 	root := &cobra.Command{
 		Use: "root",
 	}
