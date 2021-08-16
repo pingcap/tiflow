@@ -88,7 +88,7 @@ var (
 			Subsystem: "processor",
 			Name:      "table_memory_consumption",
 			Help:      "estimated memory consumption for a table after the sorter",
-		}, []string{"changefeed", "capture", "table"})
+		}, []string{"changefeed", "capture"})
 )
 
 // initProcessorMetrics registers all metrics used in processor
