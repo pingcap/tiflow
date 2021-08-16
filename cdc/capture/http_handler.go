@@ -133,6 +133,10 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 
 	info, err := h.capture.etcdClient.GetChangeFeedInfo(c, changefeedID)
 	if err != nil {
+		if cerror.ErrChangeFeedNotExists.Equal(err) {
+			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
+		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
@@ -149,6 +153,10 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 
 	processorInfos, err := h.capture.etcdClient.GetAllTaskStatus(c, changefeedID)
 	if err != nil {
+		if cerror.ErrChangeFeedNotExists.Equal(err) {
+			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
+		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
