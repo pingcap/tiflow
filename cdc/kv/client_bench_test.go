@@ -27,8 +27,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -187,9 +185,8 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}
 	}
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
-	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
 	eventCh := make(chan *model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -277,9 +274,8 @@ func prepareBench(b *testing.B, regionNum int) (
 		cluster.SplitRaw(regionID-1, regionID, []byte(fmt.Sprintf("b%d", regionID)), []uint64{peerID}, peerID)
 	}
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
-	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
 	eventCh := make(chan *model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {

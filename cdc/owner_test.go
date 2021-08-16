@@ -907,7 +907,9 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, cdcGCSafePointTTL4Test, time.Millisecond*200)
+	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+	owner, err := NewOwner(ctx, nil, grpcPool, capture.session, cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	sampleCF.etcdCli = owner.etcdClient
@@ -1208,8 +1210,10 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
+	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
 	ctx1, cancel1 := context.WithCancel(ctx)
-	owner, err := NewOwner(ctx1, nil, &security.Credential{}, capture.session,
+	owner, err := NewOwner(ctx1, nil, grpcPool, capture.session,
 		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
@@ -1290,7 +1294,9 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	for _, c := range captureList {
 		captures[c.ID] = c
 	}
-	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+	owner, err := NewOwner(ctx, nil, grpcPool, capture.session,
 		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 	// It is better to update changefeed information by `loadChangeFeeds`, however
@@ -1348,7 +1354,9 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
 	c.Assert(err, check.IsNil)
-	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
+	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+	owner, err := NewOwner(ctx, nil, grpcPool, capture.session,
 		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 

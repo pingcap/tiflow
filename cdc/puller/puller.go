@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -52,7 +51,6 @@ type Puller interface {
 type pullerImpl struct {
 	pdCli          pd.Client
 	kvCli          kv.CDCKVClient
-	credential     *security.Credential
 	kvStorage      tikv.Storage
 	checkpointTs   uint64
 	spans          []regionspan.ComparableSpan
@@ -68,7 +66,7 @@ type pullerImpl struct {
 func NewPuller(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
@@ -87,11 +85,10 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, credential)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool)
 	p := &pullerImpl{
 		pdCli:          pdCli,
 		kvCli:          kvCli,
-		credential:     credential,
 		kvStorage:      tikvStorage,
 		checkpointTs:   checkpointTs,
 		spans:          comparableSpans,

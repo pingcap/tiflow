@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -57,7 +56,6 @@ type ddlPullerImpl struct {
 
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	pdCli := ctx.GlobalVars().PDClient
-	conf := config.GetGlobalServerConfig()
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -66,9 +64,14 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
+<<<<<<< HEAD
 		plr = puller.NewPuller(ctx, pdCli, conf.Security, kvStorage, startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
 			nil, false)
+=======
+		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().GrpcPool, kvStorage, startTs,
+			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	}
 
 	return &ddlPullerImpl{

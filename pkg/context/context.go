@@ -37,6 +37,7 @@ type GlobalVars struct {
 	KVStorage   tidbkv.Storage
 	CaptureInfo *model.CaptureInfo
 	EtcdClient  *kv.CDCEtcdClient
+	GrpcPool    kv.GrpcPool
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline

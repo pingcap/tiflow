@@ -31,7 +31,6 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -454,11 +453,10 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	conf := config.GetGlobalServerConfig()
 	ddlPuller := puller.NewPuller(
 		ctx,
 		ctx.GlobalVars().PDClient,
-		conf.Security,
+		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
 		checkpointTs, ddlspans, p.limitter, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)

@@ -39,9 +39,11 @@ import (
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -61,6 +63,20 @@ type clientSuite struct {
 
 var _ = check.Suite(&clientSuite{})
 
+func createCDCKVClient(ctx context.Context, pdClient pd.Client, kvStorage tidbkv.Storage) (
+	txnutil.LockResolver,
+	PullerInitialization,
+	GrpcPool,
+	CDCKVClient,
+) {
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	// defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), grpcPool)
+	return lockresolver, isPullInit, grpcPool, cdcClient
+}
+
 func (s *clientSuite) TestNewClose(c *check.C) {
 	defer testleak.AfterTest(c)()
 	store := mocktikv.MustNewMVCCStore()
@@ -69,7 +85,9 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	pdCli := mocktikv.NewPDClient(cluster)
 	defer pdCli.Close() //nolint:errcheck
 
-	cli := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(context.Background(), &security.Credential{})
+	defer grpcPool.Close()
+	cli := NewCDCClient(context.Background(), pdCli, nil, grpcPool)
 	err := cli.Close()
 	c.Assert(err, check.IsNil)
 }
@@ -322,14 +340,14 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	kvStorage := newStorageWithCurVersionCache(tiStore, addr)
 	defer kvStorage.Close() //nolint:errcheck
 
-	cluster.AddStore(1, "localhost:1")
+	invalidStore := "localhost:1"
+	cluster.AddStore(1, invalidStore)
 	cluster.AddStore(2, addr)
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
-	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
 	defer cdcClient.Close() //nolint:errcheck
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -384,6 +402,13 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
 	checkEvent(event, ts.Ver)
+
+	// check gRPC connection active counter is updated correctly
+	bucket, ok := grpcPool.(*GrpcPoolImpl).bucketConns[invalidStore]
+	c.Assert(ok, check.IsTrue)
+	empty := bucket.recycle()
+	c.Assert(empty, check.IsTrue)
+
 	cancel()
 }
 
@@ -418,10 +443,16 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -523,10 +554,16 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	*/
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -680,10 +717,16 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
@@ -742,10 +785,16 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1191,10 +1240,16 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1296,10 +1351,16 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
 	}()
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 40)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 40)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1425,10 +1486,16 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1645,10 +1712,16 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientDelayWhenIncompatible")
 	}()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1688,27 +1761,6 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	cancel()
 }
 
-// Use etcdSuite for some special reasons, the embed etcd uses zap as the only candidate
-// logger and in the logger initializtion it also initializes the grpclog/loggerv2, which
-// is not a thread-safe operation and it must be called before any gRPC functions
-// ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
-func (s *etcdSuite) TestConnArray(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-	addr := "127.0.0.1:2379"
-	ca, err := newConnArray(context.TODO(), 2, addr, &security.Credential{})
-	c.Assert(err, check.IsNil)
-
-	conn1 := ca.Get()
-	conn2 := ca.Get()
-	c.Assert(conn1, check.Not(check.Equals), conn2)
-
-	conn3 := ca.Get()
-	c.Assert(conn1, check.Equals, conn3)
-
-	ca.Close()
-}
-
 // TestPendingRegionError tests kv client should return an error when receiving
 // a new subscription (the first event of specific region) but the corresponding
 // region is not found in pending regions.
@@ -1741,10 +1793,16 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	var wg2 sync.WaitGroup
 	if enableKVClientV2 {
 		wg.Add(1)
@@ -1833,10 +1891,16 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1942,10 +2006,16 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval")
 	}()
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2041,10 +2111,16 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientErrUnreachable")
 	}()
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
@@ -2189,10 +2265,16 @@ func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientSingleFeedProcessDelay")
 	}()
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2367,10 +2449,16 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2597,10 +2685,16 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2691,10 +2785,16 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2772,10 +2872,16 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamRecvError")
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay")
 	}()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2834,10 +2940,16 @@ func (s *etcdSuite) TestClientV1ErrNoPendingRegion(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientPendingRegionDelay")
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientStreamCloseDelay")
 	}()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2909,10 +3021,16 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientResolveLockInterval")
 		reconnectInterval = originalReconnectInterval
 	}()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3063,9 +3181,8 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/kv/kvClientMockRangeLock")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
-	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
 	// The buffer size of event channel must be large enough because in the test
 	// case we send events first, and then retrive all events from this channel.
 	eventCh := make(chan *model.RegionFeedEvent, 100)
@@ -3183,10 +3300,16 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	}()
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3306,10 +3429,16 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+=======
+	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
+	defer grpcPool.Close()
+	eventCh := make(chan model.RegionFeedEvent, 10)
+>>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
