@@ -110,6 +110,10 @@ var (
 	ErrSinkInvalidConfig         = errors.Normalize("sink config invalid", errors.RFCCodeText("CDC:ErrSinkInvalidConfig"))
 	ErrCraftCodecInvalidData     = errors.Normalize("craft codec invalid data", errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"))
 
+	// redo log related errors
+	ErrConsistentLevel   = errors.Normalize("consistent level (%s) not support", errors.RFCCodeText("CDC:ErrConsistentLevel"))
+	ErrConsistentStorage = errors.Normalize("consistent storage (%s) not support", errors.RFCCodeText("CDC:ErrConsistentStorage"))
+
 	// utilities related errors
 	ErrToTLSConfigFailed         = errors.Normalize("generate tls config failed", errors.RFCCodeText("CDC:ErrToTLSConfigFailed"))
 	ErrCheckClusterVersionFromPD = errors.Normalize("failed to request PD", errors.RFCCodeText("CDC:ErrCheckClusterVersionFromPD"))
