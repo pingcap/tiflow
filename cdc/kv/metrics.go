@@ -94,6 +94,13 @@ var (
 			Name:      "request_count",
 			Help:      "request counter of etcd operation",
 		}, []string{"type", "capture"})
+	grpcPoolStreamGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "grpc_stream_count",
+			Help:      "active stream count of each gRPC connection",
+		}, []string{"store"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -108,6 +115,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(clientRegionTokenSize)
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(etcdRequestCounter)
+	registry.MustRegister(grpcPoolStreamGauge)
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)
