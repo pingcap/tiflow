@@ -380,6 +380,12 @@ func (worker *EtcdWorker) isDeleteCounterKey(key []byte) bool {
 }
 
 func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
+	if len(value) == 0 {
+		// The delete counter key has been deleted, resetting the internal counter
+		worker.deleteCounter = 0
+		return
+	}
+
 	var err error
 	worker.deleteCounter, err = strconv.ParseInt(string(value), 10, 64)
 	if worker.deleteCounter <= 0 {
