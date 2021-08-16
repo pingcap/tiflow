@@ -160,7 +160,7 @@ EOF
     run_cdc_cli unsafe reset --no-confirm
 
     # Smoke test change log level
-    curl -X POST -d '"warn"' http://127.0.0.1:8300/admin/log
+    curl -X POST -d '"warn"' http://127.0.0.1:8300/api/v1/log
     sleep 3
     # make sure TiCDC does not panic
     curl http://127.0.0.1:8300/status
