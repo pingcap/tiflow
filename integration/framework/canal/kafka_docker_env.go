@@ -30,6 +30,12 @@ const (
 	controllerContainerName = "ticdc_controller_1"
 )
 
+var captureURIs = []string{
+	"http://capturer0:8300",
+	"http://capturer1:8300",
+	"http://capturer2:8300",
+}
+
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-canal.yml
 type KafkaDockerEnv struct {
 	framework.DockerEnv
@@ -44,7 +50,11 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		if err := checkDbConn(framework.UpstreamDSN); err != nil {
 			return err
 		}
-		return checkDbConn(framework.DownstreamDSN)
+		if err := checkDbConn(framework.DownstreamDSN); err != nil {
+			return err
+		}
+		// Also check cdc cluster.
+		return framework.CdcHealthCheck(captureURIs...)
 	}
 	var file string
 	if dockerComposeFile == "" {
