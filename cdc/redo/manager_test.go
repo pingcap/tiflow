@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
@@ -71,7 +72,7 @@ func (s *logManagerSuite) TestLogManagerInProcessor(c *check.C) {
 		c.Assert(resolvedTs, check.Equals, expectedRts)
 	}
 
-	cfg := &ConsistentConfig{
+	cfg := &config.ConsistentConfig{
 		Level:   string(consistentLevelEventual),
 		Storage: string(consistentStorageBlackhole),
 	}
@@ -154,7 +155,7 @@ func (s *logManagerSuite) TestLogManagerInOwner(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := &ConsistentConfig{
+	cfg := &config.ConsistentConfig{
 		Level:   string(consistentLevelEventual),
 		Storage: string(consistentStorageBlackhole),
 	}

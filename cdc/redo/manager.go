@@ -23,16 +23,10 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
-
-// ConsistentConfig represents replication consistency config for a changefeed
-// TODO: put ConsistentConfig to ticdc/pkg/config and make it configurable by changefeed
-type ConsistentConfig struct {
-	Level   string `toml:"level" json:"level"`
-	Storage string `toml:"storage" json:"storage"`
-}
 
 var updateRtsInterval = time.Second
 
@@ -109,7 +103,7 @@ type ManagerImpl struct {
 }
 
 // NewManager creates a new Manager
-func NewManager(ctx context.Context, cfg *ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
+func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
 	// return a nil Manager if no consistent config or normal consistent level
 	if cfg == nil || consistentLevelType(cfg.Level) == consistentLevelNormal {
 		return &ManagerImpl{enabled: false}, nil
