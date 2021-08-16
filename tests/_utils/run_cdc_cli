@@ -15,6 +15,7 @@
 
 set -eux
 
-cdc.test -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.cli.$$.out" cli "$@"
+cdc.test -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.cli.$$.out" cli "$@" \
+    --log-level "debug"
 
 set +x

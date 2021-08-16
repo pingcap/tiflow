@@ -15,7 +15,8 @@ tls=
 certcn=
 binary=
 logsuffix=
-addr=
+addr=127.0.0.1:8300
+cdc_addr=
 pd_addr=
 pwd=$pwd
 log_level=debug
@@ -47,7 +48,8 @@ while [[ ${1} ]]; do
             shift
             ;;
         --addr)
-            addr="--addr ${2}"
+            addr=${2}
+            cdc_addr="--addr ${2}"
             shift
             ;;
         --pd)
@@ -105,7 +107,7 @@ if [[ "$restart" == "true" ]]; then
         $config_path \
         $tls \
         $certcn \
-        $addr \
+        $cdc_addr \
         $pd_addr &>> $workdir/stdout$logsuffix.log
       if [ $? -eq 143 ]; then
         break
@@ -121,8 +123,17 @@ else
     $config_path \
     $tls \
     $certcn \
-    $addr \
+    $cdc_addr \
     $pd_addr &>> $workdir/stdout$log_suffix.log &
 fi
+
+while ! curl "http://$addr/status"; do
+    i=$((i+1))
+    if [ "$i" -gt 50 ]; then
+        echo 'Failed to start TiCDC'
+        return 1
+    fi
+    sleep 3
+done
 
 cd $pwd
