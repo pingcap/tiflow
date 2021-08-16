@@ -140,7 +140,7 @@ func CdcHealthCheck(captureURIs ...string) error {
 		if !ok {
 			return errors.New("cdc status invalid, is_owner not found")
 		}
-
+		log.Info("cdc status", zap.Reflect("status", m), zap.String("URI", capture))
 		if yes, ok := isOwner.(bool); ok && yes {
 			// CDC cluster is up.
 			return nil
