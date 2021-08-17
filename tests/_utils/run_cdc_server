@@ -127,7 +127,7 @@ else
     $pd_addr &>> $workdir/stdout$log_suffix.log &
 fi
 
-while ! curl "http://$addr/status"; do
+while ! curl -sS --silent "http://$addr/status"; do
     i=$((i+1))
     if [ "$i" -gt 50 ]; then
         echo 'Failed to start TiCDC'
