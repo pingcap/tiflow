@@ -126,7 +126,7 @@ func (s *asyncSinkImpl) run(ctx cdcContext.Context) {
 		case ddl := <-s.ddlCh:
 			err := s.sink.EmitDDLEvent(ctx, ddl)
 			failpoint.Inject("InjectChangefeedAsyncDDLError", func() {
-				err = cerror.ErrExecDDLFailed.GenWithStackByArgs("InjectChangefeedAsyncDDLError")
+				err = cerror.ErrExecDDLFailed.GenWithStack("InjectChangefeedAsyncDDLError")
 			})
 			if err == nil || cerror.ErrDDLEventIgnored.Equal(err) {
 				log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
