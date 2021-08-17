@@ -47,11 +47,14 @@ type EtcdWorker struct {
 	barrierRev int64
 	// prefix is the scope of Etcd watch
 	prefix util.EtcdPrefix
-	// deleteCounter maintains a local copy of a value stored in Etcd used to keep track of
-	// how many deletes have been committed by an EtcdWorker watching this key prefix.
-	// This mechanism is necessary as a workaround to correctly detect write-write conflicts when at least a transaction
-	// commits a delete, because deletes in Etcd resets the mod-revision of a key, making it difficult to use
-	// it as a unique version identifier to implement a `compare-and-swap` semantics, which is essential for implementing
+	// deleteCounter maintains a local copy of a value stored in Etcd used to
+	// keep track of how many deletes have been committed by an EtcdWorker
+	// watching this key prefix.
+	// This mechanism is necessary as a workaround to correctly detect
+	// write-write conflicts when at least a transaction commits a delete,
+	// because deletes in Etcd reset the mod-revision of keys, making it
+	// difficult to use it as a unique version identifier to implement
+	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
 }
@@ -388,11 +391,11 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 
 	var err error
 	worker.deleteCounter, err = strconv.ParseInt(string(value), 10, 64)
-	if worker.deleteCounter <= 0 {
-		log.Panic("unexpected delete counter", zap.Int64("value", worker.deleteCounter))
-	}
 	if err != nil {
 		// This should never happen unless Etcd server has been tampered with.
 		log.Panic("strconv failed. Unexpected Etcd state.", zap.Error(err))
+	}
+	if worker.deleteCounter <= 0 {
+		log.Panic("unexpected delete counter", zap.Int64("value", worker.deleteCounter))
 	}
 }
