@@ -19,7 +19,7 @@ jobs:
 
   docker_build:
     name: Docker Build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted,X64,docker]
     steps:
 
     - name: Check out code into the Go module directory
