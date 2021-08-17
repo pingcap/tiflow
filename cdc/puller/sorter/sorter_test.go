@@ -356,18 +356,18 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/InjectErrorBackEndAlloc")
 	}()
 
-	finishedCh := make(chan struct{})
+	errCh := make(chan error)
 	go func() {
 		err := testSorter(ctx, c, sorter, 10000)
-		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*")
-		close(finishedCh)
+		errCh <- err
 	}()
 
 	after := time.After(60 * time.Second)
 	select {
 	case <-after:
 		c.Fatal("TestSorterIOError timed out")
-	case <-finishedCh:
+	case <-errCh:
+		c.Assert(err, check.ErrorMatches, ".*injected alloc error.*", check.Commentf("%+v", err))
 	}
 
 	UnifiedSorterCleanUp()
@@ -383,18 +383,17 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	sorter, err = NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
 	c.Assert(err, check.IsNil)
 
-	finishedCh = make(chan struct{})
 	go func() {
 		err := testSorter(ctx, c, sorter, 10000)
-		c.Assert(err, check.ErrorMatches, ".*injected write error.*")
-		close(finishedCh)
+		errCh <- err
 	}()
 
 	after = time.After(60 * time.Second)
 	select {
 	case <-after:
 		c.Fatal("TestSorterIOError timed out")
-	case <-finishedCh:
+	case <-errCh:
+		c.Assert(err, check.ErrorMatches, ".*injected write error.*", check.Commentf("%+v", err))
 	}
 }
 
