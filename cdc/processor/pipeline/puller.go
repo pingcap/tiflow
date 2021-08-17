@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -34,14 +35,17 @@ type pullerNode struct {
 	replicaInfo *model.TableReplicaInfo
 	cancel      context.CancelFunc
 	wg          errgroup.Group
+
+	resolvedTs  model.Ts
 }
 
 func newPullerNode(
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
+		resolvedTs:  replicaInfo.StartTs,
 	}
 }
 
@@ -81,6 +85,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 				}
 				if rawKV.OpType == model.OpTypeResolved {
 					metricTableResolvedTsGauge.Set(float64(oracle.ExtractPhysical(rawKV.CRTs)))
+					atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
@@ -102,4 +107,8 @@ func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
 	tableResolvedTsGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
+}
+
+func (n *pullerNode) ResolvedTs() model.Ts {
+	return atomic.LoadUint64(&n.resolvedTs)
 }
