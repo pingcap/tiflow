@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -115,7 +114,7 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 // CdcHealthCheck check cdc cluster health.
 func CdcHealthCheck(captureURIs ...string) error {
 	for _, capture := range captureURIs {
-		resp, err := http.Get(path.Join(capture, "status"))
+		resp, err := http.Get(capture + "/status")
 		if err != nil {
 			return err
 		}
