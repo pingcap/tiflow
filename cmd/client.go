@@ -78,6 +78,7 @@ var (
 	captureID               string
 	interval                uint
 	disableGCSafePointCheck bool
+	disableVersionCheck     bool
 
 	syncPointEnabled  bool
 	syncPointInterval time.Duration
@@ -196,7 +197,8 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", cliPdAddr)
 			}
-			if needVerifyCmd(cmd, verifyCDCClusterVersionList) {
+			checkVersion := needVerifyVersion(cmd, verifyCDCClusterVersionList)
+			if checkVersion && !disableVersionCheck {
 				ctx := defaultContext
 				_, err = verifyAndGetTiCDCClusterVersion(ctx, cdcEtcdCli)
 				if err != nil {
@@ -234,6 +236,10 @@ func newCliCommand() *cobra.Command {
 	processor := newProcessorCommand()
 	command.AddCommand(processor)
 	verifyCDCClusterVersionList = append(verifyCDCClusterVersionList, processor.Name())
+
+	// Disable version check to ease internal testing.
+	command.PersistentFlags().BoolVar(&disableVersionCheck, "disable-version-check", false, "Disable version check")
+	_ = command.PersistentFlags().MarkHidden("disable-version-check")
 
 	command.AddCommand(newUnsafeCommand(), newTsoCommand())
 	return command

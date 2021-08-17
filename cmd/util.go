@@ -403,7 +403,7 @@ func verifyPdEndpoint(pdEndpoint string, useTLS bool) error {
 	return nil
 }
 
-func needVerifyCmd(cmd *cobra.Command, verifyList []string) bool {
+func needVerifyVersion(cmd *cobra.Command, verifyList []string) bool {
 	for ; cmd != nil; cmd = cmd.Parent() {
 		for _, verifyName := range verifyList {
 			if cmd.Name() == verifyName || cmd.HasAlias(verifyName) {
