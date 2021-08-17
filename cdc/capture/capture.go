@@ -57,7 +57,6 @@ type Capture struct {
 	pdClient   pd.Client
 	kvStorage  tidbkv.Storage
 	etcdClient *kv.CDCEtcdClient
-	conns      *kv.ConnArray
 
 	cancel context.CancelFunc
 
@@ -66,12 +65,11 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, conns *kv.ConnArray) *Capture {
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient) *Capture {
 	return &Capture{
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
 		etcdClient: etcdClient,
-		conns:      conns,
 		cancel:     func() {},
 
 		newProcessorManager: processor.NewManager,
@@ -147,7 +145,6 @@ func (c *Capture) run(stdCtx context.Context) error {
 		KVStorage:   c.kvStorage,
 		CaptureInfo: c.info,
 		EtcdClient:  c.etcdClient,
-		Conns:       c.conns,
 	})
 	err := c.register(ctx)
 	if err != nil {

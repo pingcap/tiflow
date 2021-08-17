@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -57,6 +58,7 @@ type ddlPullerImpl struct {
 
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	pdCli := ctx.GlobalVars().PDClient
+	conf := config.GetGlobalServerConfig()
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -65,7 +67,7 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
-		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().Conns, kvStorage, startTs,
+		plr = puller.NewPuller(ctx, pdCli, conf.Security, kvStorage, startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
 	}
 

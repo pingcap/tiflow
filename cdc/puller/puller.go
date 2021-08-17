@@ -68,7 +68,7 @@ type pullerImpl struct {
 func NewPuller(
 	ctx context.Context,
 	pdCli pd.Client,
-	conns *kv.ConnArray,
+	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
@@ -78,9 +78,6 @@ func NewPuller(
 	if !ok {
 		log.Panic("can't create puller for non-tikv storage")
 	}
-	if conns == nil {
-		log.Panic("conns can not be nil")
-	}
 	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
 	for i := range spans {
 		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
@@ -89,10 +86,11 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, conns)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, credential)
 	p := &pullerImpl{
 		pdCli:          pdCli,
 		kvCli:          kvCli,
+		credential:     credential,
 		kvStorage:      tikvStorage,
 		checkpointTs:   checkpointTs,
 		spans:          comparableSpans,

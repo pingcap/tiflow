@@ -62,7 +62,7 @@ func newMockCDCKVClient(
 	ctx context.Context,
 	pd pd.Client,
 	kvStorage tikv.Storage,
-	conns *kv.ConnArray,
+	credential *security.Credential,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -123,7 +123,7 @@ func (s *pullerSuite) newPullerForTest(
 		kv.NewCDCKVClient = backupNewCDCKVClient
 	}()
 	pdCli := &mockPdClientForPullerTest{clusterID: uint64(1)}
-	plr := NewPuller(ctx, pdCli, kv.NewConnArray(&security.Credential{}, 2), store, checkpointTs, spans, enableOldValue)
+	plr := NewPuller(ctx, pdCli, nil /* credential */, store, checkpointTs, spans, enableOldValue)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

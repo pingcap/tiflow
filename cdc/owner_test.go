@@ -912,12 +912,12 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	defer sink.Close(cctx) //nolint:errcheck
 	sampleCF.sink = sink
 
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil, kv.NewConnArray(&security.Credential{}, 2))
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	owner, err := NewOwner(ctx, nil, kv.NewConnArray(&security.Credential{}, 2), capture.session, cdcGCSafePointTTL4Test, time.Millisecond*200)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	sampleCF.etcdCli = owner.etcdClient
@@ -1213,13 +1213,13 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil, kv.NewConnArray(&security.Credential{}, 2))
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
 	ctx1, cancel1 := context.WithCancel(ctx)
-	owner, err := NewOwner(ctx1, nil, kv.NewConnArray(&security.Credential{}, 2), capture.session,
+	owner, err := NewOwner(ctx1, nil, &security.Credential{}, capture.session,
 		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
@@ -1270,7 +1270,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	defer cancel()
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil, kv.NewConnArray(&security.Credential{}, 2))
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
 	c.Assert(err, check.IsNil)
 	err = s.client.PutCaptureInfo(ctx, capture.info, capture.session.Lease())
 	c.Assert(err, check.IsNil)
@@ -1300,7 +1300,7 @@ func (s *ownerSuite) TestCleanUpStaleTasks(c *check.C) {
 	for _, c := range captureList {
 		captures[c.ID] = c
 	}
-	owner, err := NewOwner(ctx, nil, kv.NewConnArray(&security.Credential{}, 2), capture.session,
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
 		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 	// It is better to update changefeed information by `loadChangeFeeds`, however
@@ -1356,9 +1356,9 @@ func (s *ownerSuite) TestWatchFeedChange(c *check.C) {
 	defer cancel()
 	addr := "127.0.0.1:12034"
 	ctx = util.PutCaptureAddrInCtx(ctx, addr)
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil, kv.NewConnArray(&security.Credential{}, 2))
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, nil, nil)
 	c.Assert(err, check.IsNil)
-	owner, err := NewOwner(ctx, nil, kv.NewConnArray(&security.Credential{}, 2), capture.session,
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session,
 		cdcGCSafePointTTL4Test, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
