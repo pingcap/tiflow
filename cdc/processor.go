@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -71,10 +70,10 @@ type oldProcessor struct {
 	changefeed   model.ChangeFeedInfo
 	stopped      int32
 
-	pdCli      pd.Client
-	credential *security.Credential
-	etcdCli    kv.CDCEtcdClient
-	session    *concurrency.Session
+	pdCli    pd.Client
+	etcdCli  kv.CDCEtcdClient
+	grpcPool kv.GrpcPool
+	session  *concurrency.Session
 
 	sinkManager *sink.Manager
 
@@ -148,7 +147,7 @@ func (t *tableInfo) loadCheckpointTs() uint64 {
 func newProcessor(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
 	sinkManager *sink.Manager,
@@ -165,7 +164,7 @@ func newProcessor(
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	kvStorage := util.KVStorageFromCtx(ctx)
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, grpcPool, kvStorage, checkpointTs, ddlspans, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -193,7 +192,7 @@ func newProcessor(
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
-		credential:    credential,
+		grpcPool:      grpcPool,
 		etcdCli:       cdcEtcdCli,
 		session:       session,
 		sinkManager:   sinkManager,
@@ -578,7 +577,7 @@ func (p *oldProcessor) removeTable(tableID int64) {
 	if table.markTableID != 0 {
 		delete(p.markTableIDs, table.markTableID)
 	}
-	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
@@ -614,7 +613,7 @@ func (p *oldProcessor) handleTables(ctx context.Context, status *model.TaskStatu
 				opt.Done = true
 				opt.Status = model.OperFinished
 				status.Dirty = true
-				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
+				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 			}
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
@@ -818,7 +817,8 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		kvStorage := util.KVStorageFromCtx(ctx)
 		// NOTICE: always pull the old value internally
 		// See also: TODO(hi-rustin): add issue link here.
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true)
+		plr := puller.NewPuller(ctx, p.pdCli, p.grpcPool, kvStorage,
+			replicaInfo.StartTs, []regionspan.Span{span}, true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -866,7 +866,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 
 		tableSink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 		go func() {
-			p.sorterConsume(ctx, tableID, tableName, sorter, pResolvedTs, pCheckpointTs, replicaInfo, tableSink)
+			p.sorterConsume(ctx, tableID, sorter, pResolvedTs, pCheckpointTs, replicaInfo, tableSink)
 		}()
 		return tableSink
 	}
@@ -1022,7 +1022,6 @@ func (p *oldProcessor) runFlowControl(
 func (p *oldProcessor) sorterConsume(
 	ctx context.Context,
 	tableID int64,
-	tableName string,
 	sorter puller.EventSorter,
 	pResolvedTs *uint64,
 	pCheckpointTs *uint64,
@@ -1031,7 +1030,7 @@ func (p *oldProcessor) sorterConsume(
 ) {
 	var lastResolvedTs uint64
 	opDone := false
-	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	resolvedGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
 	checkDone := func() {
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
@@ -1141,7 +1140,6 @@ func (p *oldProcessor) sorterConsume(
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
 	log.Debug("creating table flow controller",
-		zap.String("table-name", tableName),
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota),
 		util.ZapFieldChangefeed(ctx))
@@ -1149,7 +1147,7 @@ func (p *oldProcessor) sorterConsume(
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
 	defer func() {
 		flowController.Abort()
-		tableMemoryGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+		tableMemoryGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	}()
 
 	sendResolvedTs2Sink := func() error {
@@ -1193,7 +1191,7 @@ func (p *oldProcessor) sorterConsume(
 		close(flowControlOutCh)
 	}()
 
-	metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 	defer metricsTicker.Stop()
 
@@ -1235,7 +1233,7 @@ func (p *oldProcessor) sorterConsume(
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
 				p.localResolvedNotifier.Notify()
-				resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
+				resolvedGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 				if !opDone {
 					checkDone()
 				}
@@ -1358,7 +1356,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
-		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tbl.name)
+		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	}
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
@@ -1409,7 +1407,7 @@ var runProcessorImpl = runProcessor
 func runProcessor(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	session *concurrency.Session,
 	info model.ChangeFeedInfo,
 	changefeedID string,
@@ -1438,7 +1436,7 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	sinkManager := sink.NewManager(ctx, s, errCh, checkpointTs)
-	processor, err := newProcessor(ctx, pdCli, credential, session, info, sinkManager,
+	processor, err := newProcessor(ctx, pdCli, grpcPool, session, info, sinkManager,
 		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
 		cancel()

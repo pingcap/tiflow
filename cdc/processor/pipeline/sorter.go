@@ -99,7 +99,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
+		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -108,7 +108,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			case <-stdCtx.Done():
 				return nil
 			case <-metricsTicker.C:
-				metricsTableMemoryGauge.Set(float64(n.flowController.GetConsumption()))
+				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
 			case msg, ok := <-sorter.Output():
 				if !ok {
 					// sorter output channel closed
@@ -194,7 +194,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	defer tableMemoryGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
+	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
 	return n.wg.Wait()
 }

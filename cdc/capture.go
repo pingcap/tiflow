@@ -29,7 +29,6 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -49,7 +48,7 @@ type Capture struct {
 	etcdClient kv.CDCEtcdClient
 	pdCli      pd.Client
 	kvStorage  tidbkv.Storage
-	credential *security.Credential
+	grpcPool   kv.GrpcPool
 
 	processorManager *processor.Manager
 
@@ -121,12 +120,13 @@ func NewCapture(
 		Version:       version.ReleaseVersion,
 	}
 	processorManager := processor.NewManager()
+	grpcPool := kv.NewGrpcPoolImpl(stdCtx, credential)
 	log.Info("creating capture", zap.String("capture-id", id), util.ZapFieldCapture(stdCtx))
 
 	c = &Capture{
 		processors:       make(map[string]*oldProcessor),
 		etcdClient:       cli,
-		credential:       credential,
+		grpcPool:         grpcPool,
 		session:          sess,
 		election:         elec,
 		info:             info,
@@ -183,6 +183,10 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			return errors.Trace(err)
 		}
 	} else {
+		defer c.grpcPool.Close()
+		go func() {
+			c.grpcPool.RecycleConn(ctx)
+		}()
 		taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
 			Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
 			ChannelSize: 128,
@@ -266,6 +270,10 @@ func (c *Capture) Close(ctx context.Context) error {
 		case <-c.closed:
 		case <-ctx.Done():
 		}
+	} else {
+		if c.grpcPool != nil {
+			c.grpcPool.Close()
+		}
 	}
 	return errors.Trace(c.etcdClient.DeleteCaptureInfo(ctx, c.info.ID))
 }
@@ -310,7 +318,7 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*oldProcessor, er
 		zap.String("changefeed", task.ChangeFeedID))
 	conf := config.GetGlobalServerConfig()
 	p, err := runProcessorImpl(
-		ctx, c.pdCli, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, time.Duration(conf.ProcessorFlushInterval))
+		ctx, c.pdCli, c.grpcPool, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, time.Duration(conf.ProcessorFlushInterval))
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeed", task.ChangeFeedID),
