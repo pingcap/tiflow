@@ -116,6 +116,11 @@ error = '''
 changefeed in abnormal state: %s, replication status: %+v
 '''
 
+["CDC:ErrChangefeedUpdateRefused"]
+error = '''
+changefeed update error: %s
+'''
+
 ["CDC:ErrCheckClusterVersionFromPD"]
 error = '''
 failed to request PD
@@ -751,6 +756,11 @@ error = '''
 this api supports POST method only
 '''
 
+["CDC:ErrTableIneligible"]
+error = '''
+some tables are not eligible to replicate(%v), if you want to ignore these tables, please set ignore_ineligible_table to true
+'''
+
 ["CDC:ErrTableListenReplicated"]
 error = '''
 A table(%d) is being replicated by at least two processors(%s, %s), please report a bug
@@ -759,6 +769,11 @@ A table(%d) is being replicated by at least two processors(%s, %s), please repor
 ["CDC:ErrTableProcessorStoppedSafely"]
 error = '''
 table processor stopped safely
+'''
+
+["CDC:ErrTargetTsBeforeStartTs"]
+error = '''
+fail to create changefeed because target-ts %d is earlier than start-ts %d
 '''
 
 ["CDC:ErrTaskPositionNotExists"]

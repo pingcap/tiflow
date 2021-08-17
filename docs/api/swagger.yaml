@@ -200,10 +200,10 @@ paths:
   /api/v1/captures:
     get:
       consumes:
-      - application/json
+        - application/json
       description: list all captures in cdc cluster
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -221,19 +221,19 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: List captures
       tags:
-      - capture
+        - capture
   /api/v1/changefeeds:
     get:
       consumes:
-      - application/json
+        - application/json
       description: list all changefeeds in cdc cluster
       parameters:
-      - description: state
-        in: query
-        name: state
-        type: string
+        - description: state
+          in: query
+          name: state
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -247,20 +247,20 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: List changefeed
       tags:
-      - changefeed
+        - changefeed
     post:
       consumes:
-      - application/json
+        - application/json
       description: create a new changefeed
       parameters:
-      - description: changefeed config
-        in: body
-        name: changefeed
-        required: true
-        schema:
-          $ref: '#/definitions/model.ChangefeedConfig'
+        - description: changefeed config
+          in: body
+          name: changefeed
+          required: true
+          schema:
+            $ref: '#/definitions/model.ChangefeedConfig'
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -274,20 +274,20 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Create changefeed
       tags:
-      - changefeed
+        - changefeed
   /api/v1/changefeeds/{changefeed_id}:
     delete:
       consumes:
-      - application/json
+        - application/json
       description: Remove a changefeed
       parameters:
-      - description: changefeed_id
-        in: path
-        name: changefeed_id
-        required: true
-        type: string
+        - description: changefeed_id
+          in: path
+          name: changefeed_id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -301,19 +301,19 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Remove a changefeed
       tags:
-      - changefeed
+        - changefeed
     get:
       consumes:
-      - application/json
+        - application/json
       description: get detail information of a changefeed
       parameters:
-      - description: changefeed_id
-        in: path
-        name: changefeed_id
-        required: true
-        type: string
+        - description: changefeed_id
+          in: path
+          name: changefeed_id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -329,25 +329,51 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Get changefeed
       tags:
-      - changefeed
+        - changefeed
     put:
       consumes:
-      - application/json
+        - application/json
       description: Update a changefeed
       parameters:
-      - description: changefeed_id
-        in: path
-        name: changefeed_id
-        required: true
-        type: string
-      - description: update changefeed
-        in: body
-        name: changefeed
-        required: true
-        schema:
-          $ref: '#/definitions/model.ChangefeedConfig'
+        - description: changefeed_id
+          in: path
+          name: changefeed_id
+          required: true
+          type: string
+        - description: changefeed target ts
+          in: body
+          name: target_ts
+          schema:
+            type: integer
+        - description: sink uri
+          in: body
+          name: sink_uri
+          schema:
+            type: string
+        - description: filter rules
+          in: body
+          name: filter_rules
+          schema:
+            items:
+              type: string
+            type: array
+        - description: ignore transaction start ts
+          in: body
+          name: ignore_txn_start_ts
+          schema:
+            type: integer
+        - description: mounter worker nums
+          in: body
+          name: mounter_worker_num
+          schema:
+            type: integer
+        - description: sink config
+          in: body
+          name: sink_config
+          schema:
+            $ref: '#/definitions/config.SinkConfig'
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -361,20 +387,20 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Update a changefeed
       tags:
-      - changefeed
+        - changefeed
   /api/v1/changefeeds/{changefeed_id}/pause:
     post:
       consumes:
-      - application/json
+        - application/json
       description: Pause a changefeed
       parameters:
-      - description: changefeed_id
-        in: path
-        name: changefeed_id
-        required: true
-        type: string
+        - description: changefeed_id
+          in: path
+          name: changefeed_id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -388,20 +414,20 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Pause a changefeed
       tags:
-      - changefeed
+        - changefeed
   /api/v1/changefeeds/{changefeed_id}/resume:
     post:
       consumes:
-      - application/json
+        - application/json
       description: Resume a changefeed
       parameters:
-      - description: changefeed_id
-        in: path
-        name: changefeed-id
-        required: true
-        type: string
+        - description: changefeed_id
+          in: path
+          name: changefeed-id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -415,32 +441,32 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Resume a changefeed
       tags:
-      - changefeed
+        - changefeed
   /api/v1/changefeeds/{changefeed_id}/tables/move_table:
     post:
       consumes:
-      - application/json
+        - application/json
       description: move one table to the target capture
       parameters:
-      - description: changefeed_id
-        in: path
-        name: changefeed_id
-        required: true
-        type: string
-      - description: table_id
-        in: body
-        name: table_id
-        required: true
-        schema:
-          type: integer
-      - description: target capture_id
-        in: body
-        name: capture_id
-        required: true
-        schema:
+        - description: changefeed_id
+          in: path
+          name: changefeed_id
+          required: true
           type: string
+        - description: table_id
+          in: body
+          name: table_id
+          required: true
+          schema:
+            type: integer
+        - description: capture_id
+          in: body
+          name: capture_id
+          required: true
+          schema:
+            type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -454,20 +480,20 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: move table
       tags:
-      - changefeed
+        - changefeed
   /api/v1/changefeeds/{changefeed_id}/tables/rebalance_table:
     post:
       consumes:
-      - application/json
+        - application/json
       description: rebalance all tables of a changefeed
       parameters:
-      - description: changefeed_id
-        in: path
-        name: changefeed_id
-        required: true
-        type: string
+        - description: changefeed_id
+          in: path
+          name: changefeed_id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -481,14 +507,14 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: rebalance tables
       tags:
-      - changefeed
+        - changefeed
   /api/v1/health:
     get:
       consumes:
-      - application/json
+        - application/json
       description: check if CDC cluster is health
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: ""
@@ -498,14 +524,38 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Check if CDC cluster is health
       tags:
-      - common
+        - common
+  /api/v1/log:
+    post:
+      consumes:
+        - application/json
+      description: change TiCDC log level dynamically
+      parameters:
+        - description: log level
+          in: body
+          name: log_level
+          required: true
+          schema:
+            type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: ""
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Change TiCDC log level
+      tags:
+        - common
   /api/v1/owner/resign:
     post:
       consumes:
-      - application/json
+        - application/json
       description: notify the current owner to resign
       produces:
-      - application/json
+        - application/json
       responses:
         "202":
           description: ""
@@ -519,14 +569,14 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: notify the owner to resign
       tags:
-      - owner
+        - owner
   /api/v1/processors:
     get:
       consumes:
-      - application/json
+        - application/json
       description: list all processors in the TiCDC cluster
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -544,14 +594,14 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: List processors
       tags:
-      - processor
+        - processor
   /api/v1/processors/{changefeed_id}/{capture_id}:
     get:
       consumes:
-      - application/json
+        - application/json
       description: get the detail information of a processor
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -567,14 +617,14 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Get processor detail information
       tags:
-      - processor
+        - processor
   /api/v1/status:
     get:
       consumes:
-      - application/json
+        - application/json
       description: get the status of a server(capture)
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -590,5 +640,5 @@ paths:
             $ref: '#/definitions/model.HTTPError'
       summary: Get server status
       tags:
-      - common
+        - common
 swagger: "2.0"
