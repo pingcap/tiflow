@@ -19,6 +19,12 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -49,4 +55,40 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 	}
 
 	return nil
+}
+
+// getTables returns ineligibleTables and eligibleTables by filter.
+func getTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	filter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	for _, tableInfo := range snap.Tables() {
+		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
+			continue
+		}
+		if !tableInfo.IsEligible(false /* forceReplicate */) {
+			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
+		} else {
+			eligibleTables = append(eligibleTables, tableInfo.TableName)
+		}
+	}
+
+	return
 }
