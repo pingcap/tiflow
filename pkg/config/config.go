@@ -328,8 +328,8 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.PerTableMemoryQuota == 0 {
 		c.PerTableMemoryQuota = defaultServerConfig.PerTableMemoryQuota
 	}
-	if c.PerTableMemoryQuota < 6*1024*1024 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
+	if c.PerTableMemoryQuota < 1024 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 1KB")
 	}
 
 	if c.KVClient == nil {
