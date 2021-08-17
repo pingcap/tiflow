@@ -95,6 +95,8 @@ pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
 # Uncomment to turn on grpc versbose log.
 # GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=debug \
 
+set -x
+
 if [[ "$restart" == "true" ]]; then
   while true; do
       GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
@@ -134,5 +136,7 @@ while ! cdc cli $pd_addr $tls changefeed list; do
     fi
     sleep 3
 done
+
+set +x
 
 cd $pwd
