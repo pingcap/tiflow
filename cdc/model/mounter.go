@@ -15,6 +15,9 @@ package model
 
 import (
 	"context"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // PolymorphicEvent describes a event can be in multiple states
@@ -34,6 +37,8 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
+	log.Debug("2400: NewPolymorphicEvent rawKV", zap.Uint64("StartTs", rawKV.StartTs), zap.String("Key", string(rawKV.Key)))
+
 	return &PolymorphicEvent{
 		StartTs:  rawKV.StartTs,
 		CRTs:     rawKV.CRTs,

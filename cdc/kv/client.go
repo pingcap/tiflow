@@ -1729,6 +1729,8 @@ func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bo
 	if enableOldValue {
 		revent.Val.OldValue = entry.GetOldValue()
 	}
+	log.Debug("2400: assembleRowEvent Event_Row", zap.Uint64("StartTs", entry.StartTs), zap.String("Key", string(entry.Key)))
+
 	return revent, nil
 }
 

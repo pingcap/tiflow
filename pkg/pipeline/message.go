@@ -13,7 +13,11 @@
 
 package pipeline
 
-import "github.com/pingcap/ticdc/cdc/model"
+import (
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
+)
 
 // MessageType is the type of Message
 type MessageType int
@@ -42,6 +46,9 @@ type Message struct {
 
 // PolymorphicEventMessage creates the message of PolymorphicEvent
 func PolymorphicEventMessage(event *model.PolymorphicEvent) *Message {
+	if event.RawKV != nil {
+		log.Debug("2400: PolymorphicEventMessage.marshal event.RawKV", zap.Uint64("StartTs", event.RawKV.StartTs), zap.String("Key", string(event.RawKV.Key)))
+	}
 	return &Message{
 		Tp:               MessageTypePolymorphicEvent,
 		PolymorphicEvent: event,

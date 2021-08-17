@@ -220,6 +220,8 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 }
 
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+	log.Debug("2400: unmarshalAndMountRowChanged rawKV", zap.Uint64("StartTs", raw.StartTs), zap.String("Key", string(raw.Key)))
+
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
@@ -458,6 +460,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
+	log.Debug("2400: mountRowKVEntry RowChangedEvent", zap.Uint64("StartTs", row.StartTs), zap.Int64("RowID", row.RecordID))
+
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,

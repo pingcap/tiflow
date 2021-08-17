@@ -1040,6 +1040,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
+	log.Debug("2400: execDMLs RowChangedEvent")
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, defaultDMLMaxRetryTime, bucket); err != nil {
 		log.Error("execute DMLs failed", zap.String("err", err.Error()))
