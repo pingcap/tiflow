@@ -14,6 +14,8 @@
 package sorter
 
 import (
+	"encoding/hex"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -25,7 +27,7 @@ type msgPackGenSerde struct {
 
 func (m *msgPackGenSerde) marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
 	bytes = bytes[:0]
-	log.Debug("2400: msgPackGenSerde.marshal event.RawKV", zap.Uint64("StartTs", event.RawKV.StartTs), zap.String("Key", string(event.RawKV.Key)))
+	log.Debug("2400: msgPackGenSerde.marshal event.RawKV", zap.Uint64("StartTs", event.RawKV.StartTs), zap.String("Key", hex.EncodeToString(event.RawKV.Key)))
 	return event.RawKV.MarshalMsg(bytes)
 }
 
@@ -41,7 +43,7 @@ func (m *msgPackGenSerde) unmarshal(event *model.PolymorphicEvent, bytes []byte)
 
 	event.StartTs = event.RawKV.StartTs
 	event.CRTs = event.RawKV.CRTs
-	log.Debug("2400: msgPackGenSerde.unmarshal event.RawKV", zap.Uint64("StartTs", event.RawKV.StartTs), zap.String("Key", string(event.RawKV.Key)))
+	log.Debug("2400: msgPackGenSerde.unmarshal event.RawKV", zap.Uint64("StartTs", event.RawKV.StartTs), zap.String("Key", hex.EncodeToString(event.RawKV.Key)))
 
 	return bytes, nil
 }

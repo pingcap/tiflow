@@ -15,6 +15,7 @@ package model
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -37,7 +38,7 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
-	log.Debug("2400: NewPolymorphicEvent rawKV", zap.Uint64("StartTs", rawKV.StartTs), zap.String("Key", string(rawKV.Key)))
+	log.Debug("2400: NewPolymorphicEvent rawKV", zap.Uint64("StartTs", rawKV.StartTs), zap.String("Key", hex.EncodeToString(rawKV.Key)))
 
 	return &PolymorphicEvent{
 		StartTs:  rawKV.StartTs,
