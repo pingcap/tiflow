@@ -24,7 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
@@ -172,6 +171,7 @@ func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factor
 	return nil
 }
 
+// validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(ctx context.Context) error {
 	if o.commonChangefeedOptions.sinkURI == "" {
 		return errors.New("Creating changefeed without a sink-uri")
@@ -371,6 +371,7 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 	return info, nil
 }
 
+// validateStartTs checks if startTs is a valid value.
 func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 	if o.disableGCSafePointCheck {
 		return nil
@@ -379,6 +380,7 @@ func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 	return ticdcutil.CheckSafetyOfStartTs(ctx, o.pdClient, o.changefeedID, o.startTs)
 }
 
+// validateTargetTs checks if targetTs is a valid value.
 func (o *createChangefeedOptions) validateTargetTs() error {
 	if o.commonChangefeedOptions.targetTs > 0 && o.commonChangefeedOptions.targetTs <= o.startTs {
 		return errors.Errorf("target-ts %d must be larger than start-ts: %d", o.commonChangefeedOptions.targetTs, o.startTs)
@@ -386,6 +388,7 @@ func (o *createChangefeedOptions) validateTargetTs() error {
 	return nil
 }
 
+// validateSink will create a sink and verify that the configuration is correct.
 func (o *createChangefeedOptions) validateSink(
 	ctx context.Context, cfg *config.ReplicaConfig, opts map[string]string,
 ) error {
@@ -393,6 +396,7 @@ func (o *createChangefeedOptions) validateSink(
 	if err != nil {
 		return err
 	}
+
 	errCh := make(chan error)
 	s, err := sink.NewSink(ctx, "cli-verify", o.commonChangefeedOptions.sinkURI, filter, cfg, opts, errCh)
 	if err != nil {
@@ -402,6 +406,7 @@ func (o *createChangefeedOptions) validateSink(
 	if err != nil {
 		return err
 	}
+
 	select {
 	case err = <-errCh:
 		if err != nil {
@@ -409,42 +414,8 @@ func (o *createChangefeedOptions) validateSink(
 		}
 	default:
 	}
+
 	return nil
-}
-
-func getTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	filter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	for _, tableInfo := range snap.Tables() {
-		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			continue
-		}
-		if !tableInfo.IsEligible(false /* forceReplicate */) {
-			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
-		} else {
-			eligibleTables = append(eligibleTables, tableInfo.TableName)
-		}
-	}
-
-	return
 }
 
 // run the `cli changefeed create` command.
