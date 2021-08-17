@@ -151,6 +151,18 @@ function run() {
     export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
 
+    # changefeed Async DDL error case
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedAsyncDDLError=return(true)'
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+    changefeedid_0=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+
+    run_sql "CREATE table changefeed_error.AsyncDDLERROR(id int primary key, val int);"
+    ensure $MAX_RETRIES check_changefeed_mark_stopped http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_0} "[CDC:ErrExecDDLFailed]exec DDL failed%!(EXTRA string=InjectChangefeedAsyncDDLError)"
+
+
+    cdc cli changefeed remove -c $changefeedid_0
+    cleanup_process $CDC_BINARY
+
     # owner DDL error case
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLError=return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY

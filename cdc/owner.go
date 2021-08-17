@@ -457,6 +457,22 @@ func (o *Owner) newChangeFeed(
 		}
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("error on running changefeed", zap.Error(err), zap.String("changefeed", id))
+			// asyncSink error, stop the changefeed
+			var code string
+			if terror, ok := err.(*errors.Error); ok {
+				code = string(terror.RFCCode())
+			} else {
+				code = string(cerror.ErrExecDDLFailed.RFCCode())
+			}
+			_ = o.EnqueueJob(model.AdminJob{
+				CfID: cf.id,
+				Type: model.AdminStop,
+				Error: &model.RunningError{
+					Addr:    util.CaptureAddrFromCtx(ctx),
+					Code:    code,
+					Message: err.Error(),
+				},
+			})
 		} else {
 			log.Info("changefeed exited", zap.String("changfeed", id))
 		}
