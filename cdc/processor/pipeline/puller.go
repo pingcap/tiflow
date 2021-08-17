@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -34,10 +35,12 @@ type pullerNode struct {
 	replicaInfo *model.TableReplicaInfo
 	cancel      context.CancelFunc
 	wg          errgroup.Group
+
+	resolvedTs  model.Ts
 }
 
 func newPullerNode(
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
@@ -102,4 +105,8 @@ func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
 	tableResolvedTsGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
 	n.cancel()
 	return n.wg.Wait()
+}
+
+func (n *pullerNode) ResolvedTs() model.Ts {
+	return atomic.LoadUint64(&n.resolvedTs)
 }

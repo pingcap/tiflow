@@ -189,7 +189,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: 20 * 1024 * 1024, // 20MB
+	PerTableMemoryQuota: 512 * 1024, // 512KB
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
@@ -328,10 +328,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.PerTableMemoryQuota == 0 {
 		c.PerTableMemoryQuota = defaultServerConfig.PerTableMemoryQuota
 	}
-	if c.PerTableMemoryQuota < 6*1024*1024 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("per-table-memory-quota should be at least 6MB")
-	}
-
+	
 	if c.KVClient == nil {
 		c.KVClient = defaultServerConfig.KVClient
 	}
