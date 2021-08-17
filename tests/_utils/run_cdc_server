@@ -126,7 +126,7 @@ else
 fi
 
 # Make sure cdc is ready to serve
-while ! cdc cli $pd_addr changefeed list; do
+while ! cdc cli $pd_addr $tls changefeed list; do
     i=$((i+1))
     if [ "$i" -gt 50 ]; then
         echo 'Failed to start TiCDC'
