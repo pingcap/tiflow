@@ -77,12 +77,18 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 }
 
 func testPprof(c *check.C) {
-	resp, err := http.Get(fmt.Sprintf("http://%s/debug/pprof/cmdline", advertiseAddr4Test))
-	c.Assert(err, check.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, 200)
-	_, err = ioutil.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
+	testValidPprof := func(uri string) {
+		resp, err := http.Get(uri)
+		c.Assert(err, check.IsNil)
+		defer resp.Body.Close()
+		c.Assert(resp.StatusCode, check.Equals, 200)
+		_, err = ioutil.ReadAll(resp.Body)
+		c.Assert(err, check.IsNil)
+	}
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof", advertiseAddr4Test))
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/cmdline", advertiseAddr4Test))
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/mutex", advertiseAddr4Test))
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/heap?debug=1", advertiseAddr4Test))
 }
 
 func testReisgnOwner(c *check.C) {

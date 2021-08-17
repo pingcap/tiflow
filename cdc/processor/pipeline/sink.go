@@ -100,6 +100,19 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	return nil
 }
 
+// stop is called when sink receives a stop command or checkpointTs reaches targetTs.
+// In this method, the builtin table sink will be closed by calling `Close`, and
+// no more events can be sent to this sink node afterwards.
+func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
+	n.status.Store(TableStatusStopped)
+	err = n.sink.Close(ctx)
+	if err != nil {
+		return
+	}
+	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+	return
+}
+
 func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
 	defer func() {
 		if err != nil {
@@ -107,13 +120,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 			return
 		}
 		if n.checkpointTs >= n.targetTs {
-			n.status.Store(TableStatusStopped)
-			err = n.sink.Close()
-			if err != nil {
-				err = errors.Trace(err)
-				return
-			}
-			err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+			err = n.stop(ctx)
 		}
 	}()
 	if resolvedTs > n.barrierTs {
@@ -270,6 +277,9 @@ func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 
 // Receive receives the message from the previous node
 func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
+	if n.status == TableStatusStopped {
+		return cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
+	}
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
@@ -301,7 +311,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 					"the table pipeline can't be stopped accurately, will be stopped soon",
 					zap.Uint64("stoppedTs", msg.Command.StoppedTs), zap.Uint64("checkpointTs", n.checkpointTs))
 			}
-			n.targetTs = msg.Command.StoppedTs
+			return n.stop(ctx)
 		}
 	case pipeline.MessageTypeBarrier:
 		n.barrierTs = msg.BarrierTs
@@ -315,5 +325,5 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
-	return n.sink.Close()
+	return n.sink.Close(ctx)
 }
