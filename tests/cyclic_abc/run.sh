@@ -21,12 +21,35 @@ function run() {
     start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
 
     echo " \
-[security] 
- ca-path = \"$TLS_DIR/ca.pem\" 
- cert-path = \"$TLS_DIR/server.pem\" 
- key-path = \"$TLS_DIR/server-key.pem\" 
- cert-allowed-cn = [\"fake_cn\"] 
+[security]
+ ca-path = \"$TLS_DIR/ca.pem\"
+ cert-path = \"$TLS_DIR/server.pem\"
+ key-path = \"$TLS_DIR/server-key.pem\"
+ cert-allowed-cn = [\"fake_cn\"]
 " > $WORK_DIR/server.toml
+
+    run_cdc_server \
+        --workdir $WORK_DIR \
+        --binary $CDC_BINARY \
+        --logsuffix "_${TEST_NAME}_upsteam" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
+        --addr "127.0.0.1:8300"
+
+    run_cdc_server \
+        --workdir $WORK_DIR \
+        --binary $CDC_BINARY \
+        --logsuffix "_${TEST_NAME}_downsteam" \
+        --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
+        --addr "127.0.0.1:8301"
+
+    run_cdc_server \
+        --workdir $WORK_DIR \
+        --binary $CDC_BINARY \
+        --logsuffix "_${TEST_NAME}_tls" \
+        --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+        --addr "127.0.0.1:8302" \
+        --config "$WORK_DIR/server.toml" \
+        --cert-allowed-cn "client" # The common name of client.pem
 
     cd $WORK_DIR
 
@@ -73,29 +96,6 @@ function run() {
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-
-    run_cdc_server \
-        --workdir $WORK_DIR \
-        --binary $CDC_BINARY \
-        --logsuffix "_${TEST_NAME}_upsteam" \
-        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
-        --addr "127.0.0.1:8300"
-
-    run_cdc_server \
-        --workdir $WORK_DIR \
-        --binary $CDC_BINARY \
-        --logsuffix "_${TEST_NAME}_downsteam" \
-        --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
-        --addr "127.0.0.1:8301"
-
-    run_cdc_server \
-        --workdir $WORK_DIR \
-        --binary $CDC_BINARY \
-        --logsuffix "_${TEST_NAME}_tls" \
-        --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
-        --addr "127.0.0.1:8302" \
-        --config "$WORK_DIR/server.toml" \
-        --cert-allowed-cn "client" # The common name of client.pem
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?safe-mode=false" \
