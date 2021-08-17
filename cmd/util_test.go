@@ -124,10 +124,10 @@ func (s *utilsSuite) TestNeedVerifyCmd(c *check.C) {
 	}
 	r.AddCommand(rl, rr)
 
-	c.Assert(needVerifyCmd(rl, []string{"root"}), check.IsTrue)
-	c.Assert(needVerifyCmd(rl, []string{"r"}), check.IsTrue)
-	c.Assert(needVerifyCmd(rl, []string{"rl"}), check.IsTrue)
-	c.Assert(needVerifyCmd(rl, []string{"rr"}), check.IsFalse)
-	c.Assert(needVerifyCmd(rl, []string{"l"}), check.IsFalse)
-	c.Assert(needVerifyCmd(rl, []string{"ll"}), check.IsFalse)
+	c.Assert(needVerifyVersion(rl, []string{"root"}), check.IsTrue)
+	c.Assert(needVerifyVersion(rl, []string{"r"}), check.IsTrue)
+	c.Assert(needVerifyVersion(rl, []string{"rl"}), check.IsTrue)
+	c.Assert(needVerifyVersion(rl, []string{"rr"}), check.IsFalse)
+	c.Assert(needVerifyVersion(rl, []string{"l"}), check.IsFalse)
+	c.Assert(needVerifyVersion(rl, []string{"ll"}), check.IsFalse)
 }
