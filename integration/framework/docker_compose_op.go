@@ -15,9 +15,7 @@ package framework
 
 import (
 	"database/sql"
-	"encoding/json"
-	"io/ioutil"
-	"net/http"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -124,42 +122,20 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 }
 
 // CdcHealthCheck check cdc cluster health.
-func CdcHealthCheck(captureURIs ...string) error {
-	for _, capture := range captureURIs {
-		statusURI := capture + "/status"
-		log.Info("check cdc status", zap.String("URI", statusURI))
-		resp, err := http.Get(statusURI)
-		if err != nil {
-			return errors.Trace(err)
-		}
+func CdcHealthCheck(cdcContainer, pdEndpoint string) error {
+	_, err := execInController(cdcContainer,
+		fmt.Sprintf("/cdc cli --pd=\"%s\" changefeed list", pdEndpoint))
+	return err
+}
 
-		if resp.Body == nil {
-			return errors.New("cdc status returns empty body")
-		}
-		bytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			_ = resp.Body.Close()
-			return errors.Trace(err)
-		}
-		_ = resp.Body.Close()
-
-		m := make(map[string]interface{})
-		err = json.Unmarshal(bytes, &m)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		isOwner, ok := m["is_owner"]
-		if !ok {
-			return errors.New("cdc status invalid, is_owner not found")
-		}
-		log.Info("cdc status", zap.Reflect("status", m), zap.String("URI", capture))
-		if yes, ok := isOwner.(bool); ok && yes {
-			// CDC cluster is up.
-			return nil
-		}
-	}
-	return errors.New("cdc no owner found")
+// execInController provides a way to execute commands inside a container in the service
+func execInController(controller, shellCmd string) ([]byte, error) {
+	log.Info("Start executing in the Controller container",
+		zap.String("shellCmd", shellCmd), zap.String("container", controller))
+	cmd := exec.Command("docker", "exec", controller, "sh", "-c", shellCmd)
+	defer log.Info("Finished executing in the Controller container",
+		zap.String("shellCmd", shellCmd), zap.String("container", controller))
+	return cmd.Output()
 }
 
 // DumpStdout dumps all container logs
@@ -190,10 +166,5 @@ func (d *DockerComposeOperator) TearDown() {
 
 // ExecInController provides a way to execute commands inside a container in the service
 func (d *DockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
-	log.Info("Start executing in the Controller container",
-		zap.String("shellCmd", shellCmd), zap.String("container", d.Controller))
-	cmd := exec.Command("docker", "exec", d.Controller, "sh", "-c", shellCmd)
-	defer log.Info("Finished executing in the Controller container",
-		zap.String("shellCmd", shellCmd), zap.String("container", d.Controller))
-	return cmd.Output()
+	return execInController(d.Controller, shellCmd)
 }
