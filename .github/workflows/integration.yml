@@ -63,8 +63,10 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: |
-          sudo docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+        run: "
+          sudo docker-compose -f docker-compose-avro.yml logs -t
+               > $GITHUB_WORKSPACE/docker/logs/containers.log
+          "
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -126,8 +128,10 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: |
-          sudo docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+        run: "
+          sudo docker-compose -f docker-compose-avro.yml logs -t
+               > $GITHUB_WORKSPACE/docker/logs/containers.log
+          "
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -189,8 +193,10 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: |
-          sudo docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+        run: "
+          sudo docker-compose -f docker-compose-canal.yml logs -t
+               > $GITHUB_WORKSPACE/docker/logs/containers.log
+          "
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -253,8 +259,10 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: |
-          sudo docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+        run: "
+          sudo docker-compose -f docker-compose-canal.yml logs -t
+               > $GITHUB_WORKSPACE/docker/logs/containers.log
+          "
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -316,8 +324,10 @@ jobs:
 
       - name: Try to dump container logs
         if: ${{ failure() }}
-        run: |
-          sudo docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+        run: "
+          sudo docker-compose -f docker-compose-avro.yml logs -t
+               > $GITHUB_WORKSPACE/docker/logs/containers.log
+          "
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}

@@ -30,13 +30,9 @@ const (
 	kafkaHealthCheckURI     = "http://127.0.0.1:18083"
 	dockerComposeFilePath   = "/docker-compose-avro.yml"
 	controllerContainerName = "ticdc_controller_1"
+	// The upstream PD endpoint in docker-compose network.
+	upstreamPD = "http://upstream-pd:2379"
 )
-
-var captureURIs = []string{
-	"http://127.0.0.1:8300",
-	"http://127.0.0.1:8301",
-	"http://127.0.0.1:8302",
-}
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-avro.yml
 type KafkaDockerEnv struct {
@@ -77,7 +73,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		}
 
 		// Also check cdc cluster.
-		return framework.CdcHealthCheck(captureURIs...)
+		return framework.CdcHealthCheck(controllerContainerName, upstreamPD)
 	}
 
 	var file string
