@@ -130,4 +130,5 @@ func (s *utilsSuite) TestNeedVerifyCmd(c *check.C) {
 	c.Assert(needVerifyVersion(rl, []string{"rr"}), check.IsFalse)
 	c.Assert(needVerifyVersion(rl, []string{"l"}), check.IsFalse)
 	c.Assert(needVerifyVersion(rl, []string{"ll"}), check.IsFalse)
+	c.Assert(needVerifyVersion(root, []string{"rl"}), check.IsFalse)
 }
