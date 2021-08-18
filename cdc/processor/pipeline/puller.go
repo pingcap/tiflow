@@ -84,6 +84,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 				}
 				if rawKV.OpType == model.OpTypeResolved {
 					metricTableResolvedTsGauge.Set(float64(oracle.ExtractPhysical(rawKV.CRTs)))
+					atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))

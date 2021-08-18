@@ -328,7 +328,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.PerTableMemoryQuota == 0 {
 		c.PerTableMemoryQuota = defaultServerConfig.PerTableMemoryQuota
 	}
-	
+
 	if c.KVClient == nil {
 		c.KVClient = defaultServerConfig.KVClient
 	}
