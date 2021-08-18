@@ -446,6 +446,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
 		checkpointTs, ddlspans, false)
+	metricDDLResolvedTsGauge := ddlResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -476,6 +477,8 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			failpoint.Inject("processorDDLResolved", nil)
 			if ddlRawKV.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
+				ddlResolvedTsPhys := oracle.ExtractPhysical(ddlRawKV.CRTs)
+				metricDDLResolvedTsGauge.Set(float64(ddlResolvedTsPhys))
 			}
 			job, err := entry.UnmarshalDDL(ddlRawKV)
 			if err != nil {
@@ -775,6 +778,7 @@ func (p *processor) Close() error {
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	ddlResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
