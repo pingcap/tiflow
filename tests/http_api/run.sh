@@ -10,8 +10,7 @@ SINK_TYPE=$1
 TLS_DIR=$( cd $CUR/../_certificates && pwd )
 
 function run() {
-    pip install --upgrade pip
-    pip install requests
+    sudo pip install requests
 
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
