@@ -49,6 +49,7 @@ function run() {
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
         --addr "127.0.0.1:8302" \
         --config "$WORK_DIR/server.toml" \
+        --tlsdir "$TLS_DIR" \
         --cert-allowed-cn "client" # The common name of client.pem
 
     cd $WORK_DIR
