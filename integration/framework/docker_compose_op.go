@@ -57,9 +57,21 @@ func (d *DockerComposeOperator) Setup() {
 // WaitClusterStarted waits the cluster is started and ready
 func (d *DockerComposeOperator) WaitClusterStarted() {
 	if d.HealthChecker != nil {
-		err := retry.Do(context.Background(), d.HealthChecker, retry.WithBackoffBaseDelay(1000), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(120), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+		check := func() error {
+			err := d.HealthChecker()
+			if err != nil {
+				log.Error("check failed", zap.Error(err))
+			}
+			return err
+		}
+		err := retry.Do(context.Background(), check,
+			retry.WithBackoffBaseDelay(1000),
+			retry.WithBackoffMaxDelay(60*1000),
+			retry.WithMaxTries(120),
+			retry.WithIsRetryableErr(cerrors.IsRetryableError))
 		if err != nil {
-			log.Fatal("Docker service health check failed after max retries", zap.Error(err))
+			log.Fatal("Docker service health check failed after max retries",
+				zap.Error(err))
 		}
 	}
 }
@@ -118,23 +130,23 @@ func CdcHealthCheck(captureURIs ...string) error {
 		log.Info("check cdc status", zap.String("URI", statusURI))
 		resp, err := http.Get(statusURI)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 
 		if resp.Body == nil {
 			return errors.New("cdc status returns empty body")
 		}
-		defer func() { _ = resp.Body.Close() }()
-
 		bytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return err
+			_ = resp.Body.Close()
+			return errors.Trace(err)
 		}
+		_ = resp.Body.Close()
 
 		m := make(map[string]interface{})
 		err = json.Unmarshal(bytes, &m)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 
 		isOwner, ok := m["is_owner"]

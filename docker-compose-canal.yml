@@ -31,6 +31,8 @@ services:
     volumes:
       - /data
       - ./docker/logs:/logs
+    ports:
+      - "8300:8300"
     entrypoint: "/cdc server"
     command:
       - --addr=0.0.0.0:8300
@@ -52,6 +54,8 @@ services:
     volumes:
       - /data
       - ./docker/logs:/logs
+    ports:
+      - "8301:8300"
     entrypoint: "/cdc server"
     command:
       - --addr=0.0.0.0:8300
@@ -73,6 +77,8 @@ services:
     volumes:
       - /data
       - ./docker/logs:/logs
+    ports:
+      - "8302:8300"
     entrypoint: "/cdc server"
     command:
       - --addr=0.0.0.0:8300

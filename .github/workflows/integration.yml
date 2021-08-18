@@ -64,7 +64,7 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: |
-          docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+          sudo docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -127,7 +127,7 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: |
-          docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+          sudo docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -190,7 +190,7 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: |
-          docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+          sudo docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -254,7 +254,7 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: |
-          docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+          sudo docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -317,7 +317,7 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: |
-          docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
+          sudo docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
