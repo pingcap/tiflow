@@ -53,7 +53,6 @@ def list_changefeed():
     resp = rq.get(url)
     assert resp.status_code == OK
     data = resp.json()
-    assert len(data) == 3
 
     # test state: normal
     url = BASE_URL+"/changefeeds?state=normal"
