@@ -114,7 +114,9 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 // CdcHealthCheck check cdc cluster health.
 func CdcHealthCheck(captureURIs ...string) error {
 	for _, capture := range captureURIs {
-		resp, err := http.Get(capture + "/status")
+		statusURI := capture + "/status"
+		log.Info("check cdc status", zap.String("URI", statusURI))
+		resp, err := http.Get(statusURI)
 		if err != nil {
 			return err
 		}
@@ -176,8 +178,10 @@ func (d *DockerComposeOperator) TearDown() {
 
 // ExecInController provides a way to execute commands inside a container in the service
 func (d *DockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
-	log.Info("Start executing in the Controller container", zap.String("shellCmd", shellCmd))
+	log.Info("Start executing in the Controller container",
+		zap.String("shellCmd", shellCmd), zap.String("container", d.Controller))
 	cmd := exec.Command("docker", "exec", d.Controller, "sh", "-c", shellCmd)
-	defer log.Info("Finished executing in the Controller container", zap.String("shellCmd", shellCmd))
+	defer log.Info("Finished executing in the Controller container",
+		zap.String("shellCmd", shellCmd), zap.String("container", d.Controller))
 	return cmd.Output()
 }

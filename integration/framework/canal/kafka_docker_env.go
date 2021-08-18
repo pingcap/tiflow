@@ -31,9 +31,9 @@ const (
 )
 
 var captureURIs = []string{
-	"http://capturer0:8300",
-	"http://capturer1:8300",
-	"http://capturer2:8300",
+	"http://127.0.0.1:8300",
+	"http://127.0.0.1:8301",
+	"http://127.0.0.1:8302",
 }
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-canal.yml
