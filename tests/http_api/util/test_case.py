@@ -44,7 +44,7 @@ def create_changefeed(sink_uri):
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == BAD_REQUEST
 
-    print("pass test: list changefeed")
+    print("pass test: create changefeed")
 
 
 def list_changefeed():
@@ -266,7 +266,12 @@ def get_processor():
 
 def check_health():
     url = BASE_URL + "/health"
-    resp = rq.get(url)
+    for i in range(RETRY_TIME):
+        i += 1
+        time.sleep(1)
+        resp = rq.get(url)
+        if resp.status_code == OK:
+            break
     assert resp.status_code == OK
 
     print("pass test: check health")

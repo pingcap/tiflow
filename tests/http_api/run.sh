@@ -20,6 +20,7 @@ function run() {
     pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+    # wait for cdc run
     sleep 1
 
     TOPIC_NAME="ticdc-http-api-test-$RANDOM"
@@ -35,6 +36,7 @@ function run() {
 
     run_sql "CREATE table test.simple(id int primary key, val int);"
     run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
+    # wait for above sql done in the up source
     sleep 1
 
     python $CUR/util/test_case.py list_changefeed
