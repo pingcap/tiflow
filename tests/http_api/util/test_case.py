@@ -14,21 +14,27 @@ RETRY_TIME = 10
 
 BASE_URL = "http://127.0.0.1:8300/api/v1"
 
+
 # we should write some SQLs in the run.sh after call create_changefeed
-def create_changefeed():
+def create_changefeed(sink_uri):
     url = BASE_URL+"/changefeeds"
     # create changefeed
     for i in range(1, 4):
-        data = json.dumps({
+        data = {
             "changefeed_id": "changefeed-test"+str(i),
             "sink_uri": "blackhole://",
             "ignore_ineligible_table": True
-        })
+        }
+        # set sink_uri
+        if i == 1 and sink_uri != "":
+            data["sink_uri"] = sink_uri
+
+        data = json.dumps(data)
         headers = {"Content-Type": "application/json"}
         resp = rq.post(url, data=data, headers=headers)
         assert resp.status_code == ACCEPTED
 
-    # create changefeed fail
+    # create changefeed fail because sink_uri is invalid
     data = json.dumps({
         "changefeed_id": "changefeed-test",
         "sink_uri": "mysql://127.0.0.1:1111",
@@ -37,7 +43,6 @@ def create_changefeed():
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == BAD_REQUEST
-    print(resp.json())
 
     print("pass test: list changefeed")
 
@@ -112,7 +117,31 @@ def pause_changefeed():
     print("pass test: pause changefeed")
 
 def update_changefeed():
+    # update fail
+    # can only update a stopped changefeed
     url = BASE_URL+"/changefeeds/changefeed-test1"
+    data = json.dumps({"mounter_worker_num": 32})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.put(url, data=data, headers=headers)
+    assert resp.status_code == BAD_REQUEST
+
+    # update success
+    url = BASE_URL+"/changefeeds/changefeed-test2"
+    data = json.dumps({"mounter_worker_num": 32})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.put(url, data=data, headers=headers)
+    assert resp.status_code == ACCEPTED
+
+    # update fail
+    # can't update start_ts
+    url = BASE_URL+"/changefeeds/changefeed-test2"
+    data = json.dumps({"start_ts": 0})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.put(url, data=data, headers=headers)
+    assert resp.status_code == BAD_REQUEST
+
+    print("pass test: update changefeed")
+
 
 
 def resume_changefeed():
@@ -267,7 +296,7 @@ def set_log_level():
 
 
 if __name__ == "__main__":
-    # test all the func as the order list in this map
+    # test all the case as the order list in this map
     FUNC_MAP = {
         "check_health": check_health,
         "get_status": get_status,
@@ -275,8 +304,8 @@ if __name__ == "__main__":
         "list_changefeed": list_changefeed,
         "get_changefeed": get_changefeed,
         "pause_changefeed": pause_changefeed,
-        "resume_changefeed": resume_changefeed,
         "update_changefeed": update_changefeed,
+        "resume_changefeed": resume_changefeed,
         "rebalance_table": rebalance_table,
         "move_table": move_table,
         "get_processor": get_processor,
