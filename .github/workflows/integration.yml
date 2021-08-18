@@ -44,8 +44,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -57,6 +60,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=mysql
+
+      -name: Try to dump container logs
+       if: ${{ failure() }}
+       run: |
+         docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -99,8 +107,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -112,6 +123,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=simple-mysql-checking-old-value
+
+      -name: Try to dump container logs
+       if: ${{ failure() }}
+       run: |
+         docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -154,8 +170,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -167,6 +186,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=canalJson
+
+      -name: Try to dump container logs
+       if: ${{ failure() }}
+       run: |
+         docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -210,8 +234,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -223,6 +250,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=canal
+
+      -name: Try to dump container logs
+       if: ${{ failure() }}
+       run: |
+         docker-compose -f docker-compose-canal.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -265,8 +297,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -278,6 +313,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration
+
+      -name: Try to dump container logs
+       if: ${{ failure() }}
+       run: |
+         docker-compose -f docker-compose-avro.yml logs -t > ${{ github.workspace }}/docker/logs/containers.log
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
