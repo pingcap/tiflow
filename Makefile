@@ -21,9 +21,9 @@ endif
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 ifeq ($(GOVERSION114), 1)
-GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
+GOTEST   := CGO_ENABLED=1 $(GO) test -failfast -p 3 --race -gcflags=all=-d=checkptr=0
 else
-GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race
+GOTEST   := CGO_ENABLED=1 $(GO) test -failfast -p 3 --race
 endif
 GOVERSIONGE116 := $(shell expr $$(go version|cut -f3 -d' '|tr -d "go"|cut -f2 -d.) \>= 16)
 
