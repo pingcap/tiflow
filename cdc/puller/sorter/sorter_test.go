@@ -491,3 +491,18 @@ func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
 	}
 	cancel1()
 }
+
+func (s *sorterSuite) TestUnifiedSorterFileLockConflict(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer UnifiedSorterCleanUp()
+
+	dir := c.MkDir()
+	captureAddr := "0.0.0.0:0"
+	_, err := newBackEndPool(dir, captureAddr)
+	c.Assert(err, check.IsNil)
+
+	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
+	config.GetGlobalServerConfig().Sorter.SortDir = dir
+	_, err = NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
+	c.Assert(err, check.ErrorMatches, ".*file lock conflict.*")
+}
