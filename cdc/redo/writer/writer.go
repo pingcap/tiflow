@@ -188,6 +188,7 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 		// TODO: crc check
 		data, err := rl.MarshalMsg(nil)
 		if err != nil {
+			// TODO: just return 0 if err ?
 			return maxCommitTs, cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
 

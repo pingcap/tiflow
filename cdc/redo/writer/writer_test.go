@@ -600,5 +600,5 @@ func TestNewLogWriter(t *testing.T) {
 
 	cancel()
 	writer.Close()
-	mockWriter.AssertCalled(t, "Close")
+	mockWriter.AssertNumberOfCalls(t, "Close", 2)
 }
