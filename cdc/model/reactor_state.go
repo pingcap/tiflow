@@ -285,7 +285,7 @@ func (s *ChangefeedReactorState) refreshTaskStatusAdminJob(captureID CaptureID) 
 }
 
 func (s *ChangefeedReactorState) refreshTaskStatus(captureID CaptureID, tableID TableID) {
-	log.Debug("refreshTaskStatus", zap.String("capture-id", captureID), zap.Int64("table-id", tableID))
+	log.Info("refreshTaskStatus", zap.String("capture-id", captureID), zap.Int64("table-id", tableID))
 	// handle deletion
 	if s.physicalTableStatuses[captureID] == nil || s.physicalTableStatuses[captureID][tableID] == nil {
 		if s.TaskStatuses[captureID] != nil {
