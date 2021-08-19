@@ -188,7 +188,9 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -276,7 +278,9 @@ func prepareBench(b *testing.B, regionNum int) (
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, &security.Credential{})
+	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
