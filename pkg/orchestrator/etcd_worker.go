@@ -313,6 +313,10 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if resp.More {
+		log.Warn("More keys found. Snapshot is NOT complete. Report an error.", zap.Int64("count", resp.Count))
+		return cerrors.WrapError(cerrors.ErrProcessorEtcdWatch, errors.New("Etcd did not return all keys"))
+	}
 
 	worker.rawState = make(map[util.EtcdKey][]byte)
 	for _, kv := range resp.Kvs {
