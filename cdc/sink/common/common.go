@@ -66,7 +66,7 @@ func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 }
 
 // Append adds unresolved rows to cache
-// the rows inputed into this function will go through the following handling logic
+// the rows inputted into this function will go through the following handling logic
 // 1. group by tableID from one input stream
 // 2. for each tableID stream, the callers of this function should **make sure** that the CommitTs of rows is **strictly increasing**
 // 3. group by CommitTs, according to CommitTs cut the rows into many group of rows in the same CommitTs
