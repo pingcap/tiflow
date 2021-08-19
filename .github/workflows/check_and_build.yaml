@@ -1,0 +1,58 @@
+name: Check & Build
+
+on:
+  push:
+    branches:
+      - master
+      - 'release-[0-9].[0-9]*'
+  pull_request:
+    branches:
+      - master
+      - 'release-[0-9].[0-9]*'
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+
+  docker_build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Build
+      run: docker build .
+
+  make_check_build:
+    name: Make Check & Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Setup Go environment
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.16.4'
+
+    - name: Cache Lint Tools
+      id: cache-lint-tools
+      uses: actions/cache@v2
+      with:
+        path: tools/bin
+        key: ${{ runner.os }}-cdc-lint-tools-${{ hashFiles('tools/check/go.sum') }}
+
+    - name: Check
+      run: make check
+
+    - name: Build
+      run: make build

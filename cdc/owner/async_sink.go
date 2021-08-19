@@ -48,7 +48,7 @@ type AsyncSink interface {
 	// the caller of this function can call again and again until a true returned
 	EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error
-	Close() error
+	Close(ctx context.Context) error
 }
 
 type asyncSinkImpl struct {
@@ -156,9 +156,11 @@ func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
 	if ddl.CommitTs <= ddlFinishedTs {
+		// the DDL event is executed successfully, and done is true
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
+		// the DDL event is executing and not finished yes, return false
 		return false, nil
 	}
 	select {
@@ -179,9 +181,9 @@ func (s *asyncSinkImpl) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 	return s.syncpointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
 }
 
-func (s *asyncSinkImpl) Close() (err error) {
+func (s *asyncSinkImpl) Close(ctx context.Context) (err error) {
 	s.cancel()
-	err = s.sink.Close()
+	err = s.sink.Close(ctx)
 	if s.syncpointStore != nil {
 		err = s.syncpointStore.Close()
 	}

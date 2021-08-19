@@ -31,7 +31,6 @@ import (
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -46,10 +45,10 @@ import (
 )
 
 const (
-	// defaultMemBufferCapacity is the default memory buffer per change feed.
-	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
 	schemaStorageGCLag = time.Minute * 20
+
+	backoffBaseDelayInMs = 5
+	maxTries             = 3
 )
 
 type processor struct {
@@ -59,7 +58,6 @@ type processor struct {
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
-	limitter      *puller.BlurResourceLimitter
 	schemaStorage entry.SchemaStorage
 	filter        *filter.Filter
 	mounter       entry.Mounter
@@ -86,7 +84,6 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p := &processor{
-		limitter:     puller.NewBlurResourceLimmter(defaultMemBufferCapacity),
 		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
@@ -179,18 +176,10 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := p.handlePosition(); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := p.pushResolvedTs2Table(); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := p.handleWorkload(); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := p.doGCSchemaStorage(); err != nil {
-		return nil, errors.Trace(err)
-	}
+	p.handlePosition()
+	p.pushResolvedTs2Table()
+	p.handleWorkload()
+	p.doGCSchemaStorage()
 	return p.changefeed, nil
 }
 
@@ -451,13 +440,12 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	conf := config.GetGlobalServerConfig()
 	ddlPuller := puller.NewPuller(
 		ctx,
 		ctx.GlobalVars().PDClient,
-		conf.Security,
+		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
-		checkpointTs, ddlspans, p.limitter, false)
+		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -513,7 +501,9 @@ func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
-		log.Error("processor receives redundant error", zap.Error(err))
+		if errors.Cause(err) != context.Canceled {
+			log.Error("processor receives redundant error", zap.Error(err))
+		}
 	}
 }
 
@@ -564,7 +554,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 }
 
 // handlePosition calculates the local resolved ts and local checkpoint ts
-func (p *processor) handlePosition() error {
+func (p *processor) handlePosition() {
 	minResolvedTs := uint64(math.MaxUint64)
 	if p.schemaStorage != nil {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
@@ -612,11 +602,10 @@ func (p *processor) handlePosition() error {
 			return position, true, nil
 		})
 	}
-	return nil
 }
 
 // handleWorkload calculates the workload of all tables
-func (p *processor) handleWorkload() error {
+func (p *processor) handleWorkload() {
 	p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(workloads model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		changed := false
 		if workloads == nil {
@@ -636,16 +625,14 @@ func (p *processor) handleWorkload() error {
 		}
 		return workloads, changed, nil
 	})
-	return nil
 }
 
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
-func (p *processor) pushResolvedTs2Table() error {
+func (p *processor) pushResolvedTs2Table() {
 	resolvedTs := p.changefeed.Status.ResolvedTs
 	for _, table := range p.tables {
 		table.UpdateBarrierTs(resolvedTs)
 	}
-	return nil
 }
 
 // addTable creates a new table pipeline and adds it to the `p.tables`
@@ -689,17 +676,17 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		return nil
 	})
 	var tableName *model.TableName
-	retry.Run(time.Millisecond*5, 3, func() error { //nolint:errcheck
+	retry.Do(ctx, func() error { //nolint:errcheck
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
 			tableName = &name
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
 		// Retry to find mark table ID
 		var markTableID model.TableID
-		err := retry.Run(50*time.Millisecond, 20, func() error {
+		err := retry.Do(context.Background(), func() error {
 			if tableName == nil {
 				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
 				if !exist {
@@ -707,14 +694,14 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 				}
 				tableName = &name
 			}
-			markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchameName, markTableTableName)
+			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchemaName, markTableTableName)
 			if !exist {
 				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
 			}
 			markTableID = tableInfo.ID
 			return nil
-		})
+		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -731,7 +718,6 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
-		p.limitter,
 		p.mounter,
 		tableID,
 		tableNameStr,
@@ -751,7 +737,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			zap.Any("replicaInfo", replicaInfo))
 	}()
 
-	log.Debug("Add table pipeline", zap.Int64("tableID", tableID),
+	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx),
 		zap.String("name", table.Name()),
 		zap.Any("replicaInfo", replicaInfo),
@@ -761,17 +747,16 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 }
 
 // doGCSchemaStorage trigger the schema storage GC
-func (p *processor) doGCSchemaStorage() error {
+func (p *processor) doGCSchemaStorage() {
 	if p.schemaStorage == nil {
 		// schemaStorage is nil only in test
-		return nil
+		return
 	}
 	// Delay GC to accommodate pullers starting from a startTs that's too small
 	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
 	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
 	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
 	p.schemaStorage.DoGC(gcTs)
-	return nil
 }
 
 func (p *processor) Close() error {
@@ -792,7 +777,10 @@ func (p *processor) Close() error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
-		return p.sinkManager.Close()
+		// pass a canceled context is ok here, since we don't need to wait Close
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return p.sinkManager.Close(ctx)
 	}
 	return nil
 }

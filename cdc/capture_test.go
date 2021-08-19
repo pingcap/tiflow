@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	pd "github.com/tikv/pd/client"
@@ -121,7 +120,7 @@ func (s *captureSuite) TestCaptureSessionDoneDuringHandleTask(c *check.C) {
 	}()
 	runProcessorBackup := runProcessorImpl
 	runProcessorImpl = func(
-		ctx context.Context, _ pd.Client, _ *security.Credential,
+		ctx context.Context, _ pd.Client, grpcPool kv.GrpcPool,
 		session *concurrency.Session, info model.ChangeFeedInfo, changefeedID string,
 		captureInfo model.CaptureInfo, checkpointTs uint64, flushCheckpointInterval time.Duration,
 	) (*oldProcessor, error) {

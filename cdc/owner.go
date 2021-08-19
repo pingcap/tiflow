@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,7 +35,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/scheduler"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -52,7 +50,7 @@ type ownership struct {
 	tickTime     time.Duration
 }
 
-func newOwnersip(tickTime time.Duration) ownership {
+func newOwnership(tickTime time.Duration) ownership {
 	minTickTime := 5 * time.Second
 	if tickTime > minTickTime {
 		log.Panic("ownership counter must be incearsed every 5 seconds")
@@ -118,7 +116,7 @@ type Owner struct {
 	l sync.RWMutex
 
 	pdEndpoints []string
-	credential  *security.Credential
+	grpcPool    kv.GrpcPool
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 
@@ -157,7 +155,7 @@ const (
 func NewOwner(
 	ctx context.Context,
 	pdClient pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	sess *concurrency.Session,
 	gcTTL int64,
 	flushChangefeedInterval time.Duration,
@@ -173,7 +171,7 @@ func NewOwner(
 		done:                    make(chan struct{}),
 		session:                 sess,
 		pdClient:                pdClient,
-		credential:              credential,
+		grpcPool:                grpcPool,
 		changeFeeds:             make(map[model.ChangeFeedID]*changeFeed),
 		failInitFeeds:           make(map[model.ChangeFeedID]struct{}),
 		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
@@ -332,19 +330,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	// TODO delete
-	if info.Engine == model.SortInFile {
-		err = os.MkdirAll(info.SortDir, 0o755)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
-		err = util.IsDirAndWritable(info.SortDir)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
-		}
-	}
-
-	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, o.grpcPool, kvStore, checkpointTs)
 	defer func() {
 		if resultErr != nil {
 			ddlHandler.Close()
@@ -450,7 +436,9 @@ func (o *Owner) newChangeFeed(
 	}
 	defer func() {
 		if resultErr != nil && primarySink != nil {
-			primarySink.Close()
+			// The Close of backend sink here doesn't use context, it is ok to pass
+			// a canceled context here.
+			primarySink.Close(ctx)
 		}
 	}()
 	go func() {
@@ -897,7 +885,7 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 // handleDDL call handleDDL of every changefeeds
 func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		err := cf.handleDDL(ctx, o.captures)
+		err := cf.handleDDL(ctx)
 		if err != nil {
 			var code string
 			if terror, ok := err.(*errors.Error); ok {
@@ -1110,7 +1098,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-
 			err = o.dispatchJob(ctx, job)
 			if err != nil {
 				return errors.Trace(err)
@@ -1232,7 +1219,7 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 	o.stepDown = stepDown
 
 	// Close and Run should be in separated goroutines
-	// A channel is used here to sychronize the steps.
+	// A channel is used here to synchronize the steps.
 
 	// Single the Run function to exit
 	select {
@@ -1276,7 +1263,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	defer feedChangeReceiver.Stop()
 	o.watchFeedChange(ctx1)
 
-	ownership := newOwnersip(tickTime)
+	ownership := newOwnership(tickTime)
 loop:
 	for {
 		select {
@@ -1578,7 +1565,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	failpoint.Inject("sleep-before-watch-capture", nil)
 
 	// When an owner just starts, changefeed information is not updated at once.
-	// Supposing a crased capture should be removed now, the owner will miss deleting
+	// Supposing a crashed capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
 	// If the task positions and status decode failed, remove them.
 	if err := o.checkAndCleanTasksInfo(ctx); err != nil {

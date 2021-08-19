@@ -52,6 +52,44 @@ const (
 	StateFinished FeedState = "finished"
 )
 
+// ToInt return a int for each `FeedState`, only use this for metrics.
+func (s FeedState) ToInt() int {
+	switch s {
+	case StateNormal:
+		return 0
+	case StateError:
+		return 1
+	case StateFailed:
+		return 2
+	case StateStopped:
+		return 3
+	case StateFinished:
+		return 4
+	case StateRemoved:
+		return 5
+	}
+	// -1 for unknown feed state
+	return -1
+}
+
+// IsNeeded return true if the given feedState matches the listState.
+func (s FeedState) IsNeeded(need string) bool {
+	if need == "all" {
+		return true
+	}
+	if need == "" {
+		switch s {
+		case StateNormal:
+			return true
+		case StateStopped:
+			return true
+		case StateFailed:
+			return true
+		}
+	}
+	return need == string(s)
+}
+
 const (
 	// errorHistoryGCInterval represents how long we keep error record in changefeed info
 	errorHistoryGCInterval = time.Minute * 10

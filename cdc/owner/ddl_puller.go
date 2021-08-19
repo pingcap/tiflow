@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -52,12 +51,12 @@ type ddlPullerImpl struct {
 	mu             sync.Mutex
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
+	lastDDLJobID   int64
 	cancel         context.CancelFunc
 }
 
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	pdCli := ctx.GlobalVars().PDClient
-	conf := config.GetGlobalServerConfig()
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -66,9 +65,8 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
-		plr = puller.NewPuller(ctx, pdCli, conf.Security, kvStorage, startTs,
-			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
-			nil, false)
+		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().GrpcPool, kvStorage, startTs,
+			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
 	}
 
 	return &ddlPullerImpl{
@@ -118,9 +116,14 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 			return nil
 		}
+		if job.ID == h.lastDDLJobID {
+			log.Warn("ignore duplicated DDL job", zap.Any("job", job))
+			return nil
+		}
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.pendingDDLJobs = append(h.pendingDDLJobs, job)
+		h.lastDDLJobID = job.ID
 		return nil
 	}
 

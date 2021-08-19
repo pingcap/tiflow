@@ -141,11 +141,12 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], conf.Security, errorTiKVIncompatible)
-	if err != nil {
-		return err
+	for _, pdEndpoint := range s.pdEndpoints {
+		err = version.CheckClusterVersion(ctx, s.pdClient, pdEndpoint, conf.Security, errorTiKVIncompatible)
+		if err == nil {
+			break
+		}
 	}
-	err = s.startStatusHTTP()
 	if err != nil {
 		return err
 	}
@@ -165,6 +166,12 @@ func (s *Server) Run(ctx context.Context) error {
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
 	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
+
+	err = s.startStatusHTTP()
+	if err != nil {
+		return err
+	}
+
 	return s.run(ctx)
 }
 
@@ -263,8 +270,8 @@ func (s *Server) initDataDir(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), ticdc recommend disk for data-dir "+
-		"at least have %dGB available space", conf.DataDir, diskInfo.Avail, dataDirThreshold))
+	log.Info(fmt.Sprintf("%s is set as data-dir (%dGB available), sort-dir=%s. "+
+		"It is recommended that the disk for data-dir at least have %dGB available space", conf.DataDir, diskInfo.Avail, conf.Sorter.SortDir, dataDirThreshold))
 
 	return nil
 }

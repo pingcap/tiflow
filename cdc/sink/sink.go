@@ -52,7 +52,11 @@ type Sink interface {
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
 
 	// Close closes the Sink
-	Close() error
+	Close(ctx context.Context) error
+
+	// Barrier is a synchronous function to wait all events to be flushed in underlying sink
+	// Note once Barrier is called, the resolved ts won't be pushed until the Barrier call returns.
+	Barrier(ctx context.Context) error
 }
 
 var sinkIniterMap = make(map[string]sinkInitFunc)

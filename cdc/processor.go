@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -39,7 +38,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/tikv/client-go/v2/oracle"
@@ -52,12 +50,11 @@ import (
 )
 
 const (
-	// defaultMemBufferCapacity is the default memory buffer per change feed.
-	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
 	defaultSyncResolvedBatch = 1024
 
 	schemaStorageGCLag = time.Minute * 20
+
+	maxTries = 3
 )
 
 type oldProcessor struct {
@@ -65,13 +62,12 @@ type oldProcessor struct {
 	captureInfo  model.CaptureInfo
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
-	limitter     *puller.BlurResourceLimitter
 	stopped      int32
 
-	pdCli      pd.Client
-	credential *security.Credential
-	etcdCli    kv.CDCEtcdClient
-	session    *concurrency.Session
+	pdCli    pd.Client
+	etcdCli  kv.CDCEtcdClient
+	grpcPool kv.GrpcPool
+	session  *concurrency.Session
 
 	sinkManager *sink.Manager
 
@@ -145,7 +141,7 @@ func (t *tableInfo) loadCheckpointTs() uint64 {
 func newProcessor(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
 	sinkManager *sink.Manager,
@@ -157,7 +153,6 @@ func newProcessor(
 ) (*oldProcessor, error) {
 	etcdCli := session.Client()
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
-	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts",
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
@@ -166,7 +161,7 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
+	ddlPuller := puller.NewPuller(ctx, pdCli, grpcPool, kvStorage, checkpointTs, ddlspans, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -190,12 +185,11 @@ func newProcessor(
 
 	p := &oldProcessor{
 		id:            uuid.New().String(),
-		limitter:      limitter,
 		captureInfo:   captureInfo,
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
-		credential:    credential,
+		grpcPool:      grpcPool,
 		etcdCli:       cdcEtcdCli,
 		session:       session,
 		sinkManager:   sinkManager,
@@ -315,7 +309,7 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 	lastFlushTime := time.Now()
 	retryFlushTaskStatusAndPosition := func() error {
 		t0Update := time.Now()
-		err := retry.Run(500*time.Millisecond, 3, func() error {
+		err := retry.Do(ctx, func() error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
@@ -328,11 +322,11 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 					logError("update info failed", util.ZapFieldChangefeed(ctx), errField)
 				}
 				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
-					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
+					return cerror.ErrAdminStopProcessor.FastGenByArgs()
 				}
 			}
 			return inErr
-		})
+		}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryable))
 		updateInfoDuration.
 			WithLabelValues(p.captureInfo.AdvertiseAddr).
 			Observe(time.Since(t0Update).Seconds())
@@ -422,6 +416,10 @@ func (p *oldProcessor) positionWorker(ctx context.Context) error {
 			lastFlushTime = time.Now()
 		}
 	}
+}
+
+func isRetryable(err error) bool {
+	return cerror.IsRetryableError(err) && cerror.ErrAdminStopProcessor.NotEqual(err)
 }
 
 func (p *oldProcessor) ddlPullWorker(ctx context.Context) error {
@@ -576,7 +574,7 @@ func (p *oldProcessor) removeTable(tableID int64) {
 	if table.markTableID != 0 {
 		delete(p.markTableIDs, table.markTableID)
 	}
-	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
@@ -612,7 +610,7 @@ func (p *oldProcessor) handleTables(ctx context.Context, status *model.TaskStatu
 				opt.Done = true
 				opt.Status = model.OperFinished
 				status.Dirty = true
-				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
+				tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 			}
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
@@ -762,13 +760,14 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	defer p.stateMu.Unlock()
 
 	var tableName string
-	err := retry.Run(time.Millisecond*5, 3, func() error {
+
+	err := retry.Do(ctx, func() error {
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
 			tableName = name.QuoteString()
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	})
+	}, retry.WithBackoffBaseDelay(5), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if err != nil {
 		log.Warn("get table name for metric", util.ZapFieldChangefeed(ctx), zap.String("error", err.Error()))
 		tableName = strconv.Itoa(int(tableID))
@@ -811,16 +810,17 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64, pCheckpointTs *uint64) sink.Sink {
 		// start table puller
-		enableOldValue := p.changefeed.Config.EnableOldValue
-		span := regionspan.GetTableSpan(tableID, enableOldValue)
+		span := regionspan.GetTableSpan(tableID)
 		kvStorage, err := util.KVStorageFromCtx(ctx)
 		if err != nil {
 			p.sendError(err)
 			return nil
 		}
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage,
-			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter,
-			enableOldValue)
+		// NOTICE: always pull the old value internally
+		// See also: TODO(hi-rustin): add issue link here.
+		plr := puller.NewPuller(ctx, p.pdCli, p.grpcPool, kvStorage,
+			replicaInfo.StartTs, []regionspan.Span{span},
+			true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -832,23 +832,11 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
-		case model.SortInFile:
-			err := util.IsDirAndWritable(p.changefeed.SortDir)
-			if err != nil {
-				if os.IsNotExist(errors.Cause(err)) {
-					err = os.MkdirAll(p.changefeed.SortDir, 0o755)
-					if err != nil {
-						p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir"))
-						return nil
-					}
-				} else {
-					p.sendError(errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check"))
-					return nil
-				}
+		case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+			if p.changefeed.Engine == model.SortInFile {
+				log.Warn("File sorter is obsolete. Please revise your changefeed settings and use unified sorter",
+					util.ZapFieldChangefeed(ctx))
 			}
-
-			sorter = puller.NewFileSorter(p.changefeed.SortDir)
-		case model.SortUnified:
 			err := psorter.UnifiedSorterCheckDir(p.changefeed.SortDir)
 			if err != nil {
 				p.sendError(errors.Trace(err))
@@ -880,7 +868,7 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 
 		tableSink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 		go func() {
-			p.sorterConsume(ctx, tableID, tableName, sorter, pResolvedTs, pCheckpointTs, replicaInfo, tableSink)
+			p.sorterConsume(ctx, tableID, sorter, pResolvedTs, pCheckpointTs, replicaInfo, tableSink)
 		}()
 		return tableSink
 	}
@@ -910,10 +898,10 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 	table.cancel = func() {
 		cancel()
 		if tableSink != nil {
-			tableSink.Close()
+			tableSink.Close(ctx)
 		}
 		if mTableSink != nil {
-			mTableSink.Close()
+			mTableSink.Close(ctx)
 		}
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
@@ -926,7 +914,6 @@ const maxLagWithCheckpointTs = (30 * 1000) << 18 // 30s
 func (p *oldProcessor) sorterConsume(
 	ctx context.Context,
 	tableID int64,
-	tableName string,
 	sorter puller.EventSorter,
 	pResolvedTs *uint64,
 	pCheckpointTs *uint64,
@@ -935,7 +922,7 @@ func (p *oldProcessor) sorterConsume(
 ) {
 	var lastResolvedTs, lastCheckPointTs uint64
 	opDone := false
-	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	resolvedGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkDoneTicker := time.NewTicker(1 * time.Second)
 	checkDone := func() {
 		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
@@ -1114,7 +1101,7 @@ func (p *oldProcessor) sorterConsume(
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
 				p.localResolvedNotifier.Notify()
-				resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
+				resolvedGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 				if !opDone {
 					checkDone()
 				}
@@ -1182,7 +1169,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
-		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tbl.name)
+		tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	}
 	p.ddlPullerCancel()
 	// mark tables share the same context with its original table, don't need to cancel
@@ -1202,7 +1189,7 @@ func (p *oldProcessor) stop(ctx context.Context) error {
 	if err := p.etcdCli.DeleteTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
-	return p.sinkManager.Close()
+	return p.sinkManager.Close(ctx)
 }
 
 func (p *oldProcessor) isStopped() bool {
@@ -1215,7 +1202,7 @@ var runProcessorImpl = runProcessor
 func runProcessor(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	session *concurrency.Session,
 	info model.ChangeFeedInfo,
 	changefeedID string,
@@ -1244,7 +1231,7 @@ func runProcessor(
 		return nil, errors.Trace(err)
 	}
 	sinkManager := sink.NewManager(ctx, s, errCh, checkpointTs)
-	processor, err := newProcessor(ctx, pdCli, credential, session, info, sinkManager,
+	processor, err := newProcessor(ctx, pdCli, grpcPool, session, info, sinkManager,
 		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
 		cancel()

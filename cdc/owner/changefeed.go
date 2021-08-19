@@ -39,7 +39,7 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        *gcManager
+	gcManager        GcManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -68,7 +68,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -86,7 +86,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager *gcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager *gcManager,
+	id model.ChangeFeedID, gcManager GcManager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -119,20 +119,29 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	}
 }
 
-func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
-	c.state = state
-	c.feedStateManager.Tick(state)
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	switch c.state.Info.State {
-	case model.StateNormal, model.StateStopped, model.StateError:
-		if err := c.gcManager.CheckStaleCheckpointTs(ctx, checkpointTs); err != nil {
+func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
+	state := c.state.Info.State
+	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
+		if err := c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
+	return nil
+}
+
+func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+	c.state = state
+	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
 		c.releaseResources()
 		return nil
 	}
+
+	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		return errors.Trace(err)
+	}
+
 	if !c.preflightCheck(captures) {
 		return nil
 	}
@@ -212,7 +221,10 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs)
+	// Since we wait for checkpoint == ddlJob.FinishTs before executing the DDL,
+	// when there is a recovery, there is no guarantee that the DDL at the checkpoint
+	// has been executed. So we need to start the DDL puller from (checkpoint-1).
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -239,7 +251,10 @@ func (c *changefeed) releaseResources() {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	if err := c.sink.Close(); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// We don't need to wait sink Close, pass a canceled context is ok
+	if err := c.sink.Close(ctx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
@@ -317,6 +332,9 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
 		if ddlJob == nil || ddlResolvedTs != barrierTs {
+			if ddlResolvedTs < barrierTs {
+				return barrierTs, nil
+			}
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}

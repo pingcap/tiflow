@@ -123,7 +123,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
 
-	err = sink.Close()
+	err = sink.Close(ctx)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
@@ -185,7 +185,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	err = sink.EmitDDLEvent(ctx, ddl)
 	c.Assert(cerror.ErrDDLEventIgnored.Equal(err), check.IsTrue)
 
-	err = sink.Close()
+	err = sink.Close(ctx)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
