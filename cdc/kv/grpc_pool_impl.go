@@ -74,6 +74,7 @@ func createClientConn(ctx context.Context, credential *security.Credential, targ
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
 
 	conn, err := grpc.DialContext(
 		ctx,
@@ -99,13 +100,7 @@ func createClientConn(ctx context.Context, credential *security.Credential, targ
 			PermitWithoutStream: true,
 		}),
 	)
-	cancel()
-
 	if err != nil {
-		err2 := conn.Close()
-		if err2 != nil {
-			log.Warn("close grpc conn", zap.Error(err2))
-		}
 		return nil, cerror.WrapError(cerror.ErrGRPCDialFailed, err)
 	}
 	return conn, nil
