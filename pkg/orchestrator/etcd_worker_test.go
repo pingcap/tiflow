@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -654,4 +655,102 @@ func (s *etcdWorkerSuite) TestEmptyOrNil(c *check.C) {
 	c.Assert(resp.Kvs, check.HasLen, 0)
 	err = cli.Unwrap().Close()
 	c.Assert(err, check.IsNil)
+}
+
+type modifyOneReactor struct {
+	state    *commonReactorState
+	key      []byte
+	value    []byte
+	finished bool
+
+	waitOnCh chan struct{}
+}
+
+func (r *modifyOneReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
+	r.state = state.(*commonReactorState)
+	if !r.finished {
+		r.finished = true
+	} else {
+		return r.state, cerrors.ErrReactorFinished.GenWithStackByArgs()
+	}
+	if r.waitOnCh != nil {
+		select {
+		case <-ctx.Done():
+			return nil, errors.Trace(ctx.Err())
+		case <-r.waitOnCh:
+		}
+		select {
+		case <-ctx.Done():
+			return nil, errors.Trace(ctx.Err())
+		case <-r.waitOnCh:
+		}
+	}
+	r.state.AppendPatch(util.NewEtcdKeyFromBytes(r.key), func(old []byte) (newValue []byte, changed bool, err error) {
+		if len(old) > 0 {
+			return r.value, true, nil
+		}
+		return nil, false, nil
+	})
+	return r.state, nil
+}
+
+// TestModifyAfterDelete tests snapshot isolation when there is one modifying transaction delayed in the middle while a deleting transaction
+// commits. The first transaction should be aborted and retried, and isolation should not be violated.
+func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	newClient, closer := setUpTest(c)
+	defer closer()
+
+	cli1 := newClient()
+	cli2 := newClient()
+
+	_, err := cli1.Put(ctx, "/test/key1", "original value")
+	c.Assert(err, check.IsNil)
+
+	modifyReactor := &modifyOneReactor{
+		key:      []byte("/test/key1"),
+		value:    []byte("modified value"),
+		waitOnCh: make(chan struct{}),
+	}
+	worker1, err := NewEtcdWorker(cli1, "/test", modifyReactor, &commonReactorState{
+		state: make(map[string]string),
+	})
+	c.Assert(err, check.IsNil)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := worker1.Run(ctx, nil, time.Millisecond*100)
+		c.Assert(err, check.IsNil)
+	}()
+
+	modifyReactor.waitOnCh <- struct{}{}
+
+	deleteReactor := &modifyOneReactor{
+		key:   []byte("/test/key1"),
+		value: nil, // deletion
+	}
+	worker2, err := NewEtcdWorker(cli2, "/test", deleteReactor, &commonReactorState{
+		state: make(map[string]string),
+	})
+	c.Assert(err, check.IsNil)
+
+	err = worker2.Run(ctx, nil, time.Millisecond*100)
+	c.Assert(err, check.IsNil)
+
+	modifyReactor.waitOnCh <- struct{}{}
+	wg.Wait()
+
+	resp, err := cli1.Get(ctx, "/test/key1")
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Kvs, check.HasLen, 0)
+	c.Assert(worker1.deleteCounter, check.Equals, int64(1))
+
+	_ = cli1.Unwrap().Close()
+	_ = cli2.Unwrap().Close()
 }
