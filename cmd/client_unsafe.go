@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +61,7 @@ func newResetCommand() *cobra.Command {
 				return errors.Trace(err)
 			}
 
-			_, err = pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
+			_, err = pdCli.UpdateServiceGCSafePoint(ctx, owner.CDCServiceSafePointID, 0, 0)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -103,7 +103,7 @@ func newDeleteServiceGcSafepointCommand() *cobra.Command {
 				return err
 			}
 			ctx := defaultContext
-			_, err := pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
+			_, err := pdCli.UpdateServiceGCSafePoint(ctx, owner.CDCServiceSafePointID, 0, 0)
 			if err == nil {
 				cmd.Println("CDC service GC safepoint truncated in PD!")
 			}
