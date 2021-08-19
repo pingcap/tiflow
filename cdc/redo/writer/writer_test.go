@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
-		rows    []*redo.RowChangedEvent
+		rows    []*model.RedoRowChangedEvent
 	}
 	tests := []struct {
 		name      string
@@ -46,9 +47,11 @@ func TestLogWriter_WriteLog(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				rows: []*redo.RowChangedEvent{
+				rows: []*model.RedoRowChangedEvent{
 					{
-						Table: &redo.TableName{TableID: 111}, CommitTs: 1,
+						Row: &model.RowChangedEvent{
+							Table: &model.TableName{TableID: 111}, CommitTs: 1,
+						},
 					},
 				},
 			},
@@ -60,10 +63,12 @@ func TestLogWriter_WriteLog(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				rows: []*redo.RowChangedEvent{
-					nil,
+				rows: []*model.RedoRowChangedEvent{
+					{Row: nil},
 					{
-						Table: &redo.TableName{TableID: 11}, CommitTs: 11,
+						Row: &model.RowChangedEvent{
+							Table: &model.TableName{TableID: 11}, CommitTs: 11,
+						},
 					},
 				},
 			},
@@ -76,7 +81,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				rows:    []*redo.RowChangedEvent{},
+				rows:    []*model.RedoRowChangedEvent{},
 			},
 			writerErr: errors.New("err"),
 			isRunning: true,
@@ -86,7 +91,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				rows:    []*redo.RowChangedEvent{},
+				rows:    []*model.RedoRowChangedEvent{},
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
@@ -97,7 +102,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				rows:    []*redo.RowChangedEvent{},
+				rows:    []*model.RedoRowChangedEvent{},
 			},
 			writerErr: nil,
 			isRunning: true,
@@ -134,7 +139,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
-		ddl     *redo.DDLEvent
+		ddl     *model.RedoDDLEvent
 	}
 	tests := []struct {
 		name      string
@@ -149,7 +154,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &redo.DDLEvent{CommitTs: 1},
+				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
 			},
 			isRunning: true,
 			writerErr: nil,
@@ -159,7 +164,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &redo.DDLEvent{CommitTs: 1},
+				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
 			},
 			writerErr: errors.New("err"),
 			wantErr:   true,
@@ -180,7 +185,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &redo.DDLEvent{CommitTs: 1},
+				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
@@ -191,7 +196,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &redo.DDLEvent{CommitTs: 1},
+				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
 			},
 			writerErr: nil,
 			isRunning: true,
