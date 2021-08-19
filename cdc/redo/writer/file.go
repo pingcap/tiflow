@@ -22,7 +22,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,9 +49,7 @@ const (
 	defaultDirMode  = 0o755
 	defaultFileMode = 0o644
 
-	megabyte                  = 1024 * 1024
-	defaultMaxLogSize         = 64 * megabyte
-	defaultFlushIntervalInSec = 2
+	defaultFlushIntervalInMs = 1000
 
 	tmpEXT = ".tmp"
 	logEXT = ".log"
@@ -65,47 +62,71 @@ const (
 	started uint32 = 1
 )
 
+var (
+	// for easy testing, not set to const
+	megabyte          int64 = 1024 * 1024
+	defaultMaxLogSize       = 64 * megabyte
+)
+
+//go:generate mockery --name=fileWriter --inpackage
+type fileWriter interface {
+	io.WriteCloser
+	flusher
+
+	// AdvanceTs ...
+	AdvanceTs(commitTs uint64)
+	// GC ...
+	GC(checkPointTs uint64) error
+	// IsRunning ...
+	IsRunning() bool
+}
+
+type flusher interface {
+	Flush() error
+}
+
 // writerConfig is the configuration used by a writer.
 type writerConfig struct {
 	dir          string
 	changeFeedID string
+	captureID    string
 	fileName     string
 	createTime   time.Time
 	// maxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
-	maxLogSize         int64
-	flushIntervalInSec int64
-	s3Storage          bool
-	s3URI              *url.URL
+	maxLogSize        int64
+	flushIntervalInMs int64
+	s3Storage         bool
+	s3URI             *url.URL
 }
 
 // writer is a redo log event writer which writes redo log events to a file.
 type writer struct {
 	cfg *writerConfig
 	// maxCommitTS is the max commitTS among the events in one log file
-	maxCommitTS *atomic.Uint64
+	maxCommitTS atomic.Uint64
 	// the ts used in file name
-	commitTS *atomic.Uint64
+	commitTS atomic.Uint64
 	// the ts send with the event
-	eventCommitTS *atomic.Uint64
-	state         *atomic.Uint32
-	gcRunning     *atomic.Bool
+	eventCommitTS atomic.Uint64
+	state         atomic.Uint32
+	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
 	bw            *pioutil.PageWriter
 	uint64buf     []byte
 	storage       storage.ExternalStorage
-	stopChan      chan struct{}
 	sync.RWMutex
 }
 
+// TODO: extract to a common rotate writer
 func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	if cfg == nil {
 		log.Panic("writerConfig can not be nil")
 		return nil
 	}
 
-	if cfg.flushIntervalInSec == 0 {
-		cfg.flushIntervalInSec = defaultFlushIntervalInSec
+	if cfg.flushIntervalInMs == 0 {
+		cfg.flushIntervalInMs = defaultFlushIntervalInMs
 	}
 	cfg.maxLogSize *= megabyte
 	if cfg.maxLogSize == 0 {
@@ -120,7 +141,6 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 
 	w := &writer{
 		cfg:       cfg,
-		stopChan:  make(chan struct{}),
 		uint64buf: make([]byte, 8),
 	}
 
@@ -135,7 +155,7 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	}
 
 	w.state.Store(started)
-	go w.runFlushToDisk(ctx, cfg.flushIntervalInSec)
+	go w.runFlushToDisk(ctx, cfg.flushIntervalInMs)
 
 	return w
 }
@@ -170,12 +190,12 @@ func initS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage
 	return s3storage, nil
 }
 
-func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInSec int64) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInSec) * time.Second)
+func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
+	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
-		if !w.isRunning() {
+		if !w.IsRunning() {
 			return
 		}
 
@@ -184,7 +204,7 @@ func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInSec int64) {
 			log.Info("runFlushToDisk got canceled", zap.Error(ctx.Err()))
 			return
 		case <-ticker.C:
-			err := w.flushAll()
+			err := w.Flush()
 			if err != nil {
 				log.Error("redo log flush error", zap.Error(err))
 			}
@@ -201,9 +221,6 @@ func (w *writer) Write(rawData []byte) (int, error) {
 		return 0, errors.Errorf("rawData %d exceeds maximum file size %d", writeLen, w.cfg.maxLogSize)
 	}
 
-	if w.maxCommitTS.Load() < w.eventCommitTS.Load() {
-		w.maxCommitTS.Store(w.eventCommitTS.Load())
-	}
 	if w.file == nil {
 		if err := w.openOrNew(len(rawData)); err != nil {
 			return 0, err
@@ -215,6 +232,9 @@ func (w *writer) Write(rawData []byte) (int, error) {
 			return 0, err
 		}
 	}
+	if w.maxCommitTS.Load() < w.eventCommitTS.Load() {
+		w.maxCommitTS.Store(w.eventCommitTS.Load())
+	}
 	// ref: https://github.com/etcd-io/etcd/pull/5250
 	lenField, padBytes := encodeFrameSize(len(rawData))
 	if err := w.writeUint64(lenField, w.uint64buf); err != nil {
@@ -224,10 +244,15 @@ func (w *writer) Write(rawData []byte) (int, error) {
 	if padBytes != 0 {
 		rawData = append(rawData, make([]byte, padBytes)...)
 	}
+
 	n, err := w.bw.Write(rawData)
 	w.size += int64(n)
-
 	return n, err
+}
+
+// AdvanceTs ...
+func (w *writer) AdvanceTs(commitTs uint64) {
+	w.eventCommitTS.Store(commitTs)
 }
 
 func (w *writer) writeUint64(n uint64, buf []byte) error {
@@ -248,9 +273,11 @@ func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 
 // Close implements Writer.Close.
 func (w *writer) Close() error {
-	if !w.isRunning() {
+	if !w.IsRunning() {
 		return nil
 	}
+	w.Lock()
+	defer w.Unlock()
 
 	err := w.close()
 	if err != nil {
@@ -261,7 +288,7 @@ func (w *writer) Close() error {
 	return nil
 }
 
-func (w *writer) isRunning() bool {
+func (w *writer) IsRunning() bool {
 	return w.state.Load() == started
 }
 
@@ -280,7 +307,7 @@ func (w *writer) close() error {
 
 	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
 	w.commitTS.Store(w.maxCommitTS.Load())
-	err = os.Rename(w.file.Name(), w.getLogFileName())
+	err = os.Rename(w.file.Name(), w.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
@@ -291,7 +318,11 @@ func (w *writer) close() error {
 }
 
 func (w *writer) getLogFileName() string {
-	return fmt.Sprintf("%s_%d_%s_%d%s", w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS, logEXT)
+	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS.Load(), logEXT)
+}
+
+func (w *writer) getLogFileNameFormat(ext string) string {
+	return fmt.Sprintf("%s_%s_%d_%s_%s%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, "%d", ext)
 }
 
 func (w *writer) filePath() string {
@@ -369,9 +400,9 @@ func (w *writer) rotate() error {
 	return w.openNew()
 }
 
-// TODO: gc in s3
-func (w *writer) gc(checkPointTs uint64) error {
-	if !w.isRunning() || w.isGCRunning() {
+// GC TODO: GC in s3
+func (w *writer) GC(checkPointTs uint64) error {
+	if !w.IsRunning() || w.isGCRunning() {
 		return nil
 	}
 
@@ -393,18 +424,15 @@ func (w *writer) gc(checkPointTs uint64) error {
 }
 
 func (w *writer) parseLogFileName(name string) (uint64, error) {
-	if filepath.Ext(name) != logEXT || filepath.Ext(name) != tmpEXT {
-		return 0, errors.New("bad log name")
+	if filepath.Ext(name) != logEXT && filepath.Ext(name) != tmpEXT {
+		return 0, errors.New("bad log name, file name extension not match")
 	}
 
-	ss := strings.Split(name, "_")
-	if len(ss) == 0 {
-		return 0, errors.New("bad log name")
-	}
-
-	commitTs, err := strconv.ParseUint(ss[len(ss)-1], 10, 64)
+	var commitTs uint64
+	format := w.getLogFileNameFormat(filepath.Ext(name))
+	_, err := fmt.Sscanf(name, format, &commitTs)
 	if err != nil {
-		return 0, err
+		return 0, errors.New("bad log name")
 	}
 	return commitTs, nil
 }
@@ -456,26 +484,31 @@ func (w *writer) flushAll() error {
 	return w.writeToS3(context.Background())
 }
 
-func (w *writer) flush() error {
+func (w *writer) Flush() error {
 	w.Lock()
 	defer w.Unlock()
 
+	return w.flushAll()
+}
+
+func (w *writer) flush() error {
 	if w.file == nil {
 		return nil
 	}
 
-	_ = w.bw.Flush()
+	err := w.bw.Flush()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
 	return cerror.WrapError(cerror.ErrRedoFileOp, w.file.Sync())
 }
 
 func (w *writer) writeToS3(ctx context.Context) error {
 	name := w.filePath()
-	w.Lock()
 	// TODO: use small file in s3, if read takes too long
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	w.Unlock()
 	return cerror.WrapError(cerror.ErrRedoFileOp, w.storage.WriteFile(ctx, name, fileData))
 }
