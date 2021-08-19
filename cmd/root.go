@@ -16,6 +16,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/pingcap/ticdc/pkg/cmd/redo"
 	"github.com/pingcap/ticdc/pkg/cmd/server"
 	"github.com/pingcap/ticdc/pkg/cmd/version"
 	"github.com/spf13/cobra"
@@ -34,6 +35,7 @@ func Execute() {
 
 	rootCmd.AddCommand(server.NewCmdServer())
 	rootCmd.AddCommand(version.NewCmdVersion())
+	rootCmd.AddCommand(redo.NewCmdRedo())
 
 	if err := rootCmd.Execute(); err != nil {
 		rootCmd.Println(err)

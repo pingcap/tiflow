@@ -82,3 +82,32 @@ func (bs *blackholeStorage) GetTableResolvedTs(ctx context.Context, tableIDs []i
 	}
 	return rtsMap, nil
 }
+
+// BlackholeReader is a blockhole storage which implements LogReader interface
+type BlackholeReader struct {
+}
+
+// NewBlackholeReader creates a new BlackholeReader
+func NewBlackholeReader() *BlackholeReader {
+	return &BlackholeReader{}
+}
+
+// ResetReader implements LogReader.ReadLog
+func (br *BlackholeReader) ResetReader(ctx context.Context, startTs, endTs uint64) error {
+	return nil
+}
+
+// ReadLog implements LogReader.ReadLog
+func (br *BlackholeReader) ReadLog(ctx context.Context, maxNumberOfMessages int) ([]*RowRedoLog, error) {
+	return nil, nil
+}
+
+// ReadDDL implements LogReader.ReadDDL
+func (br *BlackholeReader) ReadDDL(ctx context.Context, maxNumberOfDDLs int) ([]*model.DDLEvent, error) {
+	return nil, nil
+}
+
+// ReadMeta implements LogReader.ReadMeta
+func (br *BlackholeReader) ReadMeta(ctx context.Context) (resolvedTs, checkpointTs uint64, err error) {
+	return 1, 0, nil
+}

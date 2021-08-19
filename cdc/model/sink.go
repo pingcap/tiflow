@@ -228,12 +228,14 @@ const (
 	RedoLogTypeDDL
 )
 
+// RedoLog defines the persistent structure of redo log
 type RedoLog struct {
 	Row  *RedoRowChangedEvent `msg:"row"`
 	DDL  *RedoDDLEvent        `msg:"ddl"`
 	Type RedoLogType          `msg:"type"`
 }
 
+// RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row          *RowChangedEvent `msg:"row"`
 	PreColumns   []*RedoColumn    `msg:"preColumns"`
@@ -319,6 +321,7 @@ type Column struct {
 	Value interface{}    `json:"value" msg:"value"`
 }
 
+// RedoColumn stores Column change
 type RedoColumn struct {
 	Column *Column `msg:"column"`
 	Flag   uint64  `msg:"flag"`
@@ -391,6 +394,7 @@ type SimpleTableInfo struct {
 	ColumnInfo []*ColumnInfo `msg:"columnInfo"`
 }
 
+// DDLEvent stores DDL event
 type DDLEvent struct {
 	StartTs      uint64           `msg:"startTs"`
 	CommitTs     uint64           `msg:"commitTs"`
@@ -400,6 +404,7 @@ type DDLEvent struct {
 	Type         model.ActionType `msg:"-"`
 }
 
+// RedoDDLEvent represents DDL event used in redo log persistent
 type RedoDDLEvent struct {
 	DDL  *DDLEvent `msg:"ddl"`
 	Type byte      `msg:"type"`

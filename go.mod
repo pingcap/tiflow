@@ -41,6 +41,7 @@ require (
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/onsi/ginkgo v1.9.0 // indirect
 	github.com/onsi/gomega v1.6.0 // indirect
+	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v5.2.0-alpha.0.20210611153635-74f18bcbe19d+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
