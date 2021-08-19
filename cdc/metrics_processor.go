@@ -38,7 +38,7 @@ var (
 			Subsystem: "processor",
 			Name:      "table_resolved_ts",
 			Help:      "local resolved ts of processor",
-		}, []string{"changefeed", "capture", "table"})
+		}, []string{"changefeed", "capture"})
 	checkpointTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -88,7 +88,7 @@ var (
 			Subsystem: "processor",
 			Name:      "table_memory_consumption",
 			Help:      "estimated memory consumption for a table after the sorter",
-		}, []string{"changefeed", "capture", "table"})
+		}, []string{"changefeed", "capture"})
 )
 
 // initProcessorMetrics registers all metrics used in processor

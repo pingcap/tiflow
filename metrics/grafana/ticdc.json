@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1626152035486,
+  "iteration": 1628762880809,
   "links": [],
   "panels": [
     {
@@ -2747,9 +2747,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_processor_table_memory_consumption{changefeed =~ \"$changefeed\", capture =~ \"$capture\"}) by (capture)",
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture)",
               "format": "time_series",
               "intervalFactor": 1,
+              "legendFormat": "{{ capture }}",
               "refId": "A"
             }
           ],
@@ -2895,9 +2896,10 @@
           ],
           "targets": [
             {
-              "expr": "ticdc_processor_table_memory_consumption{changefeed =~ \"$changefeed\", capture =~ \"$capture\"}",
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture, changefeed)",
               "format": "table",
               "intervalFactor": 1,
+              "legendFormat": "{{ capture }} - {{ changefeed }}",
               "refId": "A"
             }
           ],
@@ -3598,24 +3600,19 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_mem_buffer_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(rate(ticdc_puller_output_chan_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s]) / rate(ticdc_puller_output_chan_size_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s])) by (capture)",
               "format": "time_series",
+              "hide": true,
               "intervalFactor": 1,
               "legendFormat": "{{capture}} - output chan",
-              "refId": "A"
-            },
-            {
-              "expr": "-sum(ticdc_puller_output_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) ",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{capture}} - memory  buffer",
               "refId": "B"
             },
             {
-              "expr": "-sum(ticdc_puller_event_chan_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(rate(ticdc_puller_event_chan_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s]) / rate(ticdc_puller_event_chan_size_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s])) by (capture)",
               "format": "time_series",
+              "hide": true,
               "intervalFactor": 1,
-              "legendFormat": "{{capture}} - input chan",
+              "legendFormat": "{{capture}} - event chan",
               "refId": "C"
             }
           ],
@@ -7899,5 +7896,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 18
+  "version": 19
 }
