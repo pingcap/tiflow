@@ -284,8 +284,6 @@ func TestLogWriter_FlushLog(t *testing.T) {
 		},
 	}
 
-	// dir := "test-GC"
-	// err := os.MkdirAll(dir, defaultDirMode)
 	dir, err := ioutil.TempDir("", "redo-FlushLog")
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
@@ -578,27 +576,58 @@ func TestNewLogWriter(t *testing.T) {
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
 	}
-
+	originValue := defaultGCIntervalInMs
+	defaultGCIntervalInMs = 1
+	defer func() {
+		defaultGCIntervalInMs = originValue
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	assert.NotPanics(t, func() { NewLogWriter(ctx, cfg) })
 
-	mockWriter := &mockFileWriter{}
-	mockWriter.On("IsRunning").Return(true)
-	mockWriter.On("Close").Return(nil)
-	mockWriter.On("GC", mock.Anything).Return(nil)
-
-	writer := LogWriter{
-		rowWriter: mockWriter,
-		ddlWriter: mockWriter,
-		meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
-		cfg:       cfg,
+	type args struct {
+		isRunning bool
 	}
-	defaultGCIntervalInMs = 1
-	go writer.runGC(ctx)
-	time.Sleep(2 * time.Millisecond)
-	mockWriter.AssertCalled(t, "GC", mock.Anything)
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			name: "running",
+			args: args{
+				isRunning: true,
+			},
+		},
+		{
+			name: "stopped",
+			args: args{
+				isRunning: false,
+			},
+		},
+	}
+	for _, tt := range tests {
+		mockWriter := &mockFileWriter{}
+		mockWriter.On("IsRunning").Return(tt.args.isRunning)
+		mockWriter.On("Close").Return(nil)
+		if tt.args.isRunning {
+			mockWriter.On("GC", mock.Anything).Return(nil)
+		}
+		writer := LogWriter{
+			rowWriter: mockWriter,
+			ddlWriter: mockWriter,
+			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			cfg:       cfg,
+		}
+		go writer.runGC(ctx)
+		time.Sleep(2 * time.Millisecond)
 
-	cancel()
-	writer.Close()
-	mockWriter.AssertNumberOfCalls(t, "Close", 2)
+		writer.Close()
+		mockWriter.AssertNumberOfCalls(t, "Close", 2)
+
+		if tt.args.isRunning {
+			mockWriter.AssertCalled(t, "GC", mock.Anything)
+		} else {
+			mockWriter.AssertNotCalled(t, "GC", mock.Anything)
+		}
+	}
 }
