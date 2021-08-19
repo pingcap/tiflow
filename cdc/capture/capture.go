@@ -57,6 +57,7 @@ type Capture struct {
 	pdClient   pd.Client
 	kvStorage  tidbkv.Storage
 	etcdClient *kv.CDCEtcdClient
+	grpcPool   kv.GrpcPool
 
 	cancel context.CancelFunc
 
@@ -77,7 +78,7 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDC
 	}
 }
 
-func (c *Capture) reset() error {
+func (c *Capture) reset(ctx context.Context) error {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	conf := config.GetGlobalServerConfig()
@@ -97,6 +98,10 @@ func (c *Capture) reset() error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
+	}
+	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -121,7 +126,7 @@ func (c *Capture) Run(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		err = c.reset()
+		err = c.reset(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -145,6 +150,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		KVStorage:   c.kvStorage,
 		CaptureInfo: c.info,
 		EtcdClient:  c.etcdClient,
+		GrpcPool:    c.grpcPool,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -158,7 +164,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(2)
+	wg.Add(3)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
@@ -179,6 +185,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
+	}()
+	go func() {
+		defer wg.Done()
+		c.grpcPool.RecycleConn(ctx)
 	}()
 	wg.Wait()
 	if ownerErr != nil {
@@ -335,6 +345,9 @@ func (c *Capture) AsyncClose() {
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
+	}
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
 	}
 }
 
