@@ -84,7 +84,10 @@ type RowChangedEvent struct {
 	ApproximateSize  int64      `msg:"approximateSize"`
 }
 
-// ColumnFlagType ...
+// ColumnFlagType in cdc/model/sink.go is defined in util.Flag, seems this is not supported in msgp
+// https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149,
+// so duplicating the type here
+// ColumnFlagType
 type ColumnFlagType uint64
 
 // Column ...
