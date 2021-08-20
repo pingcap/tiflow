@@ -172,6 +172,7 @@ func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factor
 	return o.completeCfg(ctx, cmd)
 }
 
+// completeCfg complete the replica config from file and cmd flags.
 func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Command) error {
 	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {
@@ -299,7 +300,8 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 	return nil
 }
 
-func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Command) (*model.ChangeFeedInfo, error) {
+// getInfo constructs the information for the changefeed.
+func (o *createChangefeedOptions) getInfo(cmd *cobra.Command) *model.ChangeFeedInfo {
 	info := &model.ChangeFeedInfo{
 		SinkURI:           o.commonChangefeedOptions.sinkURI,
 		Opts:              make(map[string]string),
@@ -320,11 +322,6 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 			"Adjust \"sort-engine\" to make use of the right sorter.\n")
 	}
 
-	tz, err := ticdcutil.GetTimezone(o.commonChangefeedOptions.timezone)
-	if err != nil {
-		return nil, errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
-	}
-
 	for _, opt := range o.commonChangefeedOptions.opts {
 		s := strings.SplitN(opt, "=", 2)
 		if len(s) <= 0 {
@@ -342,13 +339,7 @@ func (o *createChangefeedOptions) getInfo(ctx context.Context, cmd *cobra.Comman
 		info.Opts[key] = value
 	}
 
-	ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
-	err = o.validateSink(ctx, info.Config, info.Opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return info, nil
+	return info
 }
 
 // validateStartTs checks if startTs is a valid value.
@@ -442,12 +433,17 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 			"please run `cdc cli changefeed cyclic create-marktables`")
 	}
 
-	info, err := o.getInfo(ctx, cmd)
+	info := o.getInfo(cmd)
+
+	tz, err := ticdcutil.GetTimezone(o.commonChangefeedOptions.timezone)
+	if err != nil {
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+	}
+
+	ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
+	err = o.validateSink(ctx, info.Config, info.Opts)
 	if err != nil {
 		return err
-	}
-	if info == nil {
-		return nil
 	}
 
 	infoStr, err := info.Marshal()
