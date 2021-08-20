@@ -10,7 +10,7 @@ SINK_TYPE=$1
 TLS_DIR=$( cd $CUR/../_certificates && pwd )
 
 function run() {
-    sudo pip install requests
+    sudo pip install -U requests==2.26.0
 
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -39,21 +39,27 @@ function run() {
     # wait for above sql done in the up source
     sleep 1
 
-    python $CUR/util/test_case.py list_changefeed
-    python $CUR/util/test_case.py get_changefeed
-    python $CUR/util/test_case.py pause_changefeed
-    python $CUR/util/test_case.py update_changefeed
-    python $CUR/util/test_case.py resume_changefeed
-    python $CUR/util/test_case.py rebalance_table
-    python $CUR/util/test_case.py move_table
-    python $CUR/util/test_case.py get_processor
-    python $CUR/util/test_case.py list_processor
-    python $CUR/util/test_case.py set_log_level
-    python $CUR/util/test_case.py remove_changefeed
-    python $CUR/util/test_case.py resign_owner
+    sequential_cases=(
+    "list_changefeed"
+    "get_changefeed"
+    "pause_changefeed"
+    "update_changefeed"
+    "resume_changefeed"
+    "rebalance_table"
+    "move_table"
+    "get_processor"
+    "list_processor"
+    "set_log_level"
+    "remove_changefeed"
+    "resign_owner"
+    )
+
+    for case in $sequential_cases; do
+        python $CUR/util/test_case.py $case
+    done
 
     cleanup_process $CDC_BINARY
-}
+  }
 
 trap stop_tidb_cluster EXIT
 run $*
