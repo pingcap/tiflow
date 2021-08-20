@@ -217,6 +217,17 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 		}
 	}
 
+	for _, rules := range cfg.Sink.DispatchRules {
+		switch strings.ToLower(rules.Dispatcher) {
+		case "rowid", "index-value":
+			if cfg.EnableOldValue {
+				cmd.Printf("[WARN] This index-value distribution mode "+
+					"does not guarantee row-level orderliness when "+
+					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
+			}
+		}
+	}
+
 	if o.commonChangefeedOptions.sortEngine == model.SortUnified && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
 		o.commonChangefeedOptions.sortEngine = model.SortInMemory
 		log.Warn("The TiCDC cluster is built from an older version, disabling Unified Sorter by default",
@@ -244,17 +255,6 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 			FilterReplicaID: filter,
 			SyncDDL:         o.commonChangefeedOptions.cyclicSyncDDL,
 			// TODO(neil) enable ID bucket.
-		}
-	}
-
-	for _, rules := range cfg.Sink.DispatchRules {
-		switch strings.ToLower(rules.Dispatcher) {
-		case "rowid", "index-value":
-			if cfg.EnableOldValue {
-				cmd.Printf("[WARN] This index-value distribution mode "+
-					"does not guarantee row-level orderliness when "+
-					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
-			}
 		}
 	}
 
