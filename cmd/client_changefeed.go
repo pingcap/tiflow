@@ -242,7 +242,10 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
-func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func verifyChangefeedParameters(
+	ctx context.Context, cmd *cobra.Command, isCreate bool,
+	credential *security.Credential, cdcClusterVer version.TiCDCClusterVersion,
+) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -263,10 +266,6 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		if err := verifyTargetTs(startTs, targetTs); err != nil {
 			return nil, err
 		}
-	}
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 	cfg := config.GetDefaultReplicaConfig()
 
@@ -474,7 +473,11 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), captureInfos)
+			cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+			if err != nil {
+				return err
+			}
+			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), cdcClusterVer)
 			if err != nil {
 				return err
 			}
