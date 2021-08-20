@@ -91,9 +91,11 @@ def get_changefeed():
 def pause_changefeed():
     # pause changefeed
     url = BASE_URL+"/changefeeds/changefeed-test2/pause"
-    resp = rq.post(url)
+    for i in range(RETRY_TIME):
+        resp = rq.post(url)
+        if resp.status_code == ACCEPTED:
+            break
     assert resp.status_code == ACCEPTED
-
     # check if pause changefeed success
     url = BASE_URL+"/changefeeds/changefeed-test2"
     for i in range(RETRY_TIME):
