@@ -571,6 +571,51 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageDecodeError"]
+error = '''
+failed to decode peer-to-peer message
+'''
+
+["CDC:ErrPeerMessageDuplicateConnection"]
+error = '''
+peer-to-peer message duplicate connection: epoch %d
+'''
+
+["CDC:ErrPeerMessageInternalSenderClosed"]
+error = '''
+peer-to-peer message internal sender closed. Report a bug if seen externally
+'''
+
+["CDC:ErrPeerMessageReceiverMismatch"]
+error = '''
+peer-to-peer message receiver is a mismatch: expected %s, got %s
+'''
+
+["CDC:ErrPeerMessageSendTryAgain"]
+error = '''
+peer-to-peer message client has too many pending messages to send, try again later
+'''
+
+["CDC:ErrPeerMessageStaleConnection"]
+error = '''
+peer-to-peer message stale connection: old-epoch %d, new-epoch %d
+'''
+
+["CDC:ErrPeerMessageTaskQueueCongested"]
+error = '''
+peer-to-peer message server has too many pending tasks
+'''
+
+["CDC:ErrPeerMessageTopicCongested"]
+error = '''
+peer-to-peer message topic has congested, aborting all connections
+'''
+
+["CDC:ErrPeerMessageUnexpected"]
+error = '''
+peer-to-peer message from %s is unexpected: %s
+'''
+
 ["CDC:ErrPendingRegionCancel"]
 error = '''
 pending region cancelled due to stream disconnecting
