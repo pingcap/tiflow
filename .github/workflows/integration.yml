@@ -4,9 +4,9 @@ name: integration-tests
 # events but only for the master branch
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -20,16 +20,20 @@ jobs:
     steps:
       - name: Free disk space
         run: |
-         sudo rm -rf /usr/local/lib/android
-         sudo rm -rf /usr/share/dotnet
-         docker volume prune -f
-         docker image prune -f
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          docker volume prune -f
+          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
+<<<<<<< HEAD:.github/workflows/integration.yml
           go-version: '1.15.8'
+=======
+          go-version: "1.16.4"
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481)):.github/workflows/integration.yaml
 
       - name: Cache Vendor
         id: cache-vendor
@@ -44,8 +48,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:release-4.0-nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -57,6 +64,10 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=mysql
+
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f docker-compose-avro.yml logs -t
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -75,16 +86,20 @@ jobs:
     steps:
       - name: Free disk space
         run: |
-         sudo rm -rf /usr/local/lib/android
-         sudo rm -rf /usr/share/dotnet
-         docker volume prune -f
-         docker image prune -f
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          docker volume prune -f
+          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
+<<<<<<< HEAD:.github/workflows/integration.yml
           go-version: '1.15.8'
+=======
+          go-version: "1.16.4"
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481)):.github/workflows/integration.yaml
 
       - name: Cache Vendor
         id: cache-vendor
@@ -99,8 +114,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:release-4.0-nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -112,6 +130,10 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=simple-mysql-checking-old-value
+
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f docker-compose-avro.yml logs -t
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -130,16 +152,20 @@ jobs:
     steps:
       - name: Free disk space
         run: |
-         sudo rm -rf /usr/local/lib/android
-         sudo rm -rf /usr/share/dotnet
-         docker volume prune -f
-         docker image prune -f
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          docker volume prune -f
+          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
+<<<<<<< HEAD:.github/workflows/integration.yml
           go-version: '1.15.8'
+=======
+          go-version: "1.16.4"
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481)):.github/workflows/integration.yaml
 
       - name: Cache Vendor
         id: cache-vendor
@@ -154,8 +180,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:release-4.0-nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -168,6 +197,10 @@ jobs:
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=canalJson
 
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f docker-compose-canal.yml logs -t
+
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
@@ -179,23 +212,26 @@ jobs:
         run: |
           $GITHUB_WORKSPACE/scripts/canal/canal-local-test.sh down
 
-
   Canal-integration:
     runs-on: ubuntu-latest
 
     steps:
       - name: Free disk space
         run: |
-         sudo rm -rf /usr/local/lib/android
-         sudo rm -rf /usr/share/dotnet
-         docker volume prune -f
-         docker image prune -f
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          docker volume prune -f
+          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
+<<<<<<< HEAD:.github/workflows/integration.yml
           go-version: '1.15.8'
+=======
+          go-version: "1.16.4"
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481)):.github/workflows/integration.yaml
 
       - name: Cache Vendor
         id: cache-vendor
@@ -210,8 +246,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:release-4.0-nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -223,6 +262,10 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration -protocol=canal
+
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f docker-compose-canal.yml logs -t
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
@@ -241,16 +284,20 @@ jobs:
     steps:
       - name: Free disk space
         run: |
-         sudo rm -rf /usr/local/lib/android
-         sudo rm -rf /usr/share/dotnet
-         docker volume prune -f
-         docker image prune -f
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          docker volume prune -f
+          docker image prune -f
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - uses: actions/setup-go@v2
         with:
+<<<<<<< HEAD:.github/workflows/integration.yml
           go-version: '1.15.8'
+=======
+          go-version: "1.16.4"
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481)):.github/workflows/integration.yaml
 
       - name: Cache Vendor
         id: cache-vendor
@@ -265,8 +312,11 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
-      - name: TiKV version
-        run: docker run pingcap/tikv:release-4.0-nightly -V
+      - name: TiDB version
+        run: |
+          docker run pingcap/tidb:nightly -V
+          docker run pingcap/tikv:nightly -V
+          docker run pingcap/pd:nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -278,6 +328,10 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration
+
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f docker-compose-avro.yml logs -t
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}

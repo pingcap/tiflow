@@ -123,15 +123,20 @@ function run() {
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
         *) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1";;
     esac
-    changefeedid=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+    changefeedid="changefeed-error"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 
     ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*CDC:ErrStartTsBeforeGC.*"
+<<<<<<< HEAD
     changefeed_info=$(ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST_1}:${UP_PD_PORT_1} get /tidb/cdc/changefeed/info/${changefeedid}|tail -n 1)
     new_info=$(echo $changefeed_info|sed 's/"state":"failed"/"state":"normal"/g')
     ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST_1}:${UP_PD_PORT_1} put /tidb/cdc/changefeed/info/${changefeedid} "$new_info"
+=======
+    run_cdc_cli changefeed resume -c $changefeedid
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 
     check_table_exists "changefeed_error.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
@@ -145,7 +150,7 @@ function run() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     ensure $MAX_RETRIES check_changefeed_mark_failed http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failpoint injected retriable error"
 
-    cdc cli changefeed remove -c $changefeedid
+    run_cdc_cli changefeed remove -c $changefeedid
     ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST_1}:${UP_PD_PORT_1}
 
     export GO_FAILPOINTS=''
@@ -166,22 +171,29 @@ function run() {
     # owner DDL error case
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLError=return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-    changefeedid_1=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+    changefeedid_1="changefeed-error-1"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_1
 
     run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
     ensure $MAX_RETRIES check_changefeed_mark_stopped http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "[CDC:ErrExecDDLFailed]exec DDL failed"
 
-    cdc cli changefeed remove -c $changefeedid_1
+    run_cdc_cli changefeed remove -c $changefeedid_1
     cleanup_process $CDC_BINARY
 
     # updating GC safepoint failure case
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=return(9223372036854775807)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
+<<<<<<< HEAD
     changefeedid_2=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     ensure $MAX_RETRIES check_changefeed_mark_stopped_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "service safepoint lost"
+=======
+    changefeedid_2="changefeed-error-2"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_2
+    ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "[CDC:ErrStartTsBeforeGC]"
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 
-    cdc cli changefeed remove -c $changefeedid_2
+    run_cdc_cli changefeed remove -c $changefeedid_2
     export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
 }

@@ -242,7 +242,14 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
+<<<<<<< HEAD
 func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential) (*model.ChangeFeedInfo, error) {
+=======
+func verifyChangefeedParameters(
+	ctx context.Context, cmd *cobra.Command, isCreate bool,
+	credential *security.Credential, cdcClusterVer version.TiCDCClusterVersion,
+) (*model.ChangeFeedInfo, error) {
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 	if isCreate {
 		if sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -264,6 +271,23 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 			return nil, err
 		}
 	}
+<<<<<<< HEAD
+=======
+	cfg := config.GetDefaultReplicaConfig()
+
+	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
+		cfg.EnableOldValue = false
+		log.Warn("The TiCDC cluster is built from an older version, disabling old value by default.",
+			zap.String("version", cdcClusterVer.String()))
+	}
+
+	sortEngineFlag := cmd.Flag("sort-engine")
+	if !sortEngineFlag.Changed && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
+		sortEngine = model.SortInMemory
+		log.Warn("The TiCDC cluster is built from an older version, disabling Unified Sorter by default",
+			zap.String("version", cdcClusterVer.String()))
+	}
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 
 	cfg := config.GetDefaultReplicaConfig()
 	if len(configFile) > 0 {
@@ -453,7 +477,19 @@ func newCreateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
+<<<<<<< HEAD
 			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential())
+=======
+			_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
+			if err != nil {
+				return err
+			}
+			cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+			if err != nil {
+				return err
+			}
+			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), cdcClusterVer)
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 			if err != nil {
 				return err
 			}

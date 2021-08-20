@@ -18,8 +18,10 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -42,20 +44,36 @@ enable-old-value = false
 	c.Assert(err, check.IsNil)
 
 	sinkURI = "blackhole:///?protocol=maxwell"
+<<<<<<< HEAD
 	info, err := verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil)
+=======
+	info, err := verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil, version.TiCDCClusterVersionUnknown)
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 	c.Assert(info.SortDir, check.Equals, "")
 
 	sinkURI = ""
+<<<<<<< HEAD
 	_, err = verifyChangefeedParameters(ctx, cmd, true /* isCreate */, nil)
 	c.Assert(err, check.NotNil)
 
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
+=======
+	_, err = verifyChangefeedParameters(ctx, cmd, true /* isCreate */, nil, version.TiCDCClusterVersionUnknown)
+	c.Assert(err, check.NotNil)
+
+	sinkURI = "blackhole:///"
+	info, err = verifyChangefeedParameters(ctx, cmd, false /* isCreate */, nil, version.TiCDCClusterVersion{Version: semver.New("4.0.0")})
+	c.Assert(err, check.IsNil)
+	c.Assert(info.Config.EnableOldValue, check.IsFalse)
+	c.Assert(info.Engine, check.Equals, model.SortInMemory)
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 
 	sortDir = "/tidb/data"
 	pdCli = &mockPDClient{}
 	disableGCSafePointCheck = true
+<<<<<<< HEAD
 	_, err = verifyChangefeedParameters(ctx, cmd, false, nil)
 	c.Assert(err, check.ErrorMatches, "*Creating changefeed with `--sort-dir`, it's invalid*")
 	_, err = verifyChangefeedParameters(ctx, cmd, true, nil)
@@ -64,5 +82,14 @@ enable-old-value = false
 	sortDir = ""
 	sinkURI = "blackhole:///"
 	_, err = verifyChangefeedParameters(ctx, cmd, false, nil)
+=======
+	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, version.TiCDCClusterVersionUnknown)
+	c.Assert(err, check.ErrorMatches, "*Creating changefeed with `--sort-dir`, it's invalid*")
+	_, err = verifyChangefeedParameters(ctx, cmd, true, nil, version.TiCDCClusterVersionUnknown)
+	c.Assert(err, check.NotNil)
+
+	sortDir = ""
+	_, err = verifyChangefeedParameters(ctx, cmd, false, nil, version.TiCDCClusterVersionUnknown)
+>>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 	c.Assert(err, check.IsNil)
 }

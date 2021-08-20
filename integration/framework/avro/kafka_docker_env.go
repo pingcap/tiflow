@@ -27,9 +27,11 @@ import (
 )
 
 const (
-	healthCheckURI          = "http://127.0.0.1:18083"
+	kafkaHealthCheckURI     = "http://127.0.0.1:18083"
 	dockerComposeFilePath   = "/docker-compose-avro.yml"
 	controllerContainerName = "ticdc_controller_1"
+	// The upstream PD endpoint in docker-compose network.
+	upstreamPD = "http://upstream-pd:2379"
 )
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-avro.yml
@@ -40,7 +42,7 @@ type KafkaDockerEnv struct {
 // NewKafkaDockerEnv creates a new KafkaDockerEnv
 func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 	healthChecker := func() error {
-		resp, err := http.Get(healthCheckURI)
+		resp, err := http.Get(kafkaHealthCheckURI)
 		if err != nil {
 			return err
 		}
@@ -67,10 +69,11 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		}
 
 		if v, ok := healthy.(bool); !ok || !v {
-			return errors.New("kafka connect not healthy")
+			return errors.Errorf("kafka connect not healthy: %v", m)
 		}
 
-		return nil
+		// Also check cdc cluster.
+		return framework.CdcHealthCheck(controllerContainerName, upstreamPD)
 	}
 
 	var file string
@@ -149,7 +152,7 @@ func (d *KafkaDockerEnv) resetSchemaRegistry() error {
 }
 
 func (d *KafkaDockerEnv) resetKafkaConnector() error {
-	url := "http://127.0.0.1:8083/connectors/jdbc-sink-connector/"
+	url := "http://127.0.0.1:8083/connectors/jdbc-sink-connector-debug/"
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return err

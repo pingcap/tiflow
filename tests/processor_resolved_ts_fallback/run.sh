@@ -19,6 +19,9 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR
     cd $WORK_DIR
 
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/SinkFlushDMLPanic=return(true);github.com/pingcap/ticdc/cdc/sink/producer/kafka/SinkFlushDMLPanic=return(true)'
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
+
     TOPIC_NAME="ticdc-processor-resolved-ts-fallback-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://kafka01:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}";;
@@ -29,8 +32,6 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/SinkFlushDMLPanic=return(true);github.com/pingcap/ticdc/cdc/sink/producer/kafka/SinkFlushDMLPanic=return(true)'
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     run_sql "CREATE database processor_resolved_ts_fallback;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE table processor_resolved_ts_fallback.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # wait table t1 is processed by cdc server

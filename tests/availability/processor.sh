@@ -21,14 +21,14 @@ function test_stop_processor() {
     # start a capture server
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # ensure the server become the owner
-    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"is-owner\": true'"
     owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
-    owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
+    owner_id=$($CDC_BINARY cli capture list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}')
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
 
     # get the change feed id
-    changefeed=$($CDC_BINARY cli changefeed list 2>&1 | awk -F '"' '/id/{print $4}')
+    changefeed=$($CDC_BINARY cli changefeed list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}')
     echo "changefeed id:" $changefeed
 
     # stop the change feed job

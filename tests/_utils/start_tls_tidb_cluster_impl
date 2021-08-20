@@ -150,7 +150,7 @@ cd $CUR/../../testing_utils/cdc_state_checker
 if [ ! -f ./cdc_state_checker ]; then
   GO111MODULE=on go build
 fi
-./cdc_state_checker -pd ${TLS_PD_HOST}:${TLS_PD_PORT} \
+./cdc_state_checker -pd https://${TLS_PD_HOST}:${TLS_PD_PORT} \
     -ca $TLS_DIR/ca.pem \
     -cert $TLS_DIR/server.pem \
     -key $TLS_DIR/server-key.pem > $OUT_DIR/cdc_etcd_check.log &
