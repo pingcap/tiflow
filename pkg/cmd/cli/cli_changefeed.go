@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"strings"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
@@ -29,13 +27,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
-	"github.com/tikv/client-go/v2/oracle"
-)
-
-const (
-	// tsGapWarning specifies the OOM threshold.
-	// 1 day in milliseconds
-	tsGapWarning = 86400 * 1000
 )
 
 // newCmdChangefeed creates the `cli changefeed` command.
@@ -135,28 +126,6 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient
 			return errors.BadRequestf("admin changefeed failed")
 		}
 		return errors.BadRequestf("%s", string(body))
-	}
-
-	return nil
-}
-
-// confirmLargeDataGap checks if a large data gap is used.
-func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint64) error {
-	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
-
-	if tsGap > tsGapWarning {
-		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
-			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
-			time.Duration(tsGap)*time.Millisecond,
-		)
-		var yOrN string
-		_, err := fmt.Scan(&yOrN)
-		if err != nil {
-			return err
-		}
-		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-			return errors.NewNoStackError("abort changefeed create or resume")
-		}
 	}
 
 	return nil
