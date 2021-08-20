@@ -1,7 +1,8 @@
 name: integration-tests
 
-# Controls when the action will run. Triggers the workflow on push or pull request
-# events but only for the master branch
+# Controls when the action will run.
+# Triggers the workflow on push or pull request events
+# TODO: enable following tests.
 on:
   push:
     branches: [master]
