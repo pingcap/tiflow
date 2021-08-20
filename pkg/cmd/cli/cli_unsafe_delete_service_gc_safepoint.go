@@ -15,7 +15,7 @@ package cli
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/spf13/cobra"
@@ -50,7 +50,7 @@ func (o *unsafeDeleteServiceGcSafepointOptions) complete(f factory.Factory) erro
 func (o *unsafeDeleteServiceGcSafepointOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
+	_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, owner.CDCServiceSafePointID, 0, 0)
 	if err == nil {
 		cmd.Println("CDC service GC safepoint truncated in PD!")
 	}
