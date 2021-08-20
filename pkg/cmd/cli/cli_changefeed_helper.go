@@ -57,6 +57,7 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 	return nil
 }
 
+// confirmIgnoreIneligibleTables confirm if user need to ignore ineligible tables.
 func confirmIgnoreIneligibleTables(cmd *cobra.Command) error {
 	cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
 	var yOrN string
