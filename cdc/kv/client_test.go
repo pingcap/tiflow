@@ -1212,13 +1212,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-<<<<<<< HEAD
-	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
-=======
-	lockerResolver := txnutil.NewLockerResolver(kvStorage)
-	isPullInit := &mockPullerInit{}
-	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
->>>>>>> e270a4b49 (test: fix TestStreamSendWithError unstable test (#2568))
+	lockerResolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
 	defer grpcPool.Close()
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
