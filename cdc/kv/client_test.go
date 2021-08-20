@@ -247,7 +247,11 @@ loop:
 			if e == nil {
 				break loop
 			}
+<<<<<<< HEAD
 			server.Send(e) //nolint:errcheck
+=======
+			_ = server.Send(e)
+>>>>>>> e270a4b49 (test: fix TestStreamSendWithError unstable test (#2568))
 		case <-notify.notify:
 			break loop
 		}
@@ -1201,7 +1205,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockerResolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1210,7 +1214,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockerResolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
 	}()
@@ -1270,7 +1274,16 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
 	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
+<<<<<<< HEAD
 	cancel()
+=======
+	// a hack way to check the goroutine count of region worker is 1
+	buf := make([]byte, 1<<20)
+	stackLen := runtime.Stack(buf, true)
+	stack := string(buf[:stackLen])
+	c.Assert(strings.Count(stack, "resolveLock"), check.Equals, 1)
+	c.Assert(strings.Count(stack, "collectWorkpoolError"), check.Equals, 1)
+>>>>>>> e270a4b49 (test: fix TestStreamSendWithError unstable test (#2568))
 }
 
 func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
