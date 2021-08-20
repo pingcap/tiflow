@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	fileBufferSize       = 32 * 1024 // 32KB
+	fileBufferSize       = 4 * 1024 // 4KB
 	fileMagic            = 0x12345678
 	numFileEntriesOffset = 4
 	blockMagic           = 0xbeefbeef
@@ -160,11 +160,10 @@ func (f *fileBackEnd) cleanStats() {
 }
 
 type fileBackEndReader struct {
-	backEnd     *fileBackEnd
-	f           *os.File
-	reader      *bufio.Reader
-	rawBytesBuf []byte
-	isEOF       bool
+	backEnd *fileBackEnd
+	f       *os.File
+	reader  *bufio.Reader
+	isEOF   bool
 
 	// to prevent truncation-like corruption
 	totalEvents uint64
@@ -237,14 +236,11 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 		return nil, errors.Trace(wrapIOError(err))
 	}
 
-	if cap(r.rawBytesBuf) < int(size) {
-		r.rawBytesBuf = make([]byte, size)
-	} else {
-		r.rawBytesBuf = r.rawBytesBuf[:size]
-	}
+	// Note, do not hold the buffer in reader to avoid hogging memory.
+	rawBytesBuf := make([]byte, size)
 
 	// short reads are possible with bufio, hence the need for io.ReadFull
-	n, err := io.ReadFull(r.reader, r.rawBytesBuf)
+	n, err := io.ReadFull(r.reader, rawBytesBuf)
 	if err != nil {
 		return nil, errors.Trace(wrapIOError(err))
 	}
@@ -254,12 +250,12 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	}
 
 	event := new(model.PolymorphicEvent)
-	_, err = r.backEnd.serde.unmarshal(event, r.rawBytesBuf)
+	_, err = r.backEnd.serde.unmarshal(event, rawBytesBuf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	r.readEvents += 1
+	r.readEvents++
 
 	failpoint.Inject("sorterDebug", func() {
 		r.readBytes += int64(4 + 4 + int(size))
