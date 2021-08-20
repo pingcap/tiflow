@@ -262,11 +262,7 @@ loop:
 			if e == nil {
 				break loop
 			}
-<<<<<<< HEAD
-			server.Send(e) //nolint:errcheck
-=======
 			_ = server.Send(e)
->>>>>>> e270a4b49 (test: fix TestStreamSendWithError unstable test (#2568))
 		case <-notify.notify:
 			break loop
 		}
