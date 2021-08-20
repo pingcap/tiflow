@@ -22,6 +22,7 @@ services:
       - "upstream-pd"
       - "schema-registry"
       - "kafka-connect-01"
+      - "kafka-connect-healthcheck"
       - "kafka"
       - "capturer0"
       - "capturer1"
