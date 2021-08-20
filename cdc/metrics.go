@@ -43,7 +43,6 @@ func init() {
 		owner.InitMetrics(registry)
 	} else {
 		initProcessorMetrics(registry)
-		initOwnerMetrics(registry)
 	}
 	initServerMetrics(registry)
 }
