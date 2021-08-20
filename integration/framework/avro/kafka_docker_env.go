@@ -69,7 +69,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		}
 
 		if v, ok := healthy.(bool); !ok || !v {
-			return errors.New("kafka connect not healthy")
+			return errors.Errorf("kafka connect not healthy: %v", m)
 		}
 
 		// Also check cdc cluster.
