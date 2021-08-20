@@ -1270,16 +1270,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	expectedInitRegions := map[uint64]struct{}{regionID3: {}, regionID4: {}}
 	c.Assert(initRegions, check.DeepEquals, expectedInitRegions)
 
-<<<<<<< HEAD
 	cancel()
-=======
-	// a hack way to check the goroutine count of region worker is 1
-	buf := make([]byte, 1<<20)
-	stackLen := runtime.Stack(buf, true)
-	stack := string(buf[:stackLen])
-	c.Assert(strings.Count(stack, "resolveLock"), check.Equals, 1)
-	c.Assert(strings.Count(stack, "collectWorkpoolError"), check.Equals, 1)
->>>>>>> e270a4b49 (test: fix TestStreamSendWithError unstable test (#2568))
 }
 
 func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
