@@ -57,6 +57,21 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 	return nil
 }
 
+func confirmIgnoreIneligibleTables(cmd *cobra.Command) error {
+	cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+	var yOrN string
+	_, err := fmt.Scan(&yOrN)
+	if err != nil {
+		return err
+	}
+	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+		cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
+		return errors.NewNoStackError("abort changefeed create or resume")
+	}
+
+	return nil
+}
+
 // getTables returns ineligibleTables and eligibleTables by filter.
 func getTables(cliPdAddr string, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
