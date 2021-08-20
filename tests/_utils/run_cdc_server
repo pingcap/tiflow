@@ -95,6 +95,8 @@ pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
 # Uncomment to turn on grpc versbose log.
 # GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=debug \
 
+set -x
+
 if [[ "$restart" == "true" ]]; then
   while true; do
       GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
@@ -124,5 +126,17 @@ else
     $addr \
     $pd_addr &>> $workdir/stdout$log_suffix.log &
 fi
+
+# Make sure cdc is ready to serve
+while ! cdc cli $pd_addr $tls changefeed list; do
+    i=$((i+1))
+    if [ "$i" -gt 50 ]; then
+        echo 'Failed to start TiCDC'
+        return 1
+    fi
+    sleep 3
+done
+
+set +x
 
 cd $pwd

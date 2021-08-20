@@ -30,11 +30,10 @@ import (
 
 // newRouter create a router for OpenAPI
 func newRouter(capture2 *capture.Capture) *gin.Engine {
-	router := gin.New()
-
 	// discard gin log output
-	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = ioutil.Discard
+
+	router := gin.New()
 
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
@@ -47,6 +46,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 	// common API
 	router.GET("/api/v1/status", captureHandler.ServerStatus)
 	router.GET("/api/v1/health", captureHandler.Health)
+	router.POST("/api/v1/log", capture.SetLogLevel)
 
 	// changefeed API
 	changefeedGroup := router.Group("/api/v1/changefeeds")
@@ -54,6 +54,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 		changefeedGroup.GET("", captureHandler.ListChangefeed)
 		changefeedGroup.GET("/:changefeed_id", captureHandler.GetChangefeed)
 		changefeedGroup.POST("", captureHandler.CreateChangefeed)
+		changefeedGroup.PUT("/:changefeed_id", captureHandler.UpdateChangefeed)
 		changefeedGroup.POST("/:changefeed_id/pause", captureHandler.PauseChangefeed)
 		changefeedGroup.POST("/:changefeed_id/resume", captureHandler.ResumeChangefeed)
 		changefeedGroup.DELETE("/:changefeed_id", captureHandler.RemoveChangefeed)
