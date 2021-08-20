@@ -7,7 +7,6 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
-TLS_DIR=$( cd $CUR/../_certificates && pwd )
 
 function run() {
     sudo pip install -U requests==2.26.0
@@ -17,7 +16,6 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
 
     cd $WORK_DIR
-    pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # wait for cdc run
@@ -54,12 +52,12 @@ function run() {
     "resign_owner"
     )
 
-    for case in $sequential_cases; do
-        python $CUR/util/test_case.py $case
-    done
+    for case in $sequential_cases; do {
+        python $CUR/util/test_case.py "$case";
+    } done;
 
     cleanup_process $CDC_BINARY
-  }
+}
 
 trap stop_tidb_cluster EXIT
 run $*
