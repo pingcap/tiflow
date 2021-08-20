@@ -83,7 +83,7 @@ func (a *SingleTableTask) Run(taskContext *framework.TaskContext) error {
 func createConnector() error {
 	// TODO better way to generate JSON
 	connectorConfigFmt := `{
-		"name": "jdbc-sink-connector",
+		"name": "jdbc-sink-connector-debug",
 		"config": {
 		  "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
 		  "tasks.max": "1",
