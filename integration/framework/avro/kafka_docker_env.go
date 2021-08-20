@@ -152,7 +152,7 @@ func (d *KafkaDockerEnv) resetSchemaRegistry() error {
 }
 
 func (d *KafkaDockerEnv) resetKafkaConnector() error {
-	url := "http://127.0.0.1:8083/connectors/jdbc-sink-connector/"
+	url := "http://127.0.0.1:8083/connectors/jdbc-sink-connector-debug/"
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return err
