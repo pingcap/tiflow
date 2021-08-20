@@ -114,7 +114,8 @@ func createConnector() error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	// not in [200, 300)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		str, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return err
@@ -123,6 +124,10 @@ func createConnector() error {
 			"Kafka Connect Rest API returned",
 			zap.Int("status", resp.StatusCode),
 			zap.ByteString("body", str))
+		// ignore duplicated create connector
+		if resp.StatusCode == http.StatusConflict {
+			return nil
+		}
 		return errors.Errorf("Kafka Connect Rest API returned status code %d", resp.StatusCode)
 	}
 	return nil
