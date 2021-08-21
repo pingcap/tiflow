@@ -42,11 +42,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/store/tikv/oracle"
-=======
 	"github.com/pingcap/ticdc/pkg/version"
->>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.etcd.io/etcd/clientv3/concurrency"

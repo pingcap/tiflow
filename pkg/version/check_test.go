@@ -290,13 +290,6 @@ func (s *checkSuite) TestTiCDCClusterVersionFeaturesCompatible(c *check.C) {
 	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
 
-<<<<<<< HEAD
-=======
-	ver = TiCDCClusterVersion{semver.New("5.2.0-master")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
-
->>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
 	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), check.Equals, true)
 }
