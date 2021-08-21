@@ -46,9 +46,9 @@ jobs:
 
       - name: TiDB version
         run: |
-          docker run pingcap/tidb:nightly -V
-          docker run pingcap/tikv:nightly -V
-          docker run pingcap/pd:nightly -V
+          docker run pingcap/tidb:v5.1.0-nightly -V
+          docker run pingcap/tikv:v5.1.0-nightly -V
+          docker run pingcap/pd:v5.1.0-nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -108,9 +108,9 @@ jobs:
 
       - name: TiDB version
         run: |
-          docker run pingcap/tidb:nightly -V
-          docker run pingcap/tikv:nightly -V
-          docker run pingcap/pd:nightly -V
+          docker run pingcap/tidb:v5.1.0-nightly -V
+          docker run pingcap/tikv:v5.1.0-nightly -V
+          docker run pingcap/pd:v5.1.0-nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -170,9 +170,9 @@ jobs:
 
       - name: TiDB version
         run: |
-          docker run pingcap/tidb:nightly -V
-          docker run pingcap/tikv:nightly -V
-          docker run pingcap/pd:nightly -V
+          docker run pingcap/tidb:v5.1.0-nightly -V
+          docker run pingcap/tikv:v5.1.0-nightly -V
+          docker run pingcap/pd:v5.1.0-nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -232,9 +232,9 @@ jobs:
 
       - name: TiDB version
         run: |
-          docker run pingcap/tidb:nightly -V
-          docker run pingcap/tikv:nightly -V
-          docker run pingcap/pd:nightly -V
+          docker run pingcap/tidb:v5.1.0-nightly -V
+          docker run pingcap/tikv:v5.1.0-nightly -V
+          docker run pingcap/pd:v5.1.0-nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -294,9 +294,9 @@ jobs:
 
       - name: TiDB version
         run: |
-          docker run pingcap/tidb:nightly -V
-          docker run pingcap/tikv:nightly -V
-          docker run pingcap/pd:nightly -V
+          docker run pingcap/tidb:v5.1.0-nightly -V
+          docker run pingcap/tikv:v5.1.0-nightly -V
+          docker run pingcap/pd:v5.1.0-nightly -V
 
       - name: Build Integration Framework
         run: |
