@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/spf13/cobra"
 )
 
 type utilsSuite struct{}
@@ -91,4 +92,43 @@ func (s *utilsSuite) TestVerifyPdEndpoint(c *check.C) {
 
 	// valid https URL with TLS.
 	c.Assert(verifyPdEndpoint("https://aa", true), check.IsNil)
+}
+
+func (s *utilsSuite) TestNeedVerifyCmd(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	// Test command tree:
+	//      root
+	//   l        r
+	// ll       rr  rl
+	root := &cobra.Command{
+		Use: "root",
+	}
+	l := &cobra.Command{
+		Use: "l",
+	}
+	r := &cobra.Command{
+		Use: "r",
+	}
+	root.AddCommand(l, r)
+
+	ll := &cobra.Command{
+		Use: "ll",
+	}
+	l.AddCommand(ll)
+	rl := &cobra.Command{
+		Use: "rl",
+	}
+	rr := &cobra.Command{
+		Use: "rr",
+	}
+	r.AddCommand(rl, rr)
+
+	c.Assert(needVerifyVersion(rl, []string{"root"}), check.IsTrue)
+	c.Assert(needVerifyVersion(rl, []string{"r"}), check.IsTrue)
+	c.Assert(needVerifyVersion(rl, []string{"rl"}), check.IsTrue)
+	c.Assert(needVerifyVersion(rl, []string{"rr"}), check.IsFalse)
+	c.Assert(needVerifyVersion(rl, []string{"l"}), check.IsFalse)
+	c.Assert(needVerifyVersion(rl, []string{"ll"}), check.IsFalse)
+	c.Assert(needVerifyVersion(root, []string{"rl"}), check.IsFalse)
 }
