@@ -30,11 +30,10 @@ import (
 
 // newRouter create a router for OpenAPI
 func newRouter(capture2 *capture.Capture) *gin.Engine {
-	router := gin.New()
-
 	// discard gin log output
-	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = ioutil.Discard
+
+	router := gin.New()
 
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
