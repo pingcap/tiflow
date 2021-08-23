@@ -41,15 +41,12 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error
-		meta, err = kv.GetSnapshotMeta(kvStorage, startTs-1)
+		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	// We do a snapshot read of the metadata from TiKV at (startTs-1) instead of startTs,
-	// because the DDL puller might send a DDL at startTs, which would cause schema conflicts if
-	// the DDL's result is already contained in the snapshot.
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs-1, config.ForceReplicate)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -61,7 +58,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 		schemaSnapshot: schemaSnap,
 		filter:         f,
 		config:         config,
-		ddlHandledTs:   startTs - 1,
+		ddlHandledTs:   startTs,
 	}, nil
 }
 
