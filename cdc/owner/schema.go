@@ -61,7 +61,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 		schemaSnapshot: schemaSnap,
 		filter:         f,
 		config:         config,
-		ddlHandledTs:   startTs,
+		ddlHandledTs:   startTs - 1,
 	}, nil
 }
 
