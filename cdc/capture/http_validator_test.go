@@ -15,6 +15,7 @@ package capture
 
 import (
 	"context"
+	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -24,31 +25,31 @@ import (
 
 var _ = check.Suite(&httpValidatorSuite{})
 
+func Test(t *testing.T) { check.TestingT(t) }
+
 type httpValidatorSuite struct {
 }
 
 func (s *httpValidatorSuite) TestVerifyUpdateChangefeedConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
+	oldInfo := &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()}
 	// test startTs > targetTs
 	changefeedConfig := model.ChangefeedConfig{TargetTS: 20}
-	oldInfo := &model.ChangeFeedInfo{StartTs: 40}
+	oldInfo.StartTs = 40
 	newInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	c.Assert(err, check.NotNil)
 	c.Assert(newInfo, check.IsNil)
 
-	// test no change
+	// test no change error
 	changefeedConfig = model.ChangefeedConfig{SinkURI: "blcakhole://"}
-	oldInfo = &model.ChangeFeedInfo{SinkURI: "blcakhole://"}
+	oldInfo.SinkURI = "blcakhole://"
 	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	c.Assert(err, check.NotNil)
 	c.Assert(newInfo, check.IsNil)
 
-	// test no error
+	// test verify success
 	changefeedConfig = model.ChangefeedConfig{MounterWorkerNum: 32}
-	mounterConfig := &config.MounterConfig{WorkerNum: 16}
-	replicateConfig := &config.ReplicaConfig{Mounter: mounterConfig}
-	oldInfo = &model.ChangeFeedInfo{Config: replicateConfig}
 	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	c.Assert(err, check.IsNil)
 	c.Assert(newInfo, check.NotNil)
@@ -57,7 +58,7 @@ func (s *httpValidatorSuite) TestVerifyUpdateChangefeedConfig(c *check.C) {
 func (s *httpValidatorSuite) TestVerifySink(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
-	replicateConfig := &config.ReplicaConfig{}
+	replicateConfig := config.GetDefaultReplicaConfig()
 	opts := make(map[string]string)
 
 	// test sink uri error
