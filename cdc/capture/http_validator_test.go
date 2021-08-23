@@ -39,13 +39,15 @@ func (s *httpValidatorSuite) TestVerifyUpdateChangefeedConfig(c *check.C) {
 	oldInfo.StartTs = 40
 	newInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	c.Assert(err, check.NotNil)
+	c.Assert(err, check.ErrorMatches, ".*can not update target-ts.*less than start-ts.*")
 	c.Assert(newInfo, check.IsNil)
 
 	// test no change error
-	changefeedConfig = model.ChangefeedConfig{SinkURI: "blcakhole://"}
-	oldInfo.SinkURI = "blcakhole://"
+	changefeedConfig = model.ChangefeedConfig{SinkURI: "blackhole://"}
+	oldInfo.SinkURI = "blackhole://"
 	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	c.Assert(err, check.NotNil)
+	c.Assert(err, check.ErrorMatches, ".*changefeed config is the same with the old one.*")
 	c.Assert(newInfo, check.IsNil)
 
 	// test verify success
@@ -67,6 +69,7 @@ func (s *httpValidatorSuite) TestVerifySink(c *check.C) {
 	sinkURI := "mysql:127.0.0.1:0000"
 	err := verifySink(ctx, sinkURI, replicateConfig, opts)
 	c.Assert(err, check.NotNil)
+	c.Assert(err, check.ErrorMatches, ".*ErrMySQLConnectionError.*")
 
 	// test sink uri right
 	sinkURI = "blackhole://"
