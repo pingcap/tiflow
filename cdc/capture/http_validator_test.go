@@ -58,6 +58,8 @@ func (s *httpValidatorSuite) TestVerifyUpdateChangefeedConfig(c *check.C) {
 func (s *httpValidatorSuite) TestVerifySink(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	replicateConfig := config.GetDefaultReplicaConfig()
 	opts := make(map[string]string)
 
