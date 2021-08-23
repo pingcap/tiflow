@@ -33,6 +33,8 @@ type httpValidatorSuite struct {
 func (s *httpValidatorSuite) TestVerifyUpdateChangefeedConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	oldInfo := &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()}
 	// test startTs > targetTs
 	changefeedConfig := model.ChangefeedConfig{TargetTS: 20}
