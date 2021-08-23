@@ -41,7 +41,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error
-		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
+		meta, err = kv.GetSnapshotMeta(kvStorage, startTs-1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
