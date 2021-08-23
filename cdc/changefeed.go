@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"fmt"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"math"
 	"sync"
 	"time"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"

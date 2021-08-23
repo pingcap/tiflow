@@ -129,7 +129,7 @@ type mockSink struct {
 	checkpointError error
 }
 
-func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (m *mockSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) error {
 	m.checkpointMu.Lock()
 	defer m.checkpointMu.Unlock()
 	atomic.StoreUint64(&m.checkpointTs, ts)
