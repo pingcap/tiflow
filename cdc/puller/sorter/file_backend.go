@@ -319,10 +319,9 @@ func (r *fileBackEndReader) resetAndClose() error {
 }
 
 type fileBackEndWriter struct {
-	backEnd     *fileBackEnd
-	f           *os.File
-	writer      *bufio.Writer
-	rawBytesBuf []byte
+	backEnd *fileBackEnd
+	f       *os.File
+	writer  *bufio.Writer
 
 	bytesWritten  int64
 	eventsWritten int64
@@ -345,12 +344,14 @@ func (w *fileBackEndWriter) writeFileHeader() error {
 
 func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	var err error
-	w.rawBytesBuf, err = w.backEnd.serde.marshal(event, w.rawBytesBuf)
+	// Note, do not hold the buffer in writer to avoid hogging memory.
+	var rawBytesBuf []byte
+	rawBytesBuf, err = w.backEnd.serde.marshal(event, rawBytesBuf)
 	if err != nil {
 		return errors.Trace(wrapIOError(err))
 	}
 
-	size := len(w.rawBytesBuf)
+	size := len(rawBytesBuf)
 	if size == 0 {
 		log.Panic("fileSorterBackEnd: serialized to empty byte array. Bug?")
 	}
@@ -368,7 +369,7 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	// short writes are possible with bufio
 	offset := 0
 	for offset < size {
-		n, err := w.writer.Write(w.rawBytesBuf[offset:])
+		n, err := w.writer.Write(rawBytesBuf[offset:])
 		if err != nil {
 			return errors.Trace(wrapIOError(err))
 		}
