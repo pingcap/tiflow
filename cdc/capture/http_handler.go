@@ -305,6 +305,10 @@ func (h *HTTPHandler) ResumeChangefeed(c *gin.Context) {
 	// check if the changefeed exists && check if the etcdClient work well
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(c, changefeedID)
 	if err != nil {
+		if cerror.ErrChangeFeedNotExists.Equal(err) {
+			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			return
+		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
@@ -696,6 +700,37 @@ func (h *HTTPHandler) Health(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// SetLogLevel changes TiCDC log level dynamically.
+// @Summary Change TiCDC log level
+// @Description change TiCDC log level dynamically
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param log_level body string true "log level"
+// @Success 200
+// @Failure 400 {object} model.HTTPError
+// @Router	/api/v1/log [post]
+func SetLogLevel(c *gin.Context) {
+	// get json data from request body
+	data := struct {
+		Level string `json:"log_level"`
+	}{}
+	err := c.BindJSON(&data)
+	if err != nil {
+		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+		return
+	}
+
+	err = logutil.SetLogLevel(data.Level)
+	if err != nil {
+		c.IndentedJSON(http.StatusBadRequest,
+			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err)))
+		return
+	}
+	log.Warn("log level changed", zap.String("level", data.Level))
+	c.Status(http.StatusOK)
+}
+
 // forwardToOwner forward an request to owner
 func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	// every request can only forward to owner one time
@@ -727,6 +762,7 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 		return
 	}
 
+	// init a request
 	req, _ := http.NewRequest(c.Request.Method, c.Request.RequestURI, c.Request.Body)
 	req.URL.Host = owner.AdvertiseAddr
 	if tslConfig != nil {
@@ -765,35 +801,4 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
-}
-
-// SetLogLevel changes TiCDC log level dynamically.
-// @Summary Change TiCDC log level
-// @Description change TiCDC log level dynamically
-// @Tags common
-// @Accept json
-// @Produce json
-// @Param log_level body string true "log level"
-// @Success 200
-// @Failure 400 {object} model.HTTPError
-// @Router	/api/v1/log [post]
-func SetLogLevel(c *gin.Context) {
-	// get json data from request body
-	data := struct {
-		Level string `json:"log_level"`
-	}{}
-	err := c.BindJSON(&data)
-	if err != nil {
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-		return
-	}
-
-	err = logutil.SetLogLevel(data.Level)
-	if err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err)))
-		return
-	}
-	log.Warn("log level changed", zap.String("level", data.Level))
-	c.Status(http.StatusOK)
 }

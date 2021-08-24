@@ -78,6 +78,7 @@ var (
 	captureID               string
 	interval                uint
 	disableGCSafePointCheck bool
+	disableVersionCheck     bool
 
 	syncPointEnabled  bool
 	syncPointInterval time.Duration
@@ -126,6 +127,7 @@ type processorMeta struct {
 }
 
 func newCliCommand() *cobra.Command {
+	verifyCDCClusterVersionList := make([]string, 0)
 	command := &cobra.Command{
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
@@ -195,18 +197,25 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", cliPdAddr)
 			}
-			ctx := defaultContext
-			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			for _, pdEndpoint := range pdEndpoints {
-				err = version.CheckClusterVersion(ctx, pdCli, pdEndpoint, credential, errorTiKVIncompatible)
-				if err == nil {
-					break
+			checkVersion := needVerifyVersion(cmd, verifyCDCClusterVersionList)
+			if checkVersion && !disableVersionCheck {
+				ctx := defaultContext
+				_, err = verifyAndGetTiCDCClusterVersion(ctx, cdcEtcdCli)
+				if err != nil {
+					return err
+				}
+				errorTiKVIncompatible := true // Error if TiKV is incompatible.
+				for _, pdEndpoint := range pdEndpoints {
+					err = version.CheckClusterVersion(
+						ctx, pdCli, pdEndpoint, credential, errorTiKVIncompatible)
+					if err == nil {
+						break
+					}
+				}
+				if err != nil {
+					return err
 				}
 			}
-			if err != nil {
-				return err
-			}
-
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -215,14 +224,24 @@ func newCliCommand() *cobra.Command {
 			}
 		},
 	}
-	command.AddCommand(
-		newCaptureCommand(),
-		newChangefeedCommand(),
-		newProcessorCommand(),
-		newUnsafeCommand(),
-		newTsoCommand(),
-	)
 
+	capture := newCaptureCommand()
+	command.AddCommand(capture)
+	verifyCDCClusterVersionList = append(verifyCDCClusterVersionList, capture.Name())
+
+	changefeed := newChangefeedCommand()
+	command.AddCommand(changefeed)
+	verifyCDCClusterVersionList = append(verifyCDCClusterVersionList, changefeed.Name())
+
+	processor := newProcessorCommand()
+	command.AddCommand(processor)
+	verifyCDCClusterVersionList = append(verifyCDCClusterVersionList, processor.Name())
+
+	// Disable version check to ease internal testing.
+	command.PersistentFlags().BoolVar(&disableVersionCheck, "disable-version-check", false, "Disable version check")
+	_ = command.PersistentFlags().MarkHidden("disable-version-check")
+
+	command.AddCommand(newUnsafeCommand(), newTsoCommand())
 	return command
 }
 
