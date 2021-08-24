@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/multierr"
@@ -35,9 +36,9 @@ import (
 // Writer ...
 type Writer interface {
 	// WriteLog ...
-	WriteLog(ctx context.Context, tableID int64, rows []*redo.RowChangedEvent) (resolvedTs uint64, err error)
+	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
 	// SendDDL ...
-	SendDDL(ctx context.Context, ddl *redo.DDLEvent) error
+	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
 	// 	FlushLog ...
 	FlushLog(ctx context.Context, tableID int64, ts uint64) error
 	// EmitCheckpointTs ...
@@ -52,7 +53,7 @@ var defaultGCIntervalInMs = 5000
 
 var redoLogPool = sync.Pool{
 	New: func() interface{} {
-		return &redo.Log{}
+		return &model.RedoLog{}
 	},
 }
 
@@ -155,7 +156,7 @@ func (l *LogWriter) gc() error {
 }
 
 // WriteLog implement WriteLog api
-func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.RowChangedEvent) (uint64, error) {
+func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (uint64, error) {
 	select {
 	case <-ctx.Done():
 		return 0, errors.Trace(ctx.Err())
@@ -171,14 +172,14 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 
 	maxCommitTs := l.setMaxCommitTs(tableID, 0)
 	for _, r := range rows {
-		if r == nil {
+		if r == nil || r.Row == nil {
 			continue
 		}
 
-		rl := redoLogPool.Get().(*redo.Log)
+		rl := redoLogPool.Get().(*model.RedoLog)
 		rl.Row = r
 		rl.DDL = nil
-		rl.Type = redo.LogTypeRow
+		rl.Type = model.RedoLogTypeRow
 		// TODO: crc check
 		data, err := rl.MarshalMsg(nil)
 		if err != nil {
@@ -186,19 +187,19 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*redo.Ro
 			return maxCommitTs, cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
 
-		l.rowWriter.AdvanceTs(r.CommitTs)
+		l.rowWriter.AdvanceTs(r.Row.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
 			return maxCommitTs, err
 		}
-		maxCommitTs = l.setMaxCommitTs(tableID, r.CommitTs)
+		maxCommitTs = l.setMaxCommitTs(tableID, r.Row.CommitTs)
 		redoLogPool.Put(rl)
 	}
 	return maxCommitTs, nil
 }
 
 // SendDDL implement SendDDL api
-func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
+func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -208,22 +209,22 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *redo.DDLEvent) error {
 	if l.isStopped() {
 		return cerror.ErrRedoWriterStopped
 	}
-	if ddl == nil {
+	if ddl == nil || ddl.DDL == nil {
 		return nil
 	}
 
-	rl := redoLogPool.Get().(*redo.Log)
+	rl := redoLogPool.Get().(*model.RedoLog)
 	defer redoLogPool.Put(rl)
 
 	rl.DDL = ddl
 	rl.Row = nil
-	rl.Type = redo.LogTypeDDL
+	rl.Type = model.RedoLogTypeDDL
 	data, err := rl.MarshalMsg(nil)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 
-	l.ddlWriter.AdvanceTs(ddl.CommitTs)
+	l.ddlWriter.AdvanceTs(ddl.DDL.CommitTs)
 	_, err = l.ddlWriter.Write(data)
 	return err
 }

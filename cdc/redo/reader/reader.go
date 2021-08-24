@@ -25,6 +25,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/multierr"
@@ -35,10 +36,10 @@ import (
 type Reader interface {
 	// ReadNextLog ...
 	// The returned redo logs sorted by commit-ts
-	ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*redo.RowChangedEvent, error)
+	ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error)
 
 	// ReadNextDDL ...
-	ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*redo.DDLEvent, error)
+	ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.DDLEvent, error)
 
 	// ReadMeta reads meta from redo logs and returns the latest resovledTs and checkpointTs
 	ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error)
@@ -113,7 +114,7 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 }
 
 // ReadNextLog ...
-func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*redo.RowChangedEvent, error) {
+func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
@@ -126,7 +127,7 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	// init heap
 	if l.rowHeap.Len() == 0 {
 		for i := 0; i < len(l.rowReader); i++ {
-			rl := &redo.Log{}
+			rl := &model.RedoLog{}
 			err := l.rowReader[i].Read(rl)
 			if err != nil {
 				if err != io.EOF {
@@ -144,17 +145,17 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 		heap.Init(&l.rowHeap)
 	}
 
-	ret := []*redo.RowChangedEvent{}
+	ret := []*model.RedoRowChangedEvent{}
 	var i uint64
 	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.rowHeap).(*logWithIdx)
-		if item.data.Row.CommitTs <= l.cfg.StartTs {
+		if item.data.Row.Row.CommitTs <= l.cfg.StartTs {
 			continue
 		}
 		ret = append(ret, item.data.Row)
 		i++
 
-		rl := &redo.Log{}
+		rl := &model.RedoLog{}
 		err := l.rowReader[item.idx].Read(rl)
 		if err != nil {
 			if err != io.EOF {
@@ -174,7 +175,7 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 }
 
 // ReadNextDDL ...
-func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*redo.DDLEvent, error) {
+func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
@@ -187,7 +188,7 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	// init heap
 	if l.ddlHeap.Len() == 0 {
 		for i := 0; i < len(l.ddlReader); i++ {
-			rl := &redo.Log{}
+			rl := &model.RedoLog{}
 			err := l.ddlReader[i].Read(rl)
 			if err != nil {
 				if err != io.EOF {
@@ -205,18 +206,18 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 		heap.Init(&l.ddlHeap)
 	}
 
-	ret := []*redo.DDLEvent{}
+	ret := []*model.RedoDDLEvent{}
 	var i uint64
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
-		if item.data.DDL.CommitTs <= l.cfg.StartTs {
+		if item.data.DDL.DDL.CommitTs <= l.cfg.StartTs {
 			continue
 		}
 
 		ret = append(ret, item.data.DDL)
 		i++
 
-		rl := &redo.Log{}
+		rl := &model.RedoLog{}
 		err := l.ddlReader[item.idx].Read(rl)
 		if err != nil {
 			if err != io.EOF {
@@ -236,7 +237,6 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 }
 
 // ReadMeta ...
-// TODD: download from s3
 func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
 	select {
 	case <-ctx.Done():
@@ -290,7 +290,7 @@ func (l *LogReader) Close() error {
 
 type logWithIdx struct {
 	idx  int
-	data *redo.Log
+	data *model.RedoLog
 }
 
 type logHeap []*logWithIdx
@@ -300,11 +300,11 @@ func (h logHeap) Len() int {
 }
 
 func (h logHeap) Less(i, j int) bool {
-	if h[i].data.Type == redo.LogTypeDDL {
-		return h[i].data.DDL.CommitTs < h[j].data.DDL.CommitTs
+	if h[i].data.Type == model.RedoLogTypeDDL {
+		return h[i].data.DDL.DDL.CommitTs < h[j].data.DDL.DDL.CommitTs
 	}
 
-	return h[i].data.Row.CommitTs < h[j].data.Row.CommitTs
+	return h[i].data.Row.Row.CommitTs < h[j].data.Row.Row.CommitTs
 }
 
 func (h logHeap) Swap(i, j int) {

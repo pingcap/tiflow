@@ -31,6 +31,7 @@ import (
 // LeakOptions is used to filter the goroutines.
 var LeakOptions = []goleak.Option{
 	goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
+	goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
 }
 
 func TestMain(m *testing.M) {

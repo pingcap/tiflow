@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
@@ -43,7 +44,7 @@ const (
 type fileReader interface {
 	io.Closer
 	// Read ...
-	Read(log *redo.Log) error
+	Read(log *model.RedoLog) error
 }
 
 type readerConfig struct {
@@ -212,7 +213,7 @@ func parseLogFileName(name string) (uint64, string, error) {
 	return commitTs, fileName, nil
 }
 
-func (r *reader) Read(log *redo.Log) error {
+func (r *reader) Read(log *model.RedoLog) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
