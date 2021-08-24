@@ -149,6 +149,14 @@ func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
+	if tableInfo.IsView() {
+		// Views should be ignored because in TiDB views are not materialized,
+		// so it is pointless in trying to listen to the table ID of a view.
+		// DDLs creating views will be passed to the downstream, which, if mysql-compatible,
+		// will be able to maintain the view by itself.
+		log.Debug("view table ignored", zap.Int64("tid", tableInfo.ID), zap.Stringer("table", tableInfo.TableName))
+		return false
+	}
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
 		return true
 	}
