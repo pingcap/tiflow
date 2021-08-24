@@ -24,6 +24,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
+// InitS3storage ...
 func InitS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage, error) {
 	if len(s3URI.Host) == 0 {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %s", s3URI))

@@ -16,18 +16,26 @@
 package redo
 
 const (
+	// MinSectorSize ...
 	MinSectorSize = 512
 
-	TmpEXT  = ".tmp"
-	LogEXT  = ".log"
+	// TmpEXT ...
+	TmpEXT = ".tmp"
+	// LogEXT ...
+	LogEXT = ".log"
+	// MetaEXT ...
 	MetaEXT = ".meta"
 
+	// DefaultFileMode ...
 	DefaultFileMode = 0o644
 )
 
 const (
-	DefaultMetaFileName   = "meta"
+	// DefaultMetaFileName ...
+	DefaultMetaFileName = "meta"
+	// DefaultRowLogFileName ...
 	DefaultRowLogFileName = "row"
+	// DefaultDDLLogFileName ...
 	DefaultDDLLogFileName = "ddl"
 )
 

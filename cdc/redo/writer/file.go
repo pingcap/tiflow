@@ -474,5 +474,6 @@ func (w *writer) writeToS3(ctx context.Context) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	return cerror.WrapError(cerror.ErrRedoFileOp, w.storage.WriteFile(ctx, name, fileData))
+	//	Key: aws.String(rs.options.Prefix + name), prefix should be changefeed name
+	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, w.getLogFileName(), fileData))
 }

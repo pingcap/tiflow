@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/redo"
@@ -45,6 +44,7 @@ type Reader interface {
 	ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error)
 }
 
+// LogReaderConfig ...
 type LogReaderConfig struct {
 	Dir       string
 	StartTs   uint64
@@ -53,6 +53,7 @@ type LogReaderConfig struct {
 	S3URI     *url.URL
 }
 
+// LogReader ...
 type LogReader struct {
 	cfg       *LogReaderConfig
 	rowReader []fileReader
@@ -60,29 +61,31 @@ type LogReader struct {
 	rowHeap   logHeap
 	ddlHeap   logHeap
 	meta      *redo.LogMeta
-	storage   storage.ExternalStorage
 	rowLock   sync.Mutex
 	ddlLock   sync.Mutex
 }
 
+// NewLogReader ...
 func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 	if cfg == nil {
 		log.Panic("LogWriterConfig can not be nil")
 		return nil
 	}
 	rowCfg := &readerConfig{
-		dir:       cfg.Dir,
-		startTs:   cfg.StartTs,
-		endTs:     cfg.EndTs,
-		s3Storage: cfg.S3Storage,
-		s3URI:     cfg.S3URI,
+		dir:           cfg.Dir,
+		fixedFileType: redo.DefaultRowLogFileName,
+		startTs:       cfg.StartTs,
+		endTs:         cfg.EndTs,
+		s3Storage:     cfg.S3Storage,
+		s3URI:         cfg.S3URI,
 	}
 	ddlCfg := &readerConfig{
-		dir:       cfg.Dir,
-		startTs:   cfg.StartTs,
-		endTs:     cfg.EndTs,
-		s3Storage: cfg.S3Storage,
-		s3URI:     cfg.S3URI,
+		dir:           cfg.Dir,
+		fixedFileType: redo.DefaultDDLLogFileName,
+		startTs:       cfg.StartTs,
+		endTs:         cfg.EndTs,
+		s3Storage:     cfg.S3Storage,
+		s3URI:         cfg.S3URI,
 	}
 	logReader := &LogReader{
 		rowReader: newReader(ctx, rowCfg),
@@ -97,11 +100,19 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 				zap.Error(err),
 				zap.Any("S3URI", cfg.S3URI))
 		}
-		logReader.storage = s3storage
+		exts := []string{redo.MetaEXT}
+		err = downLoadToLocal(ctx, cfg.Dir, s3storage, exts)
+		if err != nil {
+			log.Panic("downLoadToLocal fail",
+				zap.Error(err),
+				zap.Strings("file type", exts),
+				zap.Any("s3URI", cfg.S3URI))
+		}
 	}
 	return logReader
 }
 
+// ReadNextLog ...
 func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*redo.RowChangedEvent, error) {
 	select {
 	case <-ctx.Done():
@@ -162,6 +173,7 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	return ret, nil
 }
 
+// ReadNextDDL ...
 func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*redo.DDLEvent, error) {
 	select {
 	case <-ctx.Done():
@@ -259,6 +271,7 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 	return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
 }
 
+// Close ...
 func (l *LogReader) Close() error {
 	if l == nil || l.rowReader == nil || l.ddlReader == nil {
 		return nil

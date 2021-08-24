@@ -31,6 +31,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -47,7 +48,7 @@ type fileReader interface {
 
 type readerConfig struct {
 	dir           string
-	fixedFileName string
+	fixedFileType string
 	startTs       uint64
 	endTs         uint64
 	s3Storage     bool
@@ -75,11 +76,17 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 				zap.Error(err),
 				zap.Any("s3URI", cfg.s3URI))
 		}
-		// TODO: download to local
-		_ = s3storage.WalkDir(ctx, &storage.WalkOption{}, func(path string, size int64) error { return nil })
+		exts := []string{redo.LogEXT, redo.LogEXT}
+		err = downLoadToLocal(ctx, cfg.dir, s3storage, exts)
+		if err != nil {
+			log.Panic("downLoadToLocal fail",
+				zap.Error(err),
+				zap.Strings("file type", exts),
+				zap.Any("s3URI", cfg.s3URI))
+		}
 	}
 
-	rr, err := openSelectedFiles(cfg.dir, cfg.fixedFileName, cfg.startTs, cfg.endTs)
+	rr, err := openSelectedFiles(cfg.dir, cfg.fixedFileType, cfg.startTs, cfg.endTs)
 	if err != nil {
 		log.Panic("openSelectedFiles fail",
 			zap.Error(err),
@@ -97,6 +104,49 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 	}
 
 	return readers
+}
+
+func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, exts []string) ([]string, error) {
+	files := []string{}
+	err := s3storage.WalkDir(ctx, &storage.WalkOption{}, func(path string, size int64) error {
+		fileName := filepath.Base(path)
+		for _, ext := range exts {
+			if filepath.Ext(fileName) == ext {
+				files = append(files, path)
+				break
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrS3StorageAPI, err)
+	}
+
+	return files, nil
+}
+
+func downLoadToLocal(ctx context.Context, dir string, s3storage storage.ExternalStorage, exts []string) error {
+	files, err := selectDownLoadFile(ctx, s3storage, exts)
+	if err != nil {
+		return err
+	}
+
+	eg, eCtx := errgroup.WithContext(ctx)
+	for _, file := range files {
+		f := file
+		eg.Go(func() error {
+			data, err := s3storage.ReadFile(eCtx, f)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+			}
+
+			path := filepath.Join(dir, f)
+			err = ioutil.WriteFile(path, data, redo.DefaultFileMode)
+			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		})
+	}
+
+	return eg.Wait()
 }
 
 func openSelectedFiles(dir, fixedName string, startTs, endTs uint64) ([]io.ReadCloser, error) {

@@ -394,7 +394,7 @@ func (l *LogWriter) writeMetaToS3(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	return cerror.WrapError(cerror.ErrRedoFileOp, l.storage.WriteFile(ctx, name, fileData))
+	return cerror.WrapError(cerror.ErrS3StorageAPI, l.storage.WriteFile(ctx, name, fileData))
 }
 
 func (l *LogWriter) filePath() string {
