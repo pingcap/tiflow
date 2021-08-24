@@ -164,6 +164,9 @@ func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, err
 // dispatchToTargetCaptures sets the the TargetCapture of scheduler jobs
 // If the TargetCapture of a job is not set, it chooses a capture with the minimum workload and sets the TargetCapture to the capture.
 func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
+	if len(s.captures) == 0 {
+		log.Warn("No capture is found, delay dispatching", zap.Reflect("pending-jobs", pendingJobs))
+	}
 	workloads := make(map[model.CaptureID]uint64)
 
 	for captureID := range s.captures {
@@ -209,7 +212,7 @@ func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 		}
 
 		if minCapture == "" {
-			log.Panic("Unreachable, no capture is found")
+			log.Panic("Unreachable, no capture is found", zap.Reflect("workload", workloads))
 		}
 		return minCapture
 	}
