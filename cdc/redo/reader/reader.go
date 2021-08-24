@@ -39,7 +39,7 @@ type Reader interface {
 	ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error)
 
 	// ReadNextDDL ...
-	ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.DDLEvent, error)
+	ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error)
 
 	// ReadMeta reads meta from redo logs and returns the latest resovledTs and checkpointTs
 	ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error)
