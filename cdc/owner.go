@@ -296,11 +296,11 @@ func (o *Owner) newChangeFeed(
 	processorsInfos model.ProcessorsInfos,
 	taskPositions map[string]*model.TaskPosition,
 	info *model.ChangeFeedInfo,
-	checkpointTs uint64) (cf *changeFeed, resultErr error) {
+	checkpointTs uint64) (cf *changeFeed, err error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, id, checkpointTs)
+		err = util.CheckSafetyOfStartTs(ctx, o.pdClient, id, checkpointTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -330,7 +330,7 @@ func (o *Owner) newChangeFeed(
 
 	ddlHandler := newDDLHandler(o.pdClient, o.grpcPool, kvStore, checkpointTs)
 	defer func() {
-		if resultErr != nil {
+		if err != nil {
 			ddlHandler.Close()
 		}
 	}()
@@ -352,7 +352,7 @@ func (o *Owner) newChangeFeed(
 	ctx, cancel := context.WithCancel(ctx)
 	cdcCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
 	defer func() {
-		if resultErr != nil {
+		if err != nil {
 			cancel()
 		}
 	}()
@@ -442,7 +442,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && asyncSink != nil {
+		if err != nil && asyncSink != nil {
 			asyncSink.Close(cdcCtx)
 		}
 	}()
