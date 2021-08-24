@@ -15,8 +15,8 @@ package cli
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/spf13/cobra"
@@ -72,7 +72,7 @@ func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 
-	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
+	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, owner.CDCServiceSafePointID, 0, 0)
 	if err != nil {
 		return errors.Trace(err)
 	}

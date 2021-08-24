@@ -1,5 +1,5 @@
 {
-  "name": "jdbc-sink-connector",
+  "name": "jdbc-sink-connector-debug",
   "config": {
     "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
     "tasks.max": "1",

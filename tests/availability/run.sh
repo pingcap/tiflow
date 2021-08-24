@@ -27,7 +27,9 @@ function prepare() {
     run_sql "CREATE table test.availability2(id int primary key, val int);"
     run_sql "CREATE table test.availability3(id int primary key, val int);"
 
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
+    run_cdc_cli changefeed create --start-ts=$start_ts \
+        --sink-uri="mysql://normal:123456@127.0.0.1:3306/" \
+        --disable-version-check
 }
 
 trap stop_tidb_cluster EXIT

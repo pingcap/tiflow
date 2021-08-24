@@ -84,7 +84,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	tester.MustApplyPatches()
 	// the gc safe point should be updated to 1(checkpoint Ts of changefeed-test1)
 	mockPDClient.updateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		c.Assert(serviceID, check.Equals, cdcServiceSafePointID)
+		c.Assert(serviceID, check.Equals, CDCServiceSafePointID)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
 		c.Assert(safePoint, check.Equals, uint64(1))
 		return 0, nil
@@ -115,7 +115,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 
 	// the gc safe point should be updated to 1(checkpoint Ts of changefeed-test1)
 	mockPDClient.updateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		c.Assert(serviceID, check.Equals, cdcServiceSafePointID)
+		c.Assert(serviceID, check.Equals, CDCServiceSafePointID)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
 		c.Assert(safePoint, check.Equals, uint64(20))
 		return 0, nil
