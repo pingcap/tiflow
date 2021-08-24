@@ -39,7 +39,8 @@ type Manager struct {
 	tableSinks   map[model.TableID]*tableSink
 	tableSinksMu sync.Mutex
 
-	flushMu sync.Mutex
+	flushMu  sync.Mutex
+	flushing int64
 
 	drawbackChan chan drawbackMsg
 }
@@ -94,8 +95,14 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
+	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
+		return atomic.LoadUint64(&m.checkpointTs), nil
+	}
 	m.flushMu.Lock()
-	defer m.flushMu.Unlock()
+	defer func() {
+		m.flushMu.Unlock()
+		atomic.StoreInt64(&m.flushing, 0)
+	}()
 	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
