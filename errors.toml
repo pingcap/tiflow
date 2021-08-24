@@ -671,6 +671,11 @@ error = '''
 write to storage
 '''
 
+["CDC:ErrS3StorageAPI"]
+error = '''
+s3 storage api
+'''
+
 ["CDC:ErrS3StorageInitialize"]
 error = '''
 new s3 storage for redo log
