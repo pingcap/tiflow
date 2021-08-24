@@ -172,6 +172,46 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+
+	txExec := func(tx *sql.Tx, stmt string) {
+		_, err := tx.Exec(stmt)
+		if err != nil {
+			log.S().Fatal(err)
+		}
+	}
+
+	// test empty cdc msg
+	tr.run(func(src *sql.DB) {
+		mustExec(src, "create table empty_value(id int primary key, data int);")
+
+		// This transaction will generate no row changed event from TiCDC
+		tx, err := src.Begin()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+		txExec(tx, "insert into empty_value(id, data) values (1,1);")
+		txExec(tx, "delete from empty_value where id=1;")
+		err = tx.Commit()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+
+		// This transaction should generate only one row changed event from TiCDC
+		tx, err = src.Begin()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+		txExec(tx, "replace into empty_value(id, data) values (2,2);")
+		txExec(tx, "delete from empty_value where id=2;")
+		txExec(tx, "replace into empty_value(id, data) values (2,2);")
+		txExec(tx, "delete from empty_value where id=2;")
+		txExec(tx, "replace into empty_value(id, data) values (2,2);")
+		err = tx.Commit()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+	})
+	tr.execSQLs([]string{"DROP TABLE empty_value;"})
 }
 
 func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
