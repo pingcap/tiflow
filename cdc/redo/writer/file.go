@@ -22,14 +22,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/backup"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
@@ -38,21 +37,16 @@ import (
 )
 
 const (
-	minSectorSize = 512
 	// pageBytes is the alignment for flushing records to the backing Writer.
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
-	pageBytes = 8 * minSectorSize
+	pageBytes = 8 * redo.MinSectorSize
 )
 
 const (
-	defaultDirMode  = 0o755
-	defaultFileMode = 0o644
+	defaultDirMode = 0o755
 
 	defaultFlushIntervalInMs = 1000
-
-	tmpEXT = ".tmp"
-	logEXT = ".log"
 )
 
 const (
@@ -145,7 +139,7 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	}
 
 	if cfg.s3Storage {
-		s3storage, err := initS3storage(ctx, cfg.s3URI)
+		s3storage, err := redo.InitS3storage(ctx, cfg.s3URI)
 		if err != nil {
 			log.Panic("initS3storage fail",
 				zap.Error(err),
@@ -158,36 +152,6 @@ func newWriter(ctx context.Context, cfg *writerConfig) *writer {
 	go w.runFlushToDisk(ctx, cfg.flushIntervalInMs)
 
 	return w
-}
-
-func initS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage, error) {
-	if len(s3URI.Host) == 0 {
-		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %s", s3URI))
-	}
-
-	prefix := strings.Trim(s3URI.Path, "/")
-	s3 := &backup.S3{Bucket: s3URI.Host, Prefix: prefix}
-	options := &storage.BackendOptions{}
-	storage.ExtractQueryParameters(s3URI, &options.S3)
-	if err := options.S3.Apply(s3); err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)
-	}
-
-	// we should set this to true, since br set it by default in parseBackend
-	s3.ForcePathStyle = true
-	backend := &backup.StorageBackend{
-		Backend: &backup.StorageBackend_S3{S3: s3},
-	}
-	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
-		SendCredentials:  false,
-		HTTPClient:       nil,
-		CheckPermissions: []storage.Permission{storage.PutObject},
-	})
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)
-	}
-
-	return s3storage, nil
 }
 
 func (w *writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
@@ -318,7 +282,7 @@ func (w *writer) close() error {
 }
 
 func (w *writer) getLogFileName() string {
-	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS.Load(), logEXT)
+	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS.Load(), redo.LogEXT)
 }
 
 func (w *writer) getLogFileNameFormat(ext string) string {
@@ -330,7 +294,7 @@ func (w *writer) filePath() string {
 }
 
 func openTruncFile(name string) (*os.File, error) {
-	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, defaultFileMode)
+	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, redo.DefaultFileMode)
 }
 
 func (w *writer) openNew() error {
@@ -342,7 +306,7 @@ func (w *writer) openNew() error {
 	// reset ts used in file name when new file
 	w.commitTS.Store(w.eventCommitTS.Load())
 	w.maxCommitTS.Store(w.eventCommitTS.Load())
-	path := w.filePath() + tmpEXT
+	path := w.filePath() + redo.TmpEXT
 	f, err := openTruncFile(path)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redo logfile"))
@@ -370,7 +334,7 @@ func (w *writer) openOrNew(writeLen int) error {
 		return w.rotate()
 	}
 
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, defaultFileMode)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, redo.DefaultFileMode)
 	if err != nil {
 		return w.openNew()
 	}
@@ -424,7 +388,7 @@ func (w *writer) GC(checkPointTs uint64) error {
 }
 
 func (w *writer) parseLogFileName(name string) (uint64, error) {
-	if filepath.Ext(name) != logEXT && filepath.Ext(name) != tmpEXT {
+	if filepath.Ext(name) != redo.LogEXT && filepath.Ext(name) != redo.TmpEXT {
 		return 0, errors.New("bad log name, file name extension not match")
 	}
 
@@ -438,7 +402,7 @@ func (w *writer) parseLogFileName(name string) (uint64, error) {
 }
 
 func (w *writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
-	if filepath.Ext(f.Name()) == tmpEXT {
+	if filepath.Ext(f.Name()) == redo.TmpEXT {
 		return false, nil
 	}
 

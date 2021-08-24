@@ -48,12 +48,6 @@ type Writer interface {
 	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
 }
 
-const (
-	defaultMetaFileName   = "meta"
-	defaultRowLogFileName = "row"
-	defaultDDLLogFileName = "ddl"
-)
-
 var defaultGCIntervalInMs = 5000
 
 var redoLogPool = sync.Pool{
@@ -97,7 +91,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		dir:               cfg.Dir,
 		changeFeedID:      cfg.ChangeFeedID,
 		captureID:         cfg.CaptureID,
-		fileName:          defaultRowLogFileName,
+		fileName:          redo.DefaultRowLogFileName,
 		createTime:        cfg.CreateTime,
 		maxLogSize:        cfg.MaxLogSize,
 		flushIntervalInMs: cfg.FlushIntervalInMs,
@@ -106,7 +100,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		dir:               cfg.Dir,
 		changeFeedID:      cfg.ChangeFeedID,
 		captureID:         cfg.CaptureID,
-		fileName:          defaultDDLLogFileName,
+		fileName:          redo.DefaultDDLLogFileName,
 		createTime:        cfg.CreateTime,
 		maxLogSize:        cfg.MaxLogSize,
 		flushIntervalInMs: cfg.FlushIntervalInMs,
@@ -117,7 +111,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
 	}
 	if cfg.S3Storage {
-		s3storage, err := initS3storage(ctx, cfg.S3URI)
+		s3storage, err := redo.InitS3storage(ctx, cfg.S3URI)
 		if err != nil {
 			log.Panic("initS3storage fail",
 				zap.Error(err),
@@ -349,7 +343,7 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%s_%d_%s.meta", l.cfg.CaptureID, l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), defaultMetaFileName)
+	return fmt.Sprintf("%s_%s_%d_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), redo.DefaultMetaFileName, redo.MetaEXT)
 }
 
 func (l *LogWriter) flushLogMeta() error {
@@ -365,7 +359,7 @@ func (l *LogWriter) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
-	tmpFileName := l.filePath() + tmpEXT
+	tmpFileName := l.filePath() + redo.TmpEXT
 	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

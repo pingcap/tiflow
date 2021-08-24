@@ -15,6 +15,22 @@
 
 package redo
 
+const (
+	MinSectorSize = 512
+
+	TmpEXT  = ".tmp"
+	LogEXT  = ".log"
+	MetaEXT = ".meta"
+
+	DefaultFileMode = 0o644
+)
+
+const (
+	DefaultMetaFileName   = "meta"
+	DefaultRowLogFileName = "row"
+	DefaultDDLLogFileName = "ddl"
+)
+
 // LogType is the type of log
 type LogType int
 

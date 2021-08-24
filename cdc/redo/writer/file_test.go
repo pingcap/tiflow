@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/stretchr/testify/assert"
 	"github.com/uber-go/atomic"
 	"go.uber.org/goleak"
@@ -47,7 +48,7 @@ func TestWriterWrite(t *testing.T) {
 			dir:          dir,
 			changeFeedID: "test-cf",
 			captureID:    "cp",
-			fileName:     defaultRowLogFileName,
+			fileName:     redo.DefaultRowLogFileName,
 			createTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
 		uint64buf: make([]byte, 8),
@@ -58,7 +59,7 @@ func TestWriterWrite(t *testing.T) {
 	_, err = w.Write([]byte("tes1t11111"))
 	assert.Nil(t, err)
 	// create a .tmp file
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 1, logEXT) + tmpEXT
+	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 1, redo.LogEXT) + redo.TmpEXT
 	path := filepath.Join(w.cfg.dir, fileName)
 	info, err := os.Stat(path)
 	assert.Nil(t, err)
@@ -72,20 +73,20 @@ func TestWriterWrite(t *testing.T) {
 	assert.Nil(t, err)
 
 	// after rotate, rename to .log
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 1, logEXT)
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 1, redo.LogEXT)
 	path = filepath.Join(w.cfg.dir, fileName)
 	info, err = os.Stat(path)
 	assert.Nil(t, err)
 	assert.Equal(t, fileName, info.Name())
 	// create a .tmp file with first eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 12, logEXT) + tmpEXT
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 12, redo.LogEXT) + redo.TmpEXT
 	path = filepath.Join(w.cfg.dir, fileName)
 	info, err = os.Stat(path)
 	assert.Nil(t, err)
 	assert.Equal(t, fileName, info.Name())
 	w.Close()
 	// safe close, rename to .log with max eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 22, logEXT)
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, 22, redo.LogEXT)
 	path = filepath.Join(w.cfg.dir, fileName)
 	info, err = os.Stat(path)
 	assert.Nil(t, err)
@@ -108,7 +109,7 @@ func TestWriterGC(t *testing.T) {
 		changeFeedID:      "test-cf",
 		captureID:         "cp",
 		maxLogSize:        10,
-		fileName:          defaultRowLogFileName,
+		fileName:          redo.DefaultRowLogFileName,
 		createTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		flushIntervalInMs: 5,
 	}
