@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
+	redo "github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )

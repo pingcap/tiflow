@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
+	"github.com/pingcap/ticdc/cdc/redo/reader"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -45,8 +46,8 @@ type RedoApplierConfig struct {
 type RedoApplier struct {
 	cfg *RedoApplierConfig
 
-	reader redo.LogReader
-	errCh  chan error
+	rd    reader.Reader
+	errCh chan error
 }
 
 // NewRedoApplier creates a new RedoApplier instance
@@ -68,11 +69,11 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 }
 
 func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
-	resolvedTs, checkpointTs, err := ra.reader.ReadMeta(ctx)
+	resolvedTs, checkpointTs, err := ra.rd.ReadMeta(ctx)
 	if err != nil {
 		return err
 	}
-	err = ra.reader.ResetReader(ctx, checkpointTs, resolvedTs)
+	err = ra.rd.ResetReader(ctx, checkpointTs, resolvedTs)
 	if err != nil {
 		return err
 	}
@@ -105,7 +106,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	lastResolvedTs := checkpointTs
 	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
 	for {
-		redoLogs, err := ra.reader.ReadLog(ctx, readBatch)
+		redoLogs, err := ra.rd.ReadLog(ctx, readBatch)
 		if err != nil {
 			return err
 		}
@@ -148,7 +149,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 
 var createRedoReader = createRedoReaderImpl
 
-func createRedoReaderImpl(cfg *RedoApplierConfig) (redo.LogReader, error) {
+func createRedoReaderImpl(cfg *RedoApplierConfig) (reader.Reader, error) {
 	readerConfig := &redo.ReaderConfig{
 		Storage: cfg.Storage,
 	}
@@ -157,11 +158,11 @@ func createRedoReaderImpl(cfg *RedoApplierConfig) (redo.LogReader, error) {
 
 // Apply applies redo log to given target
 func (ra *RedoApplier) Apply(ctx context.Context) error {
-	reader, err := createRedoReader(ra.cfg)
+	rd, err := createRedoReader(ra.cfg)
 	if err != nil {
 		return err
 	}
-	ra.reader = reader
+	ra.rd = rd
 	ra.errCh = make(chan error, 1024)
 
 	wg, ctx := errgroup.WithContext(ctx)

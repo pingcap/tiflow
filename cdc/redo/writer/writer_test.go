@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -118,7 +117,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 		}
 		if tt.name == "context cancel" {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -212,7 +211,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 		}
 
 		if tt.name == "context cancel" {
@@ -308,7 +307,7 @@ func TestLogWriter_FlushLog(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
 		}
 
@@ -390,7 +389,7 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
 		}
 
@@ -472,7 +471,7 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
 		}
 
@@ -546,7 +545,7 @@ func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
 		}
 
@@ -620,7 +619,7 @@ func TestNewLogWriter(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
 		}
 		go writer.runGC(ctx)

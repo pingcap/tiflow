@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo/writer"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
@@ -95,7 +96,7 @@ type ManagerImpl struct {
 	enabled       bool
 	level         consistentLevelType
 	storage       consistentStorage
-	writer        LogWriter
+	writer        writer.Writer
 	minResolvedTs uint64
 	tableIDs      []model.TableID
 	rtsMap        map[model.TableID]uint64
@@ -116,7 +117,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	}
 	switch m.storage {
 	case consistentStorageBlackhole:
-		m.writer = newBlackHoleStorage()
+		m.writer = writer.NewBlackHoleWriter()
 	default:
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storage)
 	}
@@ -142,9 +143,9 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 	tableID model.TableID,
 	rows ...*model.RowChangedEvent,
 ) error {
-	logs := make([]*RowRedoLog, 0, len(rows))
+	logs := make([]*model.RedoRowChangedEvent, 0, len(rows))
 	for _, row := range rows {
-		logs = append(logs, &RowRedoLog{Row: row, Index: row.IndexColumns})
+		logs = append(logs, RowToRedo(row))
 	}
 	_, err := m.writer.WriteLog(ctx, tableID, logs)
 	return err
@@ -161,7 +162,7 @@ func (m *ManagerImpl) FlushLog(
 
 // EmitDDLEvent sends DDL event to redo log writer
 func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return m.writer.SendDDL(ctx, ddl)
+	return m.writer.SendDDL(ctx, DDLToRedo(ddl))
 }
 
 // GetMinResolvedTs returns the minimum resolved ts of all tables in this redo log manager
@@ -221,7 +222,7 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 	m.rtsMapMu.Lock()
 	defer m.rtsMapMu.Unlock()
-	rtsMap, err := m.writer.GetTableResolvedTs(ctx, m.tableIDs)
+	rtsMap, err := m.writer.GetCurrentResolvedTs(ctx, m.tableIDs)
 	if err != nil {
 		return err
 	}

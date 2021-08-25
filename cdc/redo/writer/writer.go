@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -38,17 +37,18 @@ import (
 // Writer ...
 type Writer interface {
 	io.Closer
-	// WriteLog ...
+
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
-	// SendDDL ...
-	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
-	// 	FlushLog ...
+	// FlushLog sends resolved-ts from table pipeline to log writer, it is
+	// essential to flush when a table doesn't have any row change event for
+	// sometime, and the resolved ts of this table should be moved forward.
 	FlushLog(ctx context.Context, tableID int64, ts uint64) error
-	// EmitCheckpointTs ...
+
+	// SendDDL, EmitCheckpointTs and EmitResolvedTs are called from owner only
+	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
-	// EmitResolvedTs ...
 	EmitResolvedTs(ctx context.Context, ts uint64) error
-	// GetCurrentResolvedTs ...
+
 	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
 }
 
@@ -85,7 +85,7 @@ type LogWriter struct {
 	rowWriter fileWriter
 	ddlWriter fileWriter
 	storage   storage.ExternalStorage
-	meta      *redo.LogMeta
+	meta      *LogMeta
 	metaLock  sync.RWMutex
 }
 
@@ -118,7 +118,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 	logWriter := &LogWriter{
 		rowWriter: newWriter(ctx, rowCfg),
 		ddlWriter: newWriter(ctx, ddlCfg),
-		meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
+		meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
 	}
 	if cfg.S3Storage {
 		s3storage, err := initS3storage(ctx, cfg.S3URI)
