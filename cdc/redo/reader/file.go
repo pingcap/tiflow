@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/br/pkg/storage"
@@ -48,19 +49,20 @@ type fileReader interface {
 }
 
 type readerConfig struct {
-	dir           string
-	fixedFileType string
-	startTs       uint64
-	endTs         uint64
-	s3Storage     bool
-	s3URI         *url.URL
+	dir       string
+	fileType  string
+	startTs   uint64
+	endTs     uint64
+	s3Storage bool
+	s3URI     *url.URL
 }
 
 type reader struct {
-	cfg    *readerConfig
-	mu     sync.Mutex
-	br     *bufio.Reader
-	closer io.Closer
+	cfg      *readerConfig
+	mu       sync.Mutex
+	br       *bufio.Reader
+	fileName string
+	closer   io.Closer
 	// lastValidOff file offset following the last valid decoded record
 	lastValidOff int64
 }
@@ -77,17 +79,16 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 				zap.Error(err),
 				zap.Any("s3URI", cfg.s3URI))
 		}
-		exts := []string{redo.LogEXT, redo.LogEXT}
-		err = downLoadToLocal(ctx, cfg.dir, s3storage, exts)
+		err = downLoadToLocal(ctx, cfg.dir, s3storage, cfg.fileType)
 		if err != nil {
 			log.Panic("downLoadToLocal fail",
 				zap.Error(err),
-				zap.Strings("file type", exts),
+				zap.String("file type", cfg.fileType),
 				zap.Any("s3URI", cfg.s3URI))
 		}
 	}
 
-	rr, err := openSelectedFiles(cfg.dir, cfg.fixedFileType, cfg.startTs, cfg.endTs)
+	rr, err := openSelectedFiles(cfg.dir, cfg.fileType, cfg.startTs, cfg.endTs)
 	if err != nil {
 		log.Panic("openSelectedFiles fail",
 			zap.Error(err),
@@ -98,24 +99,27 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 	for i := range rr {
 		readers = append(readers,
 			&reader{
-				cfg:    cfg,
-				br:     bufio.NewReader(rr[i]),
-				closer: rr[i],
+				cfg:      cfg,
+				br:       bufio.NewReader(rr[i]),
+				fileName: rr[i].(*os.File).Name(),
+				closer:   rr[i],
 			})
 	}
 
 	return readers
 }
 
-func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, exts []string) ([]string, error) {
+func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, fixedName string) ([]string, error) {
 	files := []string{}
 	err := s3storage.WalkDir(ctx, &storage.WalkOption{}, func(path string, size int64) error {
 		fileName := filepath.Base(path)
-		for _, ext := range exts {
-			if filepath.Ext(fileName) == ext {
-				files = append(files, path)
-				break
-			}
+		_, name, err := parseLogFileName(fileName)
+		if err != nil {
+			return err
+		}
+
+		if name == fixedName {
+			files = append(files, path)
 		}
 		return nil
 	})
@@ -126,8 +130,8 @@ func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, 
 	return files, nil
 }
 
-func downLoadToLocal(ctx context.Context, dir string, s3storage storage.ExternalStorage, exts []string) error {
-	files, err := selectDownLoadFile(ctx, s3storage, exts)
+func downLoadToLocal(ctx context.Context, dir string, s3storage storage.ExternalStorage, fixedName string) error {
+	files, err := selectDownLoadFile(ctx, s3storage, fixedName)
 	if err != nil {
 		return err
 	}
@@ -180,17 +184,16 @@ func openSelectedFiles(dir, fixedName string, startTs, endTs uint64) ([]io.ReadC
 }
 
 func shouldOpen(startTs, endTs uint64, name, fixedName string) (bool, error) {
-	// always open tmp file, because the file is writing into data when closed
-	if filepath.Ext(name) == redo.TmpEXT {
-		return true, nil
-	}
-
 	commitTs, fileName, err := parseLogFileName(name)
 	if err != nil {
 		return false, err
 	}
 	if fileName != fixedName {
 		return false, nil
+	}
+	// always open .tmp
+	if filepath.Ext(name) == redo.TmpEXT {
+		return true, nil
 	}
 	if commitTs > startTs && commitTs <= endTs {
 		return true, nil
@@ -199,21 +202,30 @@ func shouldOpen(startTs, endTs uint64, name, fixedName string) (bool, error) {
 }
 
 func parseLogFileName(name string) (uint64, string, error) {
-	if filepath.Ext(name) != redo.LogEXT {
+	ext := filepath.Ext(name)
+	if ext != redo.LogEXT && ext != redo.TmpEXT {
 		return 0, "", errors.New("bad log name, file name extension not match")
 	}
 
 	var commitTs, d1 uint64
 	var s1, s2, fileName string
-	// TODO: extract to a common func
-	_, err := fmt.Sscanf(name, "%s_%s_%d_%s_%d"+redo.LogEXT, &s1, &s2, &d1, &fileName, &commitTs)
-	if err != nil {
-		return 0, "", errors.New("bad log name")
+	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS.Load(), redo.LogEXT)
+	formatStr := "%s %s %d %s %d" + redo.LogEXT
+	if ext == redo.TmpEXT {
+		formatStr += redo.TmpEXT
 	}
+	name = strings.ReplaceAll(name, "_", " ")
+	_, err := fmt.Sscanf(name, formatStr, &s1, &s2, &d1, &fileName, &commitTs)
+	if err != nil {
+		return 0, "", errors.Annotate(err, "bad log name")
+	}
+
 	return commitTs, fileName, nil
 }
 
-func (r *reader) Read(log *model.RedoLog) error {
+// Read ...
+// TODO: more general reader pair with writer in writer pkg
+func (r *reader) Read(redoLog *model.RedoLog) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -229,22 +241,25 @@ func (r *reader) Read(log *model.RedoLog) error {
 	data := make([]byte, recBytes+padBytes)
 	_, err = io.ReadFull(r.br, data)
 	if err != nil {
-		if err == io.EOF {
-			return err
-		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
-	_, err = log.UnmarshalMsg(data[:recBytes])
-	if err != nil {
-		if r.isTornEntry(data) {
-			// just return io.EOF, since if torn write it is the last log entry
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			log.Warn("read redo log have unexpected io error",
+				zap.String("fileName", r.fileName),
+				zap.Error(err))
 			return io.EOF
 		}
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	// point last valid offset to the end of log
+	_, err = redoLog.UnmarshalMsg(data[:recBytes])
+	if err != nil {
+		if r.isTornEntry(data) {
+			// just return io.EOF, since if torn write it is the last redoLog entry
+			return io.EOF
+		}
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
+	// point last valid offset to the end of redoLog
 	r.lastValidOff += frameSizeBytes + recBytes + padBytes
 	return nil
 }

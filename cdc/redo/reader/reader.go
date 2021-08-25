@@ -51,7 +51,8 @@ type LogReaderConfig struct {
 	StartTs   uint64
 	EndTs     uint64
 	S3Storage bool
-	S3URI     *url.URL
+	// S3URI should be like SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
+	S3URI *url.URL
 }
 
 // LogReader ...
@@ -66,27 +67,28 @@ type LogReader struct {
 	ddlLock   sync.Mutex
 }
 
-// NewLogReader ...
+// NewLogReader creates a LogReader instance. need the client to guarantee only one LogReader per changefeed
+// currently do not support read by offset, only read next batch.
 func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 	if cfg == nil {
 		log.Panic("LogWriterConfig can not be nil")
 		return nil
 	}
 	rowCfg := &readerConfig{
-		dir:           cfg.Dir,
-		fixedFileType: redo.DefaultRowLogFileName,
-		startTs:       cfg.StartTs,
-		endTs:         cfg.EndTs,
-		s3Storage:     cfg.S3Storage,
-		s3URI:         cfg.S3URI,
+		dir:       cfg.Dir,
+		fileType:  redo.DefaultRowLogFileName,
+		startTs:   cfg.StartTs,
+		endTs:     cfg.EndTs,
+		s3Storage: cfg.S3Storage,
+		s3URI:     cfg.S3URI,
 	}
 	ddlCfg := &readerConfig{
-		dir:           cfg.Dir,
-		fixedFileType: redo.DefaultDDLLogFileName,
-		startTs:       cfg.StartTs,
-		endTs:         cfg.EndTs,
-		s3Storage:     cfg.S3Storage,
-		s3URI:         cfg.S3URI,
+		dir:       cfg.Dir,
+		fileType:  redo.DefaultDDLLogFileName,
+		startTs:   cfg.StartTs,
+		endTs:     cfg.EndTs,
+		s3Storage: cfg.S3Storage,
+		s3URI:     cfg.S3URI,
 	}
 	logReader := &LogReader{
 		rowReader: newReader(ctx, rowCfg),
@@ -101,12 +103,11 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 				zap.Error(err),
 				zap.Any("S3URI", cfg.S3URI))
 		}
-		exts := []string{redo.MetaEXT}
-		err = downLoadToLocal(ctx, cfg.Dir, s3storage, exts)
+		err = downLoadToLocal(ctx, cfg.Dir, s3storage, redo.DefaultMetaFileName)
 		if err != nil {
 			log.Panic("downLoadToLocal fail",
 				zap.Error(err),
-				zap.Strings("file type", exts),
+				zap.String("file type", redo.DefaultMetaFileName),
 				zap.Any("s3URI", cfg.S3URI))
 		}
 	}

@@ -24,7 +24,8 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
-// InitS3storage ...
+// InitS3storage init a storage used for s3,
+// s3URI should be like SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
 func InitS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage, error) {
 	if len(s3URI.Host) == 0 {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %s", s3URI))

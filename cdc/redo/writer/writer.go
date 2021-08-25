@@ -33,8 +33,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Writer ...
-type Writer interface {
+// RedoLogWriter ...
+type RedoLogWriter interface {
 	// WriteLog ...
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
 	// SendDDL ...
@@ -57,7 +57,7 @@ var redoLogPool = sync.Pool{
 	},
 }
 
-// LogWriterConfig is the configuration used by a writer.
+// LogWriterConfig is the configuration used by a Writer.
 type LogWriterConfig struct {
 	Dir          string
 	ChangeFeedID string
@@ -67,7 +67,8 @@ type LogWriterConfig struct {
 	MaxLogSize        int64
 	FlushIntervalInMs int64
 	S3Storage         bool
-	S3URI             *url.URL
+	// S3URI should be like SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
+	S3URI *url.URL
 }
 
 // LogWriter ...
@@ -88,27 +89,27 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		return nil
 	}
 
-	rowCfg := &writerConfig{
-		dir:               cfg.Dir,
-		changeFeedID:      cfg.ChangeFeedID,
-		captureID:         cfg.CaptureID,
-		fileName:          redo.DefaultRowLogFileName,
-		createTime:        cfg.CreateTime,
-		maxLogSize:        cfg.MaxLogSize,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
+	rowCfg := &FileWriterConfig{
+		Dir:               cfg.Dir,
+		ChangeFeedID:      cfg.ChangeFeedID,
+		CaptureID:         cfg.CaptureID,
+		FileName:          redo.DefaultRowLogFileName,
+		CreateTime:        cfg.CreateTime,
+		MaxLogSize:        cfg.MaxLogSize,
+		FlushIntervalInMs: cfg.FlushIntervalInMs,
 	}
-	ddlCfg := &writerConfig{
-		dir:               cfg.Dir,
-		changeFeedID:      cfg.ChangeFeedID,
-		captureID:         cfg.CaptureID,
-		fileName:          redo.DefaultDDLLogFileName,
-		createTime:        cfg.CreateTime,
-		maxLogSize:        cfg.MaxLogSize,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
+	ddlCfg := &FileWriterConfig{
+		Dir:               cfg.Dir,
+		ChangeFeedID:      cfg.ChangeFeedID,
+		CaptureID:         cfg.CaptureID,
+		FileName:          redo.DefaultDDLLogFileName,
+		CreateTime:        cfg.CreateTime,
+		MaxLogSize:        cfg.MaxLogSize,
+		FlushIntervalInMs: cfg.FlushIntervalInMs,
 	}
 	logWriter := &LogWriter{
-		rowWriter: newWriter(ctx, rowCfg),
-		ddlWriter: newWriter(ctx, ddlCfg),
+		rowWriter: NewWriter(ctx, rowCfg),
+		ddlWriter: NewWriter(ctx, ddlCfg),
 		meta:      &redo.LogMeta{ResolvedTsList: map[int64]uint64{}},
 	}
 	if cfg.S3Storage {
@@ -305,7 +306,7 @@ func (l *LogWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) 
 	return ret, nil
 }
 
-// Close implements Writer.Close.
+// Close implements RedoLogWriter.Close.
 func (l *LogWriter) Close() error {
 	var err error
 	err = multierr.Append(err, l.rowWriter.Close())

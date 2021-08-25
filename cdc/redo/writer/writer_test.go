@@ -59,7 +59,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 			writerErr: nil,
 		},
 		{
-			name: "writer err",
+			name: "Writer err",
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
@@ -160,7 +160,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 			writerErr: nil,
 		},
 		{
-			name: "writer err",
+			name: "Writer err",
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
