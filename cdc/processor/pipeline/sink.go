@@ -150,6 +150,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
+		log.Warn("skip emit empty rows", zap.Reflect("event", event))
 		return nil
 	}
 
@@ -279,6 +280,7 @@ func (n *sinkNode) emitRow2Sink(ctx pipeline.NodeContext) error {
 			return errors.Trace(err)
 		}
 		if ev.Row == nil {
+			log.Warn("skip emit empty rows", zap.Reflect("event", ev))
 			continue
 		}
 		ev.Row.ReplicaID = ev.ReplicaID

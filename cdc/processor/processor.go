@@ -286,7 +286,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
+	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil

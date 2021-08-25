@@ -85,6 +85,22 @@ var (
 			Name:      "buffer_chan_size",
 			Help:      "size of row changed event buffer channel in sink manager",
 		}, []string{"capture", "changefeed"})
+
+	tableSinkTotalRowsCountCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "table_sink_total_rows_count",
+			Help:      "totla count of rows",
+		}, []string{"capture", "changefeed"})
+
+	bufferSinkTotalRowsCountCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "buffer_sink_total_rows_count",
+			Help:      "totla count of rows",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -98,4 +114,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(totalFlushedRowsCountGauge)
 	registry.MustRegister(flushRowChangedDuration)
 	registry.MustRegister(bufferChanSizeGauge)
+	registry.MustRegister(tableSinkTotalRowsCountCounter)
+	registry.MustRegister(bufferSinkTotalRowsCountCounter)
 }
