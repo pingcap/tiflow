@@ -93,12 +93,6 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 						event := msg.PolymorphicEvent
 						if event.RawKV.OpType != model.OpTypeResolved {
 							failpoint.Inject("MounterNodeWaitPrepare", func() {})
-							// only RowChangedEvents need mounting
-							err := event.WaitPrepare(stdCtx)
-							if err != nil {
-								ctx.Throw(err)
-								return nil
-							}
 						}
 
 						ctx.SendToNextNode(msg)
