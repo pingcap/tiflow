@@ -87,7 +87,7 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 	}
 }
 
-func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
+func (s *mounterNodeSuite) testMounterNodeBasics(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	ctx, cancel := cdcContext.WithCancel(cdcContext.NewBackendContext4Test(false))
