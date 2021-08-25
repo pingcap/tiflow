@@ -18,8 +18,21 @@ function run() {
 
     start_tidb_cluster --workdir $WORK_DIR
 
-    cd $WORK_DIR
+    run_cdc_server \
+        --workdir $WORK_DIR \
+        --binary $CDC_BINARY \
+        --logsuffix "_${TEST_NAME}_upsteam" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
+        --addr "127.0.0.1:8300"
 
+    run_cdc_server \
+        --workdir $WORK_DIR \
+        --binary $CDC_BINARY \
+        --logsuffix "_${TEST_NAME}_downsteam" \
+        --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
+        --addr "127.0.0.1:8301"
+
+    cd $WORK_DIR
 
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -44,20 +57,6 @@ function run() {
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-
-    run_cdc_server \
-        --workdir $WORK_DIR \
-        --binary $CDC_BINARY \
-        --logsuffix "_${TEST_NAME}_upsteam" \
-        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
-        --addr "127.0.0.1:8300"
-
-    run_cdc_server \
-        --workdir $WORK_DIR \
-        --binary $CDC_BINARY \
-        --logsuffix "_${TEST_NAME}_downsteam" \
-        --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
-        --addr "127.0.0.1:8301"
 
     # Echo y to ignore ineligible tables
     echo "y" | run_cdc_cli changefeed create --start-ts=$start_ts \
