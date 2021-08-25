@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -43,16 +44,22 @@ type Manager struct {
 	flushing int64
 
 	drawbackChan chan drawbackMsg
+
+	metricsTableSinkTotalRows prometheus.Counter
 }
 
 // NewManager creates a new Sink manager
-func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) *Manager {
+func NewManager(
+	ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts,
+	captureAddr string, changefeedID model.ChangeFeedID,
+) *Manager {
 	drawbackChan := make(chan drawbackMsg, 16)
 	return &Manager{
-		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
-		checkpointTs: checkpointTs,
-		tableSinks:   make(map[model.TableID]*tableSink),
-		drawbackChan: drawbackChan,
+		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
+		checkpointTs:              checkpointTs,
+		tableSinks:                make(map[model.TableID]*tableSink),
+		drawbackChan:              drawbackChan,
+		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
 	}
 }
 
@@ -152,6 +159,7 @@ func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
+	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	return nil
 }
 
@@ -237,6 +245,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush")
 	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
 	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
+	metricTotalRows := bufferSinkTotalRowsCountCounter.WithLabelValues(advertiseAddr, changefeedID)
 	for {
 		select {
 		case <-ctx.Done():
@@ -257,6 +266,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				i := sort.Search(len(rows), func(i int) bool {
 					return rows[i].CommitTs > resolvedTs
 				})
+				metricTotalRows.Add(float64(i))
 
 				start := time.Now()
 				err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)

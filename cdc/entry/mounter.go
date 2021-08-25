@@ -116,6 +116,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
+	metricTotalRows := totalRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		var pEvent *model.PolymorphicEvent
@@ -138,6 +139,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 		pEvent.RawKV.OldValue = nil
 		pEvent.PrepareFinished()
 		metricMountDuration.Observe(time.Since(startTime).Seconds())
+		metricTotalRows.Add(1)
 	}
 }
 
