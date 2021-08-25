@@ -17,10 +17,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pingcap/ticdc/cdc/model"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/pkg/cmd/context"
+	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/r3labs/diff"
@@ -74,71 +76,7 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 
 // run the `cli changefeed update` command.
 func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
-	ctx := context.GetDefaultContext()
-
-	old, err := o.etcdClient.GetChangeFeedInfo(ctx, o.changefeedID)
-	if err != nil {
-		return err
-	}
-
-	info, err := old.Clone()
-	if err != nil {
-		return err
-	}
-
-	// TODO: directly bind the options.
-	cmd.Flags().Visit(func(flag *pflag.Flag) {
-		switch flag.Name {
-		case "target-ts":
-			info.TargetTs = o.commonChangefeedOptions.targetTs
-		case "sink-uri":
-			info.SinkURI = o.commonChangefeedOptions.sinkURI
-		case "config":
-			cfg := info.Config
-			if err = o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
-				log.Error("decode config file error", zap.Error(err))
-			}
-		case "opts":
-			for _, opt := range o.commonChangefeedOptions.opts {
-				s := strings.SplitN(opt, "=", 2)
-				if len(s) <= 0 {
-					cmd.Printf("omit opt: %s", opt)
-					continue
-				}
-
-				var key string
-				var value string
-				key = s[0]
-				if len(s) > 1 {
-					value = s[1]
-				}
-				info.Opts[key] = value
-			}
-
-		case "sort-engine":
-			info.Engine = o.commonChangefeedOptions.sortEngine
-		case "cyclic-replica-id":
-			filter := make([]uint64, 0, len(o.commonChangefeedOptions.cyclicFilterReplicaIDs))
-			for _, id := range o.commonChangefeedOptions.cyclicFilterReplicaIDs {
-				filter = append(filter, uint64(id))
-			}
-			info.Config.Cyclic.FilterReplicaID = filter
-		case "cyclic-sync-ddl":
-			info.Config.Cyclic.SyncDDL = o.commonChangefeedOptions.cyclicSyncDDL
-		case "sync-point":
-			info.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
-		case "sync-interval":
-			info.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
-		case "tz", "changefeed-id", "no-confirm":
-			// do nothing
-		default:
-			// use this default branch to prevent new added parameter is not added
-			log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
-		}
-	})
-	if err != nil {
-		return err
-	}
+	ctx := cmdcontext.GetDefaultContext()
 
 	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
 	// if no cdc owner exists, allow user to update changefeed config
@@ -151,7 +89,17 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
 	}
 
-	changelog, err := diff.Diff(old, info)
+	old, err := o.etcdClient.GetChangeFeedInfo(ctx, o.changefeedID)
+	if err != nil {
+		return err
+	}
+
+	newInfo, err := o.applyChanges(old, cmd)
+	if err != nil {
+		return err
+	}
+
+	changelog, err := diff.Diff(old, newInfo)
 	if err != nil {
 		return err
 	}
@@ -177,11 +125,11 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		}
 	}
 
-	err = o.etcdClient.SaveChangeFeedInfo(ctx, info, o.changefeedID)
+	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo, o.changefeedID)
 	if err != nil {
 		return err
 	}
-	infoStr, err := info.Marshal()
+	infoStr, err := newInfo.Marshal()
 	if err != nil {
 		return err
 	}
@@ -190,6 +138,69 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		"\nID: %s\nInfo: %s\n", o.changefeedID, infoStr)
 
 	return nil
+}
+
+// applyChanges applies the new changes to the old changefeed.
+func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cmd *cobra.Command) (*model.ChangeFeedInfo, error) {
+	newInfo, err := oldInfo.Clone()
+	if err != nil {
+		return nil, err
+	}
+
+	cmd.Flags().Visit(func(flag *pflag.Flag) {
+		switch flag.Name {
+		case "target-ts":
+			newInfo.TargetTs = o.commonChangefeedOptions.targetTs
+		case "sink-uri":
+			newInfo.SinkURI = o.commonChangefeedOptions.sinkURI
+		case "config":
+			cfg := newInfo.Config
+			if err = o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
+				log.Error("decode config file error", zap.Error(err))
+			}
+		case "opts":
+			for _, opt := range o.commonChangefeedOptions.opts {
+				s := strings.SplitN(opt, "=", 2)
+				if len(s) <= 0 {
+					cmd.Printf("omit opt: %s", opt)
+					continue
+				}
+
+				var key string
+				var value string
+				key = s[0]
+				if len(s) > 1 {
+					value = s[1]
+				}
+				newInfo.Opts[key] = value
+			}
+
+		case "sort-engine":
+			newInfo.Engine = o.commonChangefeedOptions.sortEngine
+		case "cyclic-replica-id":
+			filter := make([]uint64, 0, len(o.commonChangefeedOptions.cyclicFilterReplicaIDs))
+			for _, id := range o.commonChangefeedOptions.cyclicFilterReplicaIDs {
+				filter = append(filter, uint64(id))
+			}
+			newInfo.Config.Cyclic.FilterReplicaID = filter
+		case "cyclic-sync-ddl":
+			newInfo.Config.Cyclic.SyncDDL = o.commonChangefeedOptions.cyclicSyncDDL
+		case "sync-point":
+			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
+		case "sync-interval":
+			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
+		case "tz", "changefeed-id", "no-confirm":
+			// do nothing
+		default:
+			// use this default branch to prevent new added parameter is not added
+			log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return newInfo, nil
 }
 
 // newCmdPauseChangefeed creates the `cli changefeed update` command.

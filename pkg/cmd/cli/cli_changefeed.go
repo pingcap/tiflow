@@ -49,45 +49,6 @@ func newCmdChangefeed(f factory.Factory) *cobra.Command {
 	return cmds
 }
 
-// sendOwnerChangefeedQuery sends owner changefeed query request.
-func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
-	id model.ChangeFeedID, credential *security.Credential,
-) (string, error) {
-	owner, err := getOwnerCapture(ctx, etcdClient)
-	if err != nil {
-		return "", err
-	}
-
-	scheme := util.HTTP
-	if credential.IsTLSEnabled() {
-		scheme = util.HTTPS
-	}
-
-	url := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
-	httpClient, err := httputil.NewClient(credential)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarChangefeedID: {id},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.BadRequestf("query changefeed simplified status")
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", errors.BadRequestf("%s", string(body))
-	}
-
-	return string(body), nil
-}
-
 // sendOwnerAdminChangeQuery sends owner admin query request.
 func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
 	owner, err := getOwnerCapture(ctx, etcdClient)
