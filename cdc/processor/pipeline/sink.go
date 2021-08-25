@@ -149,7 +149,14 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 }
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
-	if event == nil || event.Row == nil {
+	if event == nil {
+		log.Warn("skip emit empty rows", zap.Reflect("event", event))
+		return nil
+	}
+	if err := event.WaitPrepare(ctx); err != nil {
+		return err
+	}
+	if event.Row == nil {
 		log.Warn("skip emit empty rows", zap.Reflect("event", event))
 		return nil
 	}
