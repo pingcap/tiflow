@@ -18,17 +18,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/version"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
