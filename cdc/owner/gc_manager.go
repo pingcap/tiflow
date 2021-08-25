@@ -81,7 +81,7 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 		default:
 			continue
 		}
-		checkpointTs := cfState.Info.GetCheckpointTs(cfState.Status)
+		checkpointTs := cfState.Info.GetCheckpointTs(cfState.Status) - 1
 		if minCheckpointTs > checkpointTs {
 			minCheckpointTs = checkpointTs
 		}
@@ -139,7 +139,7 @@ func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs 
 		}
 	} else {
 		// if `isTiCDCBlockGC` is false, it means there is another service gc point less than the min checkpoint ts.
-		if checkpointTs < m.lastSafePointTs {
+		if checkpointTs-1 < m.lastSafePointTs {
 			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
 		}
 	}
