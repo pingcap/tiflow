@@ -16,6 +16,12 @@ function get_safepoint() {
     echo $safe_point
 }
 
+function get_clear_gc_worker_safepoint() {
+    pd_addr=$1
+    pd_cluster_id=$2
+    ETCDCTL_API=3 etcdctl --endpoints=$pd_addr del /pd/$pd_cluster_id/gc/safe_point/service/ticdc
+}
+
 function check_safepoint_cleared() {
     pd_addr=$1
     pd_cluster_id=$2
@@ -67,6 +73,7 @@ export -f check_safepoint_forward
 export -f check_safepoint_cleared
 export -f check_safepoint_equal
 export -f check_changefeed_state
+export -f get_clear_gc_worker_safepoint
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -85,6 +92,8 @@ function run() {
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectGcSafepointUpdateInterval=return(500)' # new owner
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+
+    get_clear_gc_worker_safepoint $pd_addr $pd_cluster_id
 
     run_sql "CREATE DATABASE gc_safepoint;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE table gc_safepoint.simple(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
