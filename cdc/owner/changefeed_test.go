@@ -197,6 +197,8 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 }
 
 func (s *changefeedSuite) TestExecDDL(c *check.C) {
+	defer testleak.AfterTest(c)()
+
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
@@ -205,7 +207,6 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
-	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{
 		KVStorage: helper.Storage(),
 		CaptureInfo: &model.CaptureInfo{
