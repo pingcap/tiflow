@@ -19,7 +19,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/br/pkg/httputil"
+	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
