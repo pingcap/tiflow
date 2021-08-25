@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
+	"github.com/pingcap/ticdc/cdc/redo/reader"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -38,16 +39,16 @@ var _ = check.Suite(&redoApplierSuite{})
 type MockReader struct {
 	checkpointTs uint64
 	resolvedTs   uint64
-	redoLogCh    chan *redo.RowRedoLog
-	ddlEventCh   chan *model.DDLEvent
+	redoLogCh    chan *model.RedoRowChangedEvent
+	ddlEventCh   chan *model.RedoDDLEvent
 }
 
 // NewMockReader creates a new MockReader
 func NewMockReader(
 	checkpointTs uint64,
 	resolvedTs uint64,
-	redoLogCh chan *redo.RowRedoLog,
-	ddlEventCh chan *model.DDLEvent,
+	redoLogCh chan *model.RedoRowChangedEvent,
+	ddlEventCh chan *model.RedoDDLEvent,
 ) *MockReader {
 	return &MockReader{
 		checkpointTs: checkpointTs,
@@ -63,8 +64,8 @@ func (br *MockReader) ResetReader(ctx context.Context, startTs, endTs uint64) er
 }
 
 // ReadLog implements LogReader.ReadLog
-func (br *MockReader) ReadLog(ctx context.Context, maxNumberOfMessages int) ([]*redo.RowRedoLog, error) {
-	cached := make([]*redo.RowRedoLog, 0)
+func (br *MockReader) ReadLog(ctx context.Context, maxNumberOfMessages int) ([]*model.RedoRowChangedEvent, error) {
+	cached := make([]*model.RedoRowChangedEvent, 0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -82,8 +83,8 @@ func (br *MockReader) ReadLog(ctx context.Context, maxNumberOfMessages int) ([]*
 }
 
 // ReadDDL implements LogReader.ReadDDL
-func (br *MockReader) ReadDDL(ctx context.Context, maxNumberOfDDLs int) ([]*model.DDLEvent, error) {
-	cached := make([]*model.DDLEvent, 0)
+func (br *MockReader) ReadDDL(ctx context.Context, maxNumberOfDDLs int) ([]*model.RedoDDLEvent, error) {
+	cached := make([]*model.RedoDDLEvent, 0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -113,9 +114,9 @@ func (s *redoApplierSuite) TestApplyDMLs(c *check.C) {
 
 	checkpointTs := uint64(1000)
 	resolvedTs := uint64(2000)
-	redoLogCh := make(chan *redo.RowRedoLog, 1024)
-	ddlEventCh := make(chan *model.DDLEvent, 1024)
-	createMockReader := func(cfg *RedoApplierConfig) (redo.LogReader, error) {
+	redoLogCh := make(chan *model.RedoRowChangedEvent, 1024)
+	ddlEventCh := make(chan *model.RedoDDLEvent, 1024)
+	createMockReader := func(cfg *RedoApplierConfig) (reader.Reader, error) {
 		return NewMockReader(checkpointTs, resolvedTs, redoLogCh, ddlEventCh), nil
 	}
 
@@ -170,57 +171,53 @@ func (s *redoApplierSuite) TestApplyDMLs(c *check.C) {
 		sink.GetDBConnImpl = getDBConnBak
 	}()
 
-	dmls := []*redo.RowRedoLog{
+	dmls := []*model.RowChangedEvent{
 		{
-			Row: &model.RowChangedEvent{
-				StartTs:  1100,
-				CommitTs: 1200,
-				Table:    &model.TableName{Schema: "test", Table: "t1"},
-				Columns: []*model.Column{
-					{
-						Name:  "a",
-						Value: 1,
-						Flag:  model.HandleKeyFlag,
-					}, {
-						Name:  "b",
-						Value: "2",
-						Flag:  0,
-					},
+			StartTs:  1100,
+			CommitTs: 1200,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Value: 1,
+					Flag:  model.HandleKeyFlag,
+				}, {
+					Name:  "b",
+					Value: "2",
+					Flag:  0,
 				},
 			},
 		},
 		{
-			Row: &model.RowChangedEvent{
-				StartTs:  1200,
-				CommitTs: 1300,
-				Table:    &model.TableName{Schema: "test", Table: "t1"},
-				PreColumns: []*model.Column{
-					{
-						Name:  "a",
-						Value: 1,
-						Flag:  model.HandleKeyFlag,
-					}, {
-						Name:  "b",
-						Value: "2",
-						Flag:  0,
-					},
+			StartTs:  1200,
+			CommitTs: 1300,
+			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			PreColumns: []*model.Column{
+				{
+					Name:  "a",
+					Value: 1,
+					Flag:  model.HandleKeyFlag,
+				}, {
+					Name:  "b",
+					Value: "2",
+					Flag:  0,
 				},
-				Columns: []*model.Column{
-					{
-						Name:  "a",
-						Value: 2,
-						Flag:  model.HandleKeyFlag,
-					}, {
-						Name:  "b",
-						Value: "3",
-						Flag:  0,
-					},
+			},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Value: 2,
+					Flag:  model.HandleKeyFlag,
+				}, {
+					Name:  "b",
+					Value: "3",
+					Flag:  0,
 				},
 			},
 		},
 	}
 	for _, dml := range dmls {
-		redoLogCh <- dml
+		redoLogCh <- redo.RowToRedo(dml)
 	}
 	close(redoLogCh)
 	close(ddlEventCh)

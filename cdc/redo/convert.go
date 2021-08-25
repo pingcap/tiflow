@@ -22,7 +22,14 @@ import (
 func RowToRedo(row *model.RowChangedEvent) *model.RedoRowChangedEvent {
 	redoLog := &model.RedoRowChangedEvent{
 		Row:        row,
+		Columns:    make([]*model.RedoColumn, 0, len(row.PreColumns)),
 		PreColumns: make([]*model.RedoColumn, 0, len(row.PreColumns)),
+	}
+	for _, column := range row.Columns {
+		redoLog.Columns = append(
+			redoLog.Columns,
+			&model.RedoColumn{Column: column, Flag: uint64(column.Flag)},
+		)
 	}
 	for _, column := range row.PreColumns {
 		redoLog.PreColumns = append(
@@ -36,10 +43,15 @@ func RowToRedo(row *model.RowChangedEvent) *model.RedoRowChangedEvent {
 // LogToRow converts redo log row to row changed event
 func LogToRow(redoLog *model.RedoRowChangedEvent) *model.RowChangedEvent {
 	row := redoLog.Row
+	row.Columns = make([]*model.Column, 0, len(redoLog.Columns))
 	row.PreColumns = make([]*model.Column, 0, len(redoLog.PreColumns))
 	for _, column := range redoLog.PreColumns {
 		column.Column.Flag = model.ColumnFlagType(column.Flag)
 		row.PreColumns = append(row.PreColumns, column.Column)
+	}
+	for _, column := range redoLog.Columns {
+		column.Column.Flag = model.ColumnFlagType(column.Flag)
+		row.Columns = append(row.Columns, column.Column)
 	}
 	return row
 }

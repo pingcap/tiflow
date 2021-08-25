@@ -237,9 +237,9 @@ type RedoLog struct {
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
-	Row          *RowChangedEvent `msg:"row"`
-	PreColumns   []*RedoColumn    `msg:"preColumns"`
-	IndexColumns []*RedoColumn    `msg:"indexColumns"`
+	Row        *RowChangedEvent `msg:"row"`
+	Columns    []*RedoColumn    `msg:"columns"`
+	PreColumns []*RedoColumn    `msg:"preColumns"`
 }
 
 // RowChangedEvent represents a row changed event
