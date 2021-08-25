@@ -68,10 +68,10 @@ func (s *httpValidatorSuite) TestVerifySink(c *check.C) {
 	opts := make(map[string]string)
 
 	// test sink uri error
-	sinkURI := "mysql:127.0.0.1:0000"
+	sinkURI := "mysql://root:111@127.0.0.1:3306/"
 	err := verifySink(ctx, sinkURI, replicateConfig, opts)
 	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, ".*ErrMySQLConnectionError.*")
+	c.Assert(err, check.ErrorMatches, "fail to open MySQL connection.*ErrMySQLConnectionError.*")
 
 	// test sink uri right
 	sinkURI = "blackhole://"
