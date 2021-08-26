@@ -77,10 +77,7 @@ func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 			return errors.Trace(err)
 		}
 		if tableID == n.markTableID {
-			err := n.appendMarkRow(ctx, event)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			n.appendMarkRow(ctx, event)
 		} else {
 			n.appendNormalRow(ctx, event)
 		}
@@ -106,13 +103,13 @@ func (n *cyclicMarkNode) appendNormalRow(ctx pipeline.NodeContext, event *model.
 }
 
 // appendMarkRow adds the mark row into the cache
-func (n *cyclicMarkNode) appendMarkRow(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
+func (n *cyclicMarkNode) appendMarkRow(ctx pipeline.NodeContext, event *model.PolymorphicEvent) {
 	if event.CRTs != n.currentCommitTs {
 		log.Panic("the CommitTs of the received event is not equal to the currentCommitTs, please report a bug", zap.Reflect("event", event), zap.Uint64("currentCommitTs", n.currentCommitTs))
 	}
 	markRow := event.Row
 	if markRow == nil {
-		return nil
+		return
 	}
 	replicaID := extractReplicaID(markRow)
 	// Establishing the mapping from StartTs to ReplicaID
@@ -122,7 +119,6 @@ func (n *cyclicMarkNode) appendMarkRow(ctx pipeline.NodeContext, event *model.Po
 		delete(n.rowsUnknownReplicaID, markRow.StartTs)
 		n.sendNormalRowToNextNode(ctx, replicaID, rows...)
 	}
-	return nil
 }
 
 func (n *cyclicMarkNode) flush(ctx pipeline.NodeContext, commitTs uint64) {
