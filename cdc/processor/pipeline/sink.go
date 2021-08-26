@@ -153,6 +153,8 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 		return nil
 	}
 
+	event.Row.ReplicaID = event.ReplicaID
+
 	colLen := len(event.Row.Columns)
 	preColLen := len(event.Row.PreColumns)
 	config := ctx.ChangefeedVars().Info.Config
@@ -274,14 +276,6 @@ func (n *sinkNode) clearBuffers() {
 
 func (n *sinkNode) emitRow2Sink(ctx pipeline.NodeContext) error {
 	for _, ev := range n.eventBuffer {
-		err := ev.WaitPrepare(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if ev.Row == nil {
-			continue
-		}
-		ev.Row.ReplicaID = ev.ReplicaID
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
 	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
