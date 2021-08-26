@@ -110,10 +110,6 @@ func (n *cyclicMarkNode) appendMarkRow(ctx pipeline.NodeContext, event *model.Po
 	if event.CRTs != n.currentCommitTs {
 		log.Panic("the CommitTs of the received event is not equal to the currentCommitTs, please report a bug", zap.Reflect("event", event), zap.Uint64("currentCommitTs", n.currentCommitTs))
 	}
-	err := event.WaitPrepare(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	markRow := event.Row
 	if markRow == nil {
 		return nil
