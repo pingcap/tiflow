@@ -65,7 +65,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 // AllPhysicalTables returns the table IDs of all tables and partition tables.
 func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	if s.allPhysicalTablesCache != nil {
-		return s.allPhysicalTablesCachegc_safe_point
+		return s.allPhysicalTablesCache
 	}
 	tables := s.schemaSnapshot.Tables()
 	s.allPhysicalTablesCache = make([]model.TableID, 0, len(tables))
