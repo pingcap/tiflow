@@ -130,8 +130,6 @@ function run() {
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "removed"
     ensure $MAX_RETRIES check_safepoint_cleared $pd_addr $pd_cluster_id
 
-
-
     cleanup_process $CDC_BINARY
 }
 
