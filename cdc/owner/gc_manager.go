@@ -131,7 +131,7 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 }
 
 func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
-	gcSafepointUpperBound := checkpointTs-1
+	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)
 		if err != nil {
