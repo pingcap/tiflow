@@ -73,7 +73,7 @@ export -f check_safepoint_forward
 export -f check_safepoint_cleared
 export -f check_safepoint_equal
 export -f check_changefeed_state
-export -f get_clear_gc_worker_safepoint
+export -f clear_gc_worker_safepoint
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
