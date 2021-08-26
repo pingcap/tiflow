@@ -15,19 +15,16 @@ package cli
 
 import (
 	"context"
-	liberrors "errors"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
-
-// errOwnerNotFound specifies the error that the owner could not be found.
-var errOwnerNotFound = liberrors.New("owner not found")
 
 // capture holds capture information.
 type capture struct {
@@ -125,5 +122,5 @@ func getOwnerCapture(ctx context.Context, etcdClient *kv.CDCEtcdClient) (*captur
 		}
 	}
 
-	return nil, errors.Trace(errOwnerNotFound)
+	return nil, errors.Trace(cerror.ErrOwnerNotFound)
 }

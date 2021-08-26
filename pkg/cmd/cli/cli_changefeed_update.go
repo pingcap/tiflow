@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
@@ -79,7 +80,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 
 	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
 	// if no cdc owner exists, allow user to update changefeed config
-	if err != nil && errors.Cause(err) != errOwnerNotFound {
+	if err != nil && errors.Cause(err) != cerror.ErrOwnerNotFound {
 		return err
 	}
 	// Note that the correctness of the logic here depends on the return value of `/capture/owner/changefeed/query` interface.
