@@ -399,7 +399,7 @@ func (w *Writer) parseLogFileName(name string) (uint64, error) {
 	format := w.getLogFileNameFormat(filepath.Ext(name))
 	_, err := fmt.Sscanf(name, format, &commitTs)
 	if err != nil {
-		return 0, errors.New("bad log name")
+		return 0, errors.Annotate(err, "bad log name")
 	}
 	return commitTs, nil
 }

@@ -330,8 +330,7 @@ func TestLogWriter_FlushLog(t *testing.T) {
 func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 	type arg struct {
 		ctx context.Context
-
-		ts uint64
+		ts  uint64
 	}
 	tests := []struct {
 		name      string
