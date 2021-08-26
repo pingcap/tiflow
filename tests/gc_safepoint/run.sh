@@ -16,7 +16,7 @@ function get_safepoint() {
     echo $safe_point
 }
 
-function get_clear_gc_worker_safepoint() {
+function clear_gc_worker_safepoint() {
     pd_addr=$1
     pd_cluster_id=$2
     ETCDCTL_API=3 etcdctl --endpoints=$pd_addr del /pd/$pd_cluster_id/gc/safe_point/service/ticdc
