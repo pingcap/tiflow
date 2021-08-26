@@ -30,8 +30,7 @@ import (
 )
 
 const (
-	flushMemoryMetricsDuration     = time.Second * 5
-	maxMounterWaitEventNumPerTable = 16
+	flushMemoryMetricsDuration = time.Second * 5
 )
 
 type sorterNode struct {
@@ -43,8 +42,7 @@ type sorterNode struct {
 	// for per-table flow control
 	flowController tableFlowController
 
-	mounter       entry.Mounter
-	mounterWaitCh chan *model.PolymorphicEvent
+	mounter entry.Mounter
 
 	wg     errgroup.Group
 	cancel context.CancelFunc
@@ -56,7 +54,6 @@ func newSorterNode(tableName string, tableID model.TableID, flowController table
 		tableID:        tableID,
 		flowController: flowController,
 		mounter:        mounter,
-		mounterWaitCh:  make(chan *model.PolymorphicEvent, maxMounterWaitEventNumPerTable),
 	}
 }
 
@@ -106,87 +103,22 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
-		var (
-			eventToMount *model.PolymorphicEvent
-			nextEvent    *model.PolymorphicEvent
-			dummyDoneCh  chan struct{}
-		)
-		dummyDoneCh = make(chan struct{})
-		close(dummyDoneCh)
-
-		nextReady := func() <-chan struct{} {
-			if nextEvent == nil {
-				return nil
-			}
-			if nextEvent.RawKV.OpType != model.OpTypeResolved {
-				ret := nextEvent.Finished()
-				if ret == nil {
-					log.Panic("empty finished ch")
-				}
-				return ret
-			}
-			return dummyDoneCh
-		}
-
-		loadNext := func() <-chan *model.PolymorphicEvent {
-			if nextEvent != nil {
-				return nil
-			}
-			return n.mounterWaitCh
-		}
-
-		writeNext := func() chan<- *model.PolymorphicEvent {
-			if eventToMount == nil {
-				return nil
-			}
-			return n.mounterWaitCh
-		}
-
-		readFromSorter := func() <-chan *model.PolymorphicEvent {
-			if eventToMount != nil {
-				return nil
-			}
-
-			return sorter.Output()
-		}
-
 		for {
 			select {
 			case <-stdCtx.Done():
 				return nil
 			case <-metricsTicker.C:
 				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
-			case msg1, ok := <-readFromSorter():
+			case msg1, ok := <-sorter.Output():
+				msgV := *msg1
+				msg := &msgV
 				if !ok {
 					// sorter output channel closed
 					return nil
 				}
-				if msg1 == nil || msg1.RawKV == nil {
-					log.Panic("unexpected empty msg", zap.Reflect("msg", msg1))
+				if msg == nil || msg.RawKV == nil {
+					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
-				msgV := *msg1
-				msg := &msgV
-				// resolved events do not need to be mounted
-				if msg.RawKV.OpType != model.OpTypeResolved {
-					msg.SetUpFinishedChan()
-					select {
-					case <-ctx.Done():
-						return nil
-					case n.mounter.Input() <- msg:
-					}
-				}
-				eventToMount = msg
-			case writeNext() <- eventToMount:
-				eventToMount = nil
-			case msg, ok := <-loadNext():
-				if !ok {
-					// mounter wait channel closed
-					return nil
-				}
-				nextEvent = msg
-			case <-nextReady():
-				msg := nextEvent
-				nextEvent = nil
 				if msg.RawKV.OpType != model.OpTypeResolved {
 					size := uint64(msg.RawKV.ApproximateSize())
 					commitTs := msg.CRTs
@@ -226,6 +158,15 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 						return nil
 					}
 					lastCRTs = commitTs
+
+					// DESIGN NOTE: We send the messages to the mounter in this separate goroutine to prevent
+					// blocking the whole pipeline.
+					msg.SetUpFinishedChan()
+					select {
+					case <-ctx.Done():
+						return nil
+					case n.mounter.Input() <- msg:
+					}
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
