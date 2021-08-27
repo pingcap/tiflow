@@ -160,6 +160,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if barrierTs < checkpointTs {
+		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
+		// which implies that it would be premature to schedule tables or to update status.
+		// So we return here.
+		return nil
+	}
 	shouldUpdateState, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
 	if err != nil {
 		return errors.Trace(err)
@@ -204,7 +210,10 @@ LOOP:
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
-	c.barriers.Update(ddlJobBarrier, checkpointTs)
+	// Since we are starting DDL puller from (checkpointTs-1) to make
+	// the DDL committed at checkpointTs executable by CDC, we need to set
+	// the DDL barrier to the correct start point.
+	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
 	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
