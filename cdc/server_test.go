@@ -19,6 +19,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/kv"
+	"go.etcd.io/etcd/clientv3"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -92,6 +95,15 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(server, check.NotNil)
 
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   server.pdEndpoints,
+		Context:     ctx,
+		DialTimeout: 5 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	etcdClient := kv.NewCDCEtcdClient(ctx, client)
+	server.etcdClient = &etcdClient
+
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = c.MkDir()
 
@@ -101,7 +113,6 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
 	config.StoreGlobalServerConfig(conf)
 
-	server.etcdClient = nil
 	conf.DataDir = ""
 	err = server.initDataDir(ctx)
 	c.Assert(err, check.IsNil)
