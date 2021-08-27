@@ -27,12 +27,8 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/store/tikv/oracle"
-=======
 	"github.com/pingcap/ticdc/pkg/version"
-	"github.com/tikv/client-go/v2/oracle"
->>>>>>> 200d87785 (owner: fix scheduling tables too early (#2626))
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 type mockDDLPuller struct {
