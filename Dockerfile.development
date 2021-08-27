@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 FROM golang:1.14-alpine as builder
-=======
-FROM golang:1.16-alpine3.12 as builder
->>>>>>> 04fa75b2a (version: prohibit operating TiCDC clusters across major and minor versions (#2481))
 RUN apk add --no-cache git make bash
 WORKDIR /go/src/github.com/pingcap/ticdc
 COPY . .
