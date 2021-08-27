@@ -73,7 +73,7 @@ type LogReader struct {
 }
 
 // NewLogReader creates a LogReader instance. need the client to guarantee only one LogReader per changefeed
-// currently do not support read by offset, only read next batch.
+// currently support rewind operation by ResetReader api
 func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 	if cfg == nil {
 		log.Panic("LogWriterConfig can not be nil")
