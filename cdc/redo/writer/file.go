@@ -367,7 +367,7 @@ func (w *Writer) rotate() error {
 	return w.openNew()
 }
 
-// GC ...
+// GC ... TODO: gc in s3, already added a new delete api in br
 func (w *Writer) GC(checkPointTs uint64) error {
 	if !w.IsRunning() || w.isGCRunning() {
 		return nil
