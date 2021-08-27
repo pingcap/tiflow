@@ -484,6 +484,9 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 	case mysql.TypeBit:
 		return handleUnsignedInt64()
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
+		if col.Flag.IsUnsigned() {
+			return int32(col.Value.(uint64)), "int", nil
+		}
 		return int32(col.Value.(int64)), "int", nil
 	case mysql.TypeLong:
 		if col.Flag.IsUnsigned() {
