@@ -34,6 +34,9 @@ import (
 
 // Reader ...
 type Reader interface {
+	// ResetReader ...
+	ResetReader(ctx context.Context, startTs, endTs uint64) error
+
 	// ReadNextLog ...
 	// The returned redo logs sorted by commit-ts
 	ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error)
@@ -48,8 +51,8 @@ type Reader interface {
 // LogReaderConfig ...
 type LogReaderConfig struct {
 	Dir       string
-	StartTs   uint64
-	EndTs     uint64
+	startTs   uint64
+	endTs     uint64
 	S3Storage bool
 	// S3URI should be like SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
 	S3URI *url.URL
@@ -65,6 +68,8 @@ type LogReader struct {
 	meta      *redo.LogMeta
 	rowLock   sync.Mutex
 	ddlLock   sync.Mutex
+	metaLock  sync.Mutex
+	sync.Mutex
 }
 
 // NewLogReader creates a LogReader instance. need the client to guarantee only one LogReader per changefeed
@@ -74,27 +79,8 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 		log.Panic("LogWriterConfig can not be nil")
 		return nil
 	}
-	rowCfg := &readerConfig{
-		dir:       cfg.Dir,
-		fileType:  redo.DefaultRowLogFileName,
-		startTs:   cfg.StartTs,
-		endTs:     cfg.EndTs,
-		s3Storage: cfg.S3Storage,
-		s3URI:     cfg.S3URI,
-	}
-	ddlCfg := &readerConfig{
-		dir:       cfg.Dir,
-		fileType:  redo.DefaultDDLLogFileName,
-		startTs:   cfg.StartTs,
-		endTs:     cfg.EndTs,
-		s3Storage: cfg.S3Storage,
-		s3URI:     cfg.S3URI,
-	}
 	logReader := &LogReader{
-		rowReader: newReader(ctx, rowCfg),
-		ddlReader: newReader(ctx, ddlCfg),
-		rowHeap:   logHeap{},
-		ddlHeap:   logHeap{},
+		cfg: cfg,
 	}
 	if cfg.S3Storage {
 		s3storage, err := redo.InitS3storage(ctx, cfg.S3URI)
@@ -112,6 +98,85 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 		}
 	}
 	return logReader
+}
+
+// ResetReader ...
+func (l *LogReader) ResetReader(ctx context.Context, startTs, endTs uint64) error {
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	default:
+	}
+
+	if l.meta == nil {
+		_, _, err := l.ReadMeta(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	if startTs > l.meta.ResolvedTs || endTs <= l.meta.CheckPointTs {
+		return errors.Errorf("startTs, endTs should match the boundary: (%d, %d]", l.meta.CheckPointTs, l.meta.ResolvedTs)
+	}
+	return l.setUpReader(ctx, startTs, endTs)
+}
+
+func (l *LogReader) setUpReader(ctx context.Context, startTs, endTs uint64) error {
+	l.Lock()
+	defer l.Unlock()
+
+	var errs error
+	errs = multierr.Append(errs, l.setUpRowReader(ctx, startTs, endTs))
+	errs = multierr.Append(errs, l.setUpDDLReader(ctx, startTs, endTs))
+
+	return errs
+}
+
+func (l *LogReader) setUpRowReader(ctx context.Context, startTs, endTs uint64) error {
+	l.rowLock.Lock()
+	defer l.rowLock.Unlock()
+
+	err := l.closeRowReader()
+	if err != nil {
+		return err
+	}
+
+	rowCfg := &readerConfig{
+		dir:       l.cfg.Dir,
+		fileType:  redo.DefaultRowLogFileName,
+		startTs:   startTs,
+		endTs:     endTs,
+		s3Storage: l.cfg.S3Storage,
+		s3URI:     l.cfg.S3URI,
+	}
+	l.rowReader = newReader(ctx, rowCfg)
+	l.rowHeap = logHeap{}
+	l.cfg.startTs = startTs
+	l.cfg.endTs = endTs
+	return nil
+}
+
+func (l *LogReader) setUpDDLReader(ctx context.Context, startTs, endTs uint64) error {
+	l.ddlLock.Lock()
+	defer l.ddlLock.Unlock()
+
+	err := l.closeDDLReader()
+	if err != nil {
+		return err
+	}
+
+	ddlCfg := &readerConfig{
+		dir:       l.cfg.Dir,
+		fileType:  redo.DefaultDDLLogFileName,
+		startTs:   startTs,
+		endTs:     endTs,
+		s3Storage: l.cfg.S3Storage,
+		s3URI:     l.cfg.S3URI,
+	}
+	l.ddlReader = newReader(ctx, ddlCfg)
+	l.ddlHeap = logHeap{}
+	l.cfg.startTs = startTs
+	l.cfg.endTs = endTs
+	return nil
 }
 
 // ReadNextLog ...
@@ -150,7 +215,7 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.rowHeap).(*logWithIdx)
-		if item.data.Row.Row.CommitTs <= l.cfg.StartTs {
+		if item.data.Row.Row.CommitTs <= l.cfg.startTs {
 			continue
 		}
 		ret = append(ret, item.data.Row)
@@ -211,7 +276,7 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
-		if item.data.DDL.DDL.CommitTs <= l.cfg.StartTs {
+		if item.data.DDL.DDL.CommitTs <= l.cfg.startTs {
 			continue
 		}
 
@@ -245,6 +310,9 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 	default:
 	}
 
+	l.metaLock.Lock()
+	defer l.metaLock.Unlock()
+
 	if l.meta != nil {
 		return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
 	}
@@ -254,9 +322,11 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 		return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
 	}
 
+	haveMeta := false
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == redo.MetaEXT {
-			fileData, err := os.ReadFile(file.Name())
+			path := filepath.Join(l.cfg.Dir, file.Name())
+			fileData, err := os.ReadFile(path)
 			if err != nil {
 				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
@@ -266,26 +336,47 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 			if err != nil {
 				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
+			haveMeta = true
 			break
 		}
+	}
+	if !haveMeta {
+		return 0, 0, errors.Errorf("no redo meta file found in dir:%s", l.cfg.Dir)
 	}
 	return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
 }
 
-// Close ...
-func (l *LogReader) Close() error {
-	if l == nil || l.rowReader == nil || l.ddlReader == nil {
-		return nil
-	}
-
+func (l *LogReader) closeRowReader() error {
 	var errs error
 	for _, r := range l.rowReader {
 		errs = multierr.Append(errs, r.Close())
 	}
+	return errs
+}
+
+func (l *LogReader) closeDDLReader() error {
+	var errs error
 	for _, r := range l.ddlReader {
 		errs = multierr.Append(errs, r.Close())
 	}
+	return errs
+}
 
+// Close ...
+func (l *LogReader) Close() error {
+	if l == nil {
+		return nil
+	}
+
+	var errs error
+
+	l.rowLock.Lock()
+	errs = multierr.Append(errs, l.closeRowReader())
+	l.rowLock.Unlock()
+
+	l.ddlLock.Lock()
+	errs = multierr.Append(errs, l.closeDDLReader())
+	l.ddlLock.Unlock()
 	return errs
 }
 
