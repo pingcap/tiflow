@@ -134,7 +134,6 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		return err
 	}
 	cmd.Printf("Update changefeed config successfully! "+
-		"Will take effect only if the changefeed has been paused before this command"+
 		"\nID: %s\nInfo: %s\n", o.changefeedID, infoStr)
 
 	return nil
