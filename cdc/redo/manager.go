@@ -96,7 +96,7 @@ type ManagerImpl struct {
 	enabled       bool
 	level         consistentLevelType
 	storage       consistentStorage
-	writer        writer.Writer
+	writer        writer.RedoLogWriter
 	minResolvedTs uint64
 	tableIDs      []model.TableID
 	rtsMap        map[model.TableID]uint64

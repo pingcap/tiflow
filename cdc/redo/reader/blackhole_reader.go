@@ -33,17 +33,17 @@ func (br *BlackholeReader) ResetReader(ctx context.Context, startTs, endTs uint6
 	return nil
 }
 
-// ReadLog implements LogReader.ReadLog
-func (br *BlackholeReader) ReadLog(ctx context.Context, maxNumberOfMessages int) ([]*model.RedoRowChangedEvent, error) {
+// ReadNextLog implements LogReader.ReadNextLog
+func (br *BlackholeReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
 	return nil, nil
 }
 
-// ReadDDL implements LogReader.ReadDDL
-func (br *BlackholeReader) ReadDDL(ctx context.Context, maxNumberOfDDLs int) ([]*model.RedoDDLEvent, error) {
+// ReadNextDDL implements LogReader.ReadNextDDL
+func (br *BlackholeReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
 	return nil, nil
 }
 
 // ReadMeta implements LogReader.ReadMeta
-func (br *BlackholeReader) ReadMeta(ctx context.Context) (resolvedTs, checkpointTs uint64, err error) {
-	return 1, 0, nil
+func (br *BlackholeReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+	return 0, 1, nil
 }

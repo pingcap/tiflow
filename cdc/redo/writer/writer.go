@@ -28,35 +28,32 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
-//go:generate mockery --name=Writer --inpackage
-// Writer ...
-type Writer interface {
+// RedoLogWriter ...
+type RedoLogWriter interface {
 	io.Closer
 
+	// WriteLog ...
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
+	// SendDDL, EmitCheckpointTs and EmitResolvedTs are called from owner only
+	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
+
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// sometime, and the resolved ts of this table should be moved forward.
 	FlushLog(ctx context.Context, tableID int64, ts uint64) error
-
-	// SendDDL, EmitCheckpointTs and EmitResolvedTs are called from owner only
-	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
+	// EmitCheckpointTs ...
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
+	// EmitResolvedTs ...
 	EmitResolvedTs(ctx context.Context, ts uint64) error
-
+	// GetCurrentResolvedTs ...
 	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
 }
-
-const (
-	defaultMetaFileName   = "meta"
-	defaultRowLogFileName = "row"
-	defaultDDLLogFileName = "ddl"
-)
 
 var defaultGCIntervalInMs = 5000
 
@@ -66,7 +63,7 @@ var redoLogPool = sync.Pool{
 	},
 }
 
-// LogWriterConfig is the configuration used by a writer.
+// LogWriterConfig is the configuration used by a Writer.
 type LogWriterConfig struct {
 	Dir          string
 	ChangeFeedID string
@@ -76,7 +73,8 @@ type LogWriterConfig struct {
 	MaxLogSize        int64
 	FlushIntervalInMs int64
 	S3Storage         bool
-	S3URI             *url.URL
+	// S3URI should be like SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
+	S3URI *url.URL
 }
 
 // LogWriter ...
@@ -85,7 +83,7 @@ type LogWriter struct {
 	rowWriter fileWriter
 	ddlWriter fileWriter
 	storage   storage.ExternalStorage
-	meta      *LogMeta
+	meta      *common.LogMeta
 	metaLock  sync.RWMutex
 }
 
@@ -97,31 +95,31 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		return nil
 	}
 
-	rowCfg := &writerConfig{
-		dir:               cfg.Dir,
-		changeFeedID:      cfg.ChangeFeedID,
-		captureID:         cfg.CaptureID,
-		fileName:          defaultRowLogFileName,
-		createTime:        cfg.CreateTime,
-		maxLogSize:        cfg.MaxLogSize,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
+	rowCfg := &FileWriterConfig{
+		Dir:               cfg.Dir,
+		ChangeFeedID:      cfg.ChangeFeedID,
+		CaptureID:         cfg.CaptureID,
+		FileName:          common.DefaultRowLogFileName,
+		CreateTime:        cfg.CreateTime,
+		MaxLogSize:        cfg.MaxLogSize,
+		FlushIntervalInMs: cfg.FlushIntervalInMs,
 	}
-	ddlCfg := &writerConfig{
-		dir:               cfg.Dir,
-		changeFeedID:      cfg.ChangeFeedID,
-		captureID:         cfg.CaptureID,
-		fileName:          defaultDDLLogFileName,
-		createTime:        cfg.CreateTime,
-		maxLogSize:        cfg.MaxLogSize,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
+	ddlCfg := &FileWriterConfig{
+		Dir:               cfg.Dir,
+		ChangeFeedID:      cfg.ChangeFeedID,
+		CaptureID:         cfg.CaptureID,
+		FileName:          common.DefaultDDLLogFileName,
+		CreateTime:        cfg.CreateTime,
+		MaxLogSize:        cfg.MaxLogSize,
+		FlushIntervalInMs: cfg.FlushIntervalInMs,
 	}
 	logWriter := &LogWriter{
-		rowWriter: newWriter(ctx, rowCfg),
-		ddlWriter: newWriter(ctx, ddlCfg),
-		meta:      &LogMeta{ResolvedTsList: map[int64]uint64{}},
+		rowWriter: NewWriter(ctx, rowCfg),
+		ddlWriter: NewWriter(ctx, ddlCfg),
+		meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
 	}
 	if cfg.S3Storage {
-		s3storage, err := initS3storage(ctx, cfg.S3URI)
+		s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
 		if err != nil {
 			log.Panic("initS3storage fail",
 				zap.Error(err),
@@ -314,7 +312,7 @@ func (l *LogWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) 
 	return ret, nil
 }
 
-// Close implements Writer.Close.
+// Close implements RedoLogWriter.Close.
 func (l *LogWriter) Close() error {
 	var err error
 	err = multierr.Append(err, l.rowWriter.Close())
@@ -353,7 +351,7 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%s_%d_%s.meta", l.cfg.CaptureID, l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), defaultMetaFileName)
+	return fmt.Sprintf("%s_%s_%d_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), common.DefaultMetaFileName, common.MetaEXT)
 }
 
 func (l *LogWriter) flushLogMeta() error {
@@ -369,7 +367,7 @@ func (l *LogWriter) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
-	tmpFileName := l.filePath() + tmpEXT
+	tmpFileName := l.filePath() + common.TmpEXT
 	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -404,7 +402,7 @@ func (l *LogWriter) writeMetaToS3(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	return cerror.WrapError(cerror.ErrRedoFileOp, l.storage.WriteFile(ctx, name, fileData))
+	return cerror.WrapError(cerror.ErrS3StorageAPI, l.storage.WriteFile(ctx, name, fileData))
 }
 
 func (l *LogWriter) filePath() string {

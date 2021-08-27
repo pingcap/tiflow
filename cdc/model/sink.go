@@ -238,14 +238,14 @@ type RedoLog struct {
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
-	Columns    []*RedoColumn    `msg:"columns"`
 	PreColumns []*RedoColumn    `msg:"preColumns"`
+	Columns    []*RedoColumn    `msg:"columns"`
 }
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts" msg:"startTs"`
-	CommitTs uint64 `json:"commit-ts" msg:"commit-startTs"`
+	CommitTs uint64 `json:"commit-ts" msg:"commitTs"`
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 

@@ -63,8 +63,8 @@ func (br *MockReader) ResetReader(ctx context.Context, startTs, endTs uint64) er
 	return nil
 }
 
-// ReadLog implements LogReader.ReadLog
-func (br *MockReader) ReadLog(ctx context.Context, maxNumberOfMessages int) ([]*model.RedoRowChangedEvent, error) {
+// ReadNextLog implements LogReader.ReadNextLog
+func (br *MockReader) ReadNextLog(ctx context.Context, maxNumberOfMessages uint64) ([]*model.RedoRowChangedEvent, error) {
 	cached := make([]*model.RedoRowChangedEvent, 0)
 	for {
 		select {
@@ -75,15 +75,15 @@ func (br *MockReader) ReadLog(ctx context.Context, maxNumberOfMessages int) ([]*
 				return cached, nil
 			}
 			cached = append(cached, redoLog)
-			if len(cached) >= maxNumberOfMessages {
+			if len(cached) >= int(maxNumberOfMessages) {
 				return cached, nil
 			}
 		}
 	}
 }
 
-// ReadDDL implements LogReader.ReadDDL
-func (br *MockReader) ReadDDL(ctx context.Context, maxNumberOfDDLs int) ([]*model.RedoDDLEvent, error) {
+// ReadNextDDL implements LogReader.ReadNextDDL
+func (br *MockReader) ReadNextDDL(ctx context.Context, maxNumberOfDDLs uint64) ([]*model.RedoDDLEvent, error) {
 	cached := make([]*model.RedoDDLEvent, 0)
 	for {
 		select {
@@ -94,7 +94,7 @@ func (br *MockReader) ReadDDL(ctx context.Context, maxNumberOfDDLs int) ([]*mode
 				return cached, nil
 			}
 			cached = append(cached, ddl)
-			if len(cached) >= maxNumberOfDDLs {
+			if len(cached) >= int(maxNumberOfDDLs) {
 				return cached, nil
 			}
 		}
@@ -102,8 +102,8 @@ func (br *MockReader) ReadDDL(ctx context.Context, maxNumberOfDDLs int) ([]*mode
 }
 
 // ReadMeta implements LogReader.ReadMeta
-func (br *MockReader) ReadMeta(ctx context.Context) (resolvedTs, checkpointTs uint64, err error) {
-	return br.resolvedTs, br.checkpointTs, nil
+func (br *MockReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+	return br.checkpointTs, br.resolvedTs, nil
 }
 
 func (s *redoApplierSuite) TestApplyDMLs(c *check.C) {

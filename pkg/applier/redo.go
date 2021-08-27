@@ -106,7 +106,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	lastResolvedTs := checkpointTs
 	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
 	for {
-		redoLogs, err := ra.rd.ReadLog(ctx, readBatch)
+		redoLogs, err := ra.rd.ReadNextLog(ctx, readBatch)
 		if err != nil {
 			return err
 		}
