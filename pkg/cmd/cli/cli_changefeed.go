@@ -33,6 +33,7 @@ func newCmdChangefeed(f factory.Factory) *cobra.Command {
 	cmds.AddCommand(newCmdPauseChangefeed(f))
 	cmds.AddCommand(newCmdQueryChangefeed(f))
 	cmds.AddCommand(newCmdRemoveChangefeed(f))
+	cmds.AddCommand(newCmdResumeChangefeed(f))
 
 	return cmds
 }
