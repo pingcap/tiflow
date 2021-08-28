@@ -14,18 +14,7 @@
 package cli
 
 import (
-	"context"
-	"fmt"
-	"io/ioutil"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 )
 
@@ -47,47 +36,4 @@ func newCmdChangefeed(f factory.Factory) *cobra.Command {
 	cmds.AddCommand(newCmdRemoveChangefeed(f))
 
 	return cmds
-}
-
-// sendOwnerAdminChangeQuery sends owner admin query request.
-func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
-	owner, err := getOwnerCapture(ctx, etcdClient)
-	if err != nil {
-		return err
-	}
-
-	scheme := util.HTTP
-	if credential.IsTLSEnabled() {
-		scheme = util.HTTPS
-	}
-
-	url := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
-	httpClient, err := httputil.NewClient(credential)
-	if err != nil {
-		return err
-	}
-
-	forceRemoveOpt := "false"
-	if job.Opts != nil && job.Opts.ForceRemove {
-		forceRemoveOpt = "true"
-	}
-
-	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID:       {job.CfID},
-		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
-	})
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return errors.BadRequestf("admin changefeed failed")
-		}
-		return errors.BadRequestf("%s", string(body))
-	}
-
-	return nil
 }

@@ -92,8 +92,10 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
+
 	for id := range changefeedIDs {
 		cfci := &changefeedCommonInfo{ID: id}
+
 		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, id, o.credential)
 		if err != nil {
 			// if no capture is available, the query will fail, just add a warning here
@@ -104,6 +106,7 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 			if err != nil {
 				return err
 			}
+
 			cfci.Summary = info
 		}
 		cfs = append(cfs, cfci)

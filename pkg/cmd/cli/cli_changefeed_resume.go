@@ -72,7 +72,8 @@ func (o *resumeChangefeedOptions) complete(f factory.Factory) error {
 	return nil
 }
 
-func (o *resumeChangefeedOptions) resumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
+// confirmResumeChangefeedCheck prompts the user to confirm the use of a large data gap when noConfirm is turned off.
+func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
 	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
 	if err != nil {
 		return err
@@ -99,13 +100,14 @@ func (o *resumeChangefeedOptions) resumeChangefeedCheck(ctx context.Context, cmd
 // run the `cli changefeed resume` command.
 func (o *resumeChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
+
+	if err := o.confirmResumeChangefeedCheck(ctx, cmd); err != nil {
+		return err
+	}
+
 	job := model.AdminJob{
 		CfID: o.changefeedID,
 		Type: model.AdminResume,
-	}
-
-	if err := o.resumeChangefeedCheck(ctx, cmd); err != nil {
-		return err
 	}
 
 	return sendOwnerAdminChangeQuery(ctx, o.etcdClient, job, o.credential)

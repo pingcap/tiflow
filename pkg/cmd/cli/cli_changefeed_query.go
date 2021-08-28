@@ -86,7 +86,9 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		if err != nil {
 			return err
 		}
+
 		cmd.Println(resp)
+
 		return nil
 	}
 
@@ -94,11 +96,15 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
+	if info == nil {
+		log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.changefeedID))
+	}
 
 	status, _, err := o.etcdClient.GetChangeFeedStatus(ctx, o.changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
+
 	if err != nil && cerror.ErrChangeFeedNotExists.Equal(err) {
 		log.Error("This changefeed does not exist", zap.String("changefeed", o.changefeedID))
 		return err
@@ -108,6 +114,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
+
 	var count uint64
 	for _, pinfo := range taskPositions {
 		count += pinfo.Count
@@ -117,15 +124,13 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+
 	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
 	for captureID, status := range processorInfos {
 		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
 	}
 
 	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
-	if info == nil {
-		log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.changefeedID))
-	}
 
 	return util.JSONPrint(cmd, meta)
 }

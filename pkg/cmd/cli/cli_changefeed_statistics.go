@@ -26,7 +26,8 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-type profileStatus struct {
+// status specifies the current status of the changefeed.
+type status struct {
 	OPS            uint64 `json:"ops"`
 	Count          uint64 `json:"count"`
 	SinkGap        string `json:"sink_gap"`
@@ -80,6 +81,7 @@ func (o *statisticsChangefeedOptions) run(cmd *cobra.Command) error {
 
 	tick := time.NewTicker(time.Duration(o.interval) * time.Second)
 	lastTime := time.Now()
+
 	var lastCount uint64
 
 	for {
@@ -90,31 +92,39 @@ func (o *statisticsChangefeedOptions) run(cmd *cobra.Command) error {
 			}
 		case <-tick.C:
 			now := time.Now()
-			status, _, err := o.etcdClient.GetChangeFeedStatus(ctx, o.changefeedID)
+
+			changefeedStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, o.changefeedID)
 			if err != nil {
 				return err
 			}
+
 			taskPositions, err := o.etcdClient.GetAllTaskPositions(ctx, o.changefeedID)
 			if err != nil {
 				return err
 			}
+
 			var count uint64
 			for _, pinfo := range taskPositions {
 				count += pinfo.Count
 			}
+
 			ts, _, err := o.pdClient.GetTS(ctx)
 			if err != nil {
 				return err
 			}
-			sinkGap := oracle.ExtractPhysical(status.ResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)
-			replicationGap := ts - oracle.ExtractPhysical(status.CheckpointTs)
-			statistics := profileStatus{
+
+			sinkGap := oracle.ExtractPhysical(changefeedStatus.ResolvedTs) - oracle.ExtractPhysical(changefeedStatus.CheckpointTs)
+			replicationGap := ts - oracle.ExtractPhysical(changefeedStatus.CheckpointTs)
+
+			statistics := status{
 				OPS:            (count - lastCount) / uint64(now.Unix()-lastTime.Unix()),
 				SinkGap:        fmt.Sprintf("%dms", sinkGap),
 				ReplicationGap: fmt.Sprintf("%dms", replicationGap),
 				Count:          count,
 			}
+
 			_ = util.JSONPrint(cmd, &statistics)
+
 			lastCount = count
 			lastTime = now
 		}
@@ -127,7 +137,7 @@ func newCmdStatisticsChangefeed(f factory.Factory) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "statistics",
-		Short: "Periodically check and output the status of a replicaiton task (changefeed)",
+		Short: "Periodically check and output the status of a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {
