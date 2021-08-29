@@ -133,9 +133,9 @@ fi
 
 # Make sure cdc is ready to serve
 if [ -z "$tls_dir" ]; then
-  curl_status_cmd=$(curl -LI http://127.0.0.1:8300/status -o /dev/null -w '%{http_code}\n' -s)
+  curl_status_cmd="curl -LI http://127.0.0.1:8300/status -o /dev/null -w %{http_code}\n -s"
 else
-  curl_status_cmd=$(curl --cacert $tls_dir/ca.pem --cert $tls_dir/server.pem --key $tls_dir/server-key.pem -LI http://127.0.0.1:8300/status -o /dev/null -w '%{http_code}\n' -s)
+  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/server.pem --key $tls_dir/server-key.pem -LI http://127.0.0.1:8300/status -o /dev/null -w %{http_code}\n -s"
 fi
 
 while [ "$curl_status_cmd" != "200" ]; do
