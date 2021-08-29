@@ -43,6 +43,7 @@ import (
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
+	// captureMu
 	captureMu sync.Mutex
 	info      *model.CaptureInfo
 
@@ -89,7 +90,8 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.processorManager = c.newProcessorManager()
 	if c.session != nil {
-		c.session.Close() //nolint:errcheck
+		// It can't be handled even after it fails, so we ignore it.
+		_ = c.session.Close()
 	}
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
@@ -169,9 +171,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
-		// when the campaignOwner returns an error, it means that the the owner throws an unrecoverable serious errors
+		// when the campaignOwner returns an error, it means that the owner throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the owner tick)
-		// so we should also stop the processor and let capture restart or exit
+		// so we should also stop the owner and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
 		log.Info("the owner routine has exited", zap.Error(ownerErr))
 	}()
@@ -180,9 +182,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
-		// when the etcd worker of processor returns an error, it means that the the processor throws an unrecoverable serious errors
+		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
-		// so we should also stop the owner and let capture restart or exit
+		// so we should also stop the processor and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
@@ -309,7 +311,7 @@ func (c *Capture) OperateOwnerUnderLock(fn func(*owner.Owner) error) error {
 	return fn(c.owner)
 }
 
-// Campaign to be an owner
+// campaign to be an owner.
 func (c *Capture) campaign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
@@ -317,7 +319,7 @@ func (c *Capture) campaign(ctx cdcContext.Context) error {
 	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(ctx, c.info.ID))
 }
 
-// Resign lets a owner start a new election.
+// resign lets an owner start a new election.
 func (c *Capture) resign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
@@ -337,7 +339,8 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 // AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
+	// TODO: Why we can ignore this?
+	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		o.AsyncStop()
 		return nil
 	})
@@ -353,7 +356,8 @@ func (c *Capture) AsyncClose() {
 
 // WriteDebugInfo writes the debug info into writer.
 func (c *Capture) WriteDebugInfo(w io.Writer) {
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
+	// TODO: Why we can ignore this?
+	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w)
 		return nil
@@ -368,9 +372,9 @@ func (c *Capture) WriteDebugInfo(w io.Writer) {
 
 // IsOwner returns whether the capture is an owner
 func (c *Capture) IsOwner() bool {
-	return c.OperateOwnerUnderLock(func(o *owner.Owner) error {
-		return nil
-	}) == nil
+	c.ownerMu.Lock()
+	defer c.ownerMu.Unlock()
+	return c.owner == nil
 }
 
 // GetOwner return the owner of current TiCDC cluster
