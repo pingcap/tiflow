@@ -17,6 +17,7 @@ certcn=
 binary=
 logsuffix=
 addr=
+addr_url="http://127.0.0.1:8300"
 pd_addr=
 pwd=$pwd
 log_level=debug
@@ -50,6 +51,7 @@ while [[ ${1} ]]; do
     shift
     ;;
   --addr)
+    addr_url=${2}
     addr="--addr ${2}"
     shift
     ;;
@@ -133,9 +135,9 @@ fi
 
 # Make sure cdc is ready to serve
 if [ -z "$tls_dir" ]; then
-  curl_status_cmd="curl -LI http://$addr/status -o /dev/null -w %{http_code}\n -s"
+  curl_status_cmd="curl -sL -w %{http_code}\n http://$addr_url/status -o /dev/null"
 else
-  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/server.pem --key $tls_dir/server-key.pem -LI http://$addr/status -o /dev/null -w %{http_code}\n -s"
+  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/server.pem --key $tls_dir/server-key.pem -sL -w %{http_code}\n http://$addr_url/status -o /dev/null"
 fi
 
 while [ "$curl_status_cmd" != "200" ]; do
