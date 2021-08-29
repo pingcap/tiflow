@@ -17,7 +17,7 @@ certcn=
 binary=
 logsuffix=
 addr=
-addr_url="http://127.0.0.1:8300"
+addr_url="127.0.0.1:8300"
 pd_addr=
 pwd=$pwd
 log_level=debug
@@ -137,7 +137,7 @@ fi
 if [ -z "$tls_dir" ]; then
   curl_status_cmd="curl -sL -w %{http_code}\n http://$addr_url/status -o /dev/null"
 else
-  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/server.pem --key $tls_dir/server-key.pem -sL -w %{http_code}\n http://$addr_url/status -o /dev/null"
+  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/server.pem --key $tls_dir/server-key.pem -sL -w %{http_code}\n https://$addr_url/status -o /dev/null"
 fi
 
 while [ "$curl_status_cmd" != "200" ]; do
