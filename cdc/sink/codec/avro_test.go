@@ -195,6 +195,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: int64(1)},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 			{Name: "tiny", Type: mysql.TypeTiny, Value: int64(255)},
+			{Name: "utiny", Type: mysql.TypeTiny, Flag: model.UnsignedFlag, Value: uint64(100)},
 			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		},
 	}
