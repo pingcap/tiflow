@@ -70,6 +70,7 @@ type Statistics struct {
 	changefeedID     string
 	totalRows        uint64
 	totalFlushedRows uint64
+	totalDDLCount    uint64
 
 	lastPrintStatusTotalRows uint64
 	lastPrintStatusTime      time.Time
@@ -95,10 +96,20 @@ func (b *Statistics) TotalRowsCount() uint64 {
 	return atomic.LoadUint64(&b.totalRows)
 }
 
+// AddDDLCount records total number of ddl needs to flush
+func (b *Statistics) AddDDLCount() {
+	atomic.AddUint64(&b.totalDDLCount, 1)
+}
+
+// TotalDDLCount returns total number of ddl
+func (b *Statistics) TotalDDLCount() uint64 {
+	return atomic.LoadUint64(&b.totalDDLCount)
+}
+
 // RecordBatchExecution records the cost time of batch execution and batch size
-func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
+func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
 	startTime := time.Now()
-	batchSize, err := executer()
+	batchSize, err := executor()
 	if err != nil {
 		b.metricExecErrCnt.Inc()
 		return err
@@ -111,8 +122,13 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 }
 
 // RecordDDLExecution record the time cost of execute ddl
-func (b *Statistics) RecordDDLExecution(func() error) error {
+func (b *Statistics) RecordDDLExecution(executor func() error) error {
+	start := time.Now()
+	if err := executor(); err != nil {
+		return err
+	}
 
+	b.metricExecDDLHis.Observe(time.Since(start).Seconds())
 	return nil
 }
 
@@ -131,10 +147,15 @@ func (b *Statistics) PrintStatus(ctx context.Context) {
 	}
 	b.lastPrintStatusTime = time.Now()
 	b.lastPrintStatusTotalRows = totalRows
+
+	totalDDLCount := atomic.LoadUint64(&b.totalDDLCount)
+	atomic.StoreUint64(&b.totalDDLCount, 0)
+
 	log.Info("sink replication status",
 		zap.String("name", b.name),
 		zap.String("changefeed", b.changefeedID),
 		util.ZapFieldCapture(ctx),
 		zap.Uint64("count", count),
-		zap.Uint64("qps", qps))
+		zap.Uint64("qps", qps),
+		zap.Uint64("ddl", totalDDLCount))
 }
