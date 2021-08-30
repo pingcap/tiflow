@@ -67,27 +67,35 @@ func newGCManager() *gcManager {
 	}
 }
 
+func getMinCheckpointTs(feeds map[model.ChangeFeedID]*model.ChangefeedReactorState) uint64 {
+	preferredState := map[model.FeedState]struct{}{
+		model.StateNormal:  {},
+		model.StateStopped: {},
+		model.StateError:   {},
+	}
+	minCheckpointTs := uint64(math.MaxUint64)
+	for _, cfState := range feeds {
+		if cfState.Info == nil {
+			continue
+		}
+		if _, ok := preferredState[cfState.Info.State]; ok {
+			// When the changefeed starts up, CDC will do a snapshot read at (checkpoint-ts - 1) from TiKV,
+			// so (checkpoint - 1) should be an upper bound for the GC safepoint.
+			gcSafepointUpperBound := cfState.Info.GetCheckpointTs(cfState.Status) - 1
+			if minCheckpointTs > gcSafepointUpperBound {
+				minCheckpointTs = gcSafepointUpperBound
+			}
+		}
+	}
+
+	return minCheckpointTs
+}
+
 func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error {
 	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
 		return nil
 	}
-	minCheckpointTs := uint64(math.MaxUint64)
-	for _, cfState := range state.Changefeeds {
-		if cfState.Info == nil {
-			continue
-		}
-		switch cfState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateError:
-		default:
-			continue
-		}
-		// When the changefeed starts up, CDC will do a snapshot read at (checkpoint-ts - 1) from TiKV,
-		// so (checkpoint - 1) should be an upper bound for the GC safepoint.
-		gcSafepointUpperBound := cfState.Info.GetCheckpointTs(cfState.Status) - 1
-		if minCheckpointTs > gcSafepointUpperBound {
-			minCheckpointTs = gcSafepointUpperBound
-		}
-	}
+	minCheckpointTs := getMinCheckpointTs(state.Changefeeds)
 	m.lastUpdatedTime = time.Now()
 
 	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, m.gcTTL, minCheckpointTs)
