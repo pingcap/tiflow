@@ -137,12 +137,12 @@ fi
 
 # Make sure cdc is ready to serve
 if [ -z "$tls_dir" ]; then
-  curl_status_cmd="curl -sL -w %{http_code}\n http://$addr_url/status -o /dev/null"
+  curl_status_cmd="curl -sL http://$addr_url/status 2>&1 | grep -q 'fail to get info'"
 else
-  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -sL -w %{http_code}\n https://$addr_url/status -o /dev/null"
+  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -sL https://$addr_url/status 2>&1 | grep -q 'fail to get info'"
 fi
 
-while [ "$($curl_status_cmd)" != "200" ]; do
+while [ ! "$($curl_status_cmd)" ]; do
   i=$((i + 1))
   if [ "$i" -gt 50 ]; then
     echo 'Failed to start TiCDC'
