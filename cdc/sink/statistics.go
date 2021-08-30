@@ -101,11 +101,6 @@ func (b *Statistics) AddDDLCount() {
 	atomic.AddUint64(&b.totalDDLCount, 1)
 }
 
-// TotalDDLCount returns total number of ddl
-func (b *Statistics) TotalDDLCount() uint64 {
-	return atomic.LoadUint64(&b.totalDDLCount)
-}
-
 // RecordBatchExecution records the cost time of batch execution and batch size
 func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
 	startTime := time.Now()
