@@ -138,9 +138,9 @@ fi
 # Make sure cdc is ready to serve
 get_info_fail_msg="failed to get info:"
 if [ -z "$tls_dir" ]; then
-  curl_status_cmd="curl -sL http://$addr_url/status 2>&1 | grep -q $get_info_fail_msg"
+  curl_status_cmd="curl -sL http://$addr_url/debug/info2>&1 | grep -q $get_info_fail_msg"
 else
-  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -sL https://$addr_url/status 2>&1 | grep -q $get_info_fail_msg"
+  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -sL https://$addr_url/debug/info 2>&1 | grep -q $get_info_fail_msg"
 fi
 
 while $curl_status_cmd; do
