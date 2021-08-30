@@ -137,17 +137,21 @@ fi
 
 # Make sure cdc is ready to serve
 get_info_fail_msg="failed to get info:"
+etch_info_msg="etcd info"
 if [ -z "$tls_dir" ]; then
-  curl_status_cmd="curl -sL http://$addr_url/debug/info 2>&1 | grep -q $get_info_fail_msg"
+  curl_status_cmd="curl -vL http://$addr_url/debug/info"
 else
-  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -sL https://$addr_url/debug/info 2>&1 | grep -q $get_info_fail_msg"
+  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -vL https://$addr_url/debug/info"
 fi
 
-while $curl_status_cmd; do
-  i=$((i + 1))
-  if [ "$i" -gt 50 ]; then
+for ((i = 0; i <= 50; i++)); do
+  res=$($curl_status_cmd)
+  if ! echo "$res" | grep -q "$get_info_fail_msg" && echo "$res" | grep -q "$etch_info_msg"; then
+    break
+  fi
+  if [ "$i" -eq 50 ]; then
     echo 'Failed to start TiCDC'
-    return 1
+    exit 1
   fi
   sleep 3
 done
