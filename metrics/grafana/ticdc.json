@@ -2861,7 +2861,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "MySQL sink execute DDL duration percentile",
+          "title": "MySQL sink ddl execution duration percentile",
           "tooltip": {
             "shared": true,
             "sort": 2,
