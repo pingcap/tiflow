@@ -14,6 +14,7 @@ workdir=
 tls=
 tls_dir=
 certcn=
+certcn_name="server"
 binary=
 logsuffix=
 addr=
@@ -39,6 +40,7 @@ while [[ ${1} ]]; do
     shift
     ;;
   --cert-allowed-cn)
+    certcn_name=${2}
     certcn="--cert-allowed-cn ${2}"
     shift
     ;;
@@ -137,7 +139,7 @@ fi
 if [ -z "$tls_dir" ]; then
   curl_status_cmd="curl -sL -w %{http_code}\n http://$addr_url/status -o /dev/null"
 else
-  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/server.pem --key $tls_dir/server-key.pem -sL -w %{http_code}\n https://$addr_url/status -o /dev/null"
+  curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -sL -w %{http_code}\n https://$addr_url/status -o /dev/null"
 fi
 
 while [ "$($curl_status_cmd)" != "200" ]; do
