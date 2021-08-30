@@ -15,23 +15,16 @@ package capture
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-var _ = check.Suite(&httpValidatorSuite{})
-
-func Test(t *testing.T) { check.TestingT(t) }
-
-type httpValidatorSuite struct {
-}
-
-func (s *httpValidatorSuite) TestVerifyUpdateChangefeedConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestVerifyUpdateChangefeedConfig(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -40,27 +33,27 @@ func (s *httpValidatorSuite) TestVerifyUpdateChangefeedConfig(c *check.C) {
 	changefeedConfig := model.ChangefeedConfig{TargetTS: 20}
 	oldInfo.StartTs = 40
 	newInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, ".*can not update target-ts.*less than start-ts.*")
-	c.Assert(newInfo, check.IsNil)
+	assert.NotNil(t, err)
+	assert.Regexp(t, ".*can not update target-ts.*less than start-ts.*", err)
+	assert.Nil(t, newInfo)
 
 	// test no change error
 	changefeedConfig = model.ChangefeedConfig{SinkURI: "blackhole://"}
 	oldInfo.SinkURI = "blackhole://"
 	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, ".*changefeed config is the same with the old one.*")
-	c.Assert(newInfo, check.IsNil)
+	assert.NotNil(t, err)
+	assert.Regexp(t, ".*changefeed config is the same with the old one.*", err)
+	assert.Nil(t, newInfo)
 
 	// test verify success
 	changefeedConfig = model.ChangefeedConfig{MounterWorkerNum: 32}
 	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
-	c.Assert(err, check.IsNil)
-	c.Assert(newInfo, check.NotNil)
+	assert.Nil(t, err)
+	assert.NotNil(t, newInfo)
 }
 
-func (s *httpValidatorSuite) TestVerifySink(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestVerifySink(t *testing.T) {
+	defer testleak.AfterTestT(t)()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -70,11 +63,11 @@ func (s *httpValidatorSuite) TestVerifySink(c *check.C) {
 	// test sink uri error
 	sinkURI := "mysql://root:111@127.0.0.1:3306/"
 	err := verifySink(ctx, sinkURI, replicateConfig, opts)
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, "fail to open MySQL connection.*ErrMySQLConnectionError.*")
+	assert.NotNil(t, err)
+	assert.Regexp(t, "fail to open MySQL connection.*ErrMySQLConnectionError.*", err)
 
 	// test sink uri right
 	sinkURI = "blackhole://"
 	err = verifySink(ctx, sinkURI, replicateConfig, opts)
-	c.Assert(err, check.IsNil)
+	assert.Nil(t, err)
 }
