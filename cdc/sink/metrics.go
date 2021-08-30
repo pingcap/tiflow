@@ -40,7 +40,7 @@ var (
 			Subsystem: "sink",
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
-			Buckets:   prometheus.ExponentialBuckets(0.002, 2, 18),
+			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
 		}, []string{"capture", "changefeed"})
 	executionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
