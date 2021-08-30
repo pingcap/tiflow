@@ -34,6 +34,14 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"capture", "changefeed"})
+	execDDLHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "ddl_exec_duration",
+			Help:      "Bucketed histogram of processing time (s) of a ddl.",
+			Buckets:   prometheus.ExponentialBuckets(0.002, 2, 18),
+		}, []string{"capture", "changefeed"})
 	executionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -91,6 +99,7 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
+	registry.MustRegister(execDDLHistogram)
 	registry.MustRegister(executionErrorCounter)
 	registry.MustRegister(conflictDetectDurationHis)
 	registry.MustRegister(bucketSizeCounter)
