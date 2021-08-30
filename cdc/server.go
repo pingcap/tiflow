@@ -82,6 +82,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	pdClient, err := pd.NewClientWithContext(
 		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
@@ -106,8 +107,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   s.pdEndpoints,
 		TLS:         tlsConfig,
@@ -131,9 +134,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-	etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
-	s.etcdClient = &etcdClient
-	if err := s.initDataDir(ctx); err != nil {
+
+	cdcEtcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+	s.etcdClient = &cdcEtcdClient
+
+	err = s.initDataDir(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
 
