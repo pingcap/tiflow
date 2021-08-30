@@ -96,9 +96,9 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
 		return nil
 	}
-	minCheckpointTs := getMinCheckpointTs(state.Changefeeds)
-	m.lastUpdatedTime = time.Now()
 
+	// gcSafePoint should be set as the minimum of all changefeeds' checkpoint ts.
+	minCheckpointTs := getMinCheckpointTs(state.Changefeeds)
 	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, m.gcTTL, minCheckpointTs)
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
@@ -109,6 +109,8 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 		}
 		return nil
 	}
+	m.lastUpdatedTime = time.Now()
+
 	failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
 		actual = uint64(val.(int))
 	})
