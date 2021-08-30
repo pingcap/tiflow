@@ -133,6 +133,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
 	}
+	// changefeed metadata already erased from etcd, so we have to delete those changefeed from memory.
 	if len(o.changefeeds) != len(state.Changefeeds) {
 		for changefeedID, cfReactor := range o.changefeeds {
 			if _, exist := state.Changefeeds[changefeedID]; exist {

@@ -68,17 +68,12 @@ func newGCManager() *gcManager {
 }
 
 func getMinCheckpointTs(feeds map[model.ChangeFeedID]*model.ChangefeedReactorState) uint64 {
-	preferredState := map[model.FeedState]struct{}{
-		model.StateNormal:  {},
-		model.StateStopped: {},
-		model.StateError:   {},
-	}
 	minCheckpointTs := uint64(math.MaxUint64)
 	for _, cfState := range feeds {
 		if cfState.Info == nil {
 			continue
 		}
-		if _, ok := preferredState[cfState.Info.State]; !ok {
+		if _, ok := model.RunnableStates[cfState.Info.State]; !ok {
 			continue
 		}
 		// When the changefeed starts up, CDC will do a snapshot read at (checkpoint-ts - 1) from TiKV,

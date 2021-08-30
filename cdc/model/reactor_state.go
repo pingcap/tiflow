@@ -28,8 +28,10 @@ import (
 
 // GlobalReactorState represents a global state which stores all key-value pairs in ETCD
 type GlobalReactorState struct {
-	Owner          map[string]struct{}
-	Captures       map[CaptureID]*CaptureInfo
+	Owner    map[string]struct{}
+	Captures map[CaptureID]*CaptureInfo
+
+	// all exists created changefeed state
 	Changefeeds    map[ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]orchestrator.DataPatch
 }
