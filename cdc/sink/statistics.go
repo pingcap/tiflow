@@ -39,6 +39,7 @@ func NewStatistics(ctx context.Context, name string, opts map[string]string) *St
 		statistics.captureAddr = cid
 	}
 	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 
@@ -74,6 +75,7 @@ type Statistics struct {
 	lastPrintStatusTime      time.Time
 
 	metricExecTxnHis   prometheus.Observer
+	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
 }
@@ -105,6 +107,12 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	b.metricExecTxnHis.Observe(castTime)
 	b.metricExecBatchHis.Observe(float64(batchSize))
 	atomic.AddUint64(&b.totalFlushedRows, uint64(batchSize))
+	return nil
+}
+
+// RecordDDLExecution record the time cost of execute ddl
+func (b *Statistics) RecordDDLExecution(func() error) error {
+
 	return nil
 }
 

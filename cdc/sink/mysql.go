@@ -197,6 +197,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
+
 	err := s.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
 }
@@ -231,30 +232,35 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 		failpoint.Return(nil)
 	})
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-
-	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+	err := s.statistics.RecordDDLExecution(func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.Error(err))
+			return err
+		}
+
+		if shouldSwitchDB {
+			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+			if err != nil {
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Error("Failed to rollback", zap.Error(err))
+				}
+				return err
 			}
-			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 		}
-	}
 
-	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
+		if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
+			}
+			return err
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
 
-	if err = tx.Commit(); err != nil {
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 
