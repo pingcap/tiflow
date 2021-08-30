@@ -188,22 +188,26 @@ LOOP:
 			break LOOP
 		}
 	}
+
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info),
 		zap.Uint64("checkpoint ts", checkpointTs))
+
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 	failpoint.Inject("NewChangefeedRetryError", func() {
-		failpoint.Return(errors.New("failpoint injected retriable error"))
+		failpoint.Return(errors.New("failpoint injected retryable error"))
 	})
+
 	if c.state.Info.Config.CheckGCSafePoint {
 		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
+
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
@@ -212,6 +216,7 @@ LOOP:
 	// the DDL barrier to the correct start point.
 	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
+
 	var err error
 	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
@@ -221,8 +226,10 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
+
 	c.sink, err = c.newSink(cancelCtx)
 	if err != nil {
 		return errors.Trace(err)
@@ -231,6 +238,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
