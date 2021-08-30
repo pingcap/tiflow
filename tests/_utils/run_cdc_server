@@ -136,7 +136,7 @@ else
 fi
 
 # Make sure cdc is ready to serve
-get_info_fail_msg="fail to get info"
+get_info_fail_msg="failed to get info:"
 if [ -z "$tls_dir" ]; then
   curl_status_cmd="curl -sL http://$addr_url/status 2>&1 | grep -q $get_info_fail_msg"
 else
