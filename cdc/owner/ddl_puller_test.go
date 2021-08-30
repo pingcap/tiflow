@@ -153,6 +153,7 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	resolvedTs, ddl = p.FrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(15))
 	c.Assert(ddl, check.IsNil)
+
 	mockPuller.appendResolvedTs(20)
 	waitResolvedTsGrowing(c, p, 16)
 	resolvedTs, ddl = p.FrontDDL()
@@ -161,6 +162,9 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(16))
 	c.Assert(ddl.ID, check.Equals, int64(1))
+
+	// DDL could be processed with a delay, wait here for a pending DDL job is added
+	waitResolvedTsGrowing(c, p, 18)
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(18))
 	c.Assert(ddl.ID, check.Equals, int64(2))
@@ -217,6 +221,8 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	c.Assert(ddl, check.IsNil)
 }
 
+// waitResolvedTsGrowing can wait the first DDL reaches targetTs or if no pending
+// DDL, DDL resolved ts reaches targetTs.
 func waitResolvedTsGrowing(c *check.C, p DDLPuller, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
 		resolvedTs, _ := p.FrontDDL()

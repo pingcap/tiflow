@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	// cdcServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	cdcServiceSafePointID = "ticdc"
+	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	CDCServiceSafePointID = "ticdc"
 	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
@@ -81,14 +81,16 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 		default:
 			continue
 		}
-		checkpointTs := cfState.Info.GetCheckpointTs(cfState.Status)
-		if minCheckpointTs > checkpointTs {
-			minCheckpointTs = checkpointTs
+		// When the changefeed starts up, CDC will do a snapshot read at (checkpoint-ts - 1) from TiKV,
+		// so (checkpoint - 1) should be an upper bound for the GC safepoint.
+		gcSafepointUpperBound := cfState.Info.GetCheckpointTs(cfState.Status) - 1
+		if minCheckpointTs > gcSafepointUpperBound {
+			minCheckpointTs = gcSafepointUpperBound
 		}
 	}
 	m.lastUpdatedTime = time.Now()
 
-	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
+	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, m.gcTTL, minCheckpointTs)
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
 			zap.Uint64("safePointTs", minCheckpointTs),
@@ -129,17 +131,18 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 }
 
 func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if pdTime.Sub(oracle.GetTimeFromTS(checkpointTs)) > time.Duration(m.gcTTL)*time.Second {
+		if pdTime.Sub(oracle.GetTimeFromTS(gcSafepointUpperBound)) > time.Duration(m.gcTTL)*time.Second {
 			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, ctx.ChangefeedVars().ID)
 		}
 	} else {
 		// if `isTiCDCBlockGC` is false, it means there is another service gc point less than the min checkpoint ts.
-		if checkpointTs < m.lastSafePointTs {
+		if gcSafepointUpperBound < m.lastSafePointTs {
 			return cerror.ErrSnapshotLostByGC.GenWithStackByArgs(checkpointTs, m.lastSafePointTs)
 		}
 	}
