@@ -45,8 +45,8 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
 
-    # set max_execution_time to 15s, because split region could block even region has been split.
-    run_sql "SET @@global.MAX_EXECUTION_TIME = 15000;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    # set max_execution_time to 60s, because split region could block even region has been split.
+    run_sql "SET @@global.MAX_EXECUTION_TIME = 60000;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE DATABASE region_merge;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE TABLE region_merge.t1 (id bigint primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
