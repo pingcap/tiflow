@@ -338,7 +338,8 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 // AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
-	// TODO: Why we can ignore this?
+	// Safety: Here we mainly want to stop the owner
+	// and ignore it if the owner does not exist or is not set.
 	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		o.AsyncStop()
 		return nil
@@ -355,7 +356,8 @@ func (c *Capture) AsyncClose() {
 
 // WriteDebugInfo writes the debug info into writer.
 func (c *Capture) WriteDebugInfo(w io.Writer) {
-	// TODO: Why we can ignore this?
+	// Safety: Because we are mainly outputting information about the owner here,
+	// if the owner does not exist or is not set, the information will not be output.
 	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w)
