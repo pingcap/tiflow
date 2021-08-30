@@ -341,6 +341,11 @@ error = '''
 invalid record key - %q
 '''
 
+["CDC:ErrInvalidS3URI"]
+error = '''
+invalid s3 uri: %s
+'''
+
 ["CDC:ErrInvalidServerOption"]
 error = '''
 invalid server option

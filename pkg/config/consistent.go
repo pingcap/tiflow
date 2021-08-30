@@ -15,6 +15,9 @@ package config
 
 // ConsistentConfig represents replication consistency config for a changefeed
 type ConsistentConfig struct {
-	Level   string `toml:"level" json:"level"`
-	Storage string `toml:"storage" json:"storage"`
+	Level             string `toml:"level" json:"level"`
+	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
+	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
+	Storage           string `toml:"storage" json:"storage"`
+	S3URI             string `toml:"s3-uri" json:"s3-uri"`
 }

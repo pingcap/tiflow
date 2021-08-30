@@ -35,6 +35,8 @@ const (
 	NewReplicaImpl = true
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
+	// DefaultSortDir is the sub directory path of data-dir.
+	DefaultRedoDir = "/redo"
 )
 
 func init() {
@@ -62,8 +64,11 @@ var defaultReplicaConfig = &ReplicaConfig{
 		PollingTime: -1,
 	},
 	Consistent: &ConsistentConfig{
-		Level:   "normal",
-		Storage: "local",
+		Level:             "normal",
+		MaxLogSize:        64,
+		FlushIntervalInMs: 1000,
+		Storage:           "local",
+		S3URI:             "",
 	},
 }
 

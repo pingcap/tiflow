@@ -117,6 +117,7 @@ var (
 	// redo log related errors
 	ErrConsistentLevel   = errors.Normalize("consistent level (%s) not support", errors.RFCCodeText("CDC:ErrConsistentLevel"))
 	ErrConsistentStorage = errors.Normalize("consistent storage (%s) not support", errors.RFCCodeText("CDC:ErrConsistentStorage"))
+	ErrInvalidS3URI      = errors.Normalize("invalid s3 uri: %s", errors.RFCCodeText("CDC:ErrInvalidS3URI"))
 
 	// utilities related errors
 	ErrToTLSConfigFailed         = errors.Normalize("generate tls config failed", errors.RFCCodeText("CDC:ErrToTLSConfigFailed"))

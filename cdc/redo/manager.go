@@ -16,6 +16,8 @@ package redo
 import (
 	"context"
 	"math"
+	"net/url"
+	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -26,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo/writer"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -118,6 +121,26 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	switch m.storage {
 	case consistentStorageBlackhole:
 		m.writer = writer.NewBlackHoleWriter()
+	case consistentStorageLocal, consistentStorageS3:
+		globalConf := config.GetGlobalServerConfig()
+		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir)
+		writerCfg := &writer.LogWriterConfig{
+			Dir:               redoDir,
+			CaptureID:         util.CaptureAddrFromCtx(ctx),
+			ChangeFeedID:      util.ChangefeedIDFromCtx(ctx),
+			CreateTime:        time.Now(),
+			MaxLogSize:        cfg.MaxLogSize,
+			FlushIntervalInMs: cfg.FlushIntervalInMs,
+			S3Storage:         cfg.Storage == string(consistentStorageS3),
+		}
+		if writerCfg.S3Storage {
+			s3URI, err := url.Parse(cfg.S3URI)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrInvalidS3URI, err)
+			}
+			writerCfg.S3URI = s3URI
+		}
+		m.writer = writer.NewLogWriter(ctx, writerCfg)
 	default:
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storage)
 	}
