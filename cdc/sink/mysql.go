@@ -197,7 +197,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
-
+	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
 }
@@ -255,10 +255,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 			return err
 		}
 
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-		return nil
+		return tx.Commit()
 	})
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
