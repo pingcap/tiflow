@@ -143,7 +143,7 @@ else
   curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -sL https://$addr_url/status 2>&1 | grep -q $get_info_fail_msg"
 fi
 
-while [ ! "$($curl_status_cmd)" ]; do
+while $curl_status_cmd; do
   i=$((i + 1))
   if [ "$i" -gt 50 ]; then
     echo 'Failed to start TiCDC'
