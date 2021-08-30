@@ -16,6 +16,7 @@ package sorter
 import (
 	"runtime"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -54,12 +55,24 @@ func (s *memoryBackendSuite) TestNoLeaking(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 
-	runtime.GC()
+	for i := 0; i < 10; i++ {
+		runtime.GC()
+		if atomic.LoadInt64(&objCount) <= 5000 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	c.Assert(atomic.LoadInt64(&objCount), check.LessEqual, int64(5000))
 
 	err = rdr.resetAndClose()
 	c.Assert(err, check.IsNil)
 
-	runtime.GC()
+	for i := 0; i < 10; i++ {
+		runtime.GC()
+		if atomic.LoadInt64(&objCount) == 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	c.Assert(atomic.LoadInt64(&objCount), check.Equals, int64(0))
 }
