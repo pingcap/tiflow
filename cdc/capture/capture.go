@@ -180,7 +180,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
-		// when the etcd worker of processor returns an error, it means that the the processor throws an unrecoverable serious errors
+		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the owner and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
