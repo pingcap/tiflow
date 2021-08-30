@@ -27,11 +27,10 @@ import (
 )
 
 // GlobalReactorState represents a global state which stores all key-value pairs in ETCD
+// TiCDC treat ETCD as truth of all in memory state at the moment, we should keep memory state sync with it.
 type GlobalReactorState struct {
-	Owner    map[string]struct{}
-	Captures map[CaptureID]*CaptureInfo
-
-	// all exists created changefeed state
+	Owner          map[string]struct{}
+	Captures       map[CaptureID]*CaptureInfo
 	Changefeeds    map[ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]orchestrator.DataPatch
 }
