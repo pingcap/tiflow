@@ -598,11 +598,7 @@ func TestWriter_GC(t *testing.T) {
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
 	}
-	originValue := defaultGCIntervalInMs
-	defaultGCIntervalInMs = 1
-	defer func() {
-		defaultGCIntervalInMs = originValue
-	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -640,7 +636,7 @@ func TestWriter_GC(t *testing.T) {
 			cfg:       cfg,
 		}
 		go writer.runGC(ctx)
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
 
 		writer.Close()
 		mockWriter.AssertNumberOfCalls(t, "Close", 2)
