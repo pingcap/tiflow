@@ -46,9 +46,6 @@ import (
 
 const (
 	schemaStorageGCLag = time.Minute * 20
-
-	backoffBaseDelayInMs = 5
-	maxTries             = 3
 )
 
 type processor struct {
@@ -511,9 +508,10 @@ func (p *processor) sendError(err error) {
 	}
 }
 
+// check if a table should be listened but not yet
+// this only could be happened in the first tick.
+// listen to a tables means create table pipeline by processor's addTable
 func (p *processor) listenTables(ctx cdcContext.Context, taskStatus *model.TaskStatus) error {
-	// check if a table should be listened but not yet
-	// this only could be happened in the first tick.
 	for tableID, replicaInfo := range taskStatus.Tables {
 		if _, exist := p.tables[tableID]; exist {
 			continue
@@ -656,15 +654,15 @@ func (p *processor) pushResolvedTs2Table() {
 // addTable creates a new table pipeline and adds it to the `p.tables`
 func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if table, ok := p.tables[tableID]; ok {
-		if table.Status() == tablepipeline.TableStatusStopped {
-			log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			table.Cancel()
-			table.Wait()
-			delete(p.tables, tableID)
-		} else {
+		if table.Status() != tablepipeline.TableStatusStopped {
 			log.Warn("Ignore existing table", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			return nil
 		}
+
+		log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
+		table.Cancel()
+		table.Wait()
+		delete(p.tables, tableID)
 	}
 
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
@@ -684,6 +682,22 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	return nil
 }
 
+func (p *processor) getTableNameByID(ctx cdcContext.Context, tableID model.TableID) *model.TableName {
+	var tableName *model.TableName
+	err := retry.Do(ctx, func() error {
+		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
+			tableName = &name
+			return nil
+		}
+		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
+	}, retry.WithBackoffBaseDelay(50), retry.WithMaxTries(3), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	if err != nil {
+		log.Warn("cannot get table name by table ID", zap.Any("tableID", tableID))
+	}
+
+	return tableName
+}
+
 func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
@@ -693,14 +707,9 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		p.sendError(err)
 		return nil
 	})
-	var tableName *model.TableName
-	retry.Do(ctx, func() error { //nolint:errcheck
-		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = &name
-			return nil
-		}
-		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
+	tableName := p.getTableNameByID(ctx, tableID)
+
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
 		// Retry to find mark table ID
 		var markTableID model.TableID
@@ -743,8 +752,8 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		sink,
 		p.changefeed.Info.GetTargetTs(),
 	)
+
 	p.wg.Add(1)
-	p.metricSyncTableNumGauge.Inc()
 	go func() {
 		table.Wait()
 		p.wg.Done()
@@ -754,6 +763,8 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			zap.String("name", table.Name()),
 			zap.Any("replicaInfo", replicaInfo))
 	}()
+
+	p.metricSyncTableNumGauge.Inc()
 
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx),
