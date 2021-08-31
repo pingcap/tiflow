@@ -742,14 +742,14 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		tableNameStr = tableName.QuoteString()
 	}
 
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
+	tableSink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
 		p.mounter,
 		tableID,
 		tableNameStr,
 		replicaInfo,
-		sink,
+		tableSink,
 		p.changefeed.Info.GetTargetTs(),
 	)
 
