@@ -113,6 +113,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		FlushIntervalInMs: cfg.FlushIntervalInMs,
 	}
 	logWriter := &LogWriter{
+		cfg:       cfg,
 		rowWriter: NewWriter(ctx, rowCfg),
 		ddlWriter: NewWriter(ctx, ddlCfg),
 		meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
