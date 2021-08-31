@@ -375,7 +375,7 @@ func (c *Capture) WriteDebugInfo(w io.Writer) {
 func (c *Capture) IsOwner() bool {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
-	return c.owner == nil
+	return c.owner != nil
 }
 
 // GetOwner return the owner of current TiCDC cluster
