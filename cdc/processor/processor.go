@@ -446,6 +446,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
 		checkpointTs, ddlspans, false)
+
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -454,12 +455,15 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
 		p.sendError(ddlPuller.Run(ctx))
 	}()
+
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()

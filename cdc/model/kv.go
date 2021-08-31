@@ -26,20 +26,20 @@ type OpType int
 
 // OpType for kv
 const (
-	OpTypeUnknow OpType = iota
+	OpTypeUnknown OpType = iota
 	OpTypePut
 	OpTypeDelete
 	OpTypeResolved
 )
 
 // RegionFeedEvent from the kv layer.
-// Only one of the event will be setted.
+// Only one of the event will be set.
 //msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
 	Resolved *ResolvedSpan
 
-	// Additonal debug info
+	// Additional debug info
 	RegionID uint64
 }
 
@@ -79,7 +79,7 @@ type RawKVEntry struct {
 	// Commit or resolved TS
 	CRTs uint64 `msg:"crts"`
 
-	// Additonal debug info
+	// Additional debug info
 	RegionID uint64 `msg:"region_id"`
 }
 
