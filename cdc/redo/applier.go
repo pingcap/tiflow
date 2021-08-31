@@ -14,22 +14,21 @@
 package redo
 
 import (
+	"context"
+
 	"github.com/pingcap/ticdc/cdc/redo/reader"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
-// ReaderConfig is the configuration used by a redo log reader
-type ReaderConfig struct {
-	Storage string
-}
-
 // NewRedoReader creates a new redo log reader
-func NewRedoReader(cfg *ReaderConfig) (rd reader.Reader, err error) {
-	switch consistentStorage(cfg.Storage) {
+func NewRedoReader(ctx context.Context, storage string, cfg *reader.LogReaderConfig) (rd reader.Reader, err error) {
+	switch consistentStorage(storage) {
 	case consistentStorageBlackhole:
 		rd = reader.NewBlackholeReader()
+	case consistentStorageLocal, consistentStorageS3:
+		rd = reader.NewLogReader(ctx, cfg)
 	default:
-		err = cerror.ErrConsistentStorage.GenWithStackByArgs(cfg.Storage)
+		err = cerror.ErrConsistentStorage.GenWithStackByArgs(storage)
 	}
 	return
 }
