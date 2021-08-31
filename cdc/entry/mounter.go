@@ -210,7 +210,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, nil
 	}()
 	if err != nil {
-		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
+		log.Error("failed to unmarshal and rowKV entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
 	return row, err
@@ -331,36 +331,54 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
-	var err error
+func (m *mounterImpl) mountPreCols(tableInfo *model.TableInfo, row *rowKVEntry) ([]*model.Column, error) {
 	// Decode previous columns.
-	var preCols []*model.Column
+	var (
+		err     error
+		preCols []*model.Column
+	)
+
+	if !row.PreRowExist {
+		return preCols, nil
+	}
+
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
 	// but for the Delete event, when the old value feature is off,
 	// the HandleKey column needs to be included as well. So we need to do the following filtering.
-	if row.PreRowExist {
-		// FIXME(leoppro): using pre table info to mounter pre column datum
-		// the pre column and current column in one event may using different table info
-		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
 
-		// NOTICE: When the old Value feature is off,
-		// the Delete event only needs to keep the handle key column.
-		if row.Delete && !m.enableOldValue {
-			for i := range preCols {
-				col := preCols[i]
-				if col != nil && !col.Flag.IsHandleKey() {
-					preCols[i] = nil
-				}
+	// FIXME(leoppro): using pre table info to mounter pre column datum
+	// the pre column and current column in one event may using different table info
+	preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// NOTICE: When the old Value feature is off,
+	// the Delete event only needs to keep the handle key column.
+	if row.Delete && !m.enableOldValue {
+		for i := range preCols {
+			col := preCols[i]
+			if col != nil && !col.Flag.IsHandleKey() {
+				preCols[i] = nil
 			}
 		}
 	}
+	return preCols, nil
+}
 
-	var cols []*model.Column
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
+	var (
+		err  error
+		cols []*model.Column
+	)
+
+	preCols, err := m.mountPreCols(tableInfo, row)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	if row.RowExist {
 		cols, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {

@@ -17,7 +17,7 @@ import (
 	"context"
 )
 
-// PolymorphicEvent describes a event can be in multiple states
+// PolymorphicEvent describes an event can be in multiple states
 type PolymorphicEvent struct {
 	StartTs uint64
 	// Commit or resolved TS
