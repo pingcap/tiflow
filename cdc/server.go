@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -137,18 +138,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// To not block CDC server startup, we need to warn instead of error
-	// when TiKV is incompatible.
-	errorTiKVIncompatible := false
-	for _, pdEndpoint := range s.pdEndpoints {
-		err = version.CheckClusterVersion(ctx, s.pdClient, pdEndpoint, conf.Security, errorTiKVIncompatible)
-		if err == nil {
-			break
-		}
-	}
-	if err != nil {
-		return err
-	}
+	checkAndWaitClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security)
 
 	kv.InitWorkerPool()
 	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
@@ -366,4 +356,26 @@ func findBestDataDir(candidates []string) (result string, ok bool) {
 	}
 
 	return result, ok
+}
+
+func checkAndWaitClusterVersion(
+	ctx context.Context, pdClient pd.Client, pdEndpoints []string, security *config.SecurityConfig,
+) {
+	const backoffOneSecond = 1000
+	const errorTiKVIncompatible = true
+
+	retry.Do(ctx, func() error {
+		var err error
+		for _, pdEndpoint := range pdEndpoints {
+			err = version.CheckClusterVersion(
+				ctx, pdClient, pdEndpoint, security, errorTiKVIncompatible)
+			if err == nil {
+				break
+			}
+			log.Warn("check version", zap.Error(err))
+		}
+		return err
+	}, retry.WithInfiniteTries(),
+		retry.WithBackoffBaseDelay(backoffOneSecond), retry.WithBackoffMaxDelay(backoffOneSecond))
+	return
 }

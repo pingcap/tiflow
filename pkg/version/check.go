@@ -35,9 +35,9 @@ import (
 )
 
 var (
-	// minPDVersion is the version of the minimal compatible PD.
+	// MinPDVersion is the version of the minimal compatible PD.
 	// TODO bump 5.2.0-alpha once PD releases.
-	minPDVersion *semver.Version = semver.New("5.1.0-alpha")
+	MinPDVersion *semver.Version = semver.New("5.1.0-alpha")
 	// maxPDVersion is the version of the maximum compatible PD.
 	// Compatible versions are in [minPDVersion, maxPDVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
@@ -127,10 +127,10 @@ func CheckClusterVersion(
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
 
-	minOrd := ver.Compare(*minPDVersion)
+	minOrd := ver.Compare(*MinPDVersion)
 	if minOrd < 0 {
 		arg := fmt.Sprintf("PD %s is not supported, the minimal compatible version is %s",
-			removeVAndHash(pdVer.Version), minPDVersion)
+			removeVAndHash(pdVer.Version), MinPDVersion)
 		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	maxOrd := ver.Compare(*maxPDVersion)

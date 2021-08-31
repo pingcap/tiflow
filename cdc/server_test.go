@@ -15,15 +15,21 @@ package cdc
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"net/url"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
@@ -108,4 +114,75 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 
 	cancel()
+}
+
+type checkSuite struct{}
+
+var _ = check.Suite(&checkSuite{})
+
+func (s *checkSuite) TestCheckAndWaitClusterVersion(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mock := version.MockPDClient{
+		Client: nil,
+	}
+	pdURL, _ := url.Parse(tempurl.Alloc())
+	pdHTTP := fmt.Sprintf("http://%s", pdURL.Host)
+	srv := http.Server{Addr: pdURL.Host, Handler: &mock}
+	go func() {
+		_ = srv.ListenAndServe()
+	}()
+	defer srv.Close()
+
+	{
+		mock.GetVersionFunc = func() string {
+			return version.MinPDVersion.String()
+		}
+		mock.GetAllStoresFunc = func() []*metapb.Store {
+			return []*metapb.Store{{Version: version.MinTiKVVersion.String()}}
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			checkAndWaitClusterVersion(ctx, &mock, []string{pdHTTP}, nil)
+			done <- struct{}{}
+		}()
+		select {
+		case <-time.After(5 * time.Second):
+			c.Fatal("check timeout")
+		case <-done:
+		}
+		cancel()
+	}
+
+	{
+		pdVersionSwitch := int64(0)
+		mock.GetVersionFunc = func() string {
+			if atomic.LoadInt64(&pdVersionSwitch) == 0 {
+				const incompatiblePD = "0.0.1"
+				return incompatiblePD
+			}
+			return version.MinPDVersion.String()
+		}
+		mock.GetAllStoresFunc = func() []*metapb.Store {
+			return []*metapb.Store{{Version: version.MinTiKVVersion.String()}}
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			checkAndWaitClusterVersion(ctx, &mock, []string{pdHTTP}, nil)
+			done <- struct{}{}
+		}()
+		select {
+		case <-time.After(2 * time.Second):
+		case <-done:
+			c.Fatal("must timeout")
+		}
+		atomic.StoreInt64(&pdVersionSwitch, 1)
+		select {
+		case <-time.After(2 * time.Second):
+			c.Fatal("check timeout")
+		case <-done:
+		}
+		cancel()
+	}
 }

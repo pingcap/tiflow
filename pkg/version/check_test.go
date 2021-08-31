@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/pkg/tempurl"
 )
 
@@ -38,34 +37,9 @@ type checkSuite struct{}
 
 var _ = check.Suite(&checkSuite{})
 
-type mockPDClient struct {
-	pd.Client
-	getAllStores  func() []*metapb.Store
-	getVersion    func() string
-	getStatusCode func() int
-}
-
-func (m *mockPDClient) GetAllStores(ctx context.Context, opts ...pd.GetStoreOption) ([]*metapb.Store, error) {
-	if m.getAllStores != nil {
-		return m.getAllStores(), nil
-	}
-	return []*metapb.Store{}, nil
-}
-
-func (m *mockPDClient) ServeHTTP(resp http.ResponseWriter, _ *http.Request) {
-	// set status code at first, else will not work
-	if m.getStatusCode != nil {
-		resp.WriteHeader(m.getStatusCode())
-	}
-
-	if m.getVersion != nil {
-		_, _ = resp.Write([]byte(fmt.Sprintf(`{"version":"%s"}`, m.getVersion())))
-	}
-}
-
 func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	defer testleak.AfterTest(c)()
-	mock := mockPDClient{
+	mock := MockPDClient{
 		Client: nil,
 	}
 	pdURL, _ := url.Parse(tempurl.Alloc())
@@ -89,10 +63,10 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	}
 
 	{
-		mock.getVersion = func() string {
+		mock.GetVersionFunc = func() string {
 			return minPDVersion.String()
 		}
-		mock.getAllStores = func() []*metapb.Store {
+		mock.GetAllStoresFunc = func() []*metapb.Store {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
@@ -100,10 +74,10 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	}
 
 	{
-		mock.getVersion = func() string {
+		mock.GetVersionFunc = func() string {
 			return `v1.0.0-alpha-271-g824ae7fd`
 		}
-		mock.getAllStores = func() []*metapb.Store {
+		mock.GetAllStoresFunc = func() []*metapb.Store {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
@@ -112,10 +86,10 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 
 	// Check maximum compatible PD.
 	{
-		mock.getVersion = func() string {
+		mock.GetVersionFunc = func() string {
 			return `v10000.0.0`
 		}
-		mock.getAllStores = func() []*metapb.Store {
+		mock.GetAllStoresFunc = func() []*metapb.Store {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
@@ -123,10 +97,10 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	}
 
 	{
-		mock.getVersion = func() string {
+		mock.GetVersionFunc = func() string {
 			return minPDVersion.String()
 		}
-		mock.getAllStores = func() []*metapb.Store {
+		mock.GetAllStoresFunc = func() []*metapb.Store {
 			// TiKV does not include 'v'.
 			return []*metapb.Store{{Version: `1.0.0-alpha-271-g824ae7fd`}}
 		}
@@ -138,10 +112,10 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 
 	// Check maximum compatible TiKV.
 	{
-		mock.getVersion = func() string {
+		mock.GetVersionFunc = func() string {
 			return minPDVersion.String()
 		}
-		mock.getAllStores = func() []*metapb.Store {
+		mock.GetAllStoresFunc = func() []*metapb.Store {
 			// TiKV does not include 'v'.
 			return []*metapb.Store{{Version: `10000.0.0`}}
 		}
@@ -150,7 +124,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	}
 
 	{
-		mock.getStatusCode = func() int {
+		mock.GetStatusCodeFunc = func() int {
 			return http.StatusBadRequest
 		}
 
