@@ -210,7 +210,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, nil
 	}()
 	if err != nil {
-		log.Error("failed to unmarshal and rowKV entry, start to print debug info", zap.Error(err))
+		log.Error("failed to unmarshal and mount rowKV entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
 	return row, err
