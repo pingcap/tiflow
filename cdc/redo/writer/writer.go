@@ -40,12 +40,11 @@ type RedoLogWriter interface {
 
 	// WriteLog ...
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
-	// SendDDL, EmitCheckpointTs and EmitResolvedTs are called from owner only
+	// SendDDL EmitCheckpointTs and EmitResolvedTs are called from owner only
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
-
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
-	// sometime, and the resolved ts of this table should be moved forward.
+	// some time, and the resolved ts of this table should be moved forward.
 	FlushLog(ctx context.Context, tableID int64, ts uint64) error
 	// EmitCheckpointTs ...
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
