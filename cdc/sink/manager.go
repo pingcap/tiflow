@@ -257,8 +257,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 					}
 					return
 				}
-				dur := time.Since(start)
-				metricEmitRowDuration.Observe(dur.Seconds())
+				metricEmitRowDuration.Observe(time.Since(start).Seconds())
 
 				// put remaining rows back to buffer
 				// append to a new, fixed slice to avoid lazy GC

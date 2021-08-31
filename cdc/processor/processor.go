@@ -511,14 +511,8 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// checkTablesNum if the number of table pipelines is equal to the number of TaskStatus in etcd state.
-// if the table number is not right, create or remove the odd tables.
-func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
-	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
-	if len(p.tables) == len(taskStatus.Tables) {
-		return nil
-	}
-	// check if a table should be listen but not
+func (p *processor) listenTables(ctx cdcContext.Context, taskStatus *model.TaskStatus) error {
+	// check if a table should be listened but not yet
 	// this only could be happened in the first tick.
 	for tableID, replicaInfo := range taskStatus.Tables {
 		if _, exist := p.tables[tableID]; exist {
@@ -538,6 +532,10 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 	}
+	return nil
+}
+
+func (p *processor) dropListeningTables(taskStatus *model.TaskStatus) {
 	// check if a table should be removed but still exist
 	// this shouldn't be happened in any time.
 	for tableID, tablePipeline := range p.tables {
@@ -554,6 +552,22 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 		delete(p.tables, tableID)
 		log.Warn("the table was forcibly deleted", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
 	}
+}
+
+// checkTablesNum if the number of table pipelines is equal to the number of TaskStatus in etcd state.
+// if the table number is not right, create or remove the odd tables.
+func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
+	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
+	if len(p.tables) == len(taskStatus.Tables) {
+		return nil
+	}
+
+	if err := p.listenTables(ctx, taskStatus); err != nil {
+		return errors.Trace(err)
+	}
+
+	p.dropListeningTables(taskStatus)
+
 	return nil
 }
 
