@@ -572,6 +572,24 @@ func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
 
 func TestNewLogWriter(t *testing.T) {
 	assert.Panics(t, func() { NewLogWriter(context.Background(), nil) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := &LogWriterConfig{
+		Dir:               "dir",
+		ChangeFeedID:      "test-cf",
+		CaptureID:         "cp",
+		MaxLogSize:        10,
+		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		FlushIntervalInMs: 5,
+	}
+	assert.NotPanics(t, func() { NewLogWriter(ctx, cfg) })
+
+	l := NewLogWriter(ctx, cfg)
+	assert.Equal(t, cfg.Dir, l.cfg.Dir)
+}
+
+func TestWriter_GC(t *testing.T) {
 	cfg := &LogWriterConfig{
 		Dir:               "dir",
 		ChangeFeedID:      "test-cf",
@@ -587,7 +605,6 @@ func TestNewLogWriter(t *testing.T) {
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	assert.NotPanics(t, func() { NewLogWriter(ctx, cfg) })
 
 	type args struct {
 		isRunning bool
