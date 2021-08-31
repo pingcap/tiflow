@@ -266,6 +266,7 @@ const (
 )
 
 // UnmarshalDDL unmarshals the ddl job from RawKVEntry
+// todo (Ling Jin): how to determine it's a valid ddl event
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
 		return nil, nil

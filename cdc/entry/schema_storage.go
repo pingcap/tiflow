@@ -753,6 +753,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schemaSnapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
+		// todo （Ling Jin): what's the logic here.
 		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
 			log.Debug("ignore foregone DDL job", zap.Reflect("job", job))
 			return nil
