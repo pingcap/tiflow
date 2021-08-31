@@ -52,15 +52,6 @@ const (
 	StateFinished FeedState = "finished"
 )
 
-var (
-	// RunnableStates indicate those changefeed state still normal or can be reset to normal.
-	RunnableStates = map[FeedState]struct{}{
-		StateNormal:  {},
-		StateStopped: {},
-		StateError:   {},
-	}
-)
-
 // ToInt return a int for each `FeedState`, only use this for metrics.
 func (s FeedState) ToInt() int {
 	switch s {
@@ -97,6 +88,11 @@ func (s FeedState) IsNeeded(need string) bool {
 		}
 	}
 	return need == string(s)
+}
+
+// Runnable return state still normal or can be reset to normal.
+func (s FeedState) Runnable() bool {
+	return s == StateNormal || s == StateStopped || s == StateError
 }
 
 const (

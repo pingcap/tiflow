@@ -120,7 +120,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
-	if _, ok := model.RunnableStates[c.state.Info.State]; !ok {
+	if c.state.Info.State.Runnable() {
 		return nil
 	}
 	return errors.Trace(c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs))

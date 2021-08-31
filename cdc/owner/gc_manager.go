@@ -73,9 +73,10 @@ func getMinCheckpointTs(feeds map[model.ChangeFeedID]*model.ChangefeedReactorSta
 		if cfState.Info == nil {
 			continue
 		}
-		if _, ok := model.RunnableStates[cfState.Info.State]; !ok {
+		if !cfState.Info.State.Runnable() {
 			continue
 		}
+
 		// When the changefeed starts up, CDC will do a snapshot read at (checkpoint-ts - 1) from TiKV,
 		// so (checkpoint - 1) should be an upper bound for the GC safepoint.
 		gcSafepointUpperBound := cfState.Info.GetCheckpointTs(cfState.Status) - 1
