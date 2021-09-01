@@ -60,5 +60,5 @@ max-log-size = 64
 flush-interval = 1000
 # 存储 redo log 的形式，包括 local（本地文件），S3（上传至S3），blackhole（测试用）
 storage = "local"
-# S3 地址，示例：SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
+# S3 地址，示例：s3-uri="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
 s3-uri = ""
