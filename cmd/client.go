@@ -205,13 +205,8 @@ func newCliCommand() *cobra.Command {
 					return err
 				}
 				errorTiKVIncompatible := true // Error if TiKV is incompatible.
-				for _, pdEndpoint := range pdEndpoints {
-					err = version.CheckClusterVersion(
-						ctx, pdCli, pdEndpoint, credential, errorTiKVIncompatible)
-					if err == nil {
-						break
-					}
-				}
+				checkAllPD := false
+				err = version.CheckClusterVersion(ctx, pdCli, pdEndpoints, credential, errorTiKVIncompatible, checkAllPD)
 				if err != nil {
 					return err
 				}

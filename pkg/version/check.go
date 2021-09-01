@@ -22,11 +22,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
-
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -75,8 +74,9 @@ func removeVAndHash(v string) string {
 }
 
 // CheckClusterVersion check TiKV and PD version.
+// If checkAllPD is false, need only one PD alive and match the cdc version.
 func CheckClusterVersion(
-	ctx context.Context, client pd.Client, pdHTTP string, credential *security.Credential, errorTiKVIncompat bool,
+	ctx context.Context, client pd.Client, pdAddrs []string, credential *security.Credential, errorTiKVIncompat bool, checkAllPD bool,
 ) error {
 	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
 	if err != nil {
@@ -86,17 +86,33 @@ func CheckClusterVersion(
 		log.Warn("check TiKV version failed", zap.Error(err))
 	}
 
-	httpCli, err := httputil.NewClient(credential)
-	if err != nil {
-		return err
+	for _, pdAddr := range pdAddrs {
+		err = CheckPDVersion(ctx, pdAddr, credential)
+		if err == nil && !checkAllPD {
+			return nil
+		}
+		if err != nil && checkAllPD {
+			return err
+		}
 	}
+
+	return nil
+}
+
+// CheckPDVersion check PD version.
+func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Credential) error {
 	// See more: https://github.com/pingcap/pd/blob/v4.0.0-rc.1/server/api/version.go
 	pdVer := struct {
 		Version string `json:"version"`
 	}{}
 
+	httpCli, err := httputil.NewClient(credential)
+	if err != nil {
+		return err
+	}
+
 	req, err := http.NewRequestWithContext(
-		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdHTTP), nil)
+		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdAddr), nil)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
