@@ -84,6 +84,5 @@ const (
 
 // Command is the command about table pipeline
 type Command struct {
-	Tp        CommandType
-	StoppedTs model.Ts
+	Tp CommandType
 }
