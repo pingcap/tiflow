@@ -59,7 +59,9 @@ func (c *checkSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	defer c.rowsMu.Unlock()
 	var newRows []*model.RowChangedEvent
 	for _, row := range c.rows {
-		c.Assert(row.CommitTs, check.Greater, c.lastResolvedTs)
+		if row.CommitTs <= c.lastResolvedTs {
+			return c.lastResolvedTs, errors.Errorf("commit-ts(%d) is not greater than lastResolvedTs(%d)", row.CommitTs, c.lastResolvedTs)
+		}
 		if row.CommitTs > resolvedTs {
 			newRows = append(newRows, row)
 		}
@@ -146,20 +148,19 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
 	defer manager.Close(ctx)
-	goroutineNum := 100
+	goroutineNum := 200
 	var wg sync.WaitGroup
 	const ExitSignal = uint64(math.MaxUint64)
 
 	var maxResolvedTs uint64
 	tableSinks := make([]Sink, 0, goroutineNum)
-	closeChs := make([]chan struct{}, 0, goroutineNum)
-	runTableSink := func(index int64, sink Sink, startTs uint64, close chan struct{}) {
+	tableCancels := make([]context.CancelFunc, 0, goroutineNum)
+	runTableSink := func(ctx context.Context, index int64, sink Sink, startTs uint64) {
 		defer wg.Done()
-		ctx := context.Background()
 		lastResolvedTs := startTs
 		for {
 			select {
-			case <-close:
+			case <-ctx.Done():
 				return
 			default:
 			}
@@ -193,19 +194,22 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 			if i%4 != 3 {
 				// add table
 				table := manager.CreateTableSink(model.TableID(i), maxResolvedTs, redoManager)
-				close := make(chan struct{})
+				ctx, cancel := context.WithCancel(ctx)
+				tableCancels = append(tableCancels, cancel)
 				tableSinks = append(tableSinks, table)
-				closeChs = append(closeChs, close)
+
 				atomic.AddUint64(&maxResolvedTs, 20)
 				wg.Add(1)
-				go runTableSink(int64(i), table, maxResolvedTs, close)
+				go runTableSink(ctx, int64(i), table, maxResolvedTs)
 			} else {
 				// remove table
 				table := tableSinks[0]
-				close(closeChs[0])
+				// note when a table is removed, no more data can be sent to the
+				// backend sink, so we cancel the context of this table sink.
+				tableCancels[0]()
 				c.Assert(table.Close(ctx), check.IsNil)
 				tableSinks = tableSinks[1:]
-				closeChs = closeChs[1:]
+				tableCancels = tableCancels[1:]
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
