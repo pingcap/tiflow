@@ -69,6 +69,11 @@ func IsValidConsistentStorage(storage string) bool {
 	}
 }
 
+// IsS3StorageEnabled returns whether s3 storage is enabled
+func IsS3StorageEnabled(storage string) bool {
+	return consistentStorage(storage) == consistentStorageS3
+}
+
 // LogManager defines an interface that is used to manage redo log
 type LogManager interface {
 	// Enabled returns whether the log manager is enabled

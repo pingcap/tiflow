@@ -35,7 +35,7 @@ const (
 	NewReplicaImpl = true
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
-	// DefaultSortDir is the sub directory path of data-dir.
+	// DefaultRedoDir is the sub directory path of data-dir.
 	DefaultRedoDir = "/redo"
 )
 

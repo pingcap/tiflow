@@ -24,6 +24,8 @@ type applyRedoOptions struct {
 	options
 	storage string
 	sinkURI string
+	dir     string
+	s3URI   string
 }
 
 // newapplyRedoOptions creates new applyRedoOptions for the `redo apply` command.
@@ -36,6 +38,8 @@ func newapplyRedoOptions() *applyRedoOptions {
 func (o *applyRedoOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.storage, "storage", "", "storage of redo log")
 	cmd.Flags().StringVar(&o.sinkURI, "sink-uri", "", "target database sink-uri")
+	cmd.Flags().StringVar(&o.dir, "dir", "", "local path of redo log")
+	cmd.Flags().StringVar(&o.s3URI, "s3-uri", "", "s3 uri of redo log")
 	// the possible error returned from MarkFlagRequired is `no such flag`
 	cmd.MarkFlagRequired("storage")  //nolint:errcheck
 	cmd.MarkFlagRequired("sink-uri") //nolint:errcheck
@@ -48,6 +52,8 @@ func (o *applyRedoOptions) run(cmd *cobra.Command) error {
 	cfg := &applier.RedoApplierConfig{
 		Storage: o.storage,
 		SinkURI: o.sinkURI,
+		Dir:     o.dir,
+		S3URI:   o.s3URI,
 	}
 	ap := applier.NewRedoApplier(cfg)
 	err := ap.Apply(ctx)

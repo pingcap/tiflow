@@ -15,6 +15,7 @@ package applier
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -22,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo/reader"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"golang.org/x/sync/errgroup"
 )
@@ -40,6 +42,8 @@ var errApplyFinished = errors.New("apply finished, can exit safely")
 type RedoApplierConfig struct {
 	SinkURI string
 	Storage string
+	Dir     string
+	S3URI   string
 }
 
 // RedoApplier implements a redo log applier
@@ -55,6 +59,22 @@ func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 	return &RedoApplier{
 		cfg: cfg,
 	}
+}
+
+// toLogReaderConfig is an adapter to translate from applier config to redo reader config
+func (rac *RedoApplierConfig) toLogReaderConfig() (*reader.LogReaderConfig, error) {
+	cfg := &reader.LogReaderConfig{
+		Dir:       rac.Dir,
+		S3Storage: redo.IsS3StorageEnabled(rac.Storage),
+	}
+	if cfg.S3Storage {
+		s3URI, err := url.Parse(rac.S3URI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrInvalidS3URI, err)
+		}
+		cfg.S3URI = s3URI
+	}
+	return cfg, nil
 }
 
 func (ra *RedoApplier) catchError(ctx context.Context) error {
@@ -149,16 +169,17 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 
 var createRedoReader = createRedoReaderImpl
 
-func createRedoReaderImpl(cfg *RedoApplierConfig) (reader.Reader, error) {
-	readerConfig := &redo.ReaderConfig{
-		Storage: cfg.Storage,
+func createRedoReaderImpl(ctx context.Context, cfg *RedoApplierConfig) (reader.Reader, error) {
+	readerCfg, err := cfg.toLogReaderConfig()
+	if err != nil {
+		return nil, err
 	}
-	return redo.NewRedoReader(readerConfig)
+	return redo.NewRedoReader(ctx, cfg.Storage, readerCfg)
 }
 
 // Apply applies redo log to given target
 func (ra *RedoApplier) Apply(ctx context.Context) error {
-	rd, err := createRedoReader(ra.cfg)
+	rd, err := createRedoReader(ctx, ra.cfg)
 	if err != nil {
 		return err
 	}

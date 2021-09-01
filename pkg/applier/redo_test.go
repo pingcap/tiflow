@@ -116,7 +116,7 @@ func (s *redoApplierSuite) TestApplyDMLs(c *check.C) {
 	resolvedTs := uint64(2000)
 	redoLogCh := make(chan *model.RedoRowChangedEvent, 1024)
 	ddlEventCh := make(chan *model.RedoDDLEvent, 1024)
-	createMockReader := func(cfg *RedoApplierConfig) (reader.Reader, error) {
+	createMockReader := func(ctx context.Context, cfg *RedoApplierConfig) (reader.Reader, error) {
 		return NewMockReader(checkpointTs, resolvedTs, redoLogCh, ddlEventCh), nil
 	}
 

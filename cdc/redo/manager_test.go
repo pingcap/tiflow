@@ -59,6 +59,18 @@ func (s *logManagerSuite) TestConsistentConfig(c *check.C) {
 	for _, sc := range storageCases {
 		c.Assert(IsValidConsistentStorage(sc.storage), check.Equals, sc.valid)
 	}
+
+	s3StorageCases := []struct {
+		storage   string
+		s3Enabled bool
+	}{
+		{"local", false},
+		{"s3", true},
+		{"blackhole", false},
+	}
+	for _, sc := range s3StorageCases {
+		c.Assert(IsS3StorageEnabled(sc.storage), check.Equals, sc.s3Enabled)
+	}
 }
 
 func (s *logManagerSuite) TestLogManagerInProcessor(c *check.C) {
