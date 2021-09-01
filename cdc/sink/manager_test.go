@@ -180,7 +180,9 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				c.Assert(err, check.IsNil)
 			}
 			_, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
-			c.Assert(err, check.IsNil)
+			if err != nil {
+				c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+			}
 			lastResolvedTs = resolvedTs
 		}
 	}
