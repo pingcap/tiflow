@@ -17,15 +17,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
 func TestVerifyUpdateChangefeedConfig(t *testing.T) {
-	defer testleak.AfterTestT(t)()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -34,27 +31,26 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	changefeedConfig := model.ChangefeedConfig{TargetTS: 20}
 	oldInfo.StartTs = 40
 	newInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
-	assert.NotNil(t, err)
-	assert.Regexp(t, ".*can not update target-ts.*less than start-ts.*", err)
-	assert.Nil(t, newInfo)
+	require.NotNil(t, err)
+	require.Regexp(t, ".*can not update target-ts.*less than start-ts.*", err)
+	require.Nil(t, newInfo)
 
 	// test no change error
 	changefeedConfig = model.ChangefeedConfig{SinkURI: "blackhole://"}
 	oldInfo.SinkURI = "blackhole://"
 	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
-	assert.NotNil(t, err)
-	assert.Regexp(t, ".*changefeed config is the same with the old one.*", err)
-	assert.Nil(t, newInfo)
+	require.NotNil(t, err)
+	require.Regexp(t, ".*changefeed config is the same with the old one.*", err)
+	require.Nil(t, newInfo)
 
 	// test verify success
 	changefeedConfig = model.ChangefeedConfig{MounterWorkerNum: 32}
 	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
-	assert.Nil(t, err)
-	assert.NotNil(t, newInfo)
+	require.Nil(t, err)
+	require.NotNil(t, newInfo)
 }
 
 func TestVerifySink(t *testing.T) {
-	defer testleak.AfterTestT(t)()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -64,11 +60,11 @@ func TestVerifySink(t *testing.T) {
 	// test sink uri error
 	sinkURI := "mysql://root:111@127.0.0.1:3306/"
 	err := verifySink(ctx, sinkURI, replicateConfig, opts)
-	assert.NotNil(t, err)
-	assert.Regexp(t, "fail to open MySQL connection.*ErrMySQLConnectionError.*", err)
+	require.NotNil(t, err)
+	require.Regexp(t, "fail to open MySQL connection.*ErrMySQLConnectionError.*", err)
 
 	// test sink uri right
 	sinkURI = "blackhole://"
 	err = verifySink(ctx, sinkURI, replicateConfig, opts)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 }
