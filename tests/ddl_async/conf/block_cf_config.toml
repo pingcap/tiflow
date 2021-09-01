@@ -1,0 +1,5 @@
+# changefeed config
+
+[filter]
+# 过滤器规则
+rules = ['ddl_async.ddl_block*']
