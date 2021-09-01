@@ -46,7 +46,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 			return nil, errors.Trace(err)
 		}
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs-1, config.ForceReplicate)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -58,7 +58,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 		schemaSnapshot: schemaSnap,
 		filter:         f,
 		config:         config,
-		ddlHandledTs:   startTs - 1,
+		ddlHandledTs:   startTs,
 	}, nil
 }
 

@@ -84,7 +84,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	tester.MustApplyPatches()
 	// the gc safe point should be updated to 1(checkpoint Ts of changefeed-test1)
 	mockPDClient.updateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		c.Assert(serviceID, check.Equals, cdcServiceSafePointID)
+		c.Assert(serviceID, check.Equals, CDCServiceSafePointID)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
 		c.Assert(safePoint, check.Equals, uint64(1))
 		return 0, nil
@@ -115,9 +115,9 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 
 	// the gc safe point should be updated to 1(checkpoint Ts of changefeed-test1)
 	mockPDClient.updateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		c.Assert(serviceID, check.Equals, cdcServiceSafePointID)
+		c.Assert(serviceID, check.Equals, CDCServiceSafePointID)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
-		c.Assert(safePoint, check.Equals, uint64(20))
+		c.Assert(safePoint, check.Equals, uint64(19))
 		return 0, nil
 	}
 	err = gcManager.updateGCSafePoint(ctx, state)
@@ -158,14 +158,14 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
-	err := gcManager.CheckStaleCheckpointTs(ctx, 10)
+	err := gcManager.checkStaleCheckpointTs(ctx, 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(ctx, oracle.GoTimeToTS(time.Now()))
+	err = gcManager.checkStaleCheckpointTs(ctx, oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
-	err = gcManager.CheckStaleCheckpointTs(ctx, 10)
+	err = gcManager.checkStaleCheckpointTs(ctx, 10)
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 }

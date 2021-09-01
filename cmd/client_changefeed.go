@@ -242,7 +242,10 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
-func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential, captureInfos []*model.CaptureInfo) (*model.ChangeFeedInfo, error) {
+func verifyChangefeedParameters(
+	ctx context.Context, cmd *cobra.Command, isCreate bool,
+	credential *security.Credential, cdcClusterVer version.TiCDCClusterVersion,
+) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if sinkURI == "" {
 			return nil, errors.New("Creating changefeed without a sink-uri")
@@ -260,24 +263,25 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		if err := confirmLargeDataGap(ctx, cmd, startTs); err != nil {
 			return nil, err
 		}
-		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {
+		if err := verifyTargetTs(startTs, targetTs); err != nil {
 			return nil, err
 		}
 	}
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	cfg := config.GetDefaultReplicaConfig()
 
-	sortEngineFlag := cmd.Flag("sort-engine")
-	if cdcClusterVer == version.TiCDCClusterVersion4_0 {
+	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
 		cfg.EnableOldValue = false
-		if !sortEngineFlag.Changed {
-			sortEngine = model.SortInMemory
-		}
-		log.Warn("The TiCDC cluster is built from 4.0-release branch, the old-value and unified-sorter are disabled by default.")
+		log.Warn("The TiCDC cluster is built from an older version, disabling old value by default.",
+			zap.String("version", cdcClusterVer.String()))
 	}
+
+	sortEngineFlag := cmd.Flag("sort-engine")
+	if !sortEngineFlag.Changed && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
+		sortEngine = model.SortInMemory
+		log.Warn("The TiCDC cluster is built from an older version, disabling Unified Sorter by default",
+			zap.String("version", cdcClusterVer.String()))
+	}
+
 	if len(configFile) > 0 {
 		if err := verifyReplicaConfig(configFile, "TiCDC changefeed", cfg); err != nil {
 			return nil, err
@@ -336,10 +340,13 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 		}
 	}
 	switch sortEngine {
-	case model.SortUnified, model.SortInMemory, model.SortInFile:
+	case model.SortUnified, model.SortInMemory:
+	case model.SortInFile:
+		// obsolete. But we keep silent here. We create a Unified Sorter when the owner/processor sees this option
+		// for backward-compatibility.
 	default:
 		return nil, errors.Errorf("Creating changefeed with an invalid sort engine(%s), "+
-			"`%s`,`%s` and `%s` are optional.", sortEngine, model.SortUnified, model.SortInMemory, model.SortInFile)
+			"`%s` and `%s` are the only valid options.", sortEngine, model.SortUnified, model.SortInMemory)
 	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:           sinkURI,
@@ -364,9 +371,9 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 	}
 
 	if info.Engine == model.SortInFile {
-		cmd.Printf("[WARN] file sorter is deprecated. " +
-			"make sure that you DO NOT use it in production. " +
-			"Adjust \"sort-engine\" to make use of the right sorter.\n")
+		cmd.Printf("[WARN] file sorter is obsolete. Unified Sorter is recommended. " +
+			"Adjust \"sort-engine\" to make use of the right sorter.\n" +
+			"A newer cluster will use Unified Sorter.\n")
 	}
 
 	tz, err := util.GetTimezone(timezone)
@@ -376,7 +383,7 @@ func verifyChangefeedParameters(ctx context.Context, cmd *cobra.Command, isCreat
 
 	if isCreate {
 		ctx = util.PutTimezoneInCtx(ctx, tz)
-		ineligibleTables, eligibleTables, err := verifyTables(ctx, credential, cfg, startTs)
+		ineligibleTables, eligibleTables, err := verifyTables(credential, cfg, startTs)
 		if err != nil {
 			return nil, err
 		}
@@ -466,7 +473,11 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), captureInfos)
+			cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+			if err != nil {
+				return err
+			}
+			info, err := verifyChangefeedParameters(ctx, cmd, true /* isCreate */, getCredential(), cdcClusterVer)
 			if err != nil {
 				return err
 			}
@@ -702,7 +713,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 				}
 				startTs = oracle.ComposeTS(ts, logical)
 
-				_, eligibleTables, err := verifyTables(ctx, getCredential(), cfg, startTs)
+				_, eligibleTables, err := verifyTables(getCredential(), cfg, startTs)
 				if err != nil {
 					return err
 				}

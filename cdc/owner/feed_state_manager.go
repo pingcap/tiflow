@@ -23,8 +23,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// feedStateManager manages the feedState of a changefeed
-// when the error, admin job happened, the feedStateManager is responsible for controlling the feedState
+// feedStateManager manages the ReactorState of a changefeed
+// when a error or a admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
 	state           *model.ChangefeedReactorState
 	shouldBeRunning bool
@@ -111,16 +111,17 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		}
 		m.shouldBeRunning = false
 		jobsPending = true
-		m.patchState(model.StateRemoved)
-		// remove changefeed info and state
+
+		// remove changefeedInfo
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return nil, true, nil
 		})
+		// remove changefeedStatus
 		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return nil, true, nil
 		})
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
-		log.Info("the changefeed removed", zap.String("changefeed-id", m.state.ID), zap.Uint64("checkpoint-ts", checkpointTs))
+		log.Info("the changefeed is removed", zap.String("changefeed-id", m.state.ID), zap.Uint64("checkpoint-ts", checkpointTs))
 
 	case model.AdminResume:
 		switch m.state.Info.State {

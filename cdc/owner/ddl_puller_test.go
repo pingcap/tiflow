@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -154,6 +153,7 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	resolvedTs, ddl = p.FrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(15))
 	c.Assert(ddl, check.IsNil)
+
 	mockPuller.appendResolvedTs(20)
 	waitResolvedTsGrowing(c, p, 16)
 	resolvedTs, ddl = p.FrontDDL()
@@ -162,6 +162,9 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(16))
 	c.Assert(ddl.ID, check.Equals, int64(1))
+
+	// DDL could be processed with a delay, wait here for a pending DDL job is added
+	waitResolvedTsGrowing(c, p, 18)
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(18))
 	c.Assert(ddl.ID, check.Equals, int64(2))
@@ -187,9 +190,8 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	resolvedTs, ddl = p.PopFrontDDL()
 	c.Assert(resolvedTs, check.Equals, uint64(25))
 	c.Assert(ddl.ID, check.Equals, int64(3))
-	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(25))
-	c.Assert(ddl.ID, check.Equals, int64(3))
+	_, ddl = p.PopFrontDDL()
+	c.Assert(ddl, check.IsNil)
 
 	waitResolvedTsGrowing(c, p, 30)
 	resolvedTs, ddl = p.PopFrontDDL()
@@ -219,13 +221,15 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	c.Assert(ddl, check.IsNil)
 }
 
+// waitResolvedTsGrowing can wait the first DDL reaches targetTs or if no pending
+// DDL, DDL resolved ts reaches targetTs.
 func waitResolvedTsGrowing(c *check.C, p DDLPuller, targetTs model.Ts) {
-	err := retry.Run(20*time.Millisecond, 100, func() error {
+	err := retry.Do(context.Background(), func() error {
 		resolvedTs, _ := p.FrontDDL()
 		if resolvedTs < targetTs {
 			return errors.New("resolvedTs < targetTs")
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(100))
 	c.Assert(err, check.IsNil)
 }

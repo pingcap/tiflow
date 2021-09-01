@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
@@ -78,52 +77,43 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 }
 
 func testPprof(c *check.C) {
-	resp, err := http.Get(fmt.Sprintf("http://%s/debug/pprof/cmdline", advertiseAddr4Test))
-	c.Assert(err, check.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, 200)
-	_, err = ioutil.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
+	testValidPprof := func(uri string) {
+		resp, err := http.Get(uri)
+		c.Assert(err, check.IsNil)
+		defer resp.Body.Close()
+		c.Assert(resp.StatusCode, check.Equals, 200)
+		_, err = ioutil.ReadAll(resp.Body)
+		c.Assert(err, check.IsNil)
+	}
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof", advertiseAddr4Test))
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/cmdline", advertiseAddr4Test))
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/mutex", advertiseAddr4Test))
+	testValidPprof(fmt.Sprintf("http://%s/debug/pprof/heap?debug=1", advertiseAddr4Test))
 }
 
 func testReisgnOwner(c *check.C) {
 	uri := fmt.Sprintf("http://%s/capture/owner/resign", advertiseAddr4Test)
-	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleChangefeedAdmin(c *check.C) {
 	uri := fmt.Sprintf("http://%s/capture/owner/admin", advertiseAddr4Test)
-	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleRebalance(c *check.C) {
 	uri := fmt.Sprintf("http://%s/capture/owner/rebalance_trigger", advertiseAddr4Test)
-	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleMoveTable(c *check.C) {
 	uri := fmt.Sprintf("http://%s/capture/owner/move_table", advertiseAddr4Test)
-	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
 }
 
 func testHandleChangefeedQuery(c *check.C) {
 	uri := fmt.Sprintf("http://%s/capture/owner/changefeed/query", advertiseAddr4Test)
-	testHTTPPostOnly(c, uri)
 	testRequestNonOwnerFailed(c, uri)
-}
-
-func testHTTPPostOnly(c *check.C, uri string) {
-	resp, err := http.Get(uri)
-	c.Assert(err, check.IsNil)
-	data, err := ioutil.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
-	c.Assert(string(data), check.Equals, cerror.ErrSupportPostOnly.Error())
 }
 
 func testRequestNonOwnerFailed(c *check.C, uri string) {

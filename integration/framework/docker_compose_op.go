@@ -15,14 +15,16 @@ package framework
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
+	"golang.org/x/net/context"
 )
 
 // DockerComposeOperator represent a docker compose
@@ -53,9 +55,21 @@ func (d *DockerComposeOperator) Setup() {
 // WaitClusterStarted waits the cluster is started and ready
 func (d *DockerComposeOperator) WaitClusterStarted() {
 	if d.HealthChecker != nil {
-		err := retry.Run(time.Second, 120, d.HealthChecker)
+		check := func() error {
+			err := d.HealthChecker()
+			if err != nil {
+				log.Error("check failed", zap.Error(err))
+			}
+			return err
+		}
+		err := retry.Do(context.Background(), check,
+			retry.WithBackoffBaseDelay(1000),
+			retry.WithBackoffMaxDelay(60*1000),
+			retry.WithMaxTries(120),
+			retry.WithIsRetryableErr(cerrors.IsRetryableError))
 		if err != nil {
-			log.Fatal("Docker service health check failed after max retries", zap.Error(err))
+			log.Fatal("Docker service health check failed after max retries",
+				zap.Error(err))
 		}
 	}
 }
@@ -75,7 +89,7 @@ func (d *DockerComposeOperator) RestartComponents(names ...string) {
 }
 
 func waitTiDBStarted(dsn string) error {
-	return retry.Run(time.Second, 60, func() error {
+	return retry.Do(context.Background(), func() error {
 		upstream, err := sql.Open("mysql", dsn)
 		if err != nil {
 			return errors.Trace(err)
@@ -86,7 +100,7 @@ func waitTiDBStarted(dsn string) error {
 			return errors.Trace(err)
 		}
 		return nil
-	})
+	}, retry.WithBackoffBaseDelay(1000), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(60), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {
@@ -105,6 +119,23 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 
 	log.Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
 	return bytes
+}
+
+// CdcHealthCheck check cdc cluster health.
+func CdcHealthCheck(cdcContainer, pdEndpoint string) error {
+	_, err := execInController(cdcContainer,
+		fmt.Sprintf("/cdc cli --pd=\"%s\" changefeed list", pdEndpoint))
+	return err
+}
+
+// execInController provides a way to execute commands inside a container in the service
+func execInController(controller, shellCmd string) ([]byte, error) {
+	log.Info("Start executing in the Controller container",
+		zap.String("shellCmd", shellCmd), zap.String("container", controller))
+	cmd := exec.Command("docker", "exec", controller, "sh", "-c", shellCmd)
+	defer log.Info("Finished executing in the Controller container",
+		zap.String("shellCmd", shellCmd), zap.String("container", controller))
+	return cmd.Output()
 }
 
 // DumpStdout dumps all container logs
@@ -135,8 +166,5 @@ func (d *DockerComposeOperator) TearDown() {
 
 // ExecInController provides a way to execute commands inside a container in the service
 func (d *DockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
-	log.Info("Start executing in the Controller container", zap.String("shellCmd", shellCmd))
-	cmd := exec.Command("docker", "exec", d.Controller, "sh", "-c", shellCmd)
-	defer log.Info("Finished executing in the Controller container", zap.String("shellCmd", shellCmd))
-	return cmd.Output()
+	return execInController(d.Controller, shellCmd)
 }

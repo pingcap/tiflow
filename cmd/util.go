@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/tikv/client-go/v2/oracle"
@@ -58,7 +59,7 @@ var (
 
 var errOwnerNotFound = liberrors.New("owner not found")
 
-var tsGapWarnning int64 = 86400 * 1000 // 1 day in milliseconds
+var tsGapWarning int64 = 86400 * 1000 // 1 day in milliseconds
 
 // Endpoint schemes.
 const (
@@ -164,11 +165,11 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 	if job.Opts != nil && job.Opts.ForceRemove {
 		forceRemoveOpt = "true"
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID:       {job.CfID},
 		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
-	}))
+	})
 	if err != nil {
 		return err
 	}
@@ -198,9 +199,9 @@ func applyOwnerChangefeedQuery(
 	if err != nil {
 		return "", err
 	}
-	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+	resp, err := cli.PostForm(addr, map[string][]string{
 		cdc.APIOpVarChangefeedID: {cid},
-	}))
+	})
 	if err != nil {
 		return "", err
 	}
@@ -230,14 +231,14 @@ func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) err
 	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
 }
 
-func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
+func verifyTargetTs(startTs, targetTs uint64) error {
 	if targetTs > 0 && targetTs <= startTs {
 		return errors.Errorf("target-ts %d must be larger than start-ts: %d", targetTs, startTs)
 	}
 	return nil
 }
 
-func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+func verifyTables(credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
@@ -258,10 +259,7 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 	}
 
 	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(tID)
-		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", tID)
-		}
+		tableInfo, _ := snap.TableByID(tID)
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
 		}
@@ -286,7 +284,7 @@ func verifySink(
 	if err != nil {
 		return err
 	}
-	err = s.Close()
+	err = s.Close(ctx)
 	if err != nil {
 		return err
 	}
@@ -365,7 +363,7 @@ func confirmLargeDataGap(ctx context.Context, cmd *cobra.Command, startTs uint64
 		return err
 	}
 	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
-	if tsGap > tsGapWarnning {
+	if tsGap > tsGapWarning {
 		cmd.Printf("Replicate lag (%s) is larger than 1 days, "+
 			"large data may cause OOM, confirm to continue at your own risk [Y/N]\n",
 			time.Duration(tsGap)*time.Millisecond,
@@ -403,4 +401,37 @@ func verifyPdEndpoint(pdEndpoint string, useTLS bool) error {
 		}
 	}
 	return nil
+}
+
+func needVerifyVersion(cmd *cobra.Command, verifyList []string) bool {
+	for ; cmd != nil; cmd = cmd.Parent() {
+		for _, verifyName := range verifyList {
+			if cmd.Name() == verifyName || cmd.HasAlias(verifyName) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func verifyAndGetTiCDCClusterVersion(
+	ctx context.Context, cdcEtcdCli kv.CDCEtcdClient,
+) (version.TiCDCClusterVersion, error) {
+	_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
+	if err != nil {
+		return version.TiCDCClusterVersion{}, err
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	if err != nil {
+		return version.TiCDCClusterVersion{}, err
+	}
+	// Check TiCDC cluster version.
+	isUnknownVersion, err := version.CheckTiCDCClusterVersion(cdcClusterVer)
+	if err != nil {
+		return version.TiCDCClusterVersion{}, err
+	}
+	if isUnknownVersion {
+		return version.TiCDCClusterVersion{}, errors.NewNoStackError("TiCDC cluster is unknown, please start TiCDC cluster")
+	}
+	return cdcClusterVer, nil
 }

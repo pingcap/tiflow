@@ -38,16 +38,14 @@ import (
 func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	_, tableName := util.TableIDFromCtx(ctx)
 
 	metricSorterEventCount := sorterEventCount.MustCurryWith(map[string]string{
 		"capture":    captureAddr,
 		"changefeed": changefeedID,
-		"table":      tableName,
 	})
-	metricSorterResolvedTsGauge := sorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricSorterResolvedTsGauge := sorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
+	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
+	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
 
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
@@ -55,7 +53,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	pendingSet := &sync.Map{}
 
 	defer func() {
-		log.Info("Unified Sorter: merger exiting, cleaning up resources")
+		log.Debug("Unified Sorter: merger exiting, cleaning up resources")
 		// cancel pending async IO operations.
 		onExit()
 		cleanUpTask := func(task *flushTask) {

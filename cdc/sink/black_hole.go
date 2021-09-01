@@ -75,6 +75,10 @@ func (b *blackHoleSink) Initialize(ctx context.Context, tableInfo []*model.Simpl
 	return nil
 }
 
-func (b *blackHoleSink) Close() error {
+func (b *blackHoleSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (b *blackHoleSink) Barrier(ctx context.Context) error {
 	return nil
 }

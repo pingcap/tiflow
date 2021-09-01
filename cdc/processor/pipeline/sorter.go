@@ -15,7 +15,6 @@ package pipeline
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -27,7 +26,6 @@ import (
 	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -68,22 +66,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	switch sortEngine {
 	case model.SortInMemory:
 		sorter = puller.NewEntrySorter()
-	case model.SortInFile:
-		sortDir := ctx.ChangefeedVars().Info.SortDir
-		err := util.IsDirAndWritable(sortDir)
-		if err != nil {
-			if os.IsNotExist(errors.Cause(err)) {
-				err = os.MkdirAll(sortDir, 0o755)
-				if err != nil {
-					return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
-				}
-			} else {
-				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
-			}
+	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+		if sortEngine == model.SortInFile {
+			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
+				zap.String("changefeed-id", ctx.ChangefeedVars().ID), zap.String("table-name", n.tableName))
 		}
-
-		sorter = puller.NewFileSorter(sortDir)
-	case model.SortUnified:
 		sortDir := ctx.ChangefeedVars().Info.SortDir
 		err := psorter.UnifiedSorterCheckDir(sortDir)
 		if err != nil {
@@ -116,7 +103,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
+		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -125,7 +112,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 			case <-stdCtx.Done():
 				return nil
 			case <-metricsTicker.C:
-				metricsTableMemoryGauge.Set(float64(n.flowController.GetConsumption()))
+				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
 			case msg, ok := <-sorter.Output():
 				if !ok {
 					// sorter output channel closed
@@ -141,8 +128,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
 						// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
 						// If this is true, it implies that (1) the last transaction has finished, and we are processing
-						// the first event in a new transaction, (2) a resolved-ts prev_event_commit_ts is safe to be sent,
-						// but it has not yet.
+						// the first event in a new transaction, (2) a resolved-ts is safe to be sent, but it has not yet.
 						// This means that we can interpolate prev_event_commit_ts as a resolved-ts, improving the frequency
 						// at which the sink flushes.
 						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
@@ -212,7 +198,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	defer tableMemoryGauge.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr, n.tableName)
+	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
 	return n.wg.Wait()
 }

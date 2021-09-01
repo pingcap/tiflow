@@ -211,8 +211,12 @@ func (s *simpleMySQLSink) EmitCheckpointTs(ctx context.Context, ts uint64) error
 }
 
 // Close closes the Sink
-func (s *simpleMySQLSink) Close() error {
+func (s *simpleMySQLSink) Close(ctx context.Context) error {
 	return s.db.Close()
+}
+
+func (s *simpleMySQLSink) Barrier(ctx context.Context) error {
+	return nil
 }
 
 func prepareCheckSQL(quoteTable string, cols []*model.Column) (string, []interface{}) {

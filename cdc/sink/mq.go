@@ -256,6 +256,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if msg == nil {
 		return nil
 	}
+
+	k.statistics.AddDDLCount()
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
 	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
@@ -267,9 +269,15 @@ func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 	return nil
 }
 
-func (k *mqSink) Close() error {
+func (k *mqSink) Close(ctx context.Context) error {
 	err := k.mqProducer.Close()
 	return errors.Trace(err)
+}
+
+func (k *mqSink) Barrier(cxt context.Context) error {
+	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
+	// all buffered events forcedlly.
+	return nil
 }
 
 func (k *mqSink) run(ctx context.Context) error {

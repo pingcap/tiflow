@@ -59,7 +59,9 @@ func (c *checkSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	defer c.rowsMu.Unlock()
 	var newRows []*model.RowChangedEvent
 	for _, row := range c.rows {
-		c.Assert(row.CommitTs, check.Greater, c.lastResolvedTs)
+		if row.CommitTs <= c.lastResolvedTs {
+			return c.lastResolvedTs, errors.Errorf("commit-ts(%d) is not greater than lastResolvedTs(%d)", row.CommitTs, c.lastResolvedTs)
+		}
 		if row.CommitTs > resolvedTs {
 			newRows = append(newRows, row)
 		}
@@ -76,7 +78,11 @@ func (c *checkSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	panic("unreachable")
 }
 
-func (c *checkSink) Close() error {
+func (c *checkSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (c *checkSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
@@ -86,14 +92,20 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	defer cancel()
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
-	defer manager.Close()
+	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
 	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
-		tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+		}()
 	}
+	wg.Wait()
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		tableSink := tableSinks[i]
@@ -135,21 +147,20 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	defer cancel()
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
-	defer manager.Close()
-	goroutineNum := 100
+	defer manager.Close(ctx)
+	goroutineNum := 200
 	var wg sync.WaitGroup
 	const ExitSignal = uint64(math.MaxUint64)
 
 	var maxResolvedTs uint64
 	tableSinks := make([]Sink, 0, goroutineNum)
-	closeChs := make([]chan struct{}, 0, goroutineNum)
-	runTableSink := func(index int64, sink Sink, startTs uint64, close chan struct{}) {
+	tableCancels := make([]context.CancelFunc, 0, goroutineNum)
+	runTableSink := func(ctx context.Context, index int64, sink Sink, startTs uint64) {
 		defer wg.Done()
-		ctx := context.Background()
 		lastResolvedTs := startTs
 		for {
 			select {
-			case <-close:
+			case <-ctx.Done():
 				return
 			default:
 			}
@@ -169,7 +180,9 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				c.Assert(err, check.IsNil)
 			}
 			_, err := sink.FlushRowChangedEvents(ctx, resolvedTs)
-			c.Assert(err, check.IsNil)
+			if err != nil {
+				c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+			}
 			lastResolvedTs = resolvedTs
 		}
 	}
@@ -178,23 +191,25 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	go func() {
 		defer wg.Done()
 		// add three table and then remote one table
-		for i := 0; i < 200; i++ {
+		for i := 0; i < goroutineNum; i++ {
 			if i%4 != 3 {
 				// add table
 				table := manager.CreateTableSink(model.TableID(i), maxResolvedTs)
-				close := make(chan struct{})
+				ctx, cancel := context.WithCancel(ctx)
+				tableCancels = append(tableCancels, cancel)
 				tableSinks = append(tableSinks, table)
-				closeChs = append(closeChs, close)
 				atomic.AddUint64(&maxResolvedTs, 20)
 				wg.Add(1)
-				go runTableSink(int64(i), table, maxResolvedTs, close)
+				go runTableSink(ctx, int64(i), table, maxResolvedTs)
 			} else {
 				// remove table
 				table := tableSinks[0]
-				close(closeChs[0])
-				c.Assert(table.Close(), check.IsNil)
+				// note when a table is removed, no more data can be sent to the
+				// backend sink, so we cancel the context of this table sink.
+				tableCancels[0]()
+				c.Assert(table.Close(ctx), check.IsNil)
 				tableSinks = tableSinks[1:]
-				closeChs = closeChs[1:]
+				tableCancels = tableCancels[1:]
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -208,6 +223,28 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	for err := range errCh {
 		c.Assert(err, check.IsNil)
 	}
+}
+
+func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 16)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	defer manager.Close(ctx)
+
+	tableID := int64(49)
+	tableSink := manager.CreateTableSink(tableID, 100)
+	err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+		Table:    &model.TableName{TableID: tableID},
+		CommitTs: uint64(110),
+	})
+	c.Assert(err, check.IsNil)
+	_, err = tableSink.FlushRowChangedEvents(ctx, 110)
+	c.Assert(err, check.IsNil)
+	err = manager.destroyTableSink(ctx, tableID)
+	c.Assert(err, check.IsNil)
 }
 
 type errorSink struct {
@@ -234,7 +271,11 @@ func (e *errorSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	panic("unreachable")
 }
 
-func (e *errorSink) Close() error {
+func (e *errorSink) Close(ctx context.Context) error {
+	return nil
+}
+
+func (e *errorSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
@@ -244,10 +285,11 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	defer cancel()
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0)
-	defer manager.Close()
+	defer manager.Close(ctx)
 	sink := manager.CreateTableSink(1, 0)
 	err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		CommitTs: 1,
+		Table:    &model.TableName{TableID: 1},
 	})
 	c.Assert(err, check.IsNil)
 	_, err = sink.FlushRowChangedEvents(ctx, 2)

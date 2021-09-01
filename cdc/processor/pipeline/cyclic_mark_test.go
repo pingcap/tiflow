@@ -144,9 +144,9 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 			},
 		})
 		n := newCyclicMarkNode(markTableID)
-		err := n.Init(pipeline.MockNodeContext4Test(ctx, nil, nil))
+		err := n.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil))
 		c.Assert(err, check.IsNil)
-		outputCh := make(chan *pipeline.Message)
+		outputCh := make(chan pipeline.Message)
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -175,16 +175,17 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 				if row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
 					continue
 				}
-				row.PolymorphicEvent.Row.ReplicaID = row.PolymorphicEvent.ReplicaID
 				output = append(output, row.PolymorphicEvent.Row)
 			}
 		}()
 		wg.Wait()
 		// check the commitTs is increasing
 		var lastCommitTs model.Ts
-		for _, event := range output {
-			c.Assert(event.CommitTs, check.GreaterEqual, lastCommitTs)
-			lastCommitTs = event.CommitTs
+		for _, row := range output {
+			c.Assert(row.CommitTs, check.GreaterEqual, lastCommitTs)
+			// Ensure that the ReplicaID of the row is set correctly.
+			c.Assert(row.ReplicaID, check.Not(check.Equals), 0)
+			lastCommitTs = row.CommitTs
 		}
 		sort.Slice(output, func(i, j int) bool {
 			if output[i].CommitTs == output[j].CommitTs {
