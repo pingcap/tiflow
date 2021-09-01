@@ -149,6 +149,7 @@ func (n *cyclicMarkNode) sendNormalRowToNextNode(ctx pipeline.NodeContext, repli
 	}
 	for _, row := range rows {
 		row.ReplicaID = replicaID
+		row.Row.ReplicaID = replicaID
 		ctx.SendToNextNode(pipeline.PolymorphicEventMessage(row))
 	}
 }

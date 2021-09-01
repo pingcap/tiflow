@@ -153,8 +153,6 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 		return nil
 	}
 
-	event.Row.ReplicaID = event.ReplicaID
-
 	colLen := len(event.Row.Columns)
 	preColLen := len(event.Row.PreColumns)
 	config := ctx.ChangefeedVars().Info.Config
