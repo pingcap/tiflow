@@ -138,8 +138,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	checkAndWaitClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security)
-
 	kv.InitWorkerPool()
 	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
 	if err != nil {
@@ -160,6 +158,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// Check cluster version and wait if it's incompatible.
+	// We start status server first to not block tiup cluster upgrading.
+	checkAndWaitClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security)
 
 	return s.run(ctx)
 }
