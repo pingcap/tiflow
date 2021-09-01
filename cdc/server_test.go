@@ -24,12 +24,14 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/tikv/pd/pkg/tempurl"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
@@ -98,6 +100,15 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(server, check.NotNil)
 
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   server.pdEndpoints,
+		Context:     ctx,
+		DialTimeout: 5 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	etcdClient := kv.NewCDCEtcdClient(ctx, client)
+	server.etcdClient = &etcdClient
+
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = c.MkDir()
 
@@ -107,7 +118,6 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
 	config.StoreGlobalServerConfig(conf)
 
-	server.etcdClient = nil
 	conf.DataDir = ""
 	err = server.initDataDir(ctx)
 	c.Assert(err, check.IsNil)
