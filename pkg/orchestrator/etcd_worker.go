@@ -32,7 +32,6 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -133,8 +132,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
-	watchCh := worker.client.Watch(ctx1, worker.prefix.String(),
-		clientv3.WithPrefix(), clientv3.WithProgressNotify(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.Watch(ctx1, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 	var (
 		pendingPatches [][]DataPatch
 		exiting        bool
@@ -148,9 +146,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	}
 	lastReceivedEventTime := time.Now()
 	lastCleanedUpStaleBigTxn := time.Now()
-	// This limits the number of progress notification requests to Etcd server.
-	// Too many such requests can overburden the server.
-	requestProgressRateLimiter := rate.NewLimiter(rate.Every(time.Second * 5), 1)
 	for {
 		var response clientv3.WatchResponse
 		select {
@@ -161,19 +156,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		case <-ticker.C:
 			// There is no new event to handle on timer ticks, so we have nothing here.
 			if time.Since(lastReceivedEventTime) > etcdRequestProgressDuration {
-				if requestProgressRateLimiter.Allow() {
-					if err := worker.client.RequestProgress(ctx); err != nil {
-						log.Warn("failed to request progress for etcd watcher", zap.Error(err))
-					}
-				}
-			}
-			if time.Since(lastReceivedEventTime) > 4* etcdRequestProgressDuration {
-				log.Warn("not receiving etcd events for too long",
-					zap.Duration("duration", time.Since(lastReceivedEventTime)))
-				if time.Since(lastReceivedEventTime) > 60 * time.Second {
-					// Reports an error when the Etcd watch gets stuck.
-					// The capture will restart.
-					return errors.New("etcd worker timed out")
+				if err := worker.client.RequestProgress(ctx); err != nil {
+					log.Warn("failed to request progress for etcd watcher", zap.Error(err))
 				}
 			}
 			// Checking for orphan txns is not very costly so we can do it in every tick.
