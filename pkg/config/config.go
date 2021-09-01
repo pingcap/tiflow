@@ -181,7 +181,7 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(200 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(100 * time.Millisecond),
 	Sorter: &SorterConfig{
-		NumConcurrentWorker:    4,
+		NumConcurrentWorker:    1,                       // changed to 1 for cloud-cdc
 		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
 		MaxMemoryPressure:      30,                      // 30% is safe on machines with memory capacity <= 16GB
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB

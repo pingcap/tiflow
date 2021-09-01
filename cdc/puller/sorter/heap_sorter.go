@@ -16,6 +16,7 @@ package sorter
 import (
 	"container/heap"
 	"context"
+	"golang.org/x/time/rate"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,7 +33,7 @@ import (
 )
 
 const (
-	flushRateLimitPerSecond = 10
+	flushRateLimitInterval  = time.Second * 10
 	sortHeapCapacity        = 32
 	sortHeapInputChSize     = 1024
 )
@@ -292,11 +293,19 @@ type heapSorterInternalState struct {
 	rateCounter           int
 	sorterConfig          *config.SorterConfig
 	timerMultiplier       int
+
+	flushRateLimiter      *rate.Limiter
 }
 
 func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
+	rateLimitInterval := flushRateLimitInterval
+	failpoint.Inject("sorterDebug", func() {
+		// We are using a shorter interval in debug mode for better unit test.
+		rateLimitInterval = time.Millisecond * 100
+	})
 	state := &heapSorterInternalState{
-		sorterConfig: config.GetGlobalServerConfig().Sorter,
+		sorterConfig:          config.GetGlobalServerConfig().Sorter,
+		flushRateLimiter:      rate.NewLimiter(rate.Every(rateLimitInterval), 1),
 	}
 
 	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
@@ -319,7 +328,7 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 		// 5 * 8 is for the 5 fields in PolymorphicEvent
 		state.heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
 		needFlush := state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit) ||
-			(isResolvedEvent && state.rateCounter < flushRateLimitPerSecond)
+			(isResolvedEvent && h.internalState.flushRateLimiter.Allow())
 
 		if needFlush {
 			state.rateCounter++
@@ -334,7 +343,7 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	}).SetTimer(ctx, 1*time.Second, func(ctx context.Context) error {
 		state.rateCounter = 0
 		state.timerMultiplier = (state.timerMultiplier + 1) % 5
-		if state.timerMultiplier == 0 && state.rateCounter < flushRateLimitPerSecond {
+		if state.timerMultiplier == 0 && h.internalState.flushRateLimiter.Allow() {
 			err := h.flush(ctx, state.maxResolved)
 			if err != nil {
 				return errors.Trace(err)
