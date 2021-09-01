@@ -35,9 +35,6 @@ oom-action = "log"
 # Set the memory quota for a query in bytes. Default: 32GB
 mem-quota-query = 34359738368
 
-# Enable coprocessor streaming.
-enable-streaming = false
-
 # Set system variable 'lower_case_table_names'
 lower-case-table-names = 2
 
@@ -77,9 +74,6 @@ max-days = 0
 # Maximum number of old log files to retain. No clean up by default.
 max-backups = 0
 
-# Rotate log by day
-log-rotate = true
-
 [security]
 # Path of file that contains list of trusted SSL CAs for connection with mysql client.
 ssl-ca = ""
@@ -106,9 +100,6 @@ report-status = true
 # TiDB status port.
 status-port = 10080
 
-# Prometheus pushgateway address, leaves it empty will disable prometheus push.
-metrics-addr = "pushgateway:9091"
-
 # Prometheus client push interval in second, set \"0\" to disable prometheus push.
 metrics-interval = 15
 
@@ -120,9 +111,6 @@ stmt-count-limit = 5000
 
 # Set keep alive option for tcp connection.
 tcp-keep-alive = true
-
-# The maximum number of retries when commit a transaction.
-retry-limit = 10
 
 # Whether support cartesian product.
 cross-join = true
@@ -150,15 +138,6 @@ networks = ""
 
 # PROXY protocol header read timeout, unit is second
 header-timeout = 5
-
-[plan-cache]
-enabled = false
-capacity = 2560
-shards = 256
-
-[prepared-plan-cache]
-enabled = false
-capacity = 100
 
 [opentracing]
 # Enable opentracing.

@@ -45,8 +45,7 @@ import (
 )
 
 const (
-	ownerRunInterval = time.Millisecond * 500
-	defaultDataDir   = "/tmp/cdc_data"
+	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
 )
@@ -83,6 +82,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	pdClient, err := pd.NewClientWithContext(
 		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
@@ -107,8 +107,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   s.pdEndpoints,
 		TLS:         tlsConfig,
@@ -132,9 +134,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-	etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
-	s.etcdClient = &etcdClient
-	if err := s.initDataDir(ctx); err != nil {
+
+	cdcEtcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+	s.etcdClient = &cdcEtcdClient
+
+	err = s.initDataDir(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -285,32 +290,15 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
-	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
-	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
-	cli := s.etcdClient
-	if cli == nil {
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			Context:     ctx,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
-		etcdClient := kv.NewCDCEtcdClient(ctx, client)
-		cli = &etcdClient
-		defer cli.Close()
-	}
-
 	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := cli.GetAllChangeFeedStatus(ctx)
+	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	candidates := make([]string, 0, len(allStatus))
 	for id := range allStatus {
-		info, err := cli.GetChangeFeedInfo(ctx, id)
+		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
 		if err != nil {
 			return errors.Trace(err)
 		}

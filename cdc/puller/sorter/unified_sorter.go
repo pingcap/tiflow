@@ -134,6 +134,15 @@ func UnifiedSorterCleanUp() {
 	}
 }
 
+// ResetGlobalPoolWithoutCleanup reset the pool without cleaning up files.
+// Note that it is used in tests only.
+func ResetGlobalPoolWithoutCleanup() {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	pool = nil
+}
+
 // Run implements the EventSorter interface
 func (s *UnifiedSorter) Run(ctx context.Context) error {
 	failpoint.Inject("sorterDebug", func() {
@@ -204,12 +213,10 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	errg.Go(func() error {
 		captureAddr := util.CaptureAddrFromCtx(ctx)
 		changefeedID := util.ChangefeedIDFromCtx(ctx)
-		_, tableName := util.TableIDFromCtx(ctx)
 
 		metricSorterConsumeCount := sorterConsumeCount.MustCurryWith(map[string]string{
 			"capture":    captureAddr,
 			"changefeed": changefeedID,
-			"table":      tableName,
 		})
 
 		nextSorterID := 0

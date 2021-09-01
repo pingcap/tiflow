@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -52,7 +51,6 @@ type Puller interface {
 type pullerImpl struct {
 	pdCli          pd.Client
 	kvCli          kv.CDCKVClient
-	credential     *security.Credential
 	kvStorage      tikv.Storage
 	checkpointTs   uint64
 	spans          []regionspan.ComparableSpan
@@ -68,7 +66,7 @@ type pullerImpl struct {
 func NewPuller(
 	ctx context.Context,
 	pdCli pd.Client,
-	credential *security.Credential,
+	grpcPool kv.GrpcPool,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
@@ -86,11 +84,10 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, credential)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool)
 	p := &pullerImpl{
 		pdCli:          pdCli,
 		kvCli:          kvCli,
-		credential:     credential,
 		kvStorage:      tikvStorage,
 		checkpointTs:   checkpointTs,
 		spans:          comparableSpans,
@@ -127,21 +124,21 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID, tableName := util.TableIDFromCtx(ctx)
-	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "resolved")
+	tableID, _ := util.TableIDFromCtx(ctx)
+	metricOutputChanSize := outputChanSizeHistogram.WithLabelValues(captureAddr, changefeedID)
+	metricEventChanSize := eventChanSizeHistogram.WithLabelValues(captureAddr, changefeedID)
+	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
 	defer func() {
-		outputChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
-		eventChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
-		memBufferSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
-		pullerResolvedTsGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		outputChanSizeHistogram.DeleteLabelValues(captureAddr, changefeedID)
+		eventChanSizeHistogram.DeleteLabelValues(captureAddr, changefeedID)
+		memBufferSizeGauge.DeleteLabelValues(captureAddr, changefeedID)
+		pullerResolvedTsGauge.DeleteLabelValues(captureAddr, changefeedID)
 		kvEventCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
 		kvEventCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
-		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, tableName, "kv")
-		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, tableName, "resolved")
+		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
+		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
 	}()
 	g.Go(func() error {
 		for {
@@ -149,8 +146,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(15 * time.Second):
-				metricEventChanSize.Set(float64(len(eventCh)))
-				metricOutputChanSize.Set(float64(len(p.outputCh)))
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
 			}
 		}
