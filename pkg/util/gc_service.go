@@ -15,6 +15,7 @@ package util
 
 import (
 	"context"
+	"math"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -33,24 +34,60 @@ const (
 
 // CheckSafetyOfStartTs checks if the startTs less than the minimum of Service-GC-Ts
 // and this function will update the service GC to startTs
-func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, changefeedID string, startTs uint64) (err error) {
-	var minServiceGCTs uint64
-	// pd leader switch may happen, so just retry it.
-	if err := retry.Do(ctx, func() error {
-		minServiceGCTs, err = pdCli.UpdateServiceGCSafePoint(ctx, cdcChangefeedCreatingServiceGCSafePointID+changefeedID,
-			cdcChangefeedCreatingServiceGCSafePointTTL, startTs)
-		if err != nil {
-			log.Warn("update GC safepoint failed, retry later", zap.Error(err))
-		}
-		return err
-	},
-		retry.WithBackoffBaseDelay(500),
-		retry.WithMaxTries(8),
-		retry.WithIsRetryableErr(cerrors.IsRetryableError)); err != nil {
+func CheckSafetyOfStartTs(
+	ctx context.Context, pdCli pd.Client, changefeedID string, startTs uint64,
+) error {
+	minServiceGCTs, err := SetServiceGCSafepoint(
+		ctx, pdCli, cdcChangefeedCreatingServiceGCSafePointID+changefeedID,
+		cdcChangefeedCreatingServiceGCSafePointTTL, startTs)
+	if err != nil {
 		return errors.Trace(err)
 	}
 	if startTs < minServiceGCTs {
 		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
 	return nil
+}
+
+// PD leader switch may happen, so just serviceGCSafepointRetry it.
+// The default PD election timeout is 3 seconds. Triple the timeout as
+// retry time to make sure PD leader can be elected during retry.
+const (
+	serviceGCSafepointBackoffDelay = 1000 // 1s
+	serviceGCSafepointRetry        = 9
+)
+
+// SetServiceGCSafepoint set a service safepoint to PD.
+func SetServiceGCSafepoint(
+	ctx context.Context, pdCli pd.Client, serviceID string, TTL int64, safePoint uint64,
+) (minServiceGCTs uint64, err error) {
+	retry.Do(ctx,
+		func() error {
+			minServiceGCTs, err = pdCli.UpdateServiceGCSafePoint(ctx, serviceID, TTL, safePoint)
+			if err != nil {
+				log.Warn("Set GC safepoint failed, retry later", zap.Error(err))
+			}
+			return err
+		},
+		retry.WithBackoffBaseDelay(serviceGCSafepointBackoffDelay),
+		retry.WithMaxTries(serviceGCSafepointRetry),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	return
+}
+
+// RemoveServiceGCSafepoint removes a service safepoint from PD.
+func RemoveServiceGCSafepoint(ctx context.Context, pdCli pd.Client, serviceID string) error {
+	// Set TTL to 1 second to delete the service safe point effectively.
+	TTL := 1
+	return retry.Do(ctx,
+		func() error {
+			_, err := pdCli.UpdateServiceGCSafePoint(ctx, serviceID, int64(TTL), math.MaxUint64)
+			if err != nil {
+				log.Warn("Remove GC safepoint failed, retry later", zap.Error(err))
+			}
+			return err
+		},
+		retry.WithBackoffBaseDelay(serviceGCSafepointBackoffDelay), // 1s
+		retry.WithMaxTries(serviceGCSafepointRetry),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }
