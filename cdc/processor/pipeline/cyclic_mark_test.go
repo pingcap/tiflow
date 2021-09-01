@@ -168,7 +168,7 @@ func (s *markSuite) TestCyclicMarkNode(c *check.C) {
 			err := n.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCommitTs+1)), outputCh))
 			c.Assert(err, check.IsNil)
 		}()
-		output := []*model.RowChangedEvent{}
+		var output []*model.RowChangedEvent
 		go func() {
 			defer wg.Done()
 			for row := range outputCh {
