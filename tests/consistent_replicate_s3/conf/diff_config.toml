@@ -10,7 +10,7 @@ fix-sql-file = "fix.sql"
 
 # tables need to check.
 [[check-tables]]
-    schema = "consistent_replicate_local"
+    schema = "consistent_replicate_s3"
     tables = ["~usertable.*"]
 
 [[source-db]]
