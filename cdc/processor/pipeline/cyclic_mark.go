@@ -59,10 +59,14 @@ func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
 
 // Receive receives the message from the previous node.
 // In the previous nodes(puller node and sorter node),
-// the change logs of mark table and normal table are listen by one puller, and sorted by one sorter.
-// So, this node will receive a commitTs-ordered stream which include the mark row events and normal row events.
-// Under the above conditions, we need to cache at most one transaction's row events to matching row events.
-// For every row event, Receive function flushes every the last transaction's row events,
+// the change logs of mark table and normal table are listen by one puller,
+// and sorted by one sorter.
+// So, this node will receive a commitTs-ordered stream
+// which include the mark row events and normal row events.
+// Under the above conditions, we need to cache at most one
+// transaction's row events to matching row events.
+// For every row event, Receive function flushes
+// every the last transaction's row events,
 // and adds the mark row event or normal row event into the cache.
 func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
@@ -96,8 +100,7 @@ func (n *cyclicMarkNode) appendNormalRowEvent(ctx pipeline.NodeContext, event *m
 	}
 	if replicaID, exist := n.currentReplicaIDs[event.StartTs]; exist {
 		// we already know the replicaID of this startTs, it means that the mark row of this startTs is already in cached.
-		event.ReplicaID = replicaID
-		n.sendNormalRowEventToNextNode(ctx, event.ReplicaID, event)
+		n.sendNormalRowEventToNextNode(ctx, replicaID, event)
 		return
 	}
 	// for all normal row events which we don't know the replicaID for now. we cache them in unknownReplicaIDEvents.
@@ -130,9 +133,6 @@ func (n *cyclicMarkNode) flush(ctx pipeline.NodeContext, commitTs uint64) {
 	// all mark events and normal events in current transaction is received now.
 	// there are still unmatched normal events in the cache, their replicaID should be local replicaID.
 	for _, events := range n.unknownReplicaIDEvents {
-		for _, row := range events {
-			row.ReplicaID = n.localReplicaID
-		}
 		n.sendNormalRowEventToNextNode(ctx, n.localReplicaID, events...)
 	}
 	if len(n.unknownReplicaIDEvents) != 0 {
@@ -144,14 +144,13 @@ func (n *cyclicMarkNode) flush(ctx pipeline.NodeContext, commitTs uint64) {
 	n.currentCommitTs = commitTs
 }
 
-// sendNormalRowEventToNextNode filter the specified normal row events by the FilterReplicaID config item,
-// and send events to the next node.
+// sendNormalRowEventToNextNode filter the specified normal row events
+// by the FilterReplicaID config item, and send events to the next node.
 func (n *cyclicMarkNode) sendNormalRowEventToNextNode(ctx pipeline.NodeContext, replicaID uint64, events ...*model.PolymorphicEvent) {
 	if _, shouldFilter := n.filterReplicaID[replicaID]; shouldFilter {
 		return
 	}
 	for _, event := range events {
-		event.ReplicaID = replicaID
 		event.Row.ReplicaID = replicaID
 		ctx.SendToNextNode(pipeline.PolymorphicEventMessage(event))
 	}
