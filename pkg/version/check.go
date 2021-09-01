@@ -26,34 +26,29 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	pd "github.com/tikv/pd/client"
-	"go.uber.org/zap"
 )
 
 var (
 	// MinPDVersion is the version of the minimal compatible PD.
-	// TODO bump 5.2.0-alpha once PD releases.
-	MinPDVersion *semver.Version = semver.New("5.1.0-alpha")
+	MinPDVersion *semver.Version = semver.New("5.2.0-alpha")
 	// maxPDVersion is the version of the maximum compatible PD.
 	// Compatible versions are in [minPDVersion, maxPDVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
 	maxPDVersion *semver.Version = semver.New("9999.0.0")
 
 	// MinTiKVVersion is the version of the minimal compatible TiKV.
-	// TODO bump 5.2.0-alpha once TiKV releases.
-	MinTiKVVersion *semver.Version = semver.New("5.1.0-alpha")
+	MinTiKVVersion *semver.Version = semver.New("5.2.0-alpha")
 	// maxTiKVVersion is the version of the maximum compatible TiKV.
 	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
 	maxTiKVVersion *semver.Version = semver.New("9999.0.0")
 
 	// minTiCDCVersion is the version of the minimal compatible TiCDC.
-	// TODO bump 5.2.0-alpha once TiCDC releases.
-	minTiCDCVersion *semver.Version = semver.New("5.1.0-alpha")
+	minTiCDCVersion *semver.Version = semver.New("5.2.0-alpha")
 	// Compatible versions are in [MinTiCDCVersion, MaxTiCDCVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
 	maxTiCDCVersion *semver.Version = semver.New("9999.0.0")
@@ -76,14 +71,11 @@ func removeVAndHash(v string) string {
 
 // CheckClusterVersion check TiKV and PD version.
 func CheckClusterVersion(
-	ctx context.Context, client pd.Client, pdHTTP string, credential *security.Credential, errorTiKVIncompat bool,
+	ctx context.Context, client pd.Client, pdHTTP string, credential *security.Credential,
 ) error {
 	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
 	if err != nil {
-		if errorTiKVIncompat {
-			return err
-		}
-		log.Warn("check TiKV version failed", zap.Error(err))
+		return err
 	}
 
 	httpCli, err := httputil.NewClient(credential)

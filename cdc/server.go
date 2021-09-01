@@ -362,13 +362,10 @@ func checkAndWaitClusterVersion(
 	ctx context.Context, pdClient pd.Client, pdEndpoints []string, security *config.SecurityConfig,
 ) {
 	const backoffOneSecond = 1000
-	const errorTiKVIncompatible = true
-
 	retry.Do(ctx, func() error {
 		var err error
 		for _, pdEndpoint := range pdEndpoints {
-			err = version.CheckClusterVersion(
-				ctx, pdClient, pdEndpoint, security, errorTiKVIncompatible)
+			err = version.CheckClusterVersion(ctx, pdClient, pdEndpoint, security)
 			if err == nil {
 				break
 			}
