@@ -54,7 +54,7 @@ const (
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 	// TiCDC may open numerous gRPC streams,
 	// with 64KB window size, 10K streams takes about 27GB memory.
-	grpcInitialWindowSize     = 65535 // 64 KB The value for initial window size on a stream
+	grpcInitialWindowSize     = 65535   // 64 KB The value for initial window size on a stream
 	grpcInitialConnWindowSize = 1 << 23 // 8 MB The value for initial window size on a connection
 	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
 
