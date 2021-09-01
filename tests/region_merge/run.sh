@@ -22,7 +22,7 @@ function split_and_random_merge() {
 }
 
 large_scale=(100 200 400 800 1600 3200 6400 12800 25600 51200)
-small_scale=(100 200 400)
+small_scale=(10 20 40)
 # in CI, we use the small data set
 test_scale=( "${small_scale[@]}" )
 
