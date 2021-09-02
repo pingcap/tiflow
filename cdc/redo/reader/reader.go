@@ -116,8 +116,10 @@ func (l *LogReader) ResetReader(ctx context.Context, startTs, endTs uint64) erro
 			return err
 		}
 	}
-	if startTs > l.meta.ResolvedTs || endTs <= l.meta.CheckPointTs {
-		return errors.Errorf("startTs, endTs should match the boundary: (%d, %d]", l.meta.CheckPointTs, l.meta.ResolvedTs)
+	if startTs > endTs || startTs > l.meta.ResolvedTs || endTs <= l.meta.CheckPointTs {
+		return errors.Errorf(
+			"startTs, endTs (%d, %d] should match the boundary: (%d, %d]",
+			startTs, endTs, l.meta.CheckPointTs, l.meta.ResolvedTs)
 	}
 	return l.setUpReader(ctx, startTs, endTs)
 }

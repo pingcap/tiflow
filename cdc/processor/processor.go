@@ -263,7 +263,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
-	stdCtx = util.PutCaptureAddrInCtx(ctx, p.captureInfo.AdvertiseAddr)
+	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
