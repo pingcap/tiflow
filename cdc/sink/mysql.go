@@ -902,9 +902,6 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 					args := dmls.values[i]
 					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-						if errors.Cause(err) == kv.ErrWriteConflict {
-							log.Info("write conflict happened", zap.String("query", query), zap.Any("args", args))
-						}
 						if rbErr := tx.Rollback(); rbErr != nil {
 							log.Warn("failed to rollback txn", zap.Error(err))
 						}
@@ -921,6 +918,9 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 					}
 				}
 				if err = tx.Commit(); err != nil {
+					if errors.Cause(err) == kv.ErrWriteConflict {
+						log.Info("write conflict happened", zap.Strings("query", dmls.sqls), zap.Any("args", dmls.values))
+					}
 					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 				}
 				return dmls.rowCount, nil
