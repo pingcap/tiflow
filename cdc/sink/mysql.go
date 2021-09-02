@@ -686,7 +686,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	sendFn := func(txn *model.SingleTableTxn, keys [][]byte, idx int) {
 		causality.add(keys, idx)
 		s.workers[idx].appendTxn(ctx, txn)
-		log.Info("send txn", zap.Any("key", keys), zap.Int("idx", idx), zap.Any("txn", txn))
+		log.Info("send txn", zap.Any("key", keys), zap.Int("idx", idx), zap.Any("causality", causality), zap.Any("txn", txn))
 	}
 	resolveConflict := func(txn *model.SingleTableTxn) {
 		keys := genTxnKeys(txn)
@@ -695,6 +695,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 				sendFn(txn, keys, idx)
 				return
 			}
+			log.Info("flush all txn")
 			s.notifyAndWaitExec(ctx)
 			causality.reset()
 		}
