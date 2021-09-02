@@ -260,6 +260,7 @@ func NewCmdServer() *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "server",
+		Args:  cobra.NoArgs,
 		Short: "Start a TiCDC capture server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(cmd)

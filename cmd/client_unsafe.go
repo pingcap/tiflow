@@ -25,6 +25,7 @@ import (
 func newUnsafeCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:    "unsafe",
+		Args:   cobra.NoArgs,
 		Hidden: true,
 	}
 	command.AddCommand(
