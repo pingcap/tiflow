@@ -70,6 +70,7 @@ require (
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	google.golang.org/grpc v1.29.1
+	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
