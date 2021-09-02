@@ -21,8 +21,7 @@ function prepare() {
     run_sql "CREATE table test.ddl_puller_lag1(id int primary key, val int);"
     run_sql "CREATE table test.ddl_puller_lag2(id int primary key, val int);"
 
-    # run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processorDDLResolved=1*sleep(180000)' # old processor
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processor/processorDDLResolved=1*sleep(180000)' # new processor
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --failpoint 'github.com/pingcap/ticdc/cdc/processor/processorDDLResolved=1*sleep(180000)'
 
     TOPIC_NAME="ticdc-ddl-puller-lag-test-$RANDOM"
     case $SINK_TYPE in
