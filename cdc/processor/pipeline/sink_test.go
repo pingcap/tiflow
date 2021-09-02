@@ -175,7 +175,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.Status(), check.Equals, TableStatusRunning)
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs}), nil))
+		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
 	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 
@@ -198,7 +198,7 @@ func (s *outputSuite) TestStatus(c *check.C) {
 	c.Assert(node.Status(), check.Equals, TableStatusRunning)
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs}), nil))
+		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
 	c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 	c.Assert(node.Status(), check.Equals, TableStatusStopped)
 
@@ -236,7 +236,7 @@ func (s *outputSuite) TestStopStatus(c *check.C) {
 		defer wg.Done()
 		// This will block until sink Close returns
 		err := node.Receive(pipeline.MockNodeContext4Test(ctx,
-			pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStopAtTs}), nil))
+			pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
 		c.Assert(cerrors.ErrTableProcessorStoppedSafely.Equal(err), check.IsTrue)
 		c.Assert(node.Status(), check.Equals, TableStatusStopped)
 	}()
