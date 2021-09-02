@@ -224,6 +224,8 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
 	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
 	metricsTimer := time.NewTimer(defaultMetricInterval)
+	metricsTimer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():

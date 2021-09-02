@@ -96,6 +96,8 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 	}
 
 	metricsTimer := time.NewTimer(defaultMetricInterval)
+	defer metricsTimer.Stop()
+
 	receiver, err := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
 	if err != nil {
 		return err

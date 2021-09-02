@@ -148,6 +148,8 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
 
 	metricsTimer := time.NewTimer(defaultMetricInterval)
+	defer metricsTimer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
