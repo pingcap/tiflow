@@ -386,8 +386,27 @@ func (w *Writer) GC(checkPointTs uint64) error {
 		err := os.Remove(filepath.Join(w.cfg.Dir, f.Name()))
 		errs = multierr.Append(errs, err)
 	}
+	if errs != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, errs)
+	}
 
-	return cerror.WrapError(cerror.ErrRedoFileOp, errs)
+	// forget to cp to 5.2, need wait pick to tidb 5.2.1
+	//if w.cfg.S3Storage {
+	//	// since if fail delete in s3, do not block any path, so just log the error if any
+	//	go func() {
+	//		var errs error
+	//		for _, f := range remove {
+	//			err := w.storage.DeleteFile(context.Background(), f.Name())
+	//			errs = multierr.Append(errs, err)
+	//		}
+	//		if errs != nil {
+	//			errs = cerror.WrapError(cerror.ErrS3StorageAPI, errs)
+	//			log.Warn("delete redo log in s3 fail", zap.Error(errs))
+	//		}
+	//	}()
+	//}
+
+	return nil
 }
 
 func (w *Writer) parseLogFileName(name string) (uint64, error) {
