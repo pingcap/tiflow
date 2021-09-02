@@ -50,7 +50,6 @@ function run() {
         run_sql "CREATE table processor_err_chan.t$i (id int primary key auto_increment)" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     done
 
-    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorAddTableError=1*return(true)' # old processor
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorAddTableError=1*return(true)' # new processor
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
 
