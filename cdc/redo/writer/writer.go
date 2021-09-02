@@ -23,12 +23,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )

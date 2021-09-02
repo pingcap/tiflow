@@ -18,10 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/backup"
+	backup "github.com/pingcap/kvproto/pkg/brpb"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tidb/br/pkg/storage"
 )
 
 // InitS3storage init a storage used for s3,
