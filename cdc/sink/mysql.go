@@ -919,7 +919,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 				}
 				if err = tx.Commit(); err != nil {
 					if errors.Cause(err) == kv.ErrWriteConflict {
-						log.Info("write conflict happened", zap.Strings("query", dmls.sqls), zap.Any("args", dmls.values))
+						log.Info("write conflict happened", zap.Strings("query", dmls.sqls), zap.Any("args", dmls.values), zap.Int("bucket", bucket))
 					}
 					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 				}
