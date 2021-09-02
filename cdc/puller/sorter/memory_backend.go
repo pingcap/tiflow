@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -81,6 +81,8 @@ func (r *memoryBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 	}
 
 	ret := r.backEnd.events[r.readIndex]
+	// Sets the slot to nil to prevent delaying GC.
+	r.backEnd.events[r.readIndex] = nil
 	r.readIndex++
 	return ret, nil
 }
