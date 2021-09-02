@@ -327,7 +327,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
-		if msg.Command.Tp == pipeline.CommandTypeStopAtTs {
+		if msg.Command.Tp == pipeline.CommandTypeStop {
 			return n.stop(ctx)
 		}
 	case pipeline.MessageTypeBarrier:
