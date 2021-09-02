@@ -203,9 +203,9 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 		zap.Int64("table-id", tableID),
 		zap.String("table-name", tableName))
 
-	// if err := util.CheckDataDirSatisfied(); err != nil {
-	// 	return nil, errors.Trace(err)
-	// }
+	if err := util.CheckDataDirSatisfied(); err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	ret, err := newFileBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
