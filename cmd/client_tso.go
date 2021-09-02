@@ -23,6 +23,7 @@ import (
 func newTsoCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "tso",
+		Args:  cobra.NoArgs,
 		Short: "Manage tso",
 	}
 	command.AddCommand(
@@ -34,6 +35,7 @@ func newTsoCommand() *cobra.Command {
 func newQueryTsoCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query",
+		Args:  cobra.NoArgs,
 		Short: "Get tso from PD",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
