@@ -641,7 +641,7 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 	}()
 
 	changeSet.sort()
-
+	hasDelete := false
 	for _, change := range changeSet {
 		key := change.key
 		value := change.new
@@ -651,6 +651,7 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 			ops = append(ops, clientv3.OpPut(key.String(), string(value)))
 		} else {
 			ops = append(ops, clientv3.OpDelete(key.String()))
+			hasDelete = true
 		}
 
 		var cmp clientv3.Cmp
@@ -707,9 +708,24 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 		return errors.Trace(err)
 	}
 
+	submitCmps := []clientv3.Cmp{clientv3.Compare(clientv3.ModRevision(newTxnKey.String()), "<", txnRevision+1)}
+	submitOps := []clientv3.Op{clientv3.OpPut(newTxnKey.String(), string(newTxnBytes), clientv3.WithLease(clientv3.NoLease))}
+	if hasDelete {
+		submitOps = append(submitOps, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
+	}
+	if worker.deleteCounter > 0 {
+		submitCmps = append(submitCmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+deletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
+	} else if worker.deleteCounter == 0 {
+		submitCmps = append(submitCmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+deletionCounterKey), "=", 0))
+	} else {
+		panic("unreachable")
+	}
+
+
+
 	txnResp, err := worker.client.Txn(ctx).
-		If(clientv3.Compare(clientv3.ModRevision(newTxnKey.String()), "<", txnRevision+1)).
-		Then(clientv3.OpPut(newTxnKey.String(), string(newTxnBytes), clientv3.WithLease(clientv3.NoLease))).
+		If(submitCmps...).
+		Then(submitOps...).
 		Commit()
 	if err != nil {
 		return errors.Trace(err)
