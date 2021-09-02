@@ -47,6 +47,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -901,6 +902,9 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 					args := dmls.values[i]
 					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+						if errors.Cause(err) == kv.ErrWriteConflict {
+							log.Info("write conflict happened", zap.String("query", query), zap.Any("args", args))
+						}
 						if rbErr := tx.Rollback(); rbErr != nil {
 							log.Warn("failed to rollback txn", zap.Error(err))
 						}
