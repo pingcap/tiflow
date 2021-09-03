@@ -49,11 +49,18 @@ type txnsHeap struct {
 	txnsGroup [][]*model.SingleTableTxn
 }
 
-func newTxnsHeap(txnsMap map[model.TableID][]*model.SingleTableTxn) *txnsHeap {
-	txnsGroup := make([][]*model.SingleTableTxn, 0, len(txnsMap))
+// flattenTxns flat grouped transactions into a matrix, and ignore TableID.
+func flattenTxns(txnsMap map[model.TableID][]*model.SingleTableTxn) [][]*model.SingleTableTxn {
+	result := make([][]*model.SingleTableTxn, 0, len(txnsMap))
 	for _, txns := range txnsMap {
-		txnsGroup = append(txnsGroup, txns)
+		result = append(result, txns)
 	}
+
+	return result
+}
+
+func newTxnsHeap(txnsMap map[model.TableID][]*model.SingleTableTxn) *txnsHeap {
+	txnsGroup := flattenTxns(txnsMap)
 	inner := make(innerTxnsHeap, 0, len(txnsGroup))
 	heap.Init(&inner)
 	for bucket, txns := range txnsGroup {
@@ -75,6 +82,7 @@ func (h *txnsHeap) iter(fn func(txn *model.SingleTableTxn)) {
 		bucket := minEntry.bucket
 		fn(h.txnsGroup[bucket][0])
 		h.txnsGroup[bucket] = h.txnsGroup[bucket][1:]
+		// TODO (Ling Jin): why we need this
 		if len(h.txnsGroup[bucket]) > 0 {
 			heap.Push(h.inner, innerHeapEntry{
 				ts:     h.txnsGroup[bucket][0].CommitTs,

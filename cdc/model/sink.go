@@ -239,6 +239,16 @@ func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
+// IsUpdate return true if the row is an update event
+func (r *RowChangedEvent) IsUpdate() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) != 0
+}
+
+// IsInsert return true if the row is an insert event
+func (r *RowChangedEvent) IsInsert() bool {
+	return len(r.PreColumns) == 0 && len(r.Columns) != 0
+}
+
 // PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
 	pkeyCols := make([]*Column, 0)

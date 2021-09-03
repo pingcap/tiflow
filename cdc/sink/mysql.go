@@ -159,28 +159,25 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		case <-receiver.C:
 		}
 		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
-		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
-		if len(resolvedTxnsMap) == 0 {
-			for _, worker := range s.workers {
-				atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
+		resolvedTxnMap := s.txnCache.Resolved(resolvedTs)
+		if len(resolvedTxnMap) != 0 {
+			if !config.NewReplicaImpl && s.cyclic != nil {
+				// Filter rows if it is originated from downstream.
+				skippedRowCount := cyclic.FilterAndReduceTxns(
+					resolvedTxnMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+				s.statistics.SubRowsCount(skippedRowCount)
 			}
-			s.txnCache.UpdateCheckpoint(resolvedTs)
-			continue
+			s.dispatchAndExecTxns(ctx, resolvedTxnMap)
 		}
-
-		if s.cyclic != nil {
-			// Filter rows if it is origin from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
-		}
-
-		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for _, worker := range s.workers {
-			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
-		}
-		s.txnCache.UpdateCheckpoint(resolvedTs)
+		s.updateCheckpointTs(resolvedTs)
 	}
+}
+
+func (s *mysqlSink) updateCheckpointTs(ts uint64) {
+	for _, worker := range s.workers {
+		worker.updateCheckpointTs(ts)
+	}
+	s.txnCache.UpdateCheckpoint(ts)
 }
 
 func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -691,7 +688,7 @@ func (s *mysqlSink) broadcastFinishTxn() {
 	}
 }
 
-func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
+func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnGroup map[model.TableID][]*model.SingleTableTxn) {
 	nWorkers := s.params.workerCount
 	causality := newCausality()
 	rowsChIdx := 0
@@ -714,7 +711,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		rowsChIdx++
 		rowsChIdx = rowsChIdx % nWorkers
 	}
-	h := newTxnsHeap(txnsGroup)
+	h := newTxnsHeap(txnGroup)
 	h.iter(func(txn *model.SingleTableTxn) {
 		startTime := time.Now()
 		resolveConflict(txn)
@@ -750,6 +747,10 @@ func newMySQLSinkWorker(
 		receiver:         receiver,
 		closedCh:         make(chan struct{}, 1),
 	}
+}
+
+func (w *mysqlSinkWorker) updateCheckpointTs(ts uint64) {
+	atomic.StoreUint64(&w.checkpointTs, ts)
 }
 
 func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
@@ -1034,7 +1035,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
 		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
-		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+		if translateToInsert && row.IsUpdate() {
 			flushCacheDMLs()
 			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
 			if query != "" {
@@ -1045,10 +1046,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			continue
 		}
 
-		// Case for delete event or update event
 		// If old value is enabled and not in safe mode,
 		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
-		if len(row.PreColumns) != 0 {
+		if row.IsDelete() || row.IsUpdate() {
 			flushCacheDMLs()
 			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
 			if query != "" {
@@ -1058,8 +1058,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 
-		// Case for insert event or update event
-		if len(row.Columns) != 0 {
+		if row.IsInsert() || row.IsUpdate() {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
 				if query != "" {
@@ -1154,8 +1153,8 @@ func prepareReplace(
 }
 
 // reduceReplace groups SQLs with the same replace statement format, as following
-// sql: `REPLACE INTO `test`.`t` (`a`,`b`) VALUES (?,?,?,?,?,?)`
-// args: (1,"",2,"2",3,"")
+// sql: `REPLACE INTO `test`.`t` (`a`,`b`) VALUES (?,?), (?,?), (?,?)`
+// args: (1, ""), (2, "2"), (3, "")
 func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string, [][]interface{}) {
 	nextHolderString := func(query string, valueNum int, last bool) string {
 		query += "(" + model.HolderString(valueNum) + ")"

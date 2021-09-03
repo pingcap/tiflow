@@ -66,7 +66,7 @@ func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 }
 
 // Append adds unresolved rows to cache
-// the rows inputed into this function will go through the following handling logic
+// the input rows will go through the following handling logic
 // 1. group by tableID from one input stream
 // 2. for each tableID stream, the callers of this function should **make sure** that the CommitTs of rows is **strictly increasing**
 // 3. group by CommitTs, according to CommitTs cut the rows into many group of rows in the same CommitTs
@@ -101,8 +101,8 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 	return appendRows
 }
 
-// Resolved returns resolved txns according to resolvedTs
-// The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
+// Resolved returns resolved transactions according to resolvedTs
+// The returned map contains many transaction grouped by tableID. for each table, the commitTs of txn in the txn slice is strictly increasing
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
 	if resolvedTs <= atomic.LoadUint64(&c.checkpointTs) {
 		return nil
@@ -114,8 +114,8 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*mo
 		return nil
 	}
 
-	_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, c.unresolvedTxns)
-	return resolvedTxnsMap
+	_, allResolved := c.collectResolved(resolvedTs)
+	return allResolved
 }
 
 // UpdateCheckpoint updates the checkpoint ts
@@ -123,39 +123,38 @@ func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
 	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
 }
 
-func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
-	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
+// collectResolved fetch all resolved transactions by the given resolvedTs, and group them by TableID, and keep strictly increasing order.
+func (c *UnresolvedTxnCache) collectResolved(resolvedTs uint64) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(c.unresolvedTxns))
 	minTs = resolvedTs
-	for tableID, txns := range unresolvedTxns {
+	for tableID, txns := range c.unresolvedTxns {
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].commitTs > resolvedTs
 		})
 		if i == 0 {
 			continue
 		}
-		var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
+		var resolved []*txnsWithTheSameCommitTs
 		if i == len(txns) {
-			resolvedTxnsWithTheSameCommitTs = txns
-			delete(unresolvedTxns, tableID)
+			resolved = txns
+			delete(c.unresolvedTxns, tableID)
 		} else {
-			resolvedTxnsWithTheSameCommitTs = txns[:i]
-			unresolvedTxns[tableID] = txns[i:]
+			resolved = txns[:i]
+			c.unresolvedTxns[tableID] = txns[i:]
 		}
 		var txnsLength int
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
+		for _, txns := range resolved {
 			txnsLength += len(txns.txns)
 		}
 		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
+		for _, txns := range resolved {
 			for _, txn := range txns.txns {
 				resolvedTxns = append(resolvedTxns, txn)
 			}
 		}
 		resolvedRowsMap[tableID] = resolvedTxns
-		if len(resolvedTxnsWithTheSameCommitTs) > 0 && resolvedTxnsWithTheSameCommitTs[0].commitTs < minTs {
-			minTs = resolvedTxnsWithTheSameCommitTs[0].commitTs
+		if len(resolved) > 0 && resolved[0].commitTs < minTs {
+			minTs = resolved[0].commitTs
 		}
 	}
 	return

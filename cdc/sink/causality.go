@@ -23,8 +23,8 @@ import (
 )
 
 // causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
-// causality groups sqls that maybe contain causal relationships, and syncer executes them linearly.
-// if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causality.
+// causality groups SQLs that maybe contain causal relationships, and executes them linearly.
+// if some conflicts exist in more than one groups, then waits all SQLs that are grouped be executed and reset causality.
 // this mechanism meets quiescent consistency to ensure correctness.
 type causality struct {
 	relations map[string]int
@@ -51,6 +51,8 @@ func (c *causality) reset() {
 }
 
 // detectConflict detects whether there is a conflict
+// return whether it's conflict, and also the index of the conflicted key
+// if return -1, means that multiple key conflicted, caller should reset before add the new key.
 func (c *causality) detectConflict(keys [][]byte) (bool, int) {
 	if len(keys) == 0 {
 		return false, 0
@@ -90,6 +92,7 @@ func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
 
 func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	var keys [][]byte
+	// for update or insert event
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
 			key := genKeyList(row.Columns, iIdx, idxCol, row.Table.TableID)
@@ -99,6 +102,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 			keys = append(keys, key)
 		}
 	}
+	// for update or delete event
 	if len(row.PreColumns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
 			key := genKeyList(row.PreColumns, iIdx, idxCol, row.Table.TableID)
@@ -124,7 +128,7 @@ func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) 
 	for _, i := range colIdx {
 		// if a column value is null, we can ignore this index
 		// If the index contain generated column, we can't use this key to detect conflict with other DML,
-		// Because such as insert can't specified the generated value.
+		// Because such as insert can't specify the generated value.
 		if columns[i] == nil || columns[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
 			return nil
 		}
@@ -134,9 +138,16 @@ func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) 
 	if len(key) == 0 {
 		return nil
 	}
-	tableKey := make([]byte, 16)
-	binary.BigEndian.PutUint64(tableKey[:8], uint64(iIdx))
-	binary.BigEndian.PutUint64(tableKey[8:], uint64(tableID))
+	tableKey := genTableKey(uint64(tableID), uint64(iIdx))
 	key = append(key, tableKey...)
+	return key
+}
+
+// TODO (Ling Jin): why we need iIdx, which is the index of IndexColumn slice?
+func genTableKey(tableID, iIdx uint64) []byte {
+	key := make([]byte, 16)
+	binary.BigEndian.PutUint64(key[:8], iIdx)
+	binary.BigEndian.PutUint64(key[8:], tableID)
+
 	return key
 }
