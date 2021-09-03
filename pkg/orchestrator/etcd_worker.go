@@ -103,7 +103,7 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 }
 
 const (
-	etcdRequestProgressDuration = 2 * time.Second
+	etcdRequestProgressDuration = 2 * time.Minute
 	etcdCleanUpBigTxnInterval   = 2 * time.Second
 	etcdWatchNoEventTimeout     = 5 * time.Minute
 	etcdBigTxnMetaPrefix        = "/meta-txn"
@@ -169,7 +169,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	lastCleanedUpStaleBigTxn := time.Now()
 	// This limits the number of progress notification requests to Etcd server.
 	// Too many such requests can overburden the server.
-	requestProgressRateLimiter := rate.NewLimiter(rate.Every(time.Second * 5), 1)
+	requestProgressRateLimiter := rate.NewLimiter(rate.Every(time.Second*5), 1)
 	for {
 		var response clientv3.WatchResponse
 		select {
@@ -186,7 +186,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 					}
 				}
 			}
-			if time.Since(lastReceivedEventTime) > 4* etcdRequestProgressDuration {
+			if time.Since(lastReceivedEventTime) > 4*etcdRequestProgressDuration {
 				log.Warn("not receiving etcd events for too long",
 					zap.Duration("duration", time.Since(lastReceivedEventTime)))
 				if time.Since(lastReceivedEventTime) > etcdWatchNoEventTimeout {
@@ -737,8 +737,6 @@ func (worker *EtcdWorker) applyBigTxnPatches(ctx context.Context, changeSet txnC
 	} else {
 		panic("unreachable")
 	}
-
-
 
 	txnResp, err := worker.client.Txn(ctx).
 		If(submitCmps...).
