@@ -15,6 +15,7 @@ package workerpool
 
 import (
 	"context"
+	"golang.org/x/time/rate"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -386,6 +387,7 @@ func (w *worker) synchronize() {
 	}
 	defer receiver.Stop()
 
+	rl := rate.NewLimiter(rate.Every(time.Second * 5), 1)
 	startTime := time.Now()
 	for {
 		workerHasFinishedLoop := false
@@ -398,7 +400,7 @@ func (w *worker) synchronize() {
 			break
 		}
 
-		if time.Since(startTime) > time.Second*10 {
+		if time.Since(startTime) > time.Second*10 && rl.Allow(){
 			// likely the workerpool has deadlocked, or there is a bug in the event handlers.
 			log.Warn("synchronize is taking too long, report a bug", zap.Duration("elapsed", time.Since(startTime)))
 		}
