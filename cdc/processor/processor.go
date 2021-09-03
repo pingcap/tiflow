@@ -262,30 +262,40 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sendError(p.mounter.Run(stdCtx))
 	}()
 
-	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
-	for k, v := range p.changefeed.Info.Opts {
-		opts[k] = v
+	opts, err := p.collectChangefeedOptions(ctx)
+	if err != nil {
+		return errors.Trace(err)
 	}
-
-	// TODO(neil) find a better way to let sink know cyclic is enabled.
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		opts[mark.OptCyclicConfig] = cyclicCfg
-	}
-	opts[sink.OptChangefeedID] = p.changefeed.ID
-	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	s, err := sink.NewSink(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs)
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
+}
+
+// collectChangefeedOptions return current changefeed options.
+func (p *processor) collectChangefeedOptions(ctx cdcContext.Context) (map[string]string, error) {
+	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
+	for k, v := range p.changefeed.Info.Opts {
+		opts[k] = v
+	}
+	// TODO(neil) find a better way to let sink know cyclic is enabled.
+	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
+		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		opts[mark.OptCyclicConfig] = cyclicCfg
+	}
+	opts[sink.OptChangefeedID] = p.changefeed.ID
+	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+
+	return opts, nil
 }
 
 // handleErrorCh listen the error channel and throw the error if it is not expected.
