@@ -47,7 +47,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -918,7 +917,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 					}
 				}
 				if err = tx.Commit(); err != nil {
-					if errors.Cause(err) == kv.ErrWriteConflict {
+					if strings.Contains(err.Error(), "Error 9007: Write conflict") {
 						log.Info("write conflict happened", zap.Strings("query", dmls.sqls), zap.Any("args", dmls.values), zap.Int("bucket", bucket))
 					}
 					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
