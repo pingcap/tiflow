@@ -23,10 +23,9 @@ type PolymorphicEvent struct {
 	// Commit or resolved TS
 	CRTs uint64
 
-	RawKV     *RawKVEntry
-	Row       *RowChangedEvent
-	ReplicaID uint64
-	finished  chan struct{}
+	RawKV    *RawKVEntry
+	Row      *RowChangedEvent
+	finished chan struct{}
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV

@@ -20,11 +20,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
