@@ -32,6 +32,12 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const (
+	etcdRequestProgressDuration = 2 * time.Second
+	deletionCounterKey          = "/meta/ticdc-delete-etcd-key-count"
+	etcdWorkerFuncRunWarnTime   = 5 * time.Second
+)
+
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
 	client  *etcd.Client
@@ -84,12 +90,6 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 		barrierRev: -1, // -1 indicates no barrier
 	}, nil
 }
-
-const (
-	etcdRequestProgressDuration = 2 * time.Second
-	deletionCounterKey          = "/meta/ticdc-delete-etcd-key-count"
-	etcdWorkerFuncRunWarnTime   = 5 * time.Second
-)
 
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
