@@ -109,9 +109,7 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 				return nil
 			case <-metricsTicker.C:
 				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
-			case msg1, ok := <-sorter.Output():
-				msgV := *msg1
-				msg := &msgV
+			case msg, ok := <-sorter.Output():
 				if !ok {
 					// sorter output channel closed
 					return nil
