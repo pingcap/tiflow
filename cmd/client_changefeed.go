@@ -84,6 +84,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 	cmds := []*cobra.Command{
 		{
 			Use:   "pause",
+			Args:  cobra.NoArgs,
 			Short: "Pause a replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
@@ -96,6 +97,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 		},
 		{
 			Use:   "resume",
+			Args:  cobra.NoArgs,
 			Short: "Resume a paused replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
@@ -111,6 +113,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 		},
 		{
 			Use:   "remove",
+			Args:  cobra.NoArgs,
 			Short: "Remove a replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
