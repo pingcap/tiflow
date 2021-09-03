@@ -161,7 +161,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 		resolvedTxnMap := s.txnCache.Resolved(resolvedTs)
 		if len(resolvedTxnMap) != 0 {
-			if !config.NewReplicaImpl && s.cyclic != nil {
+			if s.cyclic != nil {
 				// Filter rows if it is originated from downstream.
 				skippedRowCount := cyclic.FilterAndReduceTxns(
 					resolvedTxnMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
