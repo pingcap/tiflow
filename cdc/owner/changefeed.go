@@ -25,11 +25,16 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
+)
+
+const (
+	changefeedFuncRunWarnTime = 2 * time.Second
 )
 
 type changefeed struct {
@@ -130,6 +135,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 }
 
 func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
@@ -337,6 +343,7 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 }
 
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
+	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
 	barrierTp, barrierTs := c.barriers.Min()
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
 	switch barrierTp {
@@ -420,6 +427,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 }
 
 func (c *changefeed) updateStatus(barrierTs model.Ts) {
+	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
 	resolvedTs := barrierTs
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
@@ -460,5 +468,6 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 }
 
 func (c *changefeed) Close() {
+	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
 	c.releaseResources()
 }

@@ -136,7 +136,7 @@ func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
 	return zap.Error(err)
 }
 
-// InitSaramaLogger hacks logger used in sarama lib
+// initSaramaLogger hacks logger used in sarama lib
 func initSaramaLogger(level zapcore.Level) error {
 	// only available less than info level
 	if !zapcore.InfoLevel.Enabled(level) {
@@ -213,6 +213,7 @@ func initGRPCLogger(level zapcore.Level) error {
 	return nil
 }
 
+// TimeoutWarning warn if a func cost time more than timeLimit
 func TimeoutWarning(start time.Time, timeLimit time.Duration) {
 	dis := time.Since(start)
 	if dis > timeLimit {

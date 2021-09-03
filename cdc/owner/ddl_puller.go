@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,10 +26,15 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+)
+
+const (
+	ddlPullerchangefeedFuncRunWarnTime = 1 * time.Second
 )
 
 // DDLPuller is a wrapper of the Puller interface for the owner
@@ -56,6 +62,7 @@ type ddlPullerImpl struct {
 }
 
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
+	defer logutil.TimeoutWarning(time.Now(), ddlPullerchangefeedFuncRunWarnTime)
 	pdCli := ctx.GlobalVars().PDClient
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
@@ -144,6 +151,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 }
 
 func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
+	defer logutil.TimeoutWarning(time.Now(), ddlPullerchangefeedFuncRunWarnTime)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {
@@ -154,6 +162,7 @@ func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
 }
 
 func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
+	defer logutil.TimeoutWarning(time.Now(), ddlPullerchangefeedFuncRunWarnTime)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {

@@ -16,7 +16,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/logutil"
 	"strconv"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -201,6 +201,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
+	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
 	if worker.isDeleteCounterKey(event.Kv.Key) {
 		switch event.Type {
 		case mvccpb.PUT:
@@ -287,6 +288,7 @@ func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch) error {
+	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
 	state := worker.cloneRawState()
 	changedSet := make(map[util.EtcdKey]struct{})
 	for _, patch := range patches {

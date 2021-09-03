@@ -20,7 +20,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"go.uber.org/zap"
+)
+
+const (
+	feedStateManagerFuncRunWarnTime = 1 * time.Second
 )
 
 // feedStateManager manages the ReactorState of a changefeed
@@ -33,6 +38,7 @@ type feedStateManager struct {
 }
 
 func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
+	defer logutil.TimeoutWarning(time.Now(), feedStateManagerFuncRunWarnTime)
 	m.state = state
 	m.shouldBeRunning = true
 	defer func() {
@@ -83,6 +89,7 @@ func (m *feedStateManager) PushAdminJob(job *model.AdminJob) {
 }
 
 func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
+	defer logutil.TimeoutWarning(time.Now(), feedStateManagerFuncRunWarnTime)
 	job := m.popAdminJob()
 	if job == nil || job.CfID != m.state.ID {
 		return false
@@ -230,6 +237,7 @@ func (m *feedStateManager) cleanUpInfos() {
 }
 
 func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
+	defer logutil.TimeoutWarning(time.Now(), feedStateManagerFuncRunWarnTime)
 	var runningErrors map[string]*model.RunningError
 	for captureID, position := range m.state.TaskPositions {
 		if position.Error != nil {
@@ -258,6 +266,7 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 }
 
 func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
+	defer logutil.TimeoutWarning(time.Now(), feedStateManagerFuncRunWarnTime)
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		for _, err := range errs {
 			info.Error = err

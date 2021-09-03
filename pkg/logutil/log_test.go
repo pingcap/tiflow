@@ -15,7 +15,6 @@ package logutil
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
 	"sync"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -71,7 +71,7 @@ func TestZapErrorFilter(t *testing.T) {
 	)
 	for _, tc := range testCases {
 		require.EqualValues(t, ZapErrorFilter(tc.err, tc.filters...), tc.expected)
-		//c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
+		// c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
 	}
 }
 

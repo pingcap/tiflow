@@ -17,6 +17,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/logutil"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -30,8 +32,9 @@ import (
 
 const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	CDCServiceSafePointID = "ticdc"
-	pdTimeUpdateInterval  = 10 * time.Minute
+	CDCServiceSafePointID    = "ticdc"
+	pdTimeUpdateInterval     = 10 * time.Minute
+	gcManagerFuncRunWarnTime = 1 * time.Second
 )
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
@@ -68,6 +71,7 @@ func newGCManager() *gcManager {
 }
 
 func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error {
+	defer logutil.TimeoutWarning(time.Now(), gcManagerFuncRunWarnTime)
 	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
 		return nil
 	}
@@ -118,6 +122,7 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 }
 
 func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error) {
+	defer logutil.TimeoutWarning(time.Now(), gcManagerFuncRunWarnTime)
 	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
 		return m.pdPhysicalTimeCache, nil
 	}
@@ -131,6 +136,7 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 }
 
 func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+	defer logutil.TimeoutWarning(time.Now(), gcManagerFuncRunWarnTime)
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)

@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -42,7 +43,7 @@ import (
 )
 
 const (
-	captureFuncRunWarnTime = 5 * time.Second
+	captureFuncRunWarnTime = 2 * time.Second
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
@@ -306,6 +307,7 @@ func (c *Capture) setOwner(owner *owner.Owner) {
 
 // OperateOwnerUnderLock operates the owner with lock
 func (c *Capture) OperateOwnerUnderLock(fn func(*owner.Owner) error) error {
+	defer logutil.TimeoutWarning(time.Now(), captureFuncRunWarnTime)
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	if c.owner == nil {
@@ -324,6 +326,7 @@ func (c *Capture) campaign(ctx cdcContext.Context) error {
 
 // resign lets an owner start a new election.
 func (c *Capture) resign(ctx cdcContext.Context) error {
+	defer logutil.TimeoutWarning(time.Now(), captureFuncRunWarnTime)
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
@@ -332,6 +335,7 @@ func (c *Capture) resign(ctx cdcContext.Context) error {
 
 // register registers the capture information in etcd
 func (c *Capture) register(ctx cdcContext.Context) error {
+	defer logutil.TimeoutWarning(time.Now(), captureFuncRunWarnTime)
 	err := ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
