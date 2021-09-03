@@ -423,6 +423,7 @@ func (l *LogWriter) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
+	log.Debug("tmp file synced", zap.String("tmp file name", tmpFile.Name()))
 	err = os.Rename(tmpFileName, l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

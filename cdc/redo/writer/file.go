@@ -412,10 +412,6 @@ func (w *Writer) GC(checkPointTs uint64) error {
 }
 
 func (w *Writer) parseLogFileName(name string) (uint64, error) {
-	if filepath.Ext(name) != common.LogEXT && filepath.Ext(name) != common.TmpEXT {
-		return 0, errors.New("bad log name, file name extension not match")
-	}
-
 	var commitTs uint64
 	format := w.getLogFileNameFormat(filepath.Ext(name))
 	_, err := fmt.Sscanf(name, format, &commitTs)
@@ -426,7 +422,7 @@ func (w *Writer) parseLogFileName(name string) (uint64, error) {
 }
 
 func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
-	if filepath.Ext(f.Name()) == common.TmpEXT {
+	if filepath.Ext(f.Name()) != common.LogEXT {
 		return false, nil
 	}
 
