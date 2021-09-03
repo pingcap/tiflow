@@ -86,7 +86,8 @@ func TestTimeoutWarning(t *testing.T) {
 	cfg := &Config{
 		Level: defaultLogLevel,
 	}
-	InitLogger(cfg)
+	err = InitLogger(cfg)
+	require.Nil(t, err)
 
 	func() {
 		defer TimeoutWarning(time.Now(), 1)

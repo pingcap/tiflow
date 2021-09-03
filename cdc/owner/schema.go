@@ -45,7 +45,7 @@ type schemaWrap4Owner struct {
 }
 
 func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *config.ReplicaConfig) (*schemaWrap4Owner, error) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.TimeoutWarning(time.Now(), schemaFuncRunWarnTime)
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error
@@ -72,7 +72,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 
 // AllPhysicalTables returns the table IDs of all tables and partition tables.
 func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.TimeoutWarning(time.Now(), schemaFuncRunWarnTime)
 	if s.allPhysicalTablesCache != nil {
 		return s.allPhysicalTablesCache
 	}
@@ -95,7 +95,7 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.TimeoutWarning(time.Now(), schemaFuncRunWarnTime)
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
 		return nil
 	}
@@ -113,7 +113,7 @@ func (s *schemaWrap4Owner) IsIneligibleTableID(tableID model.TableID) bool {
 }
 
 func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, error) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.TimeoutWarning(time.Now(), schemaFuncRunWarnTime)
 	ddlEvent := new(model.DDLEvent)
 	preTableInfo, err := s.schemaSnapshot.PreTableInfo(job)
 	if err != nil {
@@ -128,7 +128,7 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 }
 
 func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.TimeoutWarning(time.Now(), schemaFuncRunWarnTime)
 	var sinkTableInfos []*model.SimpleTableInfo
 	for tableID := range s.schemaSnapshot.CloneTables() {
 		tblInfo, ok := s.schemaSnapshot.TableByID(tableID)
@@ -159,7 +159,7 @@ func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 }
 
 func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.TimeoutWarning(time.Now(), schemaFuncRunWarnTime)
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
