@@ -48,9 +48,10 @@ var forceEnableOldValueProtocols = []string{
 
 func newChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "changefeed",
-		Args:  cobra.NoArgs,
-		Short: "Manage changefeed (changefeed is a replication task)",
+		Use:       "changefeed",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Manage changefeed (changefeed is a replication task)",
 	}
 	command.AddCommand(
 		newListChangefeedCommand(),
@@ -83,9 +84,10 @@ func resumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
 func newAdminChangefeedCommand() []*cobra.Command {
 	cmds := []*cobra.Command{
 		{
-			Use:   "pause",
-			Args:  cobra.NoArgs,
-			Short: "Pause a replication task (changefeed)",
+			Use:       "pause",
+			Args:      cobra.OnlyValidArgs,
+			ValidArgs: []string{"true", "false"},
+			Short:     "Pause a replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
 				job := model.AdminJob{
@@ -96,9 +98,10 @@ func newAdminChangefeedCommand() []*cobra.Command {
 			},
 		},
 		{
-			Use:   "resume",
-			Args:  cobra.NoArgs,
-			Short: "Resume a paused replication task (changefeed)",
+			Use:       "resume",
+			Args:      cobra.OnlyValidArgs,
+			ValidArgs: []string{"true", "false"},
+			Short:     "Resume a paused replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
 				job := model.AdminJob{
@@ -112,9 +115,10 @@ func newAdminChangefeedCommand() []*cobra.Command {
 			},
 		},
 		{
-			Use:   "remove",
-			Args:  cobra.NoArgs,
-			Short: "Remove a replication task (changefeed)",
+			Use:       "remove",
+			Args:      cobra.OnlyValidArgs,
+			ValidArgs: []string{"true", "false"},
+			Short:     "Remove a replication task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				ctx := defaultContext
 				job := model.AdminJob{
@@ -144,9 +148,10 @@ func newAdminChangefeedCommand() []*cobra.Command {
 
 func newListChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "list",
-		Args:  cobra.NoArgs,
-		Short: "List all replication tasks (changefeeds) in TiCDC cluster",
+		Use:       "list",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "List all replication tasks (changefeeds) in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			_, raw, err := cdcEtcdCli.GetChangeFeeds(ctx)
@@ -192,9 +197,10 @@ func newListChangefeedCommand() *cobra.Command {
 
 func newQueryChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "query",
-		Args:  cobra.NoArgs,
-		Short: "Query information and status of a replication task (changefeed)",
+		Use:       "query",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Query information and status of a replication task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 
@@ -461,10 +467,11 @@ func changefeedConfigVariables(command *cobra.Command) {
 
 func newCreateChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "create",
-		Args:  cobra.NoArgs,
-		Short: "Create a new replication task (changefeed)",
-		Long:  ``,
+		Use:       "create",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Create a new replication task (changefeed)",
+		Long:      ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			id := changefeedID
@@ -514,10 +521,11 @@ func newCreateChangefeedCommand() *cobra.Command {
 
 func newUpdateChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "update",
-		Args:  cobra.NoArgs,
-		Short: "Update config of an existing replication task (changefeed)",
-		Long:  ``,
+		Use:       "update",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Update config of an existing replication task (changefeed)",
+		Long:      ``,
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			ctx := defaultContext
 
@@ -644,9 +652,10 @@ func newUpdateChangefeedCommand() *cobra.Command {
 
 func newStatisticsChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "statistics",
-		Args:  cobra.NoArgs,
-		Short: "Periodically check and output the status of a replicaiton task (changefeed)",
+		Use:       "statistics",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Periodically check and output the status of a replicaiton task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			tick := time.NewTicker(time.Duration(interval) * time.Second)
@@ -699,9 +708,10 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 
 func newCreateChangefeedCyclicCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "cyclic",
-		Args:  cobra.NoArgs,
-		Short: "(Experimental) Utility about cyclic replication",
+		Use:       "cyclic",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "(Experimental) Utility about cyclic replication",
 	}
 	command.AddCommand(
 		&cobra.Command{

@@ -39,9 +39,10 @@ func newUnsafeCommand() *cobra.Command {
 
 func newResetCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "reset",
-		Args:  cobra.NoArgs,
-		Short: "Reset the status of the TiCDC cluster, delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
+		Use:       "reset",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Reset the status of the TiCDC cluster, delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := confirmMetaDelete(cmd); err != nil {
 				return err
@@ -78,9 +79,10 @@ func newResetCommand() *cobra.Command {
 
 func newShowMetadataCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "show-metadata",
-		Args:  cobra.NoArgs,
-		Short: "Show metadata stored in PD",
+		Use:       "show-metadata",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Show metadata stored in PD",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			kvs, err := cdcEtcdCli.GetAllCDCInfo(ctx)
@@ -99,9 +101,10 @@ func newShowMetadataCommand() *cobra.Command {
 
 func newDeleteServiceGcSafepointCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "delete-service-gc-safepoint",
-		Args:  cobra.NoArgs,
-		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
+		Use:       "delete-service-gc-safepoint",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := confirmMetaDelete(cmd); err != nil {
 				return err

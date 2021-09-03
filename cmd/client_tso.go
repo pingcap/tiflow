@@ -22,9 +22,10 @@ import (
 
 func newTsoCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "tso",
-		Args:  cobra.NoArgs,
-		Short: "Manage tso",
+		Use:       "tso",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Manage tso",
 	}
 	command.AddCommand(
 		newQueryTsoCommand(),
@@ -34,9 +35,10 @@ func newTsoCommand() *cobra.Command {
 
 func newQueryTsoCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "query",
-		Args:  cobra.NoArgs,
-		Short: "Get tso from PD",
+		Use:       "query",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Get tso from PD",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			ts, logic, err := pdCli.GetTS(ctx)

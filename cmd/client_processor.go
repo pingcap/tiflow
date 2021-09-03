@@ -21,9 +21,10 @@ import (
 
 func newProcessorCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "processor",
-		Args:  cobra.NoArgs,
-		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
+		Use:       "processor",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Manage processor (processor is a sub replication task running on a specified capture)",
 	}
 	command.AddCommand(
 		newListProcessorCommand(),
@@ -34,9 +35,10 @@ func newProcessorCommand() *cobra.Command {
 
 func newListProcessorCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "list",
-		Args:  cobra.NoArgs,
-		Short: "List all processors in TiCDC cluster",
+		Use:       "list",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "List all processors in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			info, err := cdcEtcdCli.GetProcessors(ctx)
@@ -51,9 +53,10 @@ func newListProcessorCommand() *cobra.Command {
 
 func newQueryProcessorCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "query",
-		Args:  cobra.NoArgs,
-		Short: "Query information and status of a sub replication task (processor)",
+		Use:       "query",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			_, status, err := cdcEtcdCli.GetTaskStatus(ctx, changefeedID, captureID)

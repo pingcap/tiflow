@@ -42,10 +42,11 @@ var (
 	serverConfig = config.GetDefaultServerConfig()
 
 	serverCmd = &cobra.Command{
-		Use:   "server",
-		Args:  cobra.NoArgs,
-		Short: "Start a TiCDC capture server",
-		RunE:  runEServer,
+		Use:       "server",
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{"true", "false"},
+		Short:     "Start a TiCDC capture server",
+		RunE:      runEServer,
 	}
 )
 
