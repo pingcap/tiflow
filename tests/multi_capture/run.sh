@@ -19,10 +19,7 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-    # above statr-ts is : {tso} PASS coverage: 1.9% of statements ingithub.com/pingcap/ticdc/...
-    # here get the real tso
-    start_ts=$(echo $start_ts | awk -F " " '{print $1}')
+    start_ts=$(query_tso)
 
     # create $DB_COUNT databases and import initial workload
     for i in $(seq $DB_COUNT); do
