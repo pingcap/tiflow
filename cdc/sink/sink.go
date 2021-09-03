@@ -69,7 +69,6 @@ func init() {
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newBlackHoleSink(ctx, opts), nil
 	}
-
 	// register mysql sink
 	sinkIniterMap["mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
@@ -104,7 +103,14 @@ func init() {
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
 	}
+
+	sinkIniterMap["dsgSocket"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		return newDsgTestSink(ctx, opts), nil
+	}
 }
+
+
 
 // NewSink creates a new sink with the sink-uri
 func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
