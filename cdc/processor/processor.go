@@ -249,8 +249,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	p.schemaStorage, err = p.createAndDriveSchemaStorage(ctx)
-	if err != nil {
+	if err = p.createAndDriveSchemaStorage(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -433,7 +432,7 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
+func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) error {
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
@@ -446,12 +445,13 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.Info.Config.ForceReplicate)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
+	p.schemaStorage = schemaStorage
 
 	p.wg.Add(1)
 	go func() {
@@ -492,7 +492,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			}
 		}
 	}()
-	return schemaStorage, nil
+	return nil
 }
 
 func (p *processor) sendError(err error) {
