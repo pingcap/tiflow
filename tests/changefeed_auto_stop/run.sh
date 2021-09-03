@@ -44,8 +44,7 @@ function run() {
     done
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
-    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedError=1*return(true);github.com/pingcap/ticdc/cdc/ProcessorUpdatePositionDelaying=return(true)' # old processor
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorSyncResolvedError=1*return(true);github.com/pingcap/ticdc/cdc/processor/ProcessorUpdatePositionDelaying=sleep(1000)' # new processor
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorSyncResolvedError=1*return(true);github.com/pingcap/ticdc/cdc/processor/ProcessorUpdatePositionDelaying=sleep(1000)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "2" --addr "127.0.0.1:8302" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     export GO_FAILPOINTS=''
 
