@@ -17,6 +17,8 @@ function prepare() {
 
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+    echo $start_ts
+    echo ${start_ts[0]}
 
     run_sql "CREATE table test.ddl_puller_lag1(id int primary key, val int);"
     run_sql "CREATE table test.ddl_puller_lag2(id int primary key, val int);"

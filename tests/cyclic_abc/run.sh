@@ -97,6 +97,8 @@ function run() {
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+    echo $start_ts
+    echo ${start_ts[0]}
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?safe-mode=false" \
