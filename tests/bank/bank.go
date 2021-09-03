@@ -59,6 +59,7 @@ func main() {
 	cmd := &cobra.Command{
 		Use:   "bank",
 		Short: "bank is a testcase case that simulates bank scenarios",
+		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(upstream) == 0 || len(downstream) == 0 {
 				log.Fatal("upstream and downstream should not be empty")
