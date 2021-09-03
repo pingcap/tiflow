@@ -358,7 +358,8 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 			switch opt.Status {
 			case model.OperDispatched:
 				if opt.BoundaryTs < globalCheckpointTs {
-					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
+					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts",
+						zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
 				}
 				if !table.AsyncStop(opt.BoundaryTs) {
 					// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,

@@ -131,7 +131,7 @@ type tableSink struct {
 	tableID model.TableID
 	manager *Manager
 	buffer  []*model.RowChangedEvent
-	// emittedTs means all of events which of commitTs less than or equal to emittedTs is sent to backendSink
+	// emittedTs means all events which of commitTs less than or equal to emittedTs is sent to backendSink
 	emittedTs model.Ts
 }
 

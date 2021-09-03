@@ -26,7 +26,7 @@ import (
 
 // Dispatcher is an abstraction for dispatching rows into different partitions
 type Dispatcher interface {
-	// Dispatch returns a index of partitions according to RowChangedEvent
+	// Dispatch returns an index of partitions according to RowChangedEvent
 	Dispatch(row *model.RowChangedEvent) int32
 }
 
