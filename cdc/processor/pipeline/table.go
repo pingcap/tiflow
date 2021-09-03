@@ -64,10 +64,11 @@ type tablePipelineImpl struct {
 
 	tableID     int64
 	markTableID int64
-	tableName   string // quoted schema and table, used in metircs only
+	tableName   string // quoted schema and table, used in metrics only
 
 	sinkNode *sinkNode
-	cancel   context.CancelFunc
+	// cancel function can be used to cancel all other goroutines spawned by this tablePipelineImpl, which indicate end the pipeline's lifetime.
+	cancel context.CancelFunc
 }
 
 // TODO find a better name or avoid using an interface
@@ -182,12 +183,14 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.Int64("table-id", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
 	flowController := common.NewTableFlowController(perTableMemoryQuota)
+
 	config := ctx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize
 	if cyclicEnabled {
 		runnerSize++
 	}
+
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
