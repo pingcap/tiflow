@@ -30,8 +30,9 @@ function run() {
     run_sql "CREATE DATABASE capture_session_done_during_task;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     run_sql "CREATE table capture_session_done_during_task.t (id int primary key auto_increment, a int)" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-    echo $start_ts
-    echo ${start_ts[0]}
+    # above statr-ts is : {tso} PASS coverage: 1.9% of statements ingithub.com/pingcap/ticdc/...
+    # here get the real tso
+    start_ts=$(echo $start_ts | awk -F " " '{print $1}')
     run_sql "INSERT INTO capture_session_done_during_task.t values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/captureHandleTaskDelay=sleep(2000)' # old processor
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/processorManagerHandleNewChangefeedDelay=sleep(2000)' # new processor

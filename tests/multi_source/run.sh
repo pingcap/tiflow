@@ -18,8 +18,9 @@ function prepare() {
 
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-    echo $start_ts
-    echo ${start_ts[0]}
+    # above statr-ts is : {tso} PASS coverage: 1.9% of statements ingithub.com/pingcap/ticdc/...
+    # here get the real tso
+    start_ts=$(echo $start_ts | awk -F " " '{print $1}')
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
