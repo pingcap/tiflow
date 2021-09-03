@@ -16,8 +16,10 @@ package logutil
 import (
 	"bytes"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
@@ -209,4 +211,15 @@ func initGRPCLogger(level zapcore.Level) error {
 	writer := &grpcLoggerWriter{logFunc: logFunc}
 	grpclog.SetLoggerV2(grpclog.NewLoggerV2WithVerbosity(writer, writer, writer, v))
 	return nil
+}
+
+func TimeoutWarning(start time.Time, timeLimit time.Duration) {
+	dis := time.Since(start)
+	if dis > timeLimit {
+		pc, _, _, _ := runtime.Caller(1)
+		// Retrieve a function object this functions parent.
+		funcObj := runtime.FuncForPC(pc)
+		str := "func: [" + funcObj.Name() + "] run slow"
+		log.Warn(str, zap.Duration("time cost", dis))
+	}
 }

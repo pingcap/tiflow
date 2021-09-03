@@ -41,6 +41,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	captureFuncRunWarnTime = 5 * time.Second
+)
+
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	captureMu sync.Mutex

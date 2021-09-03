@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"strconv"
 	"time"
 
@@ -87,6 +88,7 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 const (
 	etcdRequestProgressDuration = 2 * time.Second
 	deletionCounterKey          = "/meta/ticdc-delete-etcd-key-count"
+	etcdWorkerFuncRunWarnTime   = 5 * time.Second
 )
 
 // Run starts the EtcdWorker event loop.
@@ -234,6 +236,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
+	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
 	resp, err := worker.client.Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
 	if err != nil {
 		return errors.Trace(err)
@@ -271,6 +274,7 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 }
 
 func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
+	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
 	for len(patchGroups) > 0 {
 		patches := patchGroups[0]
 		err := worker.applyPatches(ctx, patches)
@@ -346,6 +350,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 }
 
 func (worker *EtcdWorker) applyUpdates() error {
+	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
 	for _, update := range worker.pendingUpdates {
 		err := worker.state.Update(update.key, update.value, false)
 		if err != nil {

@@ -15,54 +15,45 @@ package logutil
 
 import (
 	"context"
-	"path/filepath"
+	"github.com/stretchr/testify/require"
+	"io/ioutil"
+	"os"
+	"sync"
 	"testing"
+	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
-
-type logSuite struct{}
-
-var _ = check.Suite(&logSuite{})
-
-func (s *logSuite) TestInitLoggerAndSetLogLevel(c *check.C) {
-	defer testleak.AfterTest(c)()
-	f := filepath.Join(c.MkDir(), "test")
+func TestInitLoggerAndSetLogLevel(t *testing.T) {
 	cfg := &Config{
 		Level: "warning",
-		File:  f,
 	}
+
 	cfg.Adjust()
 	err := InitLogger(cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(log.GetLevel(), check.Equals, zapcore.WarnLevel)
+	require.Nil(t, err)
+	require.Equal(t, log.GetLevel(), zapcore.WarnLevel)
 
 	// Set a different level.
 	err = SetLogLevel("info")
-	c.Assert(err, check.IsNil)
-	c.Assert(log.GetLevel(), check.Equals, zapcore.InfoLevel)
+	require.Nil(t, err)
+	require.Equal(t, log.GetLevel(), zapcore.InfoLevel)
 
 	// Set the same level.
 	err = SetLogLevel("info")
-	c.Assert(err, check.IsNil)
-	c.Assert(log.GetLevel(), check.Equals, zapcore.InfoLevel)
+	require.Nil(t, err)
+	require.Equal(t, log.GetLevel(), zapcore.InfoLevel)
 
 	// Set an invalid level.
 	err = SetLogLevel("badlevel")
-	c.Assert(err, check.NotNil)
+	require.NotNil(t, err)
 }
 
-func (s *logSuite) TestZapErrorFilter(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestZapErrorFilter(t *testing.T) {
 	var (
 		err       = errors.New("test error")
 		testCases = []struct {
@@ -79,6 +70,32 @@ func (s *logSuite) TestZapErrorFilter(c *check.C) {
 		}
 	)
 	for _, tc := range testCases {
-		c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
+		require.EqualValues(t, ZapErrorFilter(tc.err, tc.filters...), tc.expected)
+		//c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
 	}
+}
+
+func TestTimeoutWarning(t *testing.T) {
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	rescueStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.Nil(t, err)
+	os.Stdout = w
+
+	cfg := &Config{
+		Level: defaultLogLevel,
+	}
+	InitLogger(cfg)
+
+	func() {
+		defer TimeoutWarning(time.Now(), 1)
+		time.Sleep(2 * time.Second)
+	}()
+
+	w.Close()
+	out, err := ioutil.ReadAll(r)
+	require.Nil(t, err)
+	require.Contains(t, string(out), "TestTimeoutWarning")
+	os.Stdout = rescueStdout
 }
