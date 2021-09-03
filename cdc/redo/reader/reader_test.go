@@ -160,6 +160,7 @@ func TestLogReader_ReadMeta(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-ReadMeta")
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
+
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileName, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
@@ -169,6 +170,19 @@ func TestLogReader_ReadMeta(t *testing.T) {
 		ResolvedTs:   22,
 	}
 	data, err := meta.MarshalMsg(nil)
+	assert.Nil(t, err)
+	_, err = f.Write(data)
+	assert.Nil(t, err)
+
+	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileName, common.MetaEXT)
+	path = filepath.Join(dir, fileName)
+	f, err = os.Create(path)
+	assert.Nil(t, err)
+	meta = &common.LogMeta{
+		CheckPointTs: 111,
+		ResolvedTs:   21,
+	}
+	data, err = meta.MarshalMsg(nil)
 	assert.Nil(t, err)
 	_, err = f.Write(data)
 	assert.Nil(t, err)

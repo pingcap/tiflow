@@ -55,7 +55,7 @@ type LogReaderConfig struct {
 	startTs   uint64
 	endTs     uint64
 	S3Storage bool
-	// S3URI should be like SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
+	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
 	S3URI *url.URL
 }
 
@@ -75,6 +75,7 @@ type LogReader struct {
 
 // NewLogReader creates a LogReader instance. need the client to guarantee only one LogReader per changefeed
 // currently support rewind operation by ResetReader api
+// if s3 will download logs first, if OP environment need fetch the redo logs to local dir first
 func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 	if cfg == nil {
 		log.Panic("LogWriterConfig can not be nil")
@@ -324,6 +325,8 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 	}
 
 	haveMeta := false
+	metaList := map[uint64]*common.LogMeta{}
+	var maxCheckPointTs uint64
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == common.MetaEXT {
 			path := filepath.Join(l.cfg.Dir, file.Name())
@@ -337,13 +340,22 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 			if err != nil {
 				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
-			haveMeta = true
-			break
+
+			if !haveMeta {
+				haveMeta = true
+			}
+			metaList[l.meta.CheckPointTs] = l.meta
+			// since checkPointTs is guaranteed to increase always
+			if l.meta.CheckPointTs > maxCheckPointTs {
+				maxCheckPointTs = l.meta.CheckPointTs
+			}
 		}
 	}
 	if !haveMeta {
 		return 0, 0, errors.Errorf("no redo meta file found in dir:%s", l.cfg.Dir)
 	}
+
+	l.meta = metaList[maxCheckPointTs]
 	return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
 }
 

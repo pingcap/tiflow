@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -72,7 +73,7 @@ type LogWriterConfig struct {
 	MaxLogSize        int64
 	FlushIntervalInMs int64
 	S3Storage         bool
-	// S3URI should be like SINK_URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
+	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
 	S3URI *url.URL
 }
 
@@ -116,7 +117,12 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 		cfg:       cfg,
 		rowWriter: NewWriter(ctx, rowCfg),
 		ddlWriter: NewWriter(ctx, ddlCfg),
-		meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+	}
+	err := logWriter.initMeta(ctx)
+	if err != nil {
+		log.Warn("init redo meta fail",
+			zap.String("change feed", cfg.ChangeFeedID),
+			zap.Error(err))
 	}
 	if cfg.S3Storage {
 		s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
@@ -130,6 +136,41 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 
 	go logWriter.runGC(ctx)
 	return logWriter
+}
+
+func (l *LogWriter) initMeta(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	default:
+	}
+
+	l.meta = &common.LogMeta{ResolvedTsList: map[int64]uint64{}}
+	files, err := ioutil.ReadDir(l.cfg.Dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
+	}
+
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == common.MetaEXT {
+			path := filepath.Join(l.cfg.Dir, file.Name())
+			fileData, err := os.ReadFile(path)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+			}
+
+			_, err = l.meta.UnmarshalMsg(fileData)
+			if err != nil {
+				l.meta = &common.LogMeta{ResolvedTsList: map[int64]uint64{}}
+				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+			}
+			break
+		}
+	}
+	return nil
 }
 
 func (l *LogWriter) runGC(ctx context.Context) {
@@ -351,7 +392,7 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%s_%d_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, l.cfg.CreateTime.Unix(), common.DefaultMetaFileName, common.MetaEXT)
+	return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, common.DefaultMetaFileName, common.MetaEXT)
 }
 
 func (l *LogWriter) flushLogMeta() error {
