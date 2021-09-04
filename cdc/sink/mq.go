@@ -500,7 +500,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 
 	config, err := newKafkaConfig(sinkURI, replicaConfig, opts)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, cerror.ErrKafkaInvalidConfig.Wrap(err)
 	}
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
