@@ -502,6 +502,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if err != nil {
 		return nil, cerror.ErrKafkaInvalidConfig.Wrap(err)
 	}
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -509,6 +510,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -535,8 +537,8 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if s != "" {
 		opts["max-batch-size"] = s
 	}
-	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
-	// and it may needs credential.
+	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
+	// and it may need credential.
 	credential := &security.Credential{}
 	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
