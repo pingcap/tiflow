@@ -28,7 +28,7 @@ import (
 )
 
 type pullerNode struct {
-	tableName string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metrics only
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo

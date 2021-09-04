@@ -59,7 +59,7 @@ type ctxKey struct {
 // If it does not exist, we try to create one.
 // parameter: cfSortDir - the directory designated in changefeed's setting,
 // which will be overridden by a non-empty local setting of `sort-dir`.
-// TODO better way to organize this function after we obsolete chanegfeed setting's `sort-dir`
+// TODO better way to organize this function after we obsolete changefeed setting's `sort-dir`
 func UnifiedSorterCheckDir(cfSortDir string) error {
 	dir := cfSortDir
 	sorterConfig := config.GetGlobalServerConfig().Sorter

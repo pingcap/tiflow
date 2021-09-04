@@ -24,6 +24,7 @@ const (
 )
 
 var (
+	// todo (Ling Jin): kvEventCounter is not used, add it to monitor.
 	kvEventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -53,6 +54,7 @@ var (
 			Help:      "Puller entry buffer size",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
 		}, []string{"capture", "changefeed"})
+	// todo (Ling Jin): memBufferSize is not used, add it to monitor
 	memBufferSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

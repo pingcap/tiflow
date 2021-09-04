@@ -104,21 +104,22 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
 }
 
-// Run the puller, continually fetch event from TiKV and add event into buffer
+// Run the puller, continually fetch event from TiKV and add event into buffer (output channel)
 func (p *pullerImpl) Run(ctx context.Context) error {
 	defer p.kvCli.Close()
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
+	// eventCh will be used as the output channel for `kvCli.EventFeed`
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
-	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
+	lockResolver := txnutil.NewLockerResolver(p.kvStorage)
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockResolver, p, eventCh)
 		})
 	}
 
@@ -140,6 +141,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
 	}()
+
 	g.Go(func() error {
 		for {
 			select {
@@ -162,7 +164,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// be ignored since no late data is received and the guarantee of
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Warn("The CRTs is fallen back in pulelr",
+				log.Warn("The CRTs is fallen back in puller",
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),

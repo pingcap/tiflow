@@ -80,6 +80,7 @@ func (r *nodeRunner) getName() string {
 	return r.name
 }
 
+// header is the sentinel, it will be set as the previous node of the whole pipeline
 type headRunner chan Message
 
 func (h headRunner) getName() string {

@@ -72,7 +72,7 @@ func (n *mounterNode) Init(ctx pipeline.NodeContext) error {
 			case <-stdCtx.Done():
 				return nil
 			case <-receiver.C:
-				// handles writes to the queue
+				// handle writes to the queue
 				for {
 					n.mu.Lock()
 					msgs := n.queue.PopManyFront(waitEventMountedBatchSize)
