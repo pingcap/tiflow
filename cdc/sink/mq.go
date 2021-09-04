@@ -398,18 +398,13 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	return nil
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newKafkaConfig(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) (*kafka.Config, error) {
 	config := kafka.NewKafkaConfig()
-
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "kafka" && scheme != "kafka+ssl" {
-		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
-	}
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+			return nil, err
 		}
 		config.PartitionNum = int32(c)
 	}
@@ -418,7 +413,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+			return nil, err
 		}
 		config.ReplicationFactor = int16(c)
 	}
@@ -432,7 +427,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+			return nil, err
 		}
 		config.MaxMessageBytes = c
 		opts["max-message-bytes"] = s
@@ -489,15 +484,28 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if s != "" {
 		autoCreate, err := strconv.ParseBool(s)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+			return nil, err
 		}
 		config.TopicPreProcess = autoCreate
 	}
 
+	return &config, nil
+}
+
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme != "kafka" && scheme != "kafka+ssl" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
+	}
+
+	config, err := newKafkaConfig(sinkURI, replicaConfig, opts)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, *config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
