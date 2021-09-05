@@ -49,6 +49,12 @@ type Config struct {
 	TopicPreProcess bool
 }
 
+// tableToTopic specify which topic the table should be written to.
+type tableToTopic struct {
+	tableName string
+	topic     string
+}
+
 // NewKafkaConfig returns a default Kafka configuration
 func NewKafkaConfig() Config {
 	return Config{
@@ -304,7 +310,7 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 			NumPartitions:     partitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 		}, false)
-		// TODO idenfity the cause of "Topic with this name already exists"
+		// TODO identify the cause of "Topic with this name already exists"
 		if err != nil && !strings.Contains(err.Error(), "already exists") {
 			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
@@ -405,6 +411,8 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
 	}
+	config.Version = version
+
 	var role string
 	if util.IsOwnerFromCtx(ctx) {
 		role = "owner"
@@ -413,14 +421,15 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 	}
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-
 	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	config.Version = version
+
 	// See: https://kafka.apache.org/documentation/#replication
-	// When one of the brokers in a Kafka cluster is down, the partition leaders in this broker is broken, Kafka will election a new partition leader and replication logs, this process will last from a few seconds to a few minutes. Kafka cluster will not provide a writing service in this process.
+	// When one of the brokers in a Kafka cluster is down, the partition leaders in this broker is broken, Kafka will
+	// election a new partition leader and replication logs, this process will last from a few seconds to a few minutes.
+	// Kafka cluster will not provide a writing service in this process.
 	// Time out in one minute(120 * 500ms).
 	config.Metadata.Retry.Max = 120
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
