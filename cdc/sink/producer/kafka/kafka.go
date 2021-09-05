@@ -34,6 +34,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultPartitionNum = 4
+)
+
 // Config stores the Kafka configuration
 type Config struct {
 	PartitionNum      int32
@@ -47,12 +51,6 @@ type Config struct {
 	SaslScram       *security.SaslScram
 	// control whether to create topic and verify partition number
 	TopicPreProcess bool
-}
-
-// tableToTopic specify which topic the table should be written to.
-type tableToTopic struct {
-	tableName string
-	topic     string
 }
 
 // NewKafkaConfig returns a default Kafka configuration
@@ -70,7 +68,7 @@ func NewKafkaConfig() Config {
 
 type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncClient and syncClient.
-	// Since we don't close these two clients (which have a input chan) from the
+	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
 	clientLock   sync.RWMutex
 	asyncClient  sarama.AsyncProducer
@@ -269,8 +267,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-// kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't
-// exit, creates it automatically.
+// kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't exit, creates it automatically.
 func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Config) (int32, error) {
 	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
 	if err != nil {
@@ -300,7 +297,7 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 		}
 	} else {
 		if partitionNum == 0 {
-			partitionNum = 4
+			partitionNum = defaultPartitionNum
 			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
 		}
 		log.Info("create a topic", zap.String("topic", topic),
