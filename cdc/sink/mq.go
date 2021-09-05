@@ -39,6 +39,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	defaultInputMessageSizePerPartition = 12800
+	batchSizeLimit                      = 4 * 1024 * 1024 // 4MB
+)
+
+type mqEvent struct {
+	row        *model.RowChangedEvent
+	resolvedTs uint64
+}
+
 type mqSink struct {
 	mqProducer producer.Producer
 	dispatcher dispatcher.Dispatcher
@@ -46,11 +56,8 @@ type mqSink struct {
 	filter     *filter.Filter
 	protocol   codec.Protocol
 
-	partitionNum   int32
-	partitionInput []chan struct {
-		row        *model.RowChangedEvent
-		resolvedTs uint64
-	}
+	partitionNum        int32
+	partitionInput      []chan *mqEvent
 	partitionResolvedTs []uint64
 	checkpointTs        uint64
 	resolvedNotifier    *notify.Notifier
@@ -64,24 +71,20 @@ func newMqSink(
 	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
 	partitionNum := mqProducer.GetPartitionNum()
-	partitionInput := make([]chan struct {
-		row        *model.RowChangedEvent
-		resolvedTs uint64
-	}, partitionNum)
+	partitionInput := make([]chan *mqEvent, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
-		partitionInput[i] = make(chan struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}, 12800)
+		partitionInput[i] = make(chan *mqEvent, defaultInputMessageSizePerPartition)
 	}
+
 	d, err := dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	notifier := new(notify.Notifier)
+
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
-
 	newEncoder := codec.NewEventBatchEncoder(protocol)
 	if protocol == codec.ProtocolAvro {
 		registryURI, ok := opts["registry"]
@@ -173,10 +176,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case k.partitionInput[partition] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{row: row}:
+		case k.partitionInput[partition] <- &mqEvent{row: row}:
 		}
 		rowsCount++
 	}
@@ -193,10 +193,7 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (
 		select {
 		case <-ctx.Done():
 			return 0, ctx.Err()
-		case k.partitionInput[i] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{resolvedTs: resolvedTs}:
+		case k.partitionInput[i] <- &mqEvent{resolvedTs: resolvedTs}:
 		}
 	}
 
@@ -292,8 +289,6 @@ func (k *mqSink) run(ctx context.Context) error {
 	return wg.Wait()
 }
 
-const batchSizeLimit = 4 * 1024 * 1024 // 4MB
-
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
@@ -325,11 +320,9 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			return thisBatchSize, nil
 		})
 	}
+
 	for {
-		var e struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}
+		var e *mqEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
