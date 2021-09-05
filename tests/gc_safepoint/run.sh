@@ -34,7 +34,7 @@ function check_safepoint_cleared() {
 function check_safepoint_forward() {
     pd_addr=$1
     pd_cluster_id=$2
-    safe_point1=$(get_safepoint $pd_addr $pd_cluster_id)
+    safe_point1=$3
     sleep 1
     safe_point2=$(get_safepoint $pd_addr $pd_cluster_id)
     if [[ "$safe_point1" == "$safe_point2" ]]; then
@@ -89,7 +89,7 @@ function run() {
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
     fi
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectGcSafepointUpdateInterval=return(500)' # new owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectGcSafepointUpdateInterval=return(500)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
     changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
 
@@ -101,7 +101,8 @@ function run() {
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     pd_cluster_id=$(curl -s $pd_addr/pd/api/v1/cluster|grep -oE "id\":\s[0-9]+"|grep -oE "[0-9]+")
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
+    start_safepoint=$(get_safepoint $pd_addr $pd_cluster_id)
+    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id $start_safepoint
 
     # after the changefeed is paused, the safe_point will be not updated
     cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
@@ -111,7 +112,8 @@ function run() {
     # resume changefeed will recover the safe_point forward
     cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
+    start_safepoint=$(get_safepoint $pd_addr $pd_cluster_id)
+    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id $start_safepoint
 
     cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
@@ -123,7 +125,8 @@ function run() {
 
     # remove paused changefeed, the safe_point forward will recover
     cdc cli changefeed remove --changefeed-id=$changefeed_id --pd=$pd_addr
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
+    start_safepoint=$(get_safepoint $pd_addr $pd_cluster_id)
+    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id $start_safepoint
 
     # remove all changefeeds, the safe_point will be cleared
     cdc cli changefeed remove --changefeed-id=$changefeed_id2 --pd=$pd_addr

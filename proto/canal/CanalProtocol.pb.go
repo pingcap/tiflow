@@ -2633,10 +2633,7 @@ func (m *Packet) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -2725,10 +2722,7 @@ func (m *HeartBeat) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -2864,10 +2858,7 @@ func (m *Handshake) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -3139,10 +3130,7 @@ func (m *ClientAuth) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -3245,10 +3233,7 @@ func (m *Ack) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -3382,10 +3367,7 @@ func (m *ClientAck) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -3532,10 +3514,7 @@ func (m *Sub) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -3682,10 +3661,7 @@ func (m *Unsub) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -3880,10 +3856,7 @@ func (m *Get) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -3985,10 +3958,7 @@ func (m *Messages) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -4110,10 +4080,7 @@ func (m *Dump) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
@@ -4247,10 +4214,7 @@ func (m *ClientRollback) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCanalProtocol
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCanalProtocol
 			}
 			if (iNdEx + skippy) > l {
