@@ -16,6 +16,8 @@ package owner
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/pingcap/check"
@@ -24,6 +26,7 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/gcutil"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
@@ -35,24 +38,30 @@ type ownerSuite struct {
 }
 
 type mockGcManager struct {
-	GcManager
+	gcutil.GcManager
 }
 
-func (m *mockGcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+func (m *mockGcManager) checkStaleCheckpointTs(
+	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
+) error {
 	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
 }
 
-var _ GcManager = &mockGcManager{}
+var _ gcutil.GcManager = (*mockGcManager)(nil)
 
 func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.GlobalReactorState, *orchestrator.ReactorStateTester) {
-	ctx.GlobalVars().PDClient = &mockPDClient{updateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		return safePoint, nil
-	}}
+	ctx.GlobalVars().PDClient = &gcutil.MockPDClient{
+		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+			return safePoint, nil
+		},
+	}
 	cf := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
-	})
+	},
+		ctx.GlobalVars().PDClient,
+	)
 	state := model.NewGlobalState().(*model.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
@@ -253,4 +262,102 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 		},
 	})
 	c.Assert(owner.takeOwnerJobs(), check.HasLen, 0)
+}
+
+func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDClient := &gcutil.MockPDClient{}
+	o := NewOwner(mockPDClient)
+	o.gcManager = gcutil.NewGCManager(mockPDClient)
+	ctx := cdcContext.NewBackendContext4Test(true)
+	state := model.NewGlobalState().(*model.GlobalReactorState)
+	tester := orchestrator.NewReactorStateTester(c, state, nil)
+
+	// no changefeed, the gc safe point should be max uint64
+	mockPDClient.UpdateServiceGCSafePointFunc =
+		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+			// set GC safepoint to (checkpointTs - 1)
+			c.Assert(safePoint, check.Equals, uint64(math.MaxUint64-1))
+			return 0, nil
+		}
+	err := o.updateGCSafepoint(ctx, state)
+	c.Assert(err, check.IsNil)
+
+	// add a failed changefeed, it must not trigger update GC safepoint.
+	mockPDClient.UpdateServiceGCSafePointFunc =
+		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+			c.Fatal("must not update")
+			return 0, nil
+		}
+	changefeedID1 := "changefeed-test1"
+	tester.MustUpdate(
+		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1),
+		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
+	tester.MustApplyPatches()
+	state.Changefeeds[changefeedID1].PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			return &model.ChangeFeedStatus{CheckpointTs: 2}, true, nil
+		})
+	tester.MustApplyPatches()
+	err = o.updateGCSafepoint(ctx, state)
+	c.Assert(err, check.IsNil)
+
+	// switch the state of changefeed to normal, it must update GC safepoint to
+	// 1 (checkpoint Ts of changefeed-test1).
+	ch := make(chan struct{}, 1)
+	mockPDClient.UpdateServiceGCSafePointFunc =
+		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+			// set GC safepoint to (checkpointTs - 1)
+			c.Assert(safePoint, check.Equals, uint64(1))
+			c.Assert(serviceID, check.Equals, gcutil.CDCServiceSafePointID)
+			ch <- struct{}{}
+			return 0, nil
+		}
+	state.Changefeeds[changefeedID1].PatchInfo(
+		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			info.State = model.StateNormal
+			return info, true, nil
+		})
+	tester.MustApplyPatches()
+	err = o.updateGCSafepoint(ctx, state)
+	c.Assert(err, check.IsNil)
+	select {
+	case <-time.After(5 * time.Second):
+		c.Fatal("timeout")
+	case <-ch:
+	}
+
+	// add another changefeed, it must update GC safepoint.
+	changefeedID2 := "changefeed-test2"
+	tester.MustUpdate(
+		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2),
+		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))
+	tester.MustApplyPatches()
+	state.Changefeeds[changefeedID1].PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			return &model.ChangeFeedStatus{CheckpointTs: 20}, true, nil
+		})
+	state.Changefeeds[changefeedID2].PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			return &model.ChangeFeedStatus{CheckpointTs: 30}, true, nil
+		})
+	tester.MustApplyPatches()
+	mockPDClient.UpdateServiceGCSafePointFunc =
+		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+			// set GC safepoint to (checkpointTs - 1)
+			c.Assert(safePoint, check.Equals, uint64(19))
+			c.Assert(serviceID, check.Equals, gcutil.CDCServiceSafePointID)
+			ch <- struct{}{}
+			return 0, nil
+		}
+	err = o.updateGCSafepoint(ctx, state)
+	c.Assert(err, check.IsNil)
+	select {
+	case <-time.After(5 * time.Second):
+		c.Fatal("timeout")
+	case <-ch:
+	}
 }

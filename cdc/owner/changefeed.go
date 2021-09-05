@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/gcutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/prometheus/client_golang/prometheus"
@@ -39,7 +40,7 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        GcManager
+	gcManager        gcutil.GcManager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -68,7 +69,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager gcutil.GcManager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -86,7 +87,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager GcManager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager GcManager,
+	id model.ChangeFeedID, gcManager gcutil.GcManager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -122,7 +123,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
-		if err := c.gcManager.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -202,7 +203,15 @@ LOOP:
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 	if c.state.Info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, ctx.GlobalVars().PDClient, c.state.ID, checkpointTs)
+		// Ensure TiDB GC safepoint does not exceed the checkpoint in the next
+		// 10 mintues.
+		//
+		// It is necessary to update TTL, because the service GC safepoint is
+		// set to 1 hour TTL during creating. We need to shrink the TTL to
+		// unblock TiDB GC.
+		ensureTTL := int64(10 * 60)
+		err := gcutil.EnsureChangefeedStartTsSafety(
+			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}

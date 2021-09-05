@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package gcutil
 
 import (
 	"context"
@@ -28,18 +28,15 @@ import (
 const (
 	// cdcChangefeedCreatingServiceGCSafePointID is service GC safe point ID
 	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-creating-"
-	// cdcChangefeedCreatingServiceGCSafePointTTL is service GC safe point TTL
-	cdcChangefeedCreatingServiceGCSafePointTTL = 60 * 60 // 60 mins
 )
 
-// CheckSafetyOfStartTs checks if the startTs less than the minimum of Service-GC-Ts
+// EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of Service-GC-Ts
 // and this function will update the service GC to startTs
-func CheckSafetyOfStartTs(
-	ctx context.Context, pdCli pd.Client, changefeedID string, startTs uint64,
+func EnsureChangefeedStartTsSafety(
+	ctx context.Context, pdCli pd.Client, changefeedID string, TTL int64, startTs uint64,
 ) error {
 	minServiceGCTs, err := SetServiceGCSafepoint(
-		ctx, pdCli, cdcChangefeedCreatingServiceGCSafePointID+changefeedID,
-		cdcChangefeedCreatingServiceGCSafePointTTL, startTs)
+		ctx, pdCli, cdcChangefeedCreatingServiceGCSafePointID+changefeedID, TTL, startTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -77,8 +74,8 @@ func SetServiceGCSafepoint(
 
 // RemoveServiceGCSafepoint removes a service safepoint from PD.
 func RemoveServiceGCSafepoint(ctx context.Context, pdCli pd.Client, serviceID string) error {
-	// Set TTL to 1 second to delete the service safe point effectively.
-	TTL := 1
+	// Set TTL to 0 second to delete the service safe point.
+	TTL := 0
 	return retry.Do(ctx,
 		func() error {
 			_, err := pdCli.UpdateServiceGCSafePoint(ctx, serviceID, int64(TTL), math.MaxUint64)

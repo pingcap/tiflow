@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/gcutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -62,7 +63,10 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
 	}
 
-	if err := util.CheckSafetyOfStartTs(ctx, capture.pdClient, changefeedConfig.ID, changefeedConfig.StartTS); err != nil {
+	// Ensure the start ts is validate in the next 1 hour.
+	const ensureTTL = 60 * 60
+	if err := gcutil.EnsureChangefeedStartTsSafety(
+		ctx, capture.pdClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
 		if err != cerror.ErrStartTsBeforeGC {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
 		}
