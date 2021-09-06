@@ -255,7 +255,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 
 	// Init table sinks.
 	goroutineNum := 2000
-	rowNum := 500
+	rowNum := 5000
 	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
@@ -294,7 +294,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		tableSink := tableSinks[i]
 		go func() {
 			for j := 1; j < rowNum; j++ {
-				if j%5 == 0 {
+				if j%10 == 0 {
 					_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(j))
 					if err != nil {
 						b.Error(err)
