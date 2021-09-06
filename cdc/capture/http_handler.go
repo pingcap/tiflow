@@ -19,7 +19,6 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/br/pkg/httputil"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )

@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
-	"go.uber.org/zap"
 )
 
 const (
@@ -104,7 +103,8 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 // In this method, the builtin table sink will be closed by calling `Close`, and
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
-	n.status.Store(TableStatusStopped)
+	// table stopped status must be set after underlying sink is closed
+	defer n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
 		return
@@ -274,14 +274,6 @@ func (n *sinkNode) clearBuffers() {
 
 func (n *sinkNode) emitRow2Sink(ctx pipeline.NodeContext) error {
 	for _, ev := range n.eventBuffer {
-		err := ev.WaitPrepare(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if ev.Row == nil {
-			continue
-		}
-		ev.Row.ReplicaID = ev.ReplicaID
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
 	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
@@ -327,12 +319,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
-		if msg.Command.Tp == pipeline.CommandTypeStopAtTs {
-			if msg.Command.StoppedTs < n.checkpointTs {
-				log.Warn("the stopped ts is less than the checkpoint ts, "+
-					"the table pipeline can't be stopped accurately, will be stopped soon",
-					zap.Uint64("stoppedTs", msg.Command.StoppedTs), zap.Uint64("checkpointTs", n.checkpointTs))
-			}
+		if msg.Command.Tp == pipeline.CommandTypeStop {
 			return n.stop(ctx)
 		}
 	case pipeline.MessageTypeBarrier:

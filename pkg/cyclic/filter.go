@@ -61,7 +61,7 @@ func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64, repl
 }
 
 // FilterAndReduceTxns filters duplicate txns bases on filterReplicaIDs and
-// if the mark table dml is exist in the txn, this functiong will set the replicaID by mark table dml
+// if the mark table dml is exist in the txn, this function will set the replicaID by mark table dml
 // if the mark table dml is not exist, this function will set the replicaID by config
 func FilterAndReduceTxns(
 	txnsMap map[model.TableID][]*model.SingleTableTxn, filterReplicaIDs []uint64, replicaID uint64,

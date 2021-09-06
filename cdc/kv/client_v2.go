@@ -37,7 +37,7 @@ type regionStatefulEvent struct {
 	resolvedTs  *cdcpb.ResolvedTs
 	state       *regionFeedState
 
-	// regionID is used for load balancer, we don't use fileds in state to reduce lock usage
+	// regionID is used for load balancer, we don't use fields in state to reduce lock usage
 	regionID uint64
 
 	// finishedCounter is used to mark events that are sent from a give region
