@@ -14,6 +14,7 @@
 package writer
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -22,10 +23,9 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/redo/common"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
 	"go.uber.org/goleak"
-	"golang.org/x/net/context"
 )
 
 // LeakOptions is used to filter the goroutines.
@@ -46,7 +46,7 @@ func TestMain(m *testing.M) {
 
 func TestWriterWrite(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-writer")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	w := &Writer{
@@ -64,47 +64,47 @@ func TestWriterWrite(t *testing.T) {
 
 	w.eventCommitTS.Store(1)
 	_, err = w.Write([]byte("tes1t11111"))
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	// create a .tmp file
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
 	path := filepath.Join(w.cfg.Dir, fileName)
 	info, err := os.Stat(path)
-	assert.Nil(t, err)
-	assert.Equal(t, fileName, info.Name())
+	require.Nil(t, err)
+	require.Equal(t, fileName, info.Name())
 
 	w.eventCommitTS.Store(12)
 	_, err = w.Write([]byte("tt"))
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	w.eventCommitTS.Store(22)
 	_, err = w.Write([]byte("t"))
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	// after rotate, rename to .log
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
-	assert.Nil(t, err)
-	assert.Equal(t, fileName, info.Name())
+	require.Nil(t, err)
+	require.Equal(t, fileName, info.Name())
 	// create a .tmp file with first eventCommitTS as name
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 12, common.LogEXT) + common.TmpEXT
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
-	assert.Nil(t, err)
-	assert.Equal(t, fileName, info.Name())
+	require.Nil(t, err)
+	require.Equal(t, fileName, info.Name())
 	w.Close()
 	// safe close, rename to .log with max eventCommitTS as name
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
-	assert.Nil(t, err)
-	assert.Equal(t, fileName, info.Name())
+	require.Nil(t, err)
+	require.Equal(t, fileName, info.Name())
 }
 
 func TestWriterGC(t *testing.T) {
-	assert.Panics(t, func() { NewWriter(context.Background(), nil) })
+	require.Panics(t, func() { NewWriter(context.Background(), nil) })
 
 	dir, err := ioutil.TempDir("", "redo-GC")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	megabyte = 1
@@ -121,38 +121,38 @@ func TestWriterGC(t *testing.T) {
 
 	w.eventCommitTS.Store(1)
 	_, err = w.Write([]byte("t1111"))
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	w.eventCommitTS.Store(2)
 	_, err = w.Write([]byte("t2222"))
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	w.eventCommitTS.Store(3)
 	_, err = w.Write([]byte("t3333"))
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	files, err := ioutil.ReadDir(w.cfg.Dir)
-	assert.Nil(t, err)
-	assert.Equal(t, 3, len(files), "should have 3 log file")
+	require.Nil(t, err)
+	require.Equal(t, 3, len(files), "should have 3 log file")
 
 	err = w.GC(3)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	err = w.Close()
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	files, err = ioutil.ReadDir(w.cfg.Dir)
-	assert.Nil(t, err)
-	assert.Equal(t, 1, len(files), "should have 1 log left after GC")
+	require.Nil(t, err)
+	require.Equal(t, 1, len(files), "should have 1 log left after GC")
 
 	ts, fileType, err := common.ParseLogFileName(files[0].Name())
-	assert.Nil(t, err, files[0].Name())
-	assert.EqualValues(t, 3, ts)
-	assert.Equal(t, common.DefaultRowLogFileType, fileType)
+	require.Nil(t, err, files[0].Name())
+	require.EqualValues(t, 3, ts)
+	require.Equal(t, common.DefaultRowLogFileType, fileType)
 
-	time.Sleep(6 * time.Millisecond)
+	time.Sleep(time.Duration(w.cfg.FlushIntervalInMs+1) * time.Millisecond)
 }
 
 func TestAdvanceTs(t *testing.T) {
 	w := &Writer{}
 	w.AdvanceTs(111)
-	assert.EqualValues(t, 111, w.eventCommitTS.Load())
+	require.EqualValues(t, 111, w.eventCommitTS.Load())
 }

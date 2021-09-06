@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLogWriter_WriteLog(t *testing.T) {
@@ -131,9 +131,9 @@ func TestLogWriter_WriteLog(t *testing.T) {
 
 		_, err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
+			require.Nil(t, err, tt.name)
 		}
 	}
 }
@@ -226,9 +226,9 @@ func TestLogWriter_SendDDL(t *testing.T) {
 
 		err := writer.SendDDL(tt.args.ctx, tt.args.ddl)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
+			require.Nil(t, err, tt.name)
 		}
 	}
 }
@@ -293,7 +293,7 @@ func TestLogWriter_FlushLog(t *testing.T) {
 	}
 
 	dir, err := ioutil.TempDir("", "redo-FlushLog")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	for _, tt := range tests {
@@ -322,10 +322,10 @@ func TestLogWriter_FlushLog(t *testing.T) {
 		}
 		err := writer.FlushLog(tt.args.ctx, tt.args.tableID, tt.args.ts)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
-			assert.Equal(t, tt.args.ts, writer.meta.ResolvedTsList[tt.args.tableID], tt.name)
+			require.Nil(t, err, tt.name)
+			require.Equal(t, tt.args.ts, writer.meta.ResolvedTsList[tt.args.tableID], tt.name)
 		}
 	}
 }
@@ -375,7 +375,7 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 	}
 
 	dir, err := ioutil.TempDir("", "redo-EmitCheckpointTs")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	for _, tt := range tests {
@@ -403,10 +403,10 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 		}
 		err := writer.EmitCheckpointTs(tt.args.ctx, tt.args.ts)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
-			assert.Equal(t, tt.args.ts, writer.meta.CheckPointTs, tt.name)
+			require.Nil(t, err, tt.name)
+			require.Equal(t, tt.args.ts, writer.meta.CheckPointTs, tt.name)
 		}
 	}
 }
@@ -457,7 +457,7 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 	}
 
 	dir, err := ioutil.TempDir("", "redo-ResolvedTs")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	for _, tt := range tests {
@@ -485,10 +485,10 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 		}
 		err := writer.EmitResolvedTs(tt.args.ctx, tt.args.ts)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
-			assert.Equal(t, tt.args.ts, writer.meta.ResolvedTs, tt.name)
+			require.Nil(t, err, tt.name)
+			require.Equal(t, tt.args.ts, writer.meta.ResolvedTs, tt.name)
 		}
 	}
 }
@@ -530,7 +530,7 @@ func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
 	}
 
 	dir, err := ioutil.TempDir("", "redo-GetCurrentResolvedTs")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	for _, tt := range tests {
@@ -562,19 +562,19 @@ func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
 		}
 		ret, err := writer.GetCurrentResolvedTs(tt.args.ctx, tt.args.tableIDs)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name, err.Error())
+			require.NotNil(t, err, tt.name, err.Error())
 		} else {
-			assert.Nil(t, err, tt.name)
-			assert.Equal(t, len(ret), len(tt.wantTs))
+			require.Nil(t, err, tt.name)
+			require.Equal(t, len(ret), len(tt.wantTs))
 			for k, v := range tt.wantTs {
-				assert.Equal(t, v, ret[k])
+				require.Equal(t, v, ret[k])
 			}
 		}
 	}
 }
 
 func TestNewLogWriter(t *testing.T) {
-	assert.Panics(t, func() { NewLogWriter(context.Background(), nil) })
+	require.Panics(t, func() { NewLogWriter(context.Background(), nil) })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -588,37 +588,37 @@ func TestNewLogWriter(t *testing.T) {
 	}
 	var ll *LogWriter
 	initOnce = sync.Once{}
-	assert.NotPanics(t, func() { ll = NewLogWriter(ctx, cfg) })
-	assert.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
+	require.NotPanics(t, func() { ll = NewLogWriter(ctx, cfg) })
+	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
 
 	cfg.Dir += "ttt"
 	ll1 := NewLogWriter(ctx, cfg)
-	assert.Same(t, ll, ll1)
+	require.Same(t, ll, ll1)
 
 	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	meta := &common.LogMeta{
 		CheckPointTs: 11,
 		ResolvedTs:   22,
 	}
 	data, err := meta.MarshalMsg(nil)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	cfg.Dir = dir
 	initOnce = sync.Once{}
 	l := NewLogWriter(ctx, cfg)
-	assert.Equal(t, cfg.Dir, l.cfg.Dir)
-	assert.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
-	assert.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
-	assert.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
+	require.Equal(t, cfg.Dir, l.cfg.Dir)
+	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
+	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
+	require.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
 }
 
 func TestWriter_GC(t *testing.T) {

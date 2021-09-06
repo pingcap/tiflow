@@ -61,11 +61,11 @@ func InitS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage
 // ParseLogFileName extract the commitTs, fileType from log fileName
 func ParseLogFileName(name string) (uint64, string, error) {
 	ext := filepath.Ext(name)
-	if ext != LogEXT && ext != TmpEXT {
-		if ext == MetaEXT {
-			return 0, DefaultMetaFileType, nil
-		}
+	if ext == MetaEXT {
+		return 0, DefaultMetaFileType, nil
+	}
 
+	if ext != LogEXT && ext != TmpEXT {
 		return 0, "", nil
 	}
 
@@ -79,7 +79,7 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	name = strings.ReplaceAll(name, "_", " ")
 	_, err := fmt.Sscanf(name, formatStr, &s1, &s2, &d1, &fileType, &commitTs)
 	if err != nil {
-		return 0, "", errors.Annotate(err, "bad log name")
+		return 0, "", errors.Annotatef(err, "bad log name: %s", name)
 	}
 
 	return commitTs, fileType, nil

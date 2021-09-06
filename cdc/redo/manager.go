@@ -128,11 +128,12 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		m.writer = writer.NewBlackHoleWriter()
 	case consistentStorageLocal, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
-		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir)
+		changeFeedID := util.ChangefeedIDFromCtx(ctx)
+		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID)
 		writerCfg := &writer.LogWriterConfig{
 			Dir:               redoDir,
 			CaptureID:         util.CaptureAddrFromCtx(ctx),
-			ChangeFeedID:      util.ChangefeedIDFromCtx(ctx),
+			ChangeFeedID:      changeFeedID,
 			CreateTime:        time.Now(),
 			MaxLogSize:        cfg.MaxLogSize,
 			FlushIntervalInMs: cfg.FlushIntervalInMs,

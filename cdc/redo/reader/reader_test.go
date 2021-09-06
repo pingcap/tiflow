@@ -14,6 +14,7 @@
 package reader
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -25,32 +26,31 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"golang.org/x/net/context"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewLogReader(t *testing.T) {
-	assert.Panics(t, func() {
+	require.Panics(t, func() {
 		NewLogReader(context.Background(), nil)
 	})
-	assert.NotPanics(t, func() {
+	require.NotPanics(t, func() {
 		NewLogReader(context.Background(), &LogReaderConfig{})
 	})
 }
 
 func TestLogReader_ResetReader(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-ResetReader")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf100", time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf10", time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	type arg struct {
 		ctx                      context.Context
@@ -143,14 +143,14 @@ func TestLogReader_ResetReader(t *testing.T) {
 		}
 		err := r.ResetReader(tt.args.ctx, tt.args.startTs, tt.args.endTs)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
+			require.Nil(t, err, tt.name)
 			mockReader.AssertNumberOfCalls(t, "Close", 2)
-			assert.Equal(t, tt.rowFleName, r.rowReader[0].(*reader).fileName, tt.name)
-			assert.Equal(t, tt.ddlFleName, r.ddlReader[0].(*reader).fileName, tt.name)
-			assert.Equal(t, tt.wantStartTs, r.cfg.startTs, tt.name)
-			assert.Equal(t, tt.wantEndTs, r.cfg.endTs, tt.name)
+			require.Equal(t, tt.rowFleName, r.rowReader[0].(*reader).fileName, tt.name)
+			require.Equal(t, tt.ddlFleName, r.ddlReader[0].(*reader).fileName, tt.name)
+			require.Equal(t, tt.wantStartTs, r.cfg.startTs, tt.name)
+			require.Equal(t, tt.wantEndTs, r.cfg.endTs, tt.name)
 
 		}
 	}
@@ -158,37 +158,37 @@ func TestLogReader_ResetReader(t *testing.T) {
 
 func TestLogReader_ReadMeta(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-ReadMeta")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	meta := &common.LogMeta{
 		CheckPointTs: 11,
 		ResolvedTs:   22,
 	}
 	data, err := meta.MarshalMsg(nil)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path = filepath.Join(dir, fileName)
 	f, err = os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	meta = &common.LogMeta{
 		CheckPointTs: 111,
 		ResolvedTs:   21,
 	}
 	data, err = meta.MarshalMsg(nil)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	_, err = f.Write(data)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	dir1, err := ioutil.TempDir("", "redo-NoReadMeta")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir1)
 
 	tests := []struct {
@@ -235,11 +235,11 @@ func TestLogReader_ReadMeta(t *testing.T) {
 		}
 		cts, rts, err := l.ReadMeta(ctx)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
-			assert.Equal(t, tt.wantCheckPointTs, cts, tt.name)
-			assert.Equal(t, tt.wantResolvedTs, rts, tt.name)
+			require.Nil(t, err, tt.name)
+			require.Equal(t, tt.wantCheckPointTs, cts, tt.name)
+			require.Equal(t, tt.wantResolvedTs, rts, tt.name)
 		}
 	}
 }
@@ -409,21 +409,21 @@ func TestLogReader_ReadNextLog(t *testing.T) {
 		}
 		ret, err := l.ReadNextLog(tt.args.ctx, tt.args.maxNum)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
-			assert.Equal(t, 0, len(ret), tt.name)
+			require.NotNil(t, err, tt.name)
+			require.Equal(t, 0, len(ret), tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
-			assert.EqualValues(t, tt.args.maxNum, len(ret), tt.name)
+			require.Nil(t, err, tt.name)
+			require.EqualValues(t, tt.args.maxNum, len(ret), tt.name)
 			for i := 0; i < int(tt.args.maxNum); i++ {
 				if tt.name == "io.EOF err" {
-					assert.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.Row.Row.CommitTs, tt.name)
+					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.Row.Row.CommitTs, tt.name)
 					continue
 				}
 				if tt.name == "happy1" {
-					assert.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.Row.Row.CommitTs, tt.name)
+					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.Row.Row.CommitTs, tt.name)
 					continue
 				}
-				assert.Equal(t, ret[i].Row.CommitTs, tt.readerRet.Row.Row.CommitTs, tt.name)
+				require.Equal(t, ret[i].Row.CommitTs, tt.readerRet.Row.Row.CommitTs, tt.name)
 			}
 
 		}
@@ -585,21 +585,21 @@ func TestLogReader_ReadNexDDL(t *testing.T) {
 		}
 		ret, err := l.ReadNextDDL(tt.args.ctx, tt.args.maxNum)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
-			assert.Equal(t, 0, len(ret), tt.name)
+			require.NotNil(t, err, tt.name)
+			require.Equal(t, 0, len(ret), tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
-			assert.EqualValues(t, tt.args.maxNum, len(ret), tt.name)
+			require.Nil(t, err, tt.name)
+			require.EqualValues(t, tt.args.maxNum, len(ret), tt.name)
 			for i := 0; i < int(tt.args.maxNum); i++ {
 				if tt.name == "io.EOF err" {
-					assert.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.DDL.DDL.CommitTs, tt.name)
+					require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.DDL.DDL.CommitTs, tt.name)
 					continue
 				}
 				if tt.name == "happy1" {
-					assert.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.DDL.DDL.CommitTs, tt.name)
+					require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet1.DDL.DDL.CommitTs, tt.name)
 					continue
 				}
-				assert.Equal(t, ret[i].DDL.CommitTs, tt.readerRet.DDL.DDL.CommitTs, tt.name)
+				require.Equal(t, ret[i].DDL.CommitTs, tt.readerRet.DDL.DDL.CommitTs, tt.name)
 			}
 		}
 	}
@@ -631,9 +631,9 @@ func TestLogReader_Close(t *testing.T) {
 		err := l.Close()
 		mockReader.AssertNumberOfCalls(t, "Close", 2)
 		if tt.wantErr {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		} else {
-			assert.Nil(t, err, tt.name)
+			require.Nil(t, err, tt.name)
 		}
 	}
 }

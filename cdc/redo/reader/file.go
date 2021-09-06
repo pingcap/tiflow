@@ -15,6 +15,7 @@ package reader
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"io"
 	"io/ioutil"
@@ -30,7 +31,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 

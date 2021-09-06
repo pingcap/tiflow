@@ -96,7 +96,7 @@ type LogWriter struct {
 // TODO: delete log files when changefeed removed, metric
 func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 	// currently, caller do not have the ability of self-healing, like try to fix if on some error,
-	// so initOnce just literary init once, do not support could re-init if on some condition
+	// so initOnce just literary init once, do not support re-init if fail on some condition
 	initOnce.Do(func() {
 		if cfg == nil {
 			log.Panic("LogWriterConfig can not be nil")

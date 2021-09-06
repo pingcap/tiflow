@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	"github.com/pingcap/ticdc/cdc/redo/writer"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"golang.org/x/net/context"
 )
@@ -42,13 +42,13 @@ func TestMain(m *testing.M) {
 }
 
 func TestReader_newReader(t *testing.T) {
-	assert.Panics(t, func() { newReader(context.Background(), nil) })
-	assert.Panics(t, func() { newReader(context.Background(), &readerConfig{dir: ""}) })
+	require.Panics(t, func() { newReader(context.Background(), nil) })
+	require.Panics(t, func() { newReader(context.Background(), &readerConfig{dir: ""}) })
 }
 
 func TestReader_Read(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-reader")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
 	cfg := &writer.FileWriterConfig{
@@ -67,16 +67,16 @@ func TestReader_Read(t *testing.T) {
 		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 1123}},
 	}
 	data, err := log.MarshalMsg(nil)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	w.AdvanceTs(11)
 	_, err = w.Write(data)
 	w.Close()
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID, cfg.ChangeFeedID, cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
-	assert.Nil(t, err)
-	assert.Equal(t, fileName, info.Name())
+	require.Nil(t, err)
+	require.Equal(t, fileName, info.Name())
 
 	r := newReader(ctx, &readerConfig{
 		dir:      dir,
@@ -84,34 +84,34 @@ func TestReader_Read(t *testing.T) {
 		endTs:    12,
 		fileType: common.DefaultRowLogFileType,
 	})
-	assert.Equal(t, 1, len(r))
+	require.Equal(t, 1, len(r))
 	defer r[0].Close()
 	log = &model.RedoLog{}
 	err = r[0].Read(log)
-	assert.Nil(t, err)
-	assert.EqualValues(t, 1123, log.Row.Row.CommitTs)
+	require.Nil(t, err)
+	require.EqualValues(t, 1123, log.Row.Row.CommitTs)
 }
 
 func TestReader_openSelectedFiles(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-openSelectedFiles")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf11", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
-	assert.Nil(t, err)
+	require.Nil(t, err)
 	defer os.RemoveAll(dir1)
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+"test")
 	path = filepath.Join(dir1, fileName)
 	_, err = os.Create(path)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	type arg struct {
 		dir, fixedName string
@@ -178,8 +178,8 @@ func TestReader_openSelectedFiles(t *testing.T) {
 	for _, tt := range tests {
 		ret, err := openSelectedFiles(tt.args.dir, tt.args.fixedName, tt.args.startTs, tt.args.endTs)
 		if !tt.wantErr {
-			assert.Nil(t, err, tt.name)
-			assert.Equal(t, len(ret), len(tt.wantRet), tt.name)
+			require.Nil(t, err, tt.name)
+			require.Equal(t, len(ret), len(tt.wantRet), tt.name)
 			for _, closer := range tt.wantRet {
 				contains := false
 				for _, r := range ret {
@@ -188,10 +188,10 @@ func TestReader_openSelectedFiles(t *testing.T) {
 						break
 					}
 				}
-				assert.Equal(t, true, contains, tt.name)
+				require.Equal(t, true, contains, tt.name)
 			}
 		} else {
-			assert.NotNil(t, err, tt.name)
+			require.NotNil(t, err, tt.name)
 		}
 	}
 }
