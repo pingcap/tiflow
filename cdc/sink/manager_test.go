@@ -248,13 +248,14 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-func BenchmarkManagerRandomFlushing(b *testing.B) {
+func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &checkSink{}, errCh, 0)
 
-	goroutineNum := 1000
-	rowNum := 100
+	// Init table sinks.
+	goroutineNum := 2000
+	rowNum := 500
 	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
@@ -266,6 +267,8 @@ func BenchmarkManagerRandomFlushing(b *testing.B) {
 		}()
 	}
 	wg.Wait()
+
+	// Concurrent emit events.
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		tableSink := tableSinks[i]
@@ -273,27 +276,11 @@ func BenchmarkManagerRandomFlushing(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			ctx := context.Background()
-			var lastResolvedTs uint64
 			for j := 1; j < rowNum; j++ {
-				if rand.Intn(10) == 0 {
-					resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
-					_, err := tableSink.FlushRowChangedEvents(ctx, resolvedTs)
-					if err != nil {
-						b.Error(err)
-					}
-					lastResolvedTs = resolvedTs
-				} else {
-					err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
-						Table:    &model.TableName{TableID: int64(i)},
-						CommitTs: uint64(j),
-					})
-					if err != nil {
-						b.Error(err)
-					}
-				}
-			}
-			for n := 0; n < b.N; n++ {
-				_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+				err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+					Table:    &model.TableName{TableID: int64(i)},
+					CommitTs: uint64(j),
+				})
 				if err != nil {
 					b.Error(err)
 				}
@@ -301,6 +288,31 @@ func BenchmarkManagerRandomFlushing(b *testing.B) {
 		}()
 	}
 	wg.Wait()
+
+	// All tables are flushed concurrently, except table 0.
+	for i := 1; i < goroutineNum; i++ {
+		i := i
+		tableSink := tableSinks[i]
+		go func() {
+			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+			if err != nil {
+				b.Error(err)
+			}
+		}()
+	}
+
+	// Table 0 flush.
+	tableSink := tableSinks[0]
+	var lastResolvedTs uint64
+	for j := 1; j < rowNum; j++ {
+		resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
+		_, err := tableSink.FlushRowChangedEvents(ctx, resolvedTs)
+		if err != nil {
+			b.Error(err)
+		}
+		lastResolvedTs = resolvedTs
+	}
+
 	cancel()
 	_ = manager.Close(ctx)
 	close(errCh)
