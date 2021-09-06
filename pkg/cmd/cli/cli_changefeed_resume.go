@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
@@ -79,7 +78,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 		return err
 	}
 
-	info := &cdc.ChangefeedResp{}
+	info := &model.ChangefeedCommonInfo{}
 	err = json.Unmarshal([]byte(resp), info)
 	if err != nil {
 		return err
@@ -91,7 +90,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 	}
 
 	if !o.noConfirm {
-		return confirmLargeDataGap(cmd, currentPhysical, info.TSO)
+		return confirmLargeDataGap(cmd, currentPhysical, info.CheckpointTSO)
 	}
 
 	return nil
