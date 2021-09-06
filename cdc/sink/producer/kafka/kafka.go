@@ -89,6 +89,7 @@ type kafkaSaramaProducer struct {
 	closed  int32
 }
 
+// SendMessage asynchronously send the message to the specified topic partition.
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
@@ -124,6 +125,8 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 	return nil
 }
 
+// SyncBroadcastMessage synchronously send the same message to all partitions of the topic
+// If `not all` messages send successfully, error returned.
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
