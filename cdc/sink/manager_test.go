@@ -293,9 +293,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	for i := 1; i < goroutineNum; i++ {
 		i := i
 		tableSink := tableSinks[i]
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			ctx := context.Background()
 			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
 			if err != nil {
@@ -316,7 +314,6 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	}
 	b.StopTimer()
 
-	wg.Wait()
 	cancel()
 	_ = manager.Close(ctx)
 	close(errCh)
