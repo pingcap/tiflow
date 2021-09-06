@@ -297,13 +297,9 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			ctx := context.Background()
-			for j := 1; j < rowNum; j++ {
-				if j%10 == 0 {
-					_, err := tableSink.FlushRowChangedEvents(ctx, uint64(j))
-					if err != nil {
-						b.Error(err)
-					}
-				}
+			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+			if err != nil {
+				b.Error(err)
 			}
 		}()
 	}
