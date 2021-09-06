@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -245,6 +246,55 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = manager.destroyTableSink(ctx, tableID)
 	c.Assert(err, check.IsNil)
+}
+
+func BenchmarkManagerRandomFlushing(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		errCh := make(chan error, 16)
+		manager := NewManager(ctx, &checkSink{}, errCh, 0)
+
+		goroutineNum := 1000
+		rowNum := 100
+		var wg sync.WaitGroup
+		tableSinks := make([]Sink, goroutineNum)
+		for i := 0; i < goroutineNum; i++ {
+			i := i
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+			}()
+		}
+		wg.Wait()
+		for i := 0; i < goroutineNum; i++ {
+			i := i
+			tableSink := tableSinks[i]
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ctx := context.Background()
+				var lastResolvedTs uint64
+				for j := 1; j < rowNum; j++ {
+					if rand.Intn(10) == 0 {
+						resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
+						_, _ = tableSink.FlushRowChangedEvents(ctx, resolvedTs)
+						lastResolvedTs = resolvedTs
+					} else {
+						_ = tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+							Table:    &model.TableName{TableID: int64(i)},
+							CommitTs: uint64(j),
+						})
+					}
+				}
+				_, _ = tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+			}()
+		}
+		wg.Wait()
+		cancel()
+		_ = manager.Close(ctx)
+		close(errCh)
+	}
 }
 
 type errorSink struct {
