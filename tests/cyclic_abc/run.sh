@@ -103,7 +103,7 @@ function run() {
         --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --cyclic-replica-id 1 \
         --cyclic-filter-replica-ids 2 \
-        --cyclic-sync-ddl true \
+        --cyclic-sync-ddl=true \
         --config $CUR/conf/changefeed.toml
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
@@ -111,7 +111,7 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 3 \
-        --cyclic-sync-ddl true \
+        --cyclic-sync-ddl=true \
         --config $CUR/conf/changefeed.toml
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
