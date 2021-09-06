@@ -115,13 +115,10 @@ function run() {
 
     # remove paused changefeed, the safe_point forward will recover
     cdc cli changefeed remove --changefeed-id=$changefeed_id --pd=$pd_addr
-<<<<<<< HEAD
+    # remove this line when new owner is enabled, because `removed` state is deprecated
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "removed"
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
-=======
     start_safepoint=$(get_safepoint $pd_addr $pd_cluster_id)
     ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id $start_safepoint
->>>>>>> ec0e1d0a9 (tests: fix unstable integration_test gc_safepoint (#2717))
 
     # remove all changefeeds, the safe_point will be cleared
     cdc cli changefeed remove --changefeed-id=$changefeed_id2 --pd=$pd_addr
