@@ -50,14 +50,6 @@ type commonResp struct {
 	Message string `json:"message"`
 }
 
-// ChangefeedResp holds the most common usage information for a changefeed
-type ChangefeedResp struct {
-	FeedState    string              `json:"state"`
-	TSO          uint64              `json:"tso"`
-	Checkpoint   string              `json:"checkpoint"`
-	RunningError *model.RunningError `json:"error"`
-}
-
 func handleOwnerResp(w http.ResponseWriter, err error) {
 	if err != nil {
 		if errors.Cause(err) == concurrency.ErrElectionNotLeader {
@@ -224,15 +216,15 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	resp := &ChangefeedResp{}
+	resp := &model.ChangefeedCommonInfo{}
 	if cfInfo != nil {
-		resp.FeedState = string(cfInfo.State)
+		resp.FeedState = cfInfo.State
 		resp.RunningError = cfInfo.Error
 	}
 	if cfStatus != nil {
-		resp.TSO = cfStatus.CheckpointTs
-		tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
-		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
+		resp.CheckpointTSO = cfStatus.CheckpointTs
+		resp.CheckpointTime = model.JSONTime(oracle.GetTimeFromTS(cfStatus.CheckpointTs))
+
 	}
 	writeData(w, resp)
 }
