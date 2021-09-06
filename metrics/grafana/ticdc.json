@@ -8088,9 +8088,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-<<<<<<< HEAD
-  "version": 19
-=======
   "version": 21
->>>>>>> e754534b0 (metrics: add more metrics about kv client and gRPC stream (#2686))
 }
