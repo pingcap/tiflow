@@ -217,7 +217,7 @@ func (s *outputSuite) TestStopStatus(c *check.C) {
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test-status",
 		Info: &model.ChangeFeedInfo{
-			StartTs: oracle.GoTimeToTS(time.Now()),
+			StartTs: oracle.EncodeTSO(oracle.GetPhysical(time.Now())),
 			Config:  config.GetDefaultReplicaConfig(),
 		},
 	})
