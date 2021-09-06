@@ -275,9 +275,8 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ctx := context.Background()
 			for j := 1; j < rowNum; j++ {
-				err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+				err := tableSink.EmitRowChangedEvents(context.Background(), &model.RowChangedEvent{
 					Table:    &model.TableName{TableID: int64(i)},
 					CommitTs: uint64(j),
 				})
@@ -294,10 +293,13 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		i := i
 		tableSink := tableSinks[i]
 		go func() {
-			ctx := context.Background()
-			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
-			if err != nil {
-				b.Error(err)
+			for j := 1; j < rowNum; j++ {
+				if j%5 == 0 {
+					_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(j))
+					if err != nil {
+						b.Error(err)
+					}
+				}
 			}
 		}()
 	}
@@ -306,8 +308,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	// Table 0 flush.
 	tableSink := tableSinks[0]
 	for i := 0; i < b.N; i++ {
-		ctx := context.Background()
-		_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+		_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(rowNum))
 		if err != nil {
 			b.Error(err)
 		}
