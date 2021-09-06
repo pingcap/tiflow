@@ -100,8 +100,7 @@ func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 // AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
 	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
-		Tp:        pipeline.CommandTypeStopAtTs,
-		StoppedTs: targetTs,
+		Tp: pipeline.CommandTypeStop,
 	}))
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil {
