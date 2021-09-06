@@ -146,8 +146,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	checkAllPD := false
-	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible, checkAllPD)
+	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}
