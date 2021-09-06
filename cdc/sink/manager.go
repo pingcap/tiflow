@@ -95,6 +95,9 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
+	// NOTICE: Because all table sinks will try to flush backend sink,
+	// which will cause a lot of lock contention and blocking in high concurrency cases.
+	// So here we use flushing as a lightweight lock to improve the lock competition problem.
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		return atomic.LoadUint64(&m.checkpointTs), nil
 	}
