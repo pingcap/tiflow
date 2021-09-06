@@ -52,11 +52,16 @@ import (
 const (
 	dialTimeout           = 10 * time.Second
 	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
-	// TODO find optimal values and test extensively before releasing
-	// The old values cause the gRPC stream to stall for some unknown reason.
-	grpcInitialWindowSize     = 1 << 26 // 64 MB The value for initial window size on a stream
-	grpcInitialConnWindowSize = 1 << 27 // 128 MB The value for initial window size on a connection
-	grpcMaxCallRecvMsgSize    = 1 << 28 // 256 MB The maximum message size the client can receive
+
+	// TiCDC may open numerous gRPC streams,
+	// with 65535 bytes window size, 10K streams takes about 27GB memory.
+	//
+	// 65535 bytes, the initial window size in http2 spec.
+	grpcInitialWindowSize = (1 << 16) - 1
+	// 8 MB The value for initial window size on a connection
+	grpcInitialConnWindowSize = 1 << 23
+	// 256 MB The maximum message size the client can receive
+	grpcMaxCallRecvMsgSize = 1 << 28
 
 	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
 	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
