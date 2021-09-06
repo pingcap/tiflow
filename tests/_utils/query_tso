@@ -1,8 +1,14 @@
 #!/bin/bash
 
+# parameter 1: pd host
+# parameter 2: pd port
+
 set -eux
 
-tso=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+pd_host=${1}
+pd_port=${2}
+
+tso=$(run_cdc_cli tso query --pd=http://${pd_host}:${pd_port})
 echo $tso | awk -F " " '{print $1}'
 
 set +x

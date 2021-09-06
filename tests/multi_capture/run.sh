@@ -19,7 +19,7 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(query_tso)
+    start_ts=$(query_tso ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
     # create $DB_COUNT databases and import initial workload
     for i in $(seq $DB_COUNT); do

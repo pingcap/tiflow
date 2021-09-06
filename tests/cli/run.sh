@@ -40,7 +40,7 @@ function run() {
     pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(query_tso)
+    start_ts=$(query_tso ${UP_PD_HOST_1} ${UP_PD_PORT_1})
     run_sql "CREATE table test.simple(id int primary key, val int);"
     run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
 
