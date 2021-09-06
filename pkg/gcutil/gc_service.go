@@ -35,7 +35,7 @@ const (
 func EnsureChangefeedStartTsSafety(
 	ctx context.Context, pdCli pd.Client, changefeedID string, TTL int64, startTs uint64,
 ) error {
-	minServiceGCTs, err := SetServiceGCSafepoint(
+	minServiceGCTs, err := setServiceGCSafepoint(
 		ctx, pdCli, cdcChangefeedCreatingServiceGCSafePointID+changefeedID, TTL, startTs)
 	if err != nil {
 		return errors.Trace(err)
@@ -54,8 +54,8 @@ const (
 	serviceGCSafepointRetry        = 9
 )
 
-// SetServiceGCSafepoint set a service safepoint to PD.
-func SetServiceGCSafepoint(
+// setServiceGCSafepoint set a service safepoint to PD.
+func setServiceGCSafepoint(
 	ctx context.Context, pdCli pd.Client, serviceID string, TTL int64, safePoint uint64,
 ) (minServiceGCTs uint64, err error) {
 	retry.Do(ctx,
