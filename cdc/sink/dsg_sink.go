@@ -14,7 +14,10 @@
 package sink
 
 import (
+	"bufio"
 	"context"
+	"fmt"
+	"net"
 	"sync/atomic"
 
 	"github.com/pingcap/log"
@@ -25,7 +28,7 @@ import (
 // newDsgTestSink creates a block hole sink
 func newDsgTestSink(ctx context.Context, opts map[string]string) *dsgSocketSink {
 	return &dsgSocketSink{
-		statistics: NewStatistics(ctx, "dsgTesthole", opts),
+		statistics: NewStatistics(ctx, "dsgsocket", opts),
 	}
 }
 
@@ -37,8 +40,36 @@ type dsgSocketSink struct {
 }
 
 func (b *dsgSocketSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+
+
 	for _, row := range rows {
 		log.Debug("dsgSocketSink: EmitRowChangedEvents", zap.Any("row", row))
+
+
+		for _, column := range row.Columns {
+			columnName := column.Name
+			columnValue := model.ColumnValueString(column.Value)
+			//fmt.Println(value)
+			conn, err := net.Dial("tcp", ":2300")
+			if err != nil {
+				log.Fatal("",zap.Any("err", err))
+			}
+
+			fmt.Fprintf(conn, "columnName:"+columnName+":::columnValue:"+columnValue+"\n")
+			res, err := bufio.NewReader(conn).ReadString('\n')
+			if err != nil {
+				log.Fatal("",zap.Any("err", err))
+			}
+
+			fmt.Println(string(res))
+			//fmt.Fprintf(conn, value+"\n")
+
+			conn.Close()
+
+
+		}
+
+
 	}
 	rowsCount := len(rows)
 	atomic.AddUint64(&b.accumulated, uint64(rowsCount))
