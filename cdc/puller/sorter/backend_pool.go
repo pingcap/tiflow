@@ -19,8 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -131,18 +129,6 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 			} else {
 				memPressure := m.Used * 100 / m.Total
 				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
-			}
-
-			if memPressure := ret.memoryPressure(); memPressure > 50 {
-				log.Debug("unified sorter: high memory pressure", zap.Int32("memPressure", memPressure),
-					zap.Int64("usedBySorter", ret.sorterMemoryUsage()))
-				// Increase GC frequency to avoid unnecessary OOMs
-				debug.SetGCPercent(10)
-				if memPressure > 80 {
-					runtime.GC()
-				}
-			} else {
-				debug.SetGCPercent(50)
 			}
 
 			// garbage collect temporary files in batches
