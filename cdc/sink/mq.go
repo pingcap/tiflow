@@ -81,8 +81,6 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
-	notifier := new(notify.Notifier)
-
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
 	newEncoder := codec.NewEventBatchEncoder(protocol)
@@ -131,10 +129,12 @@ func newMqSink(
 		return ret
 	}
 
+	notifier := new(notify.Notifier)
 	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
+
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
