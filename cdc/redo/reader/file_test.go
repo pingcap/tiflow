@@ -56,7 +56,7 @@ func TestReader_Read(t *testing.T) {
 		Dir:          dir,
 		ChangeFeedID: "test-cf",
 		CaptureID:    "cp",
-		FileName:     common.DefaultRowLogFileName,
+		FileType:     common.DefaultRowLogFileType,
 		CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -72,7 +72,7 @@ func TestReader_Read(t *testing.T) {
 	_, err = w.Write(data)
 	w.Close()
 	assert.Nil(t, err)
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID, cfg.ChangeFeedID, cfg.CreateTime.Unix(), cfg.FileName, 11, common.LogEXT)
+	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID, cfg.ChangeFeedID, cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	assert.Nil(t, err)
@@ -82,7 +82,7 @@ func TestReader_Read(t *testing.T) {
 		dir:      dir,
 		startTs:  1,
 		endTs:    12,
-		fileType: common.DefaultRowLogFileName,
+		fileType: common.DefaultRowLogFileType,
 	})
 	assert.Equal(t, 1, len(r))
 	defer r[0].Close()
@@ -96,11 +96,11 @@ func TestReader_openSelectedFiles(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-openSelectedFiles")
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileName, 11, common.LogEXT+common.TmpEXT)
+	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
 	assert.Nil(t, err)
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf11", time.Now().Unix(), common.DefaultDDLLogFileName, 10, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf11", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
 	assert.Nil(t, err)
@@ -108,7 +108,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir1)
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileName, 11, common.LogEXT+"test")
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+"test")
 	path = filepath.Join(dir1, fileName)
 	_, err = os.Create(path)
 	assert.Nil(t, err)
@@ -128,7 +128,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 			name: "dir not exist",
 			args: arg{
 				dir:       dir + "test",
-				fixedName: common.DefaultDDLLogFileName,
+				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
 				endTs:     12,
 			},
@@ -138,7 +138,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 			name: "happy",
 			args: arg{
 				dir:       dir,
-				fixedName: common.DefaultDDLLogFileName,
+				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
 				endTs:     12,
 			},
@@ -148,7 +148,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 			name: "wrong ts",
 			args: arg{
 				dir:       dir,
-				fixedName: common.DefaultDDLLogFileName,
+				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
 				endTs:     9,
 			},
@@ -158,7 +158,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 			name: "wrong fixedName",
 			args: arg{
 				dir:       dir,
-				fixedName: common.DefaultDDLLogFileName + "test",
+				fixedName: common.DefaultDDLLogFileType + "test",
 				startTs:   0,
 				endTs:     9,
 			},
@@ -167,7 +167,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 			name: "wrong ext",
 			args: arg{
 				dir:       dir1,
-				fixedName: common.DefaultDDLLogFileName,
+				fixedName: common.DefaultDDLLogFileType,
 				startTs:   0,
 				endTs:     12,
 			},

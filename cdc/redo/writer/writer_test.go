@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -586,13 +587,18 @@ func TestNewLogWriter(t *testing.T) {
 		FlushIntervalInMs: 5,
 	}
 	var ll *LogWriter
+	initOnce = sync.Once{}
 	assert.NotPanics(t, func() { ll = NewLogWriter(ctx, cfg) })
 	assert.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
+
+	cfg.Dir += "ttt"
+	ll1 := NewLogWriter(ctx, cfg)
+	assert.Same(t, ll, ll1)
 
 	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
 	assert.Nil(t, err)
 	defer os.RemoveAll(dir)
-	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileName, common.MetaEXT)
+	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
 	assert.Nil(t, err)
@@ -607,6 +613,7 @@ func TestNewLogWriter(t *testing.T) {
 	assert.Nil(t, err)
 
 	cfg.Dir = dir
+	initOnce = sync.Once{}
 	l := NewLogWriter(ctx, cfg)
 	assert.Equal(t, cfg.Dir, l.cfg.Dir)
 	assert.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)

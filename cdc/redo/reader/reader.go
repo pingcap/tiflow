@@ -73,7 +73,7 @@ type LogReader struct {
 	sync.Mutex
 }
 
-// NewLogReader creates a LogReader instance. need the client to guarantee only one LogReader per changefeed
+// NewLogReader creates a LogReader instance. Need the client to guarantee only one LogReader per changefeed
 // currently support rewind operation by ResetReader api
 // if s3 will download logs first, if OP environment need fetch the redo logs to local dir first
 func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
@@ -91,11 +91,11 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
 				zap.Error(err),
 				zap.Any("S3URI", cfg.S3URI))
 		}
-		err = downLoadToLocal(ctx, cfg.Dir, s3storage, common.DefaultMetaFileName)
+		err = downLoadToLocal(ctx, cfg.Dir, s3storage, common.DefaultMetaFileType)
 		if err != nil {
 			log.Panic("downLoadToLocal fail",
 				zap.Error(err),
-				zap.String("file type", common.DefaultMetaFileName),
+				zap.String("file type", common.DefaultMetaFileType),
 				zap.Any("s3URI", cfg.S3URI))
 		}
 	}
@@ -144,7 +144,7 @@ func (l *LogReader) setUpRowReader(ctx context.Context, startTs, endTs uint64) e
 
 	rowCfg := &readerConfig{
 		dir:       l.cfg.Dir,
-		fileType:  common.DefaultRowLogFileName,
+		fileType:  common.DefaultRowLogFileType,
 		startTs:   startTs,
 		endTs:     endTs,
 		s3Storage: l.cfg.S3Storage,
@@ -168,7 +168,7 @@ func (l *LogReader) setUpDDLReader(ctx context.Context, startTs, endTs uint64) e
 
 	ddlCfg := &readerConfig{
 		dir:       l.cfg.Dir,
-		fileType:  common.DefaultDDLLogFileName,
+		fileType:  common.DefaultDDLLogFileType,
 		startTs:   startTs,
 		endTs:     endTs,
 		s3Storage: l.cfg.S3Storage,

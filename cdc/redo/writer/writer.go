@@ -57,6 +57,11 @@ type RedoLogWriter interface {
 
 var defaultGCIntervalInMs = 5000
 
+var (
+	initOnce  sync.Once
+	logWriter *LogWriter
+)
+
 var redoLogPool = sync.Pool{
 	New: func() interface{} {
 		return &model.RedoLog{}
@@ -87,54 +92,59 @@ type LogWriter struct {
 	metaLock  sync.RWMutex
 }
 
-// NewLogWriter creates a LogWriter instance. need the client to guarantee only one LogWriter per changefeed
+// NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
 // TODO: delete log files when changefeed removed, metric
 func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
-	if cfg == nil {
-		log.Panic("LogWriterConfig can not be nil")
-		return nil
-	}
-
-	rowCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileName:          common.DefaultRowLogFileName,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-	}
-	ddlCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileName:          common.DefaultDDLLogFileName,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-	}
-	logWriter := &LogWriter{
-		cfg:       cfg,
-		rowWriter: NewWriter(ctx, rowCfg),
-		ddlWriter: NewWriter(ctx, ddlCfg),
-	}
-	err := logWriter.initMeta(ctx)
-	if err != nil {
-		log.Warn("init redo meta fail",
-			zap.String("change feed", cfg.ChangeFeedID),
-			zap.Error(err))
-	}
-	if cfg.S3Storage {
-		s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
-		if err != nil {
-			log.Panic("initS3storage fail",
-				zap.Error(err),
-				zap.String("change feed", cfg.ChangeFeedID))
+	// currently, caller do not have the ability of self-healing, like try to fix if on some error,
+	// so initOnce just literary init once, do not support could re-init if on some condition
+	initOnce.Do(func() {
+		if cfg == nil {
+			log.Panic("LogWriterConfig can not be nil")
+			return
 		}
-		logWriter.storage = s3storage
-	}
 
-	go logWriter.runGC(ctx)
+		rowCfg := &FileWriterConfig{
+			Dir:               cfg.Dir,
+			ChangeFeedID:      cfg.ChangeFeedID,
+			CaptureID:         cfg.CaptureID,
+			FileType:          common.DefaultRowLogFileType,
+			CreateTime:        cfg.CreateTime,
+			MaxLogSize:        cfg.MaxLogSize,
+			FlushIntervalInMs: cfg.FlushIntervalInMs,
+		}
+		ddlCfg := &FileWriterConfig{
+			Dir:               cfg.Dir,
+			ChangeFeedID:      cfg.ChangeFeedID,
+			CaptureID:         cfg.CaptureID,
+			FileType:          common.DefaultDDLLogFileType,
+			CreateTime:        cfg.CreateTime,
+			MaxLogSize:        cfg.MaxLogSize,
+			FlushIntervalInMs: cfg.FlushIntervalInMs,
+		}
+		logWriter = &LogWriter{
+			cfg:       cfg,
+			rowWriter: NewWriter(ctx, rowCfg),
+			ddlWriter: NewWriter(ctx, ddlCfg),
+		}
+		err := logWriter.initMeta(ctx)
+		if err != nil {
+			log.Warn("init redo meta fail",
+				zap.String("change feed", cfg.ChangeFeedID),
+				zap.Error(err))
+		}
+		if cfg.S3Storage {
+			s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
+			if err != nil {
+				log.Panic("initS3storage fail",
+					zap.Error(err),
+					zap.String("change feed", cfg.ChangeFeedID))
+			}
+			logWriter.storage = s3storage
+		}
+
+		go logWriter.runGC(ctx)
+	})
+
 	return logWriter
 }
 
@@ -392,11 +402,12 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, common.DefaultMetaFileName, common.MetaEXT)
+	return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, common.DefaultMetaFileType, common.MetaEXT)
 }
 
 func (l *LogWriter) flushLogMeta() error {
 	l.metaLock.Lock()
+	defer l.metaLock.Unlock()
 
 	data, err := l.meta.MarshalMsg(nil)
 	if err != nil {
@@ -408,7 +419,7 @@ func (l *LogWriter) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
-	tmpFileName := l.filePath() + common.TmpEXT
+	tmpFileName := l.filePath() + common.MetaTmpEXT
 	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -428,8 +439,6 @@ func (l *LogWriter) flushLogMeta() error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-
-	l.metaLock.Unlock()
 
 	if !l.cfg.S3Storage {
 		return nil

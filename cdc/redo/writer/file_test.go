@@ -55,7 +55,7 @@ func TestWriterWrite(t *testing.T) {
 			Dir:          dir,
 			ChangeFeedID: "test-cf",
 			CaptureID:    "cp",
-			FileName:     common.DefaultRowLogFileName,
+			FileType:     common.DefaultRowLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
 		uint64buf: make([]byte, 8),
@@ -66,7 +66,7 @@ func TestWriterWrite(t *testing.T) {
 	_, err = w.Write([]byte("tes1t11111"))
 	assert.Nil(t, err)
 	// create a .tmp file
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileName, 1, common.LogEXT) + common.TmpEXT
+	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
 	path := filepath.Join(w.cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	assert.Nil(t, err)
@@ -80,20 +80,20 @@ func TestWriterWrite(t *testing.T) {
 	assert.Nil(t, err)
 
 	// after rotate, rename to .log
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileName, 1, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	assert.Nil(t, err)
 	assert.Equal(t, fileName, info.Name())
 	// create a .tmp file with first eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileName, 12, common.LogEXT) + common.TmpEXT
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 12, common.LogEXT) + common.TmpEXT
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	assert.Nil(t, err)
 	assert.Equal(t, fileName, info.Name())
 	w.Close()
 	// safe close, rename to .log with max eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileName, 22, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	assert.Nil(t, err)
@@ -113,7 +113,7 @@ func TestWriterGC(t *testing.T) {
 		ChangeFeedID:      "test-cf",
 		CaptureID:         "cp",
 		MaxLogSize:        10,
-		FileName:          common.DefaultRowLogFileName,
+		FileType:          common.DefaultRowLogFileType,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
 	}
@@ -143,9 +143,10 @@ func TestWriterGC(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(files), "should have 1 log left after GC")
 
-	ts, err := w.parseLogFileName(files[0].Name())
+	ts, fileType, err := common.ParseLogFileName(files[0].Name())
 	assert.Nil(t, err, files[0].Name())
 	assert.EqualValues(t, 3, ts)
+	assert.Equal(t, common.DefaultRowLogFileType, fileType)
 
 	time.Sleep(6 * time.Millisecond)
 }

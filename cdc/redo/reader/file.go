@@ -16,13 +16,11 @@ package reader
 import (
 	"bufio"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/pingcap/br/pkg/storage"
@@ -109,16 +107,16 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 	return readers
 }
 
-func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, fixedName string) ([]string, error) {
+func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, fixedType string) ([]string, error) {
 	files := []string{}
 	err := s3storage.WalkDir(ctx, &storage.WalkOption{}, func(path string, size int64) error {
 		fileName := filepath.Base(path)
-		_, name, err := parseLogFileName(fileName)
+		_, fileType, err := common.ParseLogFileName(fileName)
 		if err != nil {
 			return err
 		}
 
-		if name == fixedName {
+		if fileType == fixedType {
 			files = append(files, path)
 		}
 		return nil
@@ -154,7 +152,7 @@ func downLoadToLocal(ctx context.Context, dir string, s3storage storage.External
 	return eg.Wait()
 }
 
-func openSelectedFiles(dir, fixedName string, startTs, endTs uint64) ([]io.ReadCloser, error) {
+func openSelectedFiles(dir, fixedType string, startTs, endTs uint64) ([]io.ReadCloser, error) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
@@ -162,7 +160,7 @@ func openSelectedFiles(dir, fixedName string, startTs, endTs uint64) ([]io.ReadC
 
 	logFiles := []io.ReadCloser{}
 	for _, f := range files {
-		ret, err := shouldOpen(startTs, endTs, f.Name(), fixedName)
+		ret, err := shouldOpen(startTs, endTs, f.Name(), fixedType)
 		if err != nil {
 			log.Warn("check selected log file fail",
 				zap.String("log file", f.Name()),
@@ -183,44 +181,19 @@ func openSelectedFiles(dir, fixedName string, startTs, endTs uint64) ([]io.ReadC
 	return logFiles, nil
 }
 
-func shouldOpen(startTs, endTs uint64, name, fixedName string) (bool, error) {
-	commitTs, fileName, err := parseLogFileName(name)
+func shouldOpen(startTs, endTs uint64, name, fixedType string) (bool, error) {
+	commitTs, fileType, err := common.ParseLogFileName(name)
 	if err != nil {
 		return false, err
 	}
-	if fileName != fixedName {
+	if fileType != fixedType {
 		return false, nil
 	}
 	// always open .tmp
 	if filepath.Ext(name) == common.TmpEXT {
 		return true, nil
 	}
-	if commitTs > startTs && commitTs <= endTs {
-		return true, nil
-	}
-	return false, nil
-}
-
-func parseLogFileName(name string) (uint64, string, error) {
-	ext := filepath.Ext(name)
-	if ext != common.LogEXT && ext != common.TmpEXT {
-		return 0, "", errors.New("bad log name, file name extension not match")
-	}
-
-	var commitTs, d1 uint64
-	var s1, s2, fileName string
-	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileName, w.commitTS.Load(), redo.LogEXT)
-	formatStr := "%s %s %d %s %d" + common.LogEXT
-	if ext == common.TmpEXT {
-		formatStr += common.TmpEXT
-	}
-	name = strings.ReplaceAll(name, "_", " ")
-	_, err := fmt.Sscanf(name, formatStr, &s1, &s2, &d1, &fileName, &commitTs)
-	if err != nil {
-		return 0, "", errors.Annotate(err, "bad log name")
-	}
-
-	return commitTs, fileName, nil
+	return commitTs > startTs && commitTs <= endTs, nil
 }
 
 // Read ...

@@ -84,7 +84,7 @@ type FileWriterConfig struct {
 	Dir          string
 	ChangeFeedID string
 	CaptureID    string
-	FileName     string
+	FileType     string
 	CreateTime   time.Time
 	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
 	MaxLogSize        int64
@@ -285,11 +285,11 @@ func (w *Writer) close() error {
 }
 
 func (w *Writer) getLogFileName() string {
-	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileName, w.commitTS.Load(), common.LogEXT)
+	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
 }
 
-func (w *Writer) getLogFileNameFormat(ext string) string {
-	return fmt.Sprintf("%s_%s_%d_%s_%s%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileName, "%d", ext)
+func (w *Writer) getLogFileNameFormat() string {
+	return fmt.Sprintf("%s_%s_%s_%s_%s%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, "%d", w.cfg.FileType, "%d", common.LogEXT)
 }
 
 func (w *Writer) filePath() string {
@@ -411,26 +411,17 @@ func (w *Writer) GC(checkPointTs uint64) error {
 	return nil
 }
 
-func (w *Writer) parseLogFileName(name string) (uint64, error) {
-	var commitTs uint64
-	format := w.getLogFileNameFormat(filepath.Ext(name))
-	_, err := fmt.Sscanf(name, format, &commitTs)
-	if err != nil {
-		return 0, errors.Annotate(err, "bad log name")
-	}
-	return commitTs, nil
-}
-
 func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
 	if filepath.Ext(f.Name()) != common.LogEXT {
 		return false, nil
 	}
 
-	commitTs, err := w.parseLogFileName(f.Name())
+	commitTs, fileType, err := common.ParseLogFileName(f.Name())
 	if err != nil {
 		return false, err
 	}
-	return commitTs < checkPointTs, nil
+
+	return commitTs < checkPointTs && fileType == w.cfg.FileType, nil
 }
 
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
