@@ -293,25 +293,34 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	for i := 1; i < goroutineNum; i++ {
 		i := i
 		tableSink := tableSinks[i]
+		wg.Add(1)
 		go func() {
-			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
-			if err != nil {
-				b.Error(err)
+			defer wg.Done()
+			ctx := context.Background()
+			for j := 1; j < rowNum; j++ {
+				if j%10 == 0 {
+					_, err := tableSink.FlushRowChangedEvents(ctx, uint64(j))
+					if err != nil {
+						b.Error(err)
+					}
+				}
 			}
 		}()
 	}
 
+	b.ResetTimer()
 	// Table 0 flush.
 	tableSink := tableSinks[0]
-	for j := 1; j < rowNum; j++ {
-		if j%5 == 0 {
-			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(j))
-			if err != nil {
-				b.Error(err)
-			}
+	for i := 0; i < b.N; i++ {
+		ctx := context.Background()
+		_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+		if err != nil {
+			b.Error(err)
 		}
 	}
+	b.StopTimer()
 
+	wg.Wait()
 	cancel()
 	_ = manager.Close(ctx)
 	close(errCh)
