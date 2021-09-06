@@ -150,10 +150,6 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				lastSafeResolvedTs, lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
 			}
 		}
-		err = s.EmitRowChangedEvents(ctx, cachedRows...)
-		if err != nil {
-			return err
-		}
 		_, err = s.FlushRowChangedEvents(ctx, lastSafeResolvedTs)
 		if err != nil {
 			return err
