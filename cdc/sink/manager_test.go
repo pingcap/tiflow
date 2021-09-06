@@ -303,14 +303,13 @@ func BenchmarkManagerFlushing(b *testing.B) {
 
 	// Table 0 flush.
 	tableSink := tableSinks[0]
-	var lastResolvedTs uint64
 	for j := 1; j < rowNum; j++ {
-		resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
-		_, err := tableSink.FlushRowChangedEvents(ctx, resolvedTs)
-		if err != nil {
-			b.Error(err)
+		if j%5 == 0 {
+			_, err := tableSink.FlushRowChangedEvents(ctx, uint64(j))
+			if err != nil {
+				b.Error(err)
+			}
 		}
-		lastResolvedTs = resolvedTs
 	}
 
 	cancel()
