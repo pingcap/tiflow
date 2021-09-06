@@ -278,22 +278,36 @@ func BenchmarkManagerRandomFlushing(b *testing.B) {
 				for j := 1; j < rowNum; j++ {
 					if rand.Intn(10) == 0 {
 						resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
-						_, _ = tableSink.FlushRowChangedEvents(ctx, resolvedTs)
+						_, err := tableSink.FlushRowChangedEvents(ctx, resolvedTs)
+						if err != nil {
+							b.Error(err)
+						}
 						lastResolvedTs = resolvedTs
 					} else {
-						_ = tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+						err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 							Table:    &model.TableName{TableID: int64(i)},
 							CommitTs: uint64(j),
 						})
+						if err != nil {
+							b.Error(err)
+						}
 					}
 				}
-				_, _ = tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+				_, err := tableSink.FlushRowChangedEvents(ctx, uint64(rowNum))
+				if err != nil {
+					b.Error(err)
+				}
 			}()
 		}
 		wg.Wait()
 		cancel()
 		_ = manager.Close(ctx)
 		close(errCh)
+		for err := range errCh {
+			if err != nil {
+				b.Error(err)
+			}
+		}
 	}
 }
 
