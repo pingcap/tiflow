@@ -17,8 +17,8 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
@@ -26,6 +26,12 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
+
+// changefeedCommonInfo holds some common used information of a changefeed.
+type changefeedCommonInfo struct {
+	ID      string              `json:"id"`
+	Summary *cdc.ChangefeedResp `json:"summary"`
+}
 
 // listChangefeedOptions defines flags for the `cli changefeed list` command.
 type listChangefeedOptions struct {
@@ -85,21 +91,25 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 		}
 	}
 
-	cfs := make([]*model.ChangefeedCommonInfo, 0, len(changefeedIDs))
+	cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
 
 	for id := range changefeedIDs {
+		cfci := &changefeedCommonInfo{ID: id}
+
 		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, id, o.credential)
-		info := &model.ChangefeedCommonInfo{}
 		if err != nil {
 			// if no capture is available, the query will fail, just add a warning here
 			log.Warn("query changefeed info failed", zap.String("error", err.Error()))
 		} else {
+			info := &cdc.ChangefeedResp{}
 			err = json.Unmarshal([]byte(resp), info)
 			if err != nil {
 				return err
 			}
+
+			cfci.Summary = info
 		}
-		cfs = append(cfs, info)
+		cfs = append(cfs, cfci)
 	}
 
 	return util.JSONPrint(cmd, cfs)
