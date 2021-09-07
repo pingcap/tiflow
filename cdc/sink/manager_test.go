@@ -248,6 +248,8 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+// Run the benchmark
+// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/ticdc/cdc/sink
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
@@ -255,7 +257,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 
 	// Init table sinks.
 	goroutineNum := 2000
-	rowNum := 5000
+	rowNum := 2000
 	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
@@ -294,7 +296,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		tableSink := tableSinks[i]
 		go func() {
 			for j := 1; j < rowNum; j++ {
-				if j%10 == 0 {
+				if j%2 == 0 {
 					_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(j))
 					if err != nil {
 						b.Error(err)
