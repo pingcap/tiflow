@@ -17,7 +17,6 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -71,32 +70,27 @@ func TestZapErrorFilter(t *testing.T) {
 	)
 	for _, tc := range testCases {
 		require.EqualValues(t, ZapErrorFilter(tc.err, tc.filters...), tc.expected)
-		// c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
 	}
 }
 
-func TestTimeoutWarning(t *testing.T) {
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	rescueStdout := os.Stdout
-	r, w, err := os.Pipe()
+func TestWarnSlow(t *testing.T) {
+	file, err := ioutil.TempFile("", "TestWarnSlow")
 	require.Nil(t, err)
-	os.Stdout = w
+	defer os.Remove(file.Name())
 
 	cfg := &Config{
 		Level: defaultLogLevel,
+		File:  file.Name(),
 	}
 	err = InitLogger(cfg)
 	require.Nil(t, err)
 
 	func() {
-		defer TimeoutWarning(time.Now(), 1)
+		defer WarnSlow(time.Now(), 1)
 		time.Sleep(2 * time.Second)
 	}()
 
-	w.Close()
-	out, err := ioutil.ReadAll(r)
+	out, err := ioutil.ReadFile(file.Name())
 	require.Nil(t, err)
-	require.Contains(t, string(out), "TestTimeoutWarning")
-	os.Stdout = rescueStdout
+	require.Contains(t, string(out), "TestWarnSlow")
 }

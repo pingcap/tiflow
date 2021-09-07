@@ -72,7 +72,7 @@ func newScheduler() *scheduler {
 // Tick returns a bool representing whether the changefeed's state can be updated in this tick.
 // The state can be updated only if all the tables which should be listened to have been dispatched to captures and no operations have been sent to captures in this tick.
 func (s *scheduler) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool, err error) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), schedulerFuncRunWarnTime)
 	s.state = state
 	s.currentTables = currentTables
 	s.captures = captures
@@ -110,7 +110,7 @@ func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
 
 // handleMoveTableJob handles the move table job add be MoveTable function
 func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool, err error) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), schedulerFuncRunWarnTime)
 	shouldUpdateState = true
 	if len(s.moveTableJobQueue) == 0 {
 		return
@@ -151,7 +151,7 @@ func (s *scheduler) Rebalance() {
 }
 
 func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, error) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), schedulerFuncRunWarnTime)
 	table2CaptureIndex := make(map[model.TableID]model.CaptureID)
 	for captureID, taskStatus := range s.state.TaskStatuses {
 		for tableID := range taskStatus.Tables {
@@ -173,7 +173,7 @@ func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, err
 // dispatchToTargetCaptures sets the the TargetCapture of scheduler jobs
 // If the TargetCapture of a job is not set, it chooses a capture with the minimum workload and sets the TargetCapture to the capture.
 func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), schedulerFuncRunWarnTime)
 	workloads := make(map[model.CaptureID]uint64)
 
 	for captureID := range s.captures {
@@ -237,7 +237,7 @@ func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 // syncTablesWithCurrentTables iterates all current tables to check whether it should be listened or not.
 // this function will return schedulerJob to make sure all tables will be listened.
 func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), schedulerFuncRunWarnTime)
 	var pendingJob []*schedulerJob
 	allTableListeningNow, err := s.table2CaptureIndex()
 	if err != nil {
@@ -275,7 +275,7 @@ func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
 }
 
 func (s *scheduler) handleJobs(jobs []*schedulerJob) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), schedulerFuncRunWarnTime)
 	for _, job := range jobs {
 		job := job
 		s.state.PatchTaskStatus(job.TargetCapture, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
@@ -350,7 +350,7 @@ func (s *scheduler) shouldRebalance() bool {
 // rebalanceByTableNum removes tables from captures replicating an above-average number of tables.
 // the removed table will be dispatched again by syncTablesWithCurrentTables function
 func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
-	defer logutil.TimeoutWarning(time.Now(), schedulerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), schedulerFuncRunWarnTime)
 	totalTableNum := len(s.currentTables)
 	captureNum := len(s.captures)
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))

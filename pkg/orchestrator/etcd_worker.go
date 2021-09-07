@@ -201,7 +201,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
-	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), etcdWorkerFuncRunWarnTime)
 	if worker.isDeleteCounterKey(event.Kv.Key) {
 		switch event.Type {
 		case mvccpb.PUT:
@@ -237,7 +237,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 }
 
 func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
-	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), etcdWorkerFuncRunWarnTime)
 	resp, err := worker.client.Get(ctx, worker.prefix.String(), clientv3.WithPrefix())
 	if err != nil {
 		return errors.Trace(err)
@@ -275,7 +275,7 @@ func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 }
 
 func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]DataPatch) ([][]DataPatch, error) {
-	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), etcdWorkerFuncRunWarnTime)
 	for len(patchGroups) > 0 {
 		patches := patchGroups[0]
 		err := worker.applyPatches(ctx, patches)
@@ -288,7 +288,7 @@ func (worker *EtcdWorker) applyPatchGroups(ctx context.Context, patchGroups [][]
 }
 
 func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch) error {
-	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), etcdWorkerFuncRunWarnTime)
 	state := worker.cloneRawState()
 	changedSet := make(map[util.EtcdKey]struct{})
 	for _, patch := range patches {
@@ -352,7 +352,7 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 }
 
 func (worker *EtcdWorker) applyUpdates() error {
-	defer logutil.TimeoutWarning(time.Now(), etcdWorkerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), etcdWorkerFuncRunWarnTime)
 	for _, update := range worker.pendingUpdates {
 		err := worker.state.Update(update.key, update.value, false)
 		if err != nil {

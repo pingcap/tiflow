@@ -213,8 +213,8 @@ func initGRPCLogger(level zapcore.Level) error {
 	return nil
 }
 
-// TimeoutWarning warn if a func cost time more than timeLimit
-func TimeoutWarning(start time.Time, timeLimit time.Duration) {
+// WarnSlow warn if a func cost time more than timeLimit
+func WarnSlow(start time.Time, timeLimit time.Duration) {
 	dis := time.Since(start)
 	if dis > timeLimit {
 		pc, _, _, _ := runtime.Caller(1)

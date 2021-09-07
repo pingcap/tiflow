@@ -135,7 +135,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 }
 
 func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
-	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), changefeedFuncRunWarnTime)
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
@@ -183,6 +183,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) error {
+	defer logutil.WarnSlow(time.Now(), changefeedFuncRunWarnTime)
 	if c.initialized {
 		return nil
 	}
@@ -343,7 +344,7 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 }
 
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
-	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), changefeedFuncRunWarnTime)
 	barrierTp, barrierTs := c.barriers.Min()
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
 	switch barrierTp {
@@ -427,7 +428,7 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 }
 
 func (c *changefeed) updateStatus(barrierTs model.Ts) {
-	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), changefeedFuncRunWarnTime)
 	resolvedTs := barrierTs
 	for _, position := range c.state.TaskPositions {
 		if resolvedTs > position.ResolvedTs {
@@ -468,6 +469,6 @@ func (c *changefeed) updateStatus(barrierTs model.Ts) {
 }
 
 func (c *changefeed) Close() {
-	defer logutil.TimeoutWarning(time.Now(), changefeedFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), changefeedFuncRunWarnTime)
 	c.releaseResources()
 }

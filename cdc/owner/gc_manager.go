@@ -71,7 +71,7 @@ func newGCManager() *gcManager {
 }
 
 func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error {
-	defer logutil.TimeoutWarning(time.Now(), gcManagerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), gcManagerFuncRunWarnTime)
 	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
 		return nil
 	}
@@ -122,7 +122,7 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.Globa
 }
 
 func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error) {
-	defer logutil.TimeoutWarning(time.Now(), gcManagerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), gcManagerFuncRunWarnTime)
 	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
 		return m.pdPhysicalTimeCache, nil
 	}
@@ -136,7 +136,7 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 }
 
 func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
-	defer logutil.TimeoutWarning(time.Now(), gcManagerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), gcManagerFuncRunWarnTime)
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
 		pdTime, err := m.currentTimeFromPDCached(ctx)

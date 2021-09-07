@@ -105,7 +105,7 @@ func NewOwner4Test(
 
 // Tick implements the Reactor interface
 func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	defer logutil.TimeoutWarning(time.Now(), ownerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), ownerFuncRunWarnTime)
 	failpoint.Inject("owner-run-with-error", func() {
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
@@ -269,7 +269,7 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 }
 
 func (o *Owner) handleJobs() {
-	defer logutil.TimeoutWarning(time.Now(), ownerFuncRunWarnTime)
+	defer logutil.WarnSlow(time.Now(), ownerFuncRunWarnTime)
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
