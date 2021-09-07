@@ -16,6 +16,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/pingcap/ticdc/pkg/cmd/cli"
 	"github.com/pingcap/ticdc/pkg/cmd/redo"
 	"github.com/pingcap/ticdc/pkg/cmd/server"
 	"github.com/pingcap/ticdc/pkg/cmd/version"
@@ -39,6 +40,7 @@ func Run() {
 	cmd.SetOut(os.Stdout)
 
 	cmd.AddCommand(server.NewCmdServer())
+	cmd.AddCommand(cli.NewCmdCli())
 	cmd.AddCommand(version.NewCmdVersion())
 	cmd.AddCommand(redo.NewCmdRedo())
 
