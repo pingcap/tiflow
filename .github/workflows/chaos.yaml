@@ -139,6 +139,9 @@ jobs:
           echo "show pod"
           kubectl get pod -n playground
 
+          echo "show cdc log"
+          kubectl log cdc-0 -n playground
+
       - name: Create CDC changefeed
         run: |
           kubectl exec -i cdc-0 -n playground -- ./cdc cli changefeed create --pd=http://upstream-pd.playground.svc:2379 --sink-uri="mysql://root@downstream-tidb.playground.svc:4000/"
