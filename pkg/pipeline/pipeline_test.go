@@ -435,48 +435,6 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 	p.Wait()
 }
 
-type panicNode struct {
-}
-
-func (e panicNode) Init(ctx NodeContext) error {
-	panic("panic in panicNode")
-}
-
-func (e panicNode) Receive(ctx NodeContext) error {
-	return nil
-}
-
-func (e panicNode) Destroy(ctx NodeContext) error {
-	return nil
-}
-
-func (s *pipelineSuite) TestPipelinePanic(c *check.C) {
-	defer testleak.AfterTest(c)()
-	// why skip this test?
-	// this test is panic expected, but the panic is not happened at the main goroutine.
-	// so we can't recover the panic through the defer code block at the main goroutine.
-	// the c.ExpectFailure() is not warking cause the same reason.
-	c.Skip("this test should be panic")
-	defer func() {
-		panicInfo := recover().(string)
-		c.Assert(panicInfo, check.Equals, "panic in panicNode")
-	}()
-	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	ctx = context.WithErrorHandler(ctx, func(err error) error {
-		c.Fatal(err)
-		return err
-	})
-	ctx = context.WithErrorHandler(ctx, func(err error) error {
-		return nil
-	})
-	runnersSize, outputChannelSize := 1, 64
-	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
-	p.AppendNode(ctx, "panic", panicNode{})
-	p.Wait()
-}
-
 type forward struct {
 	ch chan Message
 }
