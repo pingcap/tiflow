@@ -95,7 +95,7 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
 		return nil
 	})
-	p := pipeline.NewPipeline(ctx, 0)
+	p := pipeline.NewPipeline(ctx, 0, defaultRunnersSize, defaultOutputChannelSize)
 	mounterNode := newMounterNode()
 	p.AppendNode(ctx, "mounter", mounterNode)
 
@@ -107,7 +107,7 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 	p.AppendNode(ctx, "check", checkNode)
 
 	var sentCount int64
-	sendMsg := func(p *pipeline.Pipeline, msg *pipeline.Message) {
+	sendMsg := func(p *pipeline.Pipeline, msg pipeline.Message) {
 		err := retry.Run(10*time.Millisecond, 100, func() error {
 			return p.SendToFirstNode(msg)
 		})
@@ -121,7 +121,7 @@ func (s *mounterNodeSuite) TestMounterNodeBasics(c *check.C) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < basicsTestMessageCount; i++ {
-			var msg *pipeline.Message
+			var msg pipeline.Message
 			if i%100 == 0 {
 				// generates a control message
 				msg = pipeline.TickMessage()
