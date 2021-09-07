@@ -106,7 +106,7 @@ func init() {
 
 	sinkIniterMap["dsgsocket"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return newDsgTestSink(ctx, opts), nil
+		return newDsgSink(ctx, opts), nil
 	}
 }
 
