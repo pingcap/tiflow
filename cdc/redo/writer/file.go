@@ -25,11 +25,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
@@ -286,10 +286,6 @@ func (w *Writer) close() error {
 
 func (w *Writer) getLogFileName() string {
 	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
-}
-
-func (w *Writer) getLogFileNameFormat() string {
-	return fmt.Sprintf("%s_%s_%s_%s_%s%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, "%d", w.cfg.FileType, "%d", common.LogEXT)
 }
 
 func (w *Writer) filePath() string {

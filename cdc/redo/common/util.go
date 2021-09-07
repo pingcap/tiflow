@@ -20,10 +20,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/backup"
+	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tidb/br/pkg/storage"
 )
 
 // InitS3storage init a storage used for s3,
@@ -34,7 +34,7 @@ func InitS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage
 	}
 
 	prefix := strings.Trim(s3URI.Path, "/")
-	s3 := &backup.S3{Bucket: s3URI.Host, Prefix: prefix}
+	s3 := &backuppb.S3{Bucket: s3URI.Host, Prefix: prefix}
 	options := &storage.BackendOptions{}
 	storage.ExtractQueryParameters(s3URI, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
@@ -43,8 +43,8 @@ func InitS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage
 
 	// we should set this to true, since br set it by default in parseBackend
 	s3.ForcePathStyle = true
-	backend := &backup.StorageBackend{
-		Backend: &backup.StorageBackend_S3{S3: s3},
+	backend := &backuppb.StorageBackend{
+		Backend: &backuppb.StorageBackend_S3{S3: s3},
 	}
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
