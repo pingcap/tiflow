@@ -8,13 +8,6 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-function apply_redo_log() {
-    # run_sql "truncate table consistent_replicate_local.USERTABLE;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    # run_sql "truncate table consistent_replicate_local.USERTABLE2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    cdc redo apply --dir="$WORK_DIR/cdc_data/redo" --storage="local" --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
-    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-}
-
 # check resolved ts has been persisted in redo log meta
 function check_resolved_ts() {
     changefeedid=$1
@@ -76,10 +69,11 @@ function run() {
     sleep 5
 
     current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-    ensure 20 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/cdc_data/redo
+    ensure 20 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/cdc_data/redo/$changefeed_id
     cleanup_process $CDC_BINARY
 
-    apply_redo_log $*
+    export GO_FAILPOINTS=''
+    cdc redo apply --dir="$WORK_DIR/cdc_data/redo/$changefeed_id" --storage="local" --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }
 
