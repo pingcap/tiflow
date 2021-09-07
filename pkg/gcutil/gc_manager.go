@@ -39,8 +39,8 @@ var gcSafepointUpdateInterval = 1 * time.Minute
 
 // GcManager is an interface for gc manager
 type GcManager interface {
-	// TryUpdateGCSafePoint tries update TiCDC service GC safepoint.
-	// GcManager may skip update when it thinks its too frequent.
+	// TryUpdateGCSafePoint tries to update TiCDC service GC safepoint.
+	// GcManager may skip update when it thinks it is too frequent.
 	// Set `forceUpdate` to force GcManager update.
 	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
 	CurrentTimeFromPDCached(ctx context.Context) (time.Time, error)

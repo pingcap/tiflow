@@ -58,7 +58,7 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, "changefeed2", TTL, 65)
 	c.Assert(err, check.IsNil)
 
-	s.pdCli.retryThreshold = serviceGCSafepointRetry + 1
+	s.pdCli.retryThreshold = gcServiceMaxRetries + 1
 	s.pdCli.retryCount = 0
 	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, "changefeed2", TTL, 65)
 	c.Assert(err, check.NotNil)

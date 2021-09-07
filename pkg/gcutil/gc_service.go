@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ const (
 	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-creating-"
 )
 
-// EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of Service-GC-Ts
-// and this function will update the service GC to startTs
+// EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
+// service GC safepoint and this function will update the service GC to startTs
 func EnsureChangefeedStartTsSafety(
 	ctx context.Context, pdCli pd.Client, changefeedID string, TTL int64, startTs uint64,
 ) error {
@@ -46,12 +46,12 @@ func EnsureChangefeedStartTsSafety(
 	return nil
 }
 
-// PD leader switch may happen, so just serviceGCSafepointRetry it.
+// PD leader switch may happen, so just gcServiceMaxRetries it.
 // The default PD election timeout is 3 seconds. Triple the timeout as
 // retry time to make sure PD leader can be elected during retry.
 const (
-	serviceGCSafepointBackoffDelay = 1000 // 1s
-	serviceGCSafepointRetry        = 9
+	gcServiceBackoffDelay = 1000 // 1s
+	gcServiceMaxRetries   = 9
 )
 
 // setServiceGCSafepoint set a service safepoint to PD.
@@ -66,8 +66,8 @@ func setServiceGCSafepoint(
 			}
 			return err
 		},
-		retry.WithBackoffBaseDelay(serviceGCSafepointBackoffDelay),
-		retry.WithMaxTries(serviceGCSafepointRetry),
+		retry.WithBackoffBaseDelay(gcServiceBackoffDelay),
+		retry.WithMaxTries(gcServiceMaxRetries),
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	return
 }
@@ -84,7 +84,7 @@ func RemoveServiceGCSafepoint(ctx context.Context, pdCli pd.Client, serviceID st
 			}
 			return err
 		},
-		retry.WithBackoffBaseDelay(serviceGCSafepointBackoffDelay), // 1s
-		retry.WithMaxTries(serviceGCSafepointRetry),
+		retry.WithBackoffBaseDelay(gcServiceBackoffDelay), // 1s
+		retry.WithMaxTries(gcServiceMaxRetries),
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }

@@ -67,7 +67,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	const ensureTTL = 60 * 60
 	if err := gcutil.EnsureChangefeedStartTsSafety(
 		ctx, capture.pdClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
-		if err != cerror.ErrStartTsBeforeGC {
+		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
 		}
 		return nil, err

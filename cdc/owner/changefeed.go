@@ -203,12 +203,16 @@ LOOP:
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 	if c.state.Info.Config.CheckGCSafePoint {
-		// Ensure TiDB GC safepoint does not exceed the checkpoint in the next
-		// 10 mintues.
+		// Check TiDB GC safepoint does not exceed the checkpoint.
 		//
-		// It is necessary to update TTL, because the service GC safepoint is
-		// set to 1 hour TTL during creating. We need to shrink the TTL to
-		// unblock TiDB GC.
+		// We update TTL to 10 mintues,
+		//  1. to delete the service GC safepoint effectively,
+		//  2. in case owner update TiCDC service GC safepoint fails.
+		//
+		// Also it unblocks TiDB GC, because the service GC safepoint is set to
+		// 1 hour TTL during creating changefeed.
+		//
+		// See more gcutil doc.
 		ensureTTL := int64(10 * 60)
 		err := gcutil.EnsureChangefeedStartTsSafety(
 			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
