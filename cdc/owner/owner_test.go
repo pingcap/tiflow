@@ -41,7 +41,7 @@ type mockManager struct {
 	gc.Manager
 }
 
-func (m *mockManager) checkStaleCheckpointTs(
+func (m *mockManager) CheckStaleCheckpointTs(
 	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
 	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
@@ -127,6 +127,8 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	// this will make changefeed always meet ErrGCTTLExceeded
 	mockedManager := &mockManager{Manager: owner.gcManager}
 	owner.gcManager = mockedManager
+	err = owner.gcManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
+	c.Assert(err, check.NotNil)
 
 	// this tick create remove changefeed patches
 	owner.EnqueueJob(removeJob)

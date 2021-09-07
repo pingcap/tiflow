@@ -58,13 +58,14 @@ const (
 func setServiceGCSafepoint(
 	ctx context.Context, pdCli pd.Client, serviceID string, TTL int64, safePoint uint64,
 ) (minServiceGCTs uint64, err error) {
-	retry.Do(ctx,
+	err = retry.Do(ctx,
 		func() error {
-			minServiceGCTs, err = pdCli.UpdateServiceGCSafePoint(ctx, serviceID, TTL, safePoint)
-			if err != nil {
-				log.Warn("Set GC safepoint failed, retry later", zap.Error(err))
+			var err1 error
+			minServiceGCTs, err1 = pdCli.UpdateServiceGCSafePoint(ctx, serviceID, TTL, safePoint)
+			if err1 != nil {
+				log.Warn("Set GC safepoint failed, retry later", zap.Error(err1))
 			}
-			return err
+			return err1
 		},
 		retry.WithBackoffBaseDelay(gcServiceBackoffDelay),
 		retry.WithMaxTries(gcServiceMaxRetries),
