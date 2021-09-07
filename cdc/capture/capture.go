@@ -16,6 +16,8 @@ package capture
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/p2p"
+	"github.com/pingcap/ticdc/pkg/security"
 	"io"
 	"sync"
 	"time"
@@ -58,6 +60,9 @@ type Capture struct {
 	kvStorage  tidbkv.Storage
 	etcdClient *kv.CDCEtcdClient
 	grpcPool   kv.GrpcPool
+
+	peerMessageServer *p2p.MessageServer
+	peerMessageRouter p2p.MessageRouter
 
 	cancel context.CancelFunc
 
@@ -165,7 +170,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(3)
+	wg.Add(4)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
@@ -187,6 +192,12 @@ func (c *Capture) run(stdCtx context.Context) error {
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
+	go func() {
+		defer wg.Done()
+		defer c.AsyncClose()
+		err := c.peerMessageServer.Run(ctx)
+
+	}
 	go func() {
 		defer wg.Done()
 		c.grpcPool.RecycleConn(ctx)
@@ -396,4 +407,9 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 		}
 	}
 	return nil, cerror.ErrOwnerNotFound.FastGenByArgs()
+}
+
+func (c *Capture) InitPeerMessaging(ctx context.Context, captureID model.CaptureID, credentials *security.Credential) {
+	c.peerMessageServer = p2p.NewMessageServer(p2p.SenderID(captureID))
+	c.peerMessageRouter = p2p.NewMessageRouter(p2p.SenderID(captureID), credentials)
 }
