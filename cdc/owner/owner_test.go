@@ -26,8 +26,8 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/gcutil"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -37,20 +37,20 @@ var _ = check.Suite(&ownerSuite{})
 type ownerSuite struct {
 }
 
-type mockGcManager struct {
-	gcutil.GcManager
+type mockManager struct {
+	gc.Manager
 }
 
-func (m *mockGcManager) checkStaleCheckpointTs(
+func (m *mockManager) checkStaleCheckpointTs(
 	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
 	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
 }
 
-var _ gcutil.GcManager = (*mockGcManager)(nil)
+var _ gc.Manager = (*mockManager)(nil)
 
 func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.GlobalReactorState, *orchestrator.ReactorStateTester) {
-	ctx.GlobalVars().PDClient = &gcutil.MockPDClient{
+	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
 		},
@@ -125,8 +125,8 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	}
 
 	// this will make changefeed always meet ErrGCTTLExceeded
-	mockedGcManager := &mockGcManager{GcManager: owner.gcManager}
-	owner.gcManager = mockedGcManager
+	mockedManager := &mockManager{Manager: owner.gcManager}
+	owner.gcManager = mockedManager
 
 	// this tick create remove changefeed patches
 	owner.EnqueueJob(removeJob)
@@ -266,9 +266,9 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 
 func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	defer testleak.AfterTest(c)()
-	mockPDClient := &gcutil.MockPDClient{}
+	mockPDClient := &gc.MockPDClient{}
 	o := NewOwner(mockPDClient)
-	o.gcManager = gcutil.NewGCManager(mockPDClient)
+	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	state := model.NewGlobalState().(*model.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
@@ -311,7 +311,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 			// set GC safepoint to (checkpointTs - 1)
 			c.Assert(safePoint, check.Equals, uint64(1))
-			c.Assert(serviceID, check.Equals, gcutil.CDCServiceSafePointID)
+			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
 			ch <- struct{}{}
 			return 0, nil
 		}
@@ -349,7 +349,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 			// set GC safepoint to (checkpointTs - 1)
 			c.Assert(safePoint, check.Equals, uint64(19))
-			c.Assert(serviceID, check.Equals, gcutil.CDCServiceSafePointID)
+			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
 			ch <- struct{}{}
 			return 0, nil
 		}

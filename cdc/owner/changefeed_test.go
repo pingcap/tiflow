@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/gcutil"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
@@ -108,12 +108,12 @@ type changefeedSuite struct {
 
 func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *model.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester) {
-	ctx.GlobalVars().PDClient = &gcutil.MockPDClient{
+	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
 		},
 	}
-	gcManager := gcutil.NewGCManager(ctx.GlobalVars().PDClient)
+	gcManager := gc.NewManager(ctx.GlobalVars().PDClient)
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {

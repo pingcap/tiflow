@@ -33,8 +33,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/gcutil"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	ticdcutil "github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
@@ -350,7 +350,7 @@ func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 	}
 	// Ensure the start ts is validate in the next 1 hour.
 	const ensureTTL = 60 * 60.
-	return gcutil.EnsureChangefeedStartTsSafety(
+	return gc.EnsureChangefeedStartTsSafety(
 		ctx, o.pdClient, o.changefeedID, ensureTTL, o.startTs)
 }
 

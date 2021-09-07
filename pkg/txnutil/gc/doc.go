@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package gcutil privodes TiDB GC related utilities.
+// Package gc privodes TiDB GC related utilities.
 //
 // Following graph shows how TiCDC manipulates GC safepoints.
 //
@@ -65,4 +65,4 @@
 //
 // TiCDC Owner removes the service GC safepoint after new changefeed checkpoint
 // is included in the "ticdc" service GC safepoint.
-package gcutil
+package gc

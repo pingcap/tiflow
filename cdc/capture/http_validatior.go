@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/gcutil"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -65,7 +65,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 
 	// Ensure the start ts is validate in the next 1 hour.
 	const ensureTTL = 60 * 60
-	if err := gcutil.EnsureChangefeedStartTsSafety(
+	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx, capture.pdClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)

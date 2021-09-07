@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gcutil
+package gc
 
 import (
 	"context"
@@ -37,11 +37,11 @@ const (
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
-// GcManager is an interface for gc manager
-type GcManager interface {
+// Manager is an interface for gc manager
+type Manager interface {
 	// TryUpdateGCSafePoint tries to update TiCDC service GC safepoint.
-	// GcManager may skip update when it thinks it is too frequent.
-	// Set `forceUpdate` to force GcManager update.
+	// Manager may skip update when it thinks it is too frequent.
+	// Set `forceUpdate` to force Manager update.
 	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
 	CurrentTimeFromPDCached(ctx context.Context) (time.Time, error)
 	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
@@ -61,8 +61,8 @@ type gcManager struct {
 	lastUpdatedPdTime   time.Time
 }
 
-// NewGCManager creates a new GcManager.
-func NewGCManager(pdClint pd.Client) GcManager {
+// NewManager creates a new Manager.
+func NewManager(pdClint pd.Client) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))

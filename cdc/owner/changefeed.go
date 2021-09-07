@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/gcutil"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/prometheus/client_golang/prometheus"
@@ -40,7 +40,7 @@ type changefeed struct {
 	scheduler        *scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        gcutil.GcManager
+	gcManager        gc.Manager
 
 	schema      *schemaWrap4Owner
 	sink        AsyncSink
@@ -69,7 +69,7 @@ type changefeed struct {
 	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager gcutil.GcManager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id:               id,
 		scheduler:        newScheduler(),
@@ -87,7 +87,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gcutil.GcManager) *changefee
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager gcutil.GcManager,
+	id model.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func(ctx cdcContext.Context) (AsyncSink, error),
 ) *changefeed {
@@ -212,9 +212,9 @@ LOOP:
 		// Also it unblocks TiDB GC, because the service GC safepoint is set to
 		// 1 hour TTL during creating changefeed.
 		//
-		// See more gcutil doc.
+		// See more gc doc.
 		ensureTTL := int64(10 * 60)
-		err := gcutil.EnsureChangefeedStartTsSafety(
+		err := gc.EnsureChangefeedStartTsSafety(
 			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)

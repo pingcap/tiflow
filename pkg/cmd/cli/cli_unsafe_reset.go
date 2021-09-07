@@ -18,7 +18,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
-	"github.com/pingcap/ticdc/pkg/gcutil"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 )
@@ -72,7 +72,7 @@ func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 
-	err = gcutil.RemoveServiceGCSafepoint(ctx, o.pdClient, gcutil.CDCServiceSafePointID)
+	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, gc.CDCServiceSafePointID)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -28,8 +28,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/gcutil"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -68,7 +68,7 @@ type ownerJob struct {
 type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
 
-	gcManager gcutil.GcManager
+	gcManager gc.Manager
 
 	ownerJobQueueMu sync.Mutex
 	ownerJobQueue   []*ownerJob
@@ -77,14 +77,14 @@ type Owner struct {
 
 	closed int32
 
-	newChangefeed func(id model.ChangeFeedID, gcManager gcutil.GcManager) *changefeed
+	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
 
 // NewOwner creates a new Owner
 func NewOwner(pdClient pd.Client) *Owner {
 	return &Owner{
 		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
-		gcManager:     gcutil.NewGCManager(pdClient),
+		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
 	}
@@ -97,7 +97,7 @@ func NewOwner4Test(
 	pdClient pd.Client,
 ) *Owner {
 	o := NewOwner(pdClient)
-	o.newChangefeed = func(id model.ChangeFeedID, gcManager gcutil.GcManager) *changefeed {
+	o.newChangefeed = func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
 	return o
@@ -122,7 +122,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
 	//
-	// See more gcutil doc.
+	// See more gc doc.
 	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
 		return nil, errors.Trace(err)
 	}

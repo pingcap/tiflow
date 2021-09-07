@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gcutil
+package gc
 
 import (
 	"context"
@@ -38,7 +38,7 @@ type gcManagerSuite struct {
 func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
-	gcManager := NewGCManager(mockPDClient).(*gcManager)
+	gcManager := NewManager(mockPDClient).(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 
 	startTs := oracle.GoTimeToTS(time.Now())
@@ -91,7 +91,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
-	gcManager := NewGCManager(mockPDClient).(*gcManager)
+	gcManager := NewManager(mockPDClient).(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.GlobalVars().PDClient = mockPDClient
 	t1, err := gcManager.CurrentTimeFromPDCached(ctx)
@@ -118,7 +118,7 @@ func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
-	gcManager := NewGCManager(mockPDClient).(*gcManager)
+	gcManager := NewManager(mockPDClient).(*gcManager)
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 	err := gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
