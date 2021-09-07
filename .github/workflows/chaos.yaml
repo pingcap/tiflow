@@ -140,7 +140,7 @@ jobs:
           kubectl get pod -n playground
 
           echo "show cdc log"
-          kubectl log cdc-0 -n playground
+          kubectl logs cdc-0 -n playground
 
       - name: Create CDC changefeed
         run: |
