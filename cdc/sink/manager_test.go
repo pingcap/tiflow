@@ -267,7 +267,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0, redo.NewDisabledManager())
 		}()
 	}
 	wg.Wait()
