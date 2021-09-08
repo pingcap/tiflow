@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
+	"github.com/pingcap/ticdc/cdc/redo/writer"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -43,13 +44,44 @@ func TestLogReader_ResetReader(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-ResetReader")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := &writer.FileWriterConfig{
+		MaxLogSize: 100000,
+		Dir:        dir,
+	}
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf100", time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
-	path := filepath.Join(dir, fileName)
-	f, err := os.Create(path)
+	w := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+		return fileName
+	}))
+	log := &model.RedoLog{
+		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
+	}
+	data, err := log.MarshalMsg(nil)
 	require.Nil(t, err)
+	_, err = w.Write(data)
+	require.Nil(t, err)
+	w.Close()
+
+	path := filepath.Join(dir, fileName)
+	f, err := os.Open(path)
+	require.Nil(t, err)
+
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf10", time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
+	w = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+		return fileName
+	}))
+	log = &model.RedoLog{
+		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
+	}
+	data, err = log.MarshalMsg(nil)
+	require.Nil(t, err)
+	_, err = w.Write(data)
+	require.Nil(t, err)
+	w.Close()
 	path = filepath.Join(dir, fileName)
-	f1, err := os.Create(path)
+	f1, err := os.Open(path)
 	require.Nil(t, err)
 
 	type arg struct {
@@ -136,9 +168,14 @@ func TestLogReader_ResetReader(t *testing.T) {
 			ddlReader: []fileReader{mockReader},
 			meta:      &common.LogMeta{CheckPointTs: tt.args.checkPointTs, ResolvedTs: tt.args.resolvedTs},
 		}
+
 		if tt.name == "context cancel" {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
+			tt.args.ctx = ctx
+		} else {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			tt.args.ctx = ctx
 		}
 		err := r.ResetReader(tt.args.ctx, tt.args.startTs, tt.args.endTs)
@@ -147,8 +184,8 @@ func TestLogReader_ResetReader(t *testing.T) {
 		} else {
 			require.Nil(t, err, tt.name)
 			mockReader.AssertNumberOfCalls(t, "Close", 2)
-			require.Equal(t, tt.rowFleName, r.rowReader[0].(*reader).fileName, tt.name)
-			require.Equal(t, tt.ddlFleName, r.ddlReader[0].(*reader).fileName, tt.name)
+			require.Equal(t, tt.rowFleName+common.SortLogEXT, r.rowReader[0].(*reader).fileName, tt.name)
+			require.Equal(t, tt.ddlFleName+common.SortLogEXT, r.ddlReader[0].(*reader).fileName, tt.name)
 			require.Equal(t, tt.wantStartTs, r.cfg.startTs, tt.name)
 			require.Equal(t, tt.wantEndTs, r.cfg.endTs, tt.name)
 

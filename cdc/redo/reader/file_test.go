@@ -14,6 +14,7 @@
 package reader
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -96,11 +97,42 @@ func TestReader_openSelectedFiles(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-openSelectedFiles")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := &writer.FileWriterConfig{
+		MaxLogSize: 100000,
+		Dir:        dir,
+	}
 	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
-	path := filepath.Join(dir, fileName)
-	f, err := os.Create(path)
+	w := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+		return fileName
+	}))
+	log := &model.RedoLog{
+		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
+	}
+	data, err := log.MarshalMsg(nil)
 	require.Nil(t, err)
+	_, err = w.Write(data)
+	require.Nil(t, err)
+	log = &model.RedoLog{
+		Row: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 10}},
+	}
+	data, err = log.MarshalMsg(nil)
+	require.Nil(t, err)
+	_, err = w.Write(data)
+	w.Close()
+	require.Nil(t, err)
+	path := filepath.Join(cfg.Dir, fileName)
+	f, err := os.Open(path)
+	require.Nil(t, err)
+
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf11", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
+	path = filepath.Join(dir, fileName)
+	_, err = os.Create(path)
+	require.Nil(t, err)
+
+	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf111", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT) + common.SortLogEXT
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
 	require.Nil(t, err)
@@ -176,19 +208,40 @@ func TestReader_openSelectedFiles(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		ret, err := openSelectedFiles(tt.args.dir, tt.args.fixedName, tt.args.startTs, tt.args.endTs)
+		ret, err := openSelectedFiles(ctx, tt.args.dir, tt.args.fixedName, tt.args.startTs, tt.args.endTs)
 		if !tt.wantErr {
 			require.Nil(t, err, tt.name)
-			require.Equal(t, len(ret), len(tt.wantRet), tt.name)
+			require.Equal(t, len(tt.wantRet), len(ret), tt.name)
 			for _, closer := range tt.wantRet {
+				name := closer.(*os.File).Name()
+				if filepath.Ext(name) != common.SortLogEXT {
+					name += common.SortLogEXT
+				}
 				contains := false
 				for _, r := range ret {
-					if r.(*os.File).Name() == closer.(*os.File).Name() {
+					if r.(*os.File).Name() == name {
 						contains = true
 						break
 					}
 				}
 				require.Equal(t, true, contains, tt.name)
+			}
+			var preTs uint64 = 0
+			for _, r := range ret {
+				r := &reader{
+					br:       bufio.NewReader(r),
+					fileName: r.(*os.File).Name(),
+					closer:   r,
+				}
+				for {
+					rl := &model.RedoLog{}
+					err := r.Read(rl)
+					if err == io.EOF {
+						break
+					}
+					require.Greater(t, rl.Row.Row.CommitTs, preTs, tt.name)
+					preTs = rl.Row.Row.CommitTs
+				}
 			}
 		} else {
 			require.NotNil(t, err, tt.name)

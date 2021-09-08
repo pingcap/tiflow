@@ -15,10 +15,12 @@ package reader
 
 import (
 	"bufio"
+	"container/heap"
 	"context"
 	"encoding/binary"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,6 +31,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
+	"github.com/pingcap/ticdc/cdc/redo/writer"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -86,7 +89,7 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 		}
 	}
 
-	rr, err := openSelectedFiles(cfg.dir, cfg.fileType, cfg.startTs, cfg.endTs)
+	rr, err := openSelectedFiles(ctx, cfg.dir, cfg.fileType, cfg.startTs, cfg.endTs)
 	if err != nil {
 		log.Panic("openSelectedFiles fail",
 			zap.Error(err),
@@ -152,36 +155,151 @@ func downLoadToLocal(ctx context.Context, dir string, s3storage storage.External
 	return eg.Wait()
 }
 
-func openSelectedFiles(dir, fixedType string, startTs, endTs uint64) ([]io.ReadCloser, error) {
+func openSelectedFiles(ctx context.Context, dir, fixedType string, startTs, endTs uint64) ([]io.ReadCloser, error) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", dir))
+	}
+
+	sortedFileList := map[string]bool{}
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == common.SortLogEXT {
+			sortedFileList[file.Name()] = false
+		}
 	}
 
 	logFiles := []io.ReadCloser{}
+	unSortedFile := []string{}
 	for _, f := range files {
-		ret, err := shouldOpen(startTs, endTs, f.Name(), fixedType)
+		name := f.Name()
+		ret, err := shouldOpen(startTs, endTs, name, fixedType)
 		if err != nil {
 			log.Warn("check selected log file fail",
-				zap.String("log file", f.Name()),
+				zap.String("log file", name),
 				zap.Error(err))
 			continue
 		}
 
 		if ret {
-			path := filepath.Join(dir, f.Name())
-			file, err := os.OpenFile(path, os.O_RDONLY, common.DefaultFileMode)
+			sortedName := name
+			if filepath.Ext(sortedName) != common.SortLogEXT {
+				sortedName += common.SortLogEXT
+			}
+			if opened, ok := sortedFileList[sortedName]; ok {
+				if opened {
+					continue
+				}
+			} else {
+				unSortedFile = append(unSortedFile, name)
+				continue
+			}
+			path := filepath.Join(dir, sortedName)
+			file, err := openReadFile(path)
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open redo logfile"))
 			}
 			logFiles = append(logFiles, file)
+			sortedFileList[sortedName] = true
 		}
+	}
+
+	sortFiles, err := createSortedFile(ctx, dir, unSortedFile)
+	if err != nil {
+		return nil, err
+	}
+	logFiles = append(logFiles, sortFiles...)
+	return logFiles, nil
+}
+
+func openReadFile(name string) (*os.File, error) {
+	return os.OpenFile(name, os.O_RDONLY, common.DefaultFileMode)
+}
+
+func readFile(file *os.File) (logHeap, error) {
+	r := &reader{
+		br:       bufio.NewReader(file),
+		fileName: file.Name(),
+		closer:   file,
+	}
+	defer r.Close()
+
+	h := logHeap{}
+	for {
+		rl := &model.RedoLog{}
+		err := r.Read(rl)
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+			break
+		}
+		h = append(h, &logWithIdx{data: rl})
+	}
+
+	return h, nil
+}
+
+func writFile(ctx context.Context, dir, name string, h logHeap) error {
+	cfg := &writer.FileWriterConfig{
+		Dir:        dir,
+		MaxLogSize: math.MaxInt32,
+	}
+	w := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
+	defer w.Close()
+
+	for h.Len() != 0 {
+		item := heap.Pop(&h).(*logWithIdx).data
+		data, err := item.MarshalMsg(nil)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMarshalFailed, err)
+		}
+		_, err = w.Write(data)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createSortedFile(ctx context.Context, dir string, names []string) ([]io.ReadCloser, error) {
+	logFiles := []io.ReadCloser{}
+
+	// TODO: go func
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		file, err := openReadFile(path)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open redo logfile"))
+		}
+
+		h, err := readFile(file)
+		if err != nil {
+			return nil, err
+		}
+
+		heap.Init(&h)
+		if h.Len() == 0 {
+			continue
+		}
+
+		sortFileName := name + common.SortLogEXT
+		err = writFile(ctx, dir, sortFileName, h)
+		if err != nil {
+			return nil, err
+		}
+
+		file, err = openReadFile(filepath.Join(dir, sortFileName))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open redo logfile"))
+		}
+		logFiles = append(logFiles, file)
 	}
 
 	return logFiles, nil
 }
 
 func shouldOpen(startTs, endTs uint64, name, fixedType string) (bool, error) {
+	// .sort.tmp will return error
 	commitTs, fileType, err := common.ParseLogFileName(name)
 	if err != nil {
 		return false, err
@@ -229,7 +347,7 @@ func (r *reader) Read(redoLog *model.RedoLog) error {
 			// just return io.EOF, since if torn write it is the last redoLog entry
 			return io.EOF
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 
 	// point last valid offset to the end of redoLog

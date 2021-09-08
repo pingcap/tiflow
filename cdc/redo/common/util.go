@@ -65,6 +65,12 @@ func ParseLogFileName(name string) (uint64, string, error) {
 		return 0, DefaultMetaFileType, nil
 	}
 
+	// if .sort, the name should be like
+	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), LogEXT)+SortLogEXT
+	if ext == SortLogEXT {
+		name = strings.TrimSuffix(name, SortLogEXT)
+		ext = filepath.Ext(name)
+	}
 	if ext != LogEXT && ext != TmpEXT {
 		return 0, "", nil
 	}

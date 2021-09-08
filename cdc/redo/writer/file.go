@@ -93,9 +93,26 @@ type FileWriterConfig struct {
 	S3URI             *url.URL
 }
 
+// Option ...
+type Option func(writer *writerOptions)
+
+type writerOptions struct {
+	getLogFileName func() string
+}
+
+// WithLogFileName ...
+func WithLogFileName(f func() string) Option {
+	return func(o *writerOptions) {
+		if f != nil {
+			o.getLogFileName = f
+		}
+	}
+}
+
 // Writer is a redo log event Writer which writes redo log events to a file.
 type Writer struct {
 	cfg *FileWriterConfig
+	op  *writerOptions
 	// maxCommitTS is the max commitTS among the events in one log file
 	maxCommitTS atomic.Uint64
 	// the ts used in file name
@@ -113,7 +130,7 @@ type Writer struct {
 }
 
 // NewWriter ... TODO: extract to a common rotate Writer
-func NewWriter(ctx context.Context, cfg *FileWriterConfig) *Writer {
+func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) *Writer {
 	if cfg == nil {
 		log.Panic("FileWriterConfig can not be nil")
 		return nil
@@ -133,8 +150,13 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig) *Writer {
 		}
 	}
 
+	op := &writerOptions{}
+	for _, opt := range opts {
+		opt(op)
+	}
 	w := &Writer{
 		cfg:       cfg,
+		op:        op,
 		uint64buf: make([]byte, 8),
 	}
 
@@ -285,11 +307,10 @@ func (w *Writer) close() error {
 }
 
 func (w *Writer) getLogFileName() string {
+	if w.op != nil && w.op.getLogFileName != nil {
+		return w.op.getLogFileName()
+	}
 	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
-}
-
-func (w *Writer) getLogFileNameFormat() string {
-	return fmt.Sprintf("%s_%s_%s_%s_%s%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, "%d", w.cfg.FileType, "%d", common.LogEXT)
 }
 
 func (w *Writer) filePath() string {
