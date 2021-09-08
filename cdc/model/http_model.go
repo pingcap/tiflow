@@ -66,6 +66,7 @@ type ChangefeedCommonInfo struct {
 
 // MarshalJSON use to marshal ChangefeedCommonInfo
 func (c ChangefeedCommonInfo) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
 	type Alias ChangefeedCommonInfo
 	if c.FeedState == StateNormal {
 		c.RunningError = nil
@@ -96,6 +97,7 @@ type ChangefeedDetail struct {
 
 // MarshalJSON use to marshal ChangefeedDetail
 func (c ChangefeedDetail) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
 	type Alias ChangefeedDetail
 	if c.FeedState == StateNormal {
 		c.RunningError = nil
