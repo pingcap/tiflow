@@ -17,11 +17,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/p2p"
-	"github.com/pingcap/ticdc/pkg/security"
+	"google.golang.org/grpc"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -35,6 +35,8 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/p2p"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	pd "github.com/tikv/pd/client"
@@ -64,6 +66,8 @@ type Capture struct {
 
 	peerMessageServer *p2p.MessageServer
 	peerMessageRouter p2p.MessageRouter
+	grpcListener      net.Listener
+	grpcServer        *grpc.Server
 
 	cancel context.CancelFunc
 
@@ -72,12 +76,14 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient) *Capture {
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, grpcListener net.Listener) *Capture {
 	return &Capture{
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
 		etcdClient: etcdClient,
 		cancel:     func() {},
+
+		grpcListener: grpcListener,
 
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
@@ -176,9 +182,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 	}()
 
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
+	wg.Add(5)
 	// TODO refactor error handling here, probably using errgroup.
-	var ownerErr, processorErr, messageServerErr error
+	var ownerErr, processorErr, messageServerErr, grpcServerErr error
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
@@ -207,6 +213,13 @@ func (c *Capture) run(stdCtx context.Context) error {
 	}()
 	go func() {
 		defer wg.Done()
+		defer c.AsyncClose()
+		grpcServer := grpc.NewServer()
+		grpcServerErr = grpcServer.Serve(c.grpcListener)
+		log.Info("grpc server has exited", zap.Error(grpcServerErr))
+	}()
+	go func() {
+		defer wg.Done()
 		c.grpcPool.RecycleConn(ctx)
 	}()
 	wg.Wait()
@@ -218,6 +231,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 	}
 	if messageServerErr != nil {
 		return errors.Annotate(messageServerErr, "message server exited with error")
+	}
+	if grpcServerErr != nil {
+		return errors.Annotate(grpcServerErr, "grpc server exited with error")
 	}
 	return nil
 }

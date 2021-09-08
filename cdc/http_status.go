@@ -37,7 +37,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *Server) startStatusHTTP() error {
+func (s *Server) startStatusHTTP(ln net.Listener) error {
 	router := newRouter(s.capture)
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
@@ -65,8 +65,6 @@ func (s *Server) startStatusHTTP() error {
 	}
 
 	s.statusServer = &http.Server{Addr: conf.Addr, Handler: router, TLSConfig: tlsConfig}
-
-	ln, err := net.Listen("tcp", conf.Addr)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrServeHTTP, err)
 	}

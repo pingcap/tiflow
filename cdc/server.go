@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/soheilhy/cmux"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/logutil"
@@ -58,6 +60,7 @@ type Server struct {
 	etcdClient   *kv.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
+	grpcListener net.Listener
 }
 
 // NewServer creates a Server instance.
@@ -170,11 +173,21 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
-
-	err = s.startStatusHTTP()
+	ln, err := net.Listen("tcp", conf.Addr)
 	if err != nil {
-		return err
+		return errors.Trace(err)
+	}
+
+	// TODO refactor the use of listeners and the management of the server goroutines.
+	mux := cmux.New(ln)
+	s.grpcListener = mux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	httpLn := mux.Match(cmux.Any())
+
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcListener)
+
+	err = s.startStatusHTTP(httpLn)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	return s.run(ctx)
