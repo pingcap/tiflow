@@ -414,7 +414,7 @@ func (l *LogWriter) flushLogMeta() error {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 
-	err = os.MkdirAll(l.cfg.Dir, defaultDirMode)
+	err = os.MkdirAll(l.cfg.Dir, common.DefaultDirMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
