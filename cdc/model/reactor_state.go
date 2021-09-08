@@ -83,7 +83,9 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		}
 
 		log.Info("remote capture online", zap.String("capture-id", k.CaptureID), zap.Any("info", newCaptureInfo))
-		s.updateCaptureFn(k.CaptureID, newCaptureInfo.AdvertiseAddr)
+		if s.updateCaptureFn != nil {
+			s.updateCaptureFn(k.CaptureID, newCaptureInfo.AdvertiseAddr)
+		}
 		s.Captures[k.CaptureID] = &newCaptureInfo
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,
