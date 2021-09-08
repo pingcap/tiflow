@@ -15,10 +15,11 @@ package p2p
 
 import (
 	"context"
+	"sync"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type MessageRouter interface {

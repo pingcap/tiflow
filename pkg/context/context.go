@@ -15,9 +15,10 @@ package context
 
 import (
 	"context"
-	"github.com/pingcap/ticdc/pkg/p2p"
 	"log"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/p2p"
 
 	"github.com/pingcap/ticdc/pkg/version"
 

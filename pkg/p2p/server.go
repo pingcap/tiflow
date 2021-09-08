@@ -16,10 +16,11 @@ package p2p
 import (
 	"context"
 	"encoding/json"
-	"github.com/pingcap/failpoint"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/pingcap/failpoint"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -245,10 +246,9 @@ func (m *MessageServer) AddHandler(
 			return nil
 		}
 
-		if lastAck != 0 && Seq(entry.Sequence) > lastAck + 1 {
+		if lastAck != 0 && Seq(entry.Sequence) > lastAck+1 {
 			log.Panic("seq is skipped. Bug?", zap.Int64("last-ack", int64(lastAck)))
 		}
-
 
 		m.acksMapLock.Unlock()
 
@@ -339,7 +339,6 @@ func (m *MessageServer) registerPeer(
 	streamMeta *p2p.StreamMeta,
 	sender *streamSender,
 	clientIP string) error {
-
 	log.Info("peer connection received",
 		zap.String("sender-id", streamMeta.GetSenderId()),
 		zap.String("addr", clientIP),

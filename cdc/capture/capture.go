@@ -16,11 +16,12 @@ package capture
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/p2p"
-	"github.com/pingcap/ticdc/pkg/security"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/p2p"
+	"github.com/pingcap/ticdc/pkg/security"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -195,7 +196,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, c.MakeGlobalEtcdStateWithCaptureChangeEventHandler(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	go func() {
@@ -268,7 +269,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
 		owner := c.newOwner()
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ctx, owner, c.MakeGlobalEtcdStateWithCaptureChangeEventHandler(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -423,4 +424,14 @@ func (c *Capture) InitPeerMessaging(captureID model.CaptureID, credentials *secu
 	c.peerMessageRouter = p2p.NewMessageRouter(p2p.SenderID(captureID), credentials)
 }
 
-
+func (c *Capture) MakeGlobalEtcdStateWithCaptureChangeEventHandler() *model.GlobalReactorState {
+	ret := model.NewGlobalState()
+	ret.SetUpdateCaptureFn(func(id model.CaptureID, addr string) {
+		if addr == "" {
+			c.peerMessageRouter.RemoveSenderID(p2p.SenderID(id))
+			return
+		}
+		c.peerMessageRouter.AddSenderID(p2p.SenderID(id), addr)
+	})
+	return ret
+}

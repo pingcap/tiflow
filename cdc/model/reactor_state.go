@@ -39,7 +39,7 @@ type GlobalReactorState struct {
 }
 
 // NewGlobalState creates a new global state
-func NewGlobalState() orchestrator.ReactorState {
+func NewGlobalState() *GlobalReactorState {
 	return &GlobalReactorState{
 		Owner:       map[string]struct{}{},
 		Captures:    make(map[CaptureID]*CaptureInfo),

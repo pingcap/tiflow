@@ -16,12 +16,13 @@ package p2p
 import (
 	"context"
 	"fmt"
-	"go.uber.org/zap"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -58,7 +59,7 @@ func newServerForIntegrationTesting(t *testing.T, serverID string) (server *Mess
 	return
 }
 
-func runP2PIntegrationTest(ctx context.Context, t* testing.T, size int, numTopics int) {
+func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopics int) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -116,7 +117,7 @@ func runP2PIntegrationTest(ctx context.Context, t* testing.T, size int, numTopic
 
 	var wg1 sync.WaitGroup
 	wg1.Add(numTopics)
-	for j := 0; j < numTopics; j++{
+	for j := 0; j < numTopics; j++ {
 		topicName := fmt.Sprintf("test-topic-%d", j)
 		go func() {
 			defer wg1.Done()
@@ -218,7 +219,6 @@ func TestMessageClientRestartMultiTopics(t *testing.T) {
 	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 32)
 }
 
-
 func TestMessageClientBasicNonblocking(t *testing.T) {
 	defer testleak.AfterTestT(t)()
 
@@ -276,9 +276,9 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 		require.Eventually(t, func() bool {
 			seq, err = client.TrySendMessage(ctx, "test-topic-1", content)
 			return !cerrors.ErrPeerMessageSendTryAgain.Equal(err)
-		}, time.Second * 5, time.Millisecond * 10)
+		}, time.Second*5, time.Millisecond*10)
 		require.NoError(t, err)
-		require.Equal(t, oldSeq + 1, seq)
+		require.Equal(t, oldSeq+1, seq)
 		oldSeq = seq
 	}
 
@@ -288,7 +288,7 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 			return false
 		}
 		return seq >= defaultMessageBatchSizeSmall
-	}, time.Second * 10, time.Millisecond * 20)
+	}, time.Second*10, time.Millisecond*20)
 
 	cancel()
 	wg.Wait()

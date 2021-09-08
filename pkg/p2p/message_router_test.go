@@ -138,7 +138,7 @@ func TestMessageRouterBasic(t *testing.T) {
 	for i := 0; i < defaultMessageBatchSizeLarge; i++ {
 		serverIdx := i % 3
 		serverID := fmt.Sprintf("server-%d", serverIdx+1)
-		Seq, err := suite.messageRouter.GetClient(SenderID(serverID)).SendMessage(ctx, "test-topic", &testTopicContent{int64(i / 3)+1})
+		Seq, err := suite.messageRouter.GetClient(SenderID(serverID)).SendMessage(ctx, "test-topic", &testTopicContent{int64(i/3) + 1})
 		require.NoError(t, err)
 		lastSeq[serverIdx] = Seq
 	}
@@ -149,7 +149,7 @@ func TestMessageRouterBasic(t *testing.T) {
 			return false
 		}
 		return seq >= lastSeq[0]
-	}, time.Second * 10, time.Millisecond * 20)
+	}, time.Second*10, time.Millisecond*20)
 
 	require.Eventually(t, func() bool {
 		seq, ok := suite.messageRouter.GetClient("server-2").CurrentAck("test-topic")
@@ -157,7 +157,7 @@ func TestMessageRouterBasic(t *testing.T) {
 			return false
 		}
 		return seq >= lastSeq[1]
-	}, time.Second * 10, time.Millisecond * 20)
+	}, time.Second*10, time.Millisecond*20)
 
 	require.Eventually(t, func() bool {
 		seq, ok := suite.messageRouter.GetClient("server-3").CurrentAck("test-topic")
@@ -165,7 +165,7 @@ func TestMessageRouterBasic(t *testing.T) {
 			return false
 		}
 		return seq >= lastSeq[2]
-	}, time.Second * 10, time.Millisecond * 20)
+	}, time.Second*10, time.Millisecond*20)
 
 	suite.close()
 	suite.wait()
@@ -217,7 +217,7 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 				return false
 			}
 			return seq >= lastSeq
-		}, time.Second * 10, time.Millisecond * 20)
+		}, time.Second*10, time.Millisecond*20)
 	}()
 
 	wg.Add(1)
