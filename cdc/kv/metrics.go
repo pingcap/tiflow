@@ -50,7 +50,7 @@ var (
 			Name:      "event_size_bytes",
 			Help:      "Size of KV events.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
-		}, []string{"capture"})
+		}, []string{"capture", "type"})
 	pullEventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -78,7 +78,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "region_token",
 			Help:      "size of region token in kv client",
-		}, []string{"store", "changefeed"})
+		}, []string{"store", "changefeed", "capture"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

@@ -1351,7 +1351,8 @@ func (s *eventFeedSession) singleEventFeed(
 ) (lastResolvedTs uint64, initialized bool, err error) {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricEventSize := eventSize.WithLabelValues(captureAddr)
+	metricReceivedEventSize := eventSize.WithLabelValues(captureAddr, "received")
+	metricDroppedEventSize := eventSize.WithLabelValues(captureAddr, "dropped")
 	metricPullEventInitializedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_INITIALIZED.String(), captureAddr, changefeedID)
 	metricPullEventCommittedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMITTED.String(), captureAddr, changefeedID)
 	metricPullEventCommitCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureAddr, changefeedID)
@@ -1460,7 +1461,7 @@ func (s *eventFeedSession) singleEventFeed(
 		var revent model.RegionFeedEvent
 		lastReceivedEventTime = time.Now()
 		if event.changeEvent != nil {
-			metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
+			metricReceivedEventSize.Observe(float64(event.changeEvent.Event.Size()))
 			switch x := event.changeEvent.Event.(type) {
 			case *cdcpb.Event_Entries_:
 				for _, entry := range x.Entries.GetEntries() {
@@ -1471,6 +1472,7 @@ func (s *eventFeedSession) singleEventFeed(
 					comparableKey := regionspan.ToComparableKey(entry.GetKey())
 					// key for initialized event is nil
 					if !regionspan.KeyInSpan(comparableKey, span) && entry.Type != cdcpb.Event_INITIALIZED {
+						metricDroppedEventSize.Observe(float64(entry.Size()))
 						continue
 					}
 					switch entry.Type {

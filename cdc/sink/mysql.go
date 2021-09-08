@@ -960,6 +960,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
 		})
+		failpoint.Inject("MySQLSinkHang", func() {
+			<-ctx.Done()
+			failpoint.Return(nil)
+		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(ctx, nil)

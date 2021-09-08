@@ -18,6 +18,7 @@ import (
 	"net/url"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/redo/reader"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -89,7 +91,7 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 }
 
 func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
-	resolvedTs, checkpointTs, err := ra.rd.ReadMeta(ctx)
+	checkpointTs, resolvedTs, err := ra.rd.ReadMeta(ctx)
 	if err != nil {
 		return err
 	}
@@ -97,6 +99,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	log.Info("apply redo log starts", zap.Uint64("checkpoint-ts", checkpointTs), zap.Uint64("resolved-ts", resolvedTs))
 
 	// MySQL sink will use the following replication config
 	// - EnableOldValue: default true
@@ -142,19 +145,19 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				}
 				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
 			}
-			cachedRows = append(cachedRows, redoLog.Row)
+			cachedRows = append(cachedRows, redo.LogToRow(redoLog))
 			if redoLog.Row.CommitTs > lastResolvedTs {
 				lastSafeResolvedTs, lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
 			}
-		}
-		err = s.EmitRowChangedEvents(ctx, cachedRows...)
-		if err != nil {
-			return err
 		}
 		_, err = s.FlushRowChangedEvents(ctx, lastSafeResolvedTs)
 		if err != nil {
 			return err
 		}
+	}
+	err = s.EmitRowChangedEvents(ctx, cachedRows...)
+	if err != nil {
+		return err
 	}
 	_, err = s.FlushRowChangedEvents(ctx, resolvedTs)
 	if err != nil {
@@ -175,6 +178,15 @@ func createRedoReaderImpl(ctx context.Context, cfg *RedoApplierConfig) (reader.R
 		return nil, err
 	}
 	return redo.NewRedoReader(ctx, cfg.Storage, readerCfg)
+}
+
+// ReadMeta creates a new redo applier and read meta from reader
+func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resolvedTs uint64, err error) {
+	rd, err := createRedoReader(ctx, ra.cfg)
+	if err != nil {
+		return 0, 0, err
+	}
+	return rd.ReadMeta(ctx)
 }
 
 // Apply applies redo log to given target

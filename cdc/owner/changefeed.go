@@ -247,8 +247,9 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
+	stdCtx := util.PutChangefeedIDInCtx(cancelCtx, c.id)
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
-	redoManager, err := redo.NewManager(cancelCtx, c.state.Info.Config.Consistent, redoManagerOpts)
+	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
 	}
@@ -472,6 +473,7 @@ func (c *changefeed) updateStatus(ctx context.Context, barrierTs model.Ts) error
 		if err != nil {
 			return err
 		}
+		log.Debug("flush redo log meta", zap.Uint64("resolved-ts", resolvedTs), zap.Uint64("checkpoint-ts", checkpointTs))
 	}
 
 	phyTs := oracle.ExtractPhysical(checkpointTs)

@@ -109,7 +109,8 @@ func (rsm *regionStateManager) delState(regionID uint64) {
 
 type regionWorkerMetrics struct {
 	// kv events related metrics
-	metricEventSize                   prometheus.Observer
+	metricReceivedEventSize           prometheus.Observer
+	metricDroppedEventSize            prometheus.Observer
 	metricPullEventInitializedCounter prometheus.Counter
 	metricPullEventPrewriteCounter    prometheus.Counter
 	metricPullEventCommitCounter      prometheus.Counter
@@ -182,7 +183,8 @@ func (w *regionWorker) initMetrics(ctx context.Context) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	metrics := &regionWorkerMetrics{}
-	metrics.metricEventSize = eventSize.WithLabelValues(captureAddr)
+	metrics.metricReceivedEventSize = eventSize.WithLabelValues(captureAddr, "received")
+	metrics.metricDroppedEventSize = eventSize.WithLabelValues(captureAddr, "dropped")
 	metrics.metricPullEventInitializedCounter = pullEventCounter.WithLabelValues(cdcpb.Event_INITIALIZED.String(), captureAddr, changefeedID)
 	metrics.metricPullEventCommittedCounter = pullEventCounter.WithLabelValues(cdcpb.Event_COMMITTED.String(), captureAddr, changefeedID)
 	metrics.metricPullEventCommitCounter = pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureAddr, changefeedID)
@@ -400,7 +402,7 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 	var err error
 	event.state.lock.Lock()
 	if event.changeEvent != nil {
-		w.metrics.metricEventSize.Observe(float64(event.changeEvent.Event.Size()))
+		w.metrics.metricReceivedEventSize.Observe(float64(event.changeEvent.Event.Size()))
 		switch x := event.changeEvent.Event.(type) {
 		case *cdcpb.Event_Entries_:
 			err = w.handleEventEntry(ctx, x, event.state)
@@ -639,6 +641,7 @@ func (w *regionWorker) handleEventEntry(
 		comparableKey := regionspan.ToComparableKey(entry.GetKey())
 		// key for initialized event is nil
 		if !regionspan.KeyInSpan(comparableKey, state.sri.span) && entry.Type != cdcpb.Event_INITIALIZED {
+			w.metrics.metricDroppedEventSize.Observe(float64(entry.Size()))
 			continue
 		}
 		switch entry.Type {

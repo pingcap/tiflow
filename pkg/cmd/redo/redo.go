@@ -32,7 +32,7 @@ func newOptions() *options {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&o.logLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
+	cmd.Flags().StringVar(&o.logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
 }
 
 // NewCmdRedo creates the `redo` command.
@@ -55,6 +55,7 @@ func NewCmdRedo() *cobra.Command {
 
 	// Add subcommands.
 	cmds.AddCommand(newCmdApply())
+	cmds.AddCommand(newCmdMeta())
 
 	return cmds
 }

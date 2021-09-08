@@ -61,7 +61,7 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	s.pdCli.retryCount = 0
 	err = CheckSafetyOfStartTs(ctx, s.pdCli, "changefeed2", 65)
 	c.Assert(err, check.NotNil)
-	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 8")
+	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 8: not pd leader")
 
 	s.pdCli.retryThresh = 3
 	s.pdCli.retryCount = 0
