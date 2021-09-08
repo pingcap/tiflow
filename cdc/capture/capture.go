@@ -180,6 +180,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		}
 		cancel()
 	}()
+	c.grpcServer = grpc.NewServer()
 
 	wg := new(sync.WaitGroup)
 	wg.Add(5)
@@ -214,8 +215,8 @@ func (c *Capture) run(stdCtx context.Context) error {
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
-		grpcServer := grpc.NewServer()
-		grpcServerErr = grpcServer.Serve(c.grpcListener)
+
+		grpcServerErr = c.grpcServer.Serve(c.grpcListener)
 		log.Info("grpc server has exited", zap.Error(grpcServerErr))
 	}()
 	go func() {
@@ -388,6 +389,9 @@ func (c *Capture) AsyncClose() {
 	}
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
+	}
+	if c.grpcServer != nil {
+		c.grpcServer.Stop()
 	}
 }
 
