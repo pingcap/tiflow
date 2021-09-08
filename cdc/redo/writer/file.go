@@ -44,8 +44,6 @@ const (
 )
 
 const (
-	defaultDirMode = 0o755
-
 	defaultFlushIntervalInMs = 1000
 )
 
@@ -322,7 +320,7 @@ func openTruncFile(name string) (*os.File, error) {
 }
 
 func (w *Writer) openNew() error {
-	err := os.MkdirAll(w.cfg.Dir, defaultDirMode)
+	err := os.MkdirAll(w.cfg.Dir, common.DefaultDirMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}

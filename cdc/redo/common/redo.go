@@ -32,6 +32,8 @@ const (
 
 	// DefaultFileMode ...
 	DefaultFileMode = 0o644
+	// DefaultDirMode ...
+	DefaultDirMode = 0o755
 )
 
 const (

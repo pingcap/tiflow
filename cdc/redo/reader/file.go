@@ -146,6 +146,10 @@ func downLoadToLocal(ctx context.Context, dir string, s3storage storage.External
 				return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 			}
 
+			err = os.MkdirAll(dir, common.DefaultDirMode)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+			}
 			path := filepath.Join(dir, f)
 			err = ioutil.WriteFile(path, data, common.DefaultFileMode)
 			return cerror.WrapError(cerror.ErrRedoFileOp, err)
