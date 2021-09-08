@@ -3300,11 +3300,6 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	srv1 := newMockChangeDataService(c, ch1)
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
 	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
-		defer func() {
-			close(ch1)
-			server1.Stop()
-			server1Stopped <- struct{}{}
-		}()
 		for {
 			_, err := server.Recv()
 			if err != nil {
@@ -3313,6 +3308,11 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 			}
 		}
 	}
+	defer func() {
+		close(ch1)
+		server1.Stop()
+		server1Stopped <- struct{}{}
+	}()
 
 	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
