@@ -39,8 +39,8 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/kvproto v0.0.0-20210806074406-317f69fb54b4
 	github.com/pingcap/log v0.0.0-20210818144256-6455d4a4c6f9
-	github.com/pingcap/parser v0.0.0-20210819101755-48d84c1db428
-	github.com/pingcap/tidb v1.1.0-beta.0.20210825080806-0f459efafd8a
+	github.com/pingcap/parser v0.0.0-20210831085004-b5390aa83f65
+	github.com/pingcap/tidb v1.1.0-beta.0.20210907130457-cd8fb24c5f7e
 	github.com/pingcap/tidb-tools v5.0.3+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
@@ -50,8 +50,8 @@ require (
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
-	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20210824090536-16d902a3c7e5
-	github.com/tikv/pd v1.1.0-beta.0.20210818082359-acba1da0018d
+	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20210831090540-391fcd842dc8
+	github.com/tikv/pd v1.1.0-beta.0.20210818112400-0c5667766690
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
