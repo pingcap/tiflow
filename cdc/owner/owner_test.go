@@ -53,7 +53,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
 	})
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := model.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// set captures
