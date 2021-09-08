@@ -15,6 +15,7 @@ package context
 
 import (
 	"context"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"log"
 	"time"
 
@@ -33,11 +34,12 @@ import (
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-	PDClient    pd.Client
-	KVStorage   tidbkv.Storage
-	CaptureInfo *model.CaptureInfo
-	EtcdClient  *kv.CDCEtcdClient
-	GrpcPool    kv.GrpcPool
+	PDClient      pd.Client
+	KVStorage     tidbkv.Storage
+	CaptureInfo   *model.CaptureInfo
+	EtcdClient    *kv.CDCEtcdClient
+	GrpcPool      kv.GrpcPool
+	MessageRouter p2p.MessageRouter
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline

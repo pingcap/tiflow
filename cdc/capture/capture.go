@@ -151,12 +151,16 @@ func (c *Capture) Run(ctx context.Context) error {
 }
 
 func (c *Capture) run(stdCtx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	c.InitPeerMessaging(c.info.ID, conf.Security)
+
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:    c.pdClient,
-		KVStorage:   c.kvStorage,
-		CaptureInfo: c.info,
-		EtcdClient:  c.etcdClient,
-		GrpcPool:    c.grpcPool,
+		PDClient:      c.pdClient,
+		KVStorage:     c.kvStorage,
+		CaptureInfo:   c.info,
+		EtcdClient:    c.etcdClient,
+		GrpcPool:      c.grpcPool,
+		MessageRouter: c.peerMessageRouter,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -169,9 +173,11 @@ func (c *Capture) run(stdCtx context.Context) error {
 		}
 		cancel()
 	}()
+
 	wg := new(sync.WaitGroup)
 	wg.Add(4)
-	var ownerErr, processorErr error
+	// TODO refactor error handling here, probably using errgroup.
+	var ownerErr, processorErr, messageServerErr error
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
@@ -195,9 +201,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
-		err := c.peerMessageServer.Run(ctx)
-
-	}
+		messageServerErr = c.peerMessageServer.Run(ctx)
+		log.Info("message server has exited", zap.Error(messageServerErr))
+	}()
 	go func() {
 		defer wg.Done()
 		c.grpcPool.RecycleConn(ctx)
@@ -208,6 +214,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 	}
 	if processorErr != nil {
 		return errors.Annotate(processorErr, "processor exited with error")
+	}
+	if messageServerErr != nil {
+		return errors.Annotate(messageServerErr, "message server exited with error")
 	}
 	return nil
 }
@@ -409,7 +418,9 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 	return nil, cerror.ErrOwnerNotFound.FastGenByArgs()
 }
 
-func (c *Capture) InitPeerMessaging(ctx context.Context, captureID model.CaptureID, credentials *security.Credential) {
+func (c *Capture) InitPeerMessaging(captureID model.CaptureID, credentials *security.Credential) {
 	c.peerMessageServer = p2p.NewMessageServer(p2p.SenderID(captureID))
 	c.peerMessageRouter = p2p.NewMessageRouter(p2p.SenderID(captureID), credentials)
 }
+
+

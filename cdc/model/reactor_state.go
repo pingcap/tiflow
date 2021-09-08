@@ -32,6 +32,10 @@ type GlobalReactorState struct {
 	Captures       map[CaptureID]*CaptureInfo
 	Changefeeds    map[ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]orchestrator.DataPatch
+
+	// updateCaptureFn is called when the membership of the cluster changes.
+	// An empty addr implies that a capture has been removed.
+	updateCaptureFn func(id CaptureID, addr string)
 }
 
 // NewGlobalState creates a new global state
@@ -41,6 +45,10 @@ func NewGlobalState() orchestrator.ReactorState {
 		Captures:    make(map[CaptureID]*CaptureInfo),
 		Changefeeds: make(map[ChangeFeedID]*ChangefeedReactorState),
 	}
+}
+
+func (s *GlobalReactorState) SetUpdateCaptureFn(f func(id CaptureID, addr string)) {
+	s.updateCaptureFn = f
 }
 
 // Update implements the ReactorState interface
@@ -61,6 +69,9 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
 			log.Info("remote capture offline", zap.String("capture-id", k.CaptureID))
+			if s.updateCaptureFn != nil {
+				s.updateCaptureFn(k.CaptureID, "")
+			}
 			delete(s.Captures, k.CaptureID)
 			return nil
 		}
@@ -72,6 +83,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		}
 
 		log.Info("remote capture online", zap.String("capture-id", k.CaptureID), zap.Any("info", newCaptureInfo))
+		s.updateCaptureFn(k.CaptureID, newCaptureInfo.AdvertiseAddr)
 		s.Captures[k.CaptureID] = &newCaptureInfo
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,
