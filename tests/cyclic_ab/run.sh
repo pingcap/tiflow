@@ -71,7 +71,7 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 1 \
-        --cyclic-sync-ddl false \
+        --cyclic-sync-ddl=false \
         --config $CUR/conf/only_test_simple.toml
 
     for i in $(seq 11 20); do {

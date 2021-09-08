@@ -123,7 +123,7 @@ function run() {
         --key=$TLS_DIR/client-key.pem \
         --cyclic-replica-id 3 \
         --cyclic-filter-replica-ids 1 \
-        --cyclic-sync-ddl false \
+        --cyclic-sync-ddl=false \
         --config $CUR/conf/changefeed.toml
 
     for i in $(seq 6 15); do {
