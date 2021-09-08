@@ -11,24 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package model
 
-import (
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/p2p"
-)
-
-type schedulerV2 struct {
-	state         *model.ChangefeedReactorState
-	messageServer *p2p.MessageServer
-	messageRouter p2p.MessageRouter
-}
-
-func (s *schedulerV2) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) {
-}
-
-func (s *schedulerV2) MoveTable(tableID model.TableID, target model.CaptureID) {
-}
-
-func (s *schedulerV2) Rebalance() {
+type TableOperationMessage struct {
+	ID         TableID `json:"id"`
+	IsDelete   bool    `json:"is-delete"`
+	BoundaryTs Ts      `json:"boundary-ts"`
 }

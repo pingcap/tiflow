@@ -61,6 +61,7 @@ type Server struct {
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 	grpcListener net.Listener
+	mux          cmux.CMux
 }
 
 // NewServer creates a Server instance.
@@ -179,9 +180,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	// TODO refactor the use of listeners and the management of the server goroutines.
-	mux := cmux.New(ln)
-	s.grpcListener = mux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
-	httpLn := mux.Match(cmux.Any())
+	s.mux = cmux.New(ln)
+	s.grpcListener = s.mux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	httpLn := s.mux.Match(cmux.Any())
 
 	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcListener)
 
@@ -255,6 +256,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return kv.RunWorkerPool(cctx)
+	})
+
+	wg.Go(func() error {
+		return s.mux.Serve()
 	})
 
 	return wg.Wait()
