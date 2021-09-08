@@ -71,7 +71,7 @@ func (c *column) FromSinkColumn(col *model.Column) {
 		case string:
 			str = col.Value.(string)
 		default:
-			log.Panic("invalid column value, please report a bug", zap.Any("col", c))
+			log.Panic("invalid column value, please report a bug", zap.Any("col", col))
 		}
 		if c.Flag.IsBinary() {
 			str = strconv.Quote(str)
