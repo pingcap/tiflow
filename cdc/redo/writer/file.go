@@ -294,6 +294,7 @@ func (w *Writer) close() error {
 
 	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
 	w.commitTS.Store(w.maxCommitTS.Load())
+	// TODO: rename in s3
 	err = os.Rename(w.file.Name(), w.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

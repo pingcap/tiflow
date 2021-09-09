@@ -352,6 +352,12 @@ func (l *LogWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) 
 	l.metaLock.RLock()
 	defer l.metaLock.RUnlock()
 
+	// need to make sure all data received got saved already
+	err := l.rowWriter.Flush()
+	if err != nil {
+		return nil, err
+	}
+
 	ret := map[int64]uint64{}
 	for i := 0; i < len(tableIDs); i++ {
 		id := tableIDs[i]
