@@ -26,7 +26,7 @@ import (
 )
 
 // newDsgTestSink creates a block hole sink
-func newDsgSink(ctx context.Context, opts map[string]string) *dsgSocketSink {
+func newDsgTestSink(ctx context.Context, opts map[string]string) *dsgSocketSink {
 	return &dsgSocketSink{
 		statistics: NewStatistics(ctx, "dsgsocket", opts),
 	}
