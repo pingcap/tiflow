@@ -17,6 +17,9 @@ import (
 	//"bufio"
 	"context"
 	"fmt"
+	"github.com/pingcap/ticdc/cdc/sink/socket"
+	"github.com/pingcap/ticdc/cdc/sink/vo"
+
 	//"net"
 	"sync/atomic"
 
@@ -62,35 +65,8 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 	for _, row := range rows {
 		log.Debug("dsgSocketSink: EmitRowChangedEvents", zap.Any("row", row))
-
-
-		/*for _, column := range row.Columns {
-			columnName := column.Name
-			columnValue := model.ColumnValueString(column.Value)
-			//fmt.Println(value)
-			conn, err := net.Dial("tcp", ":2300")
-			if err != nil {
-				log.Fatal("",zap.Any("err", err))
-			}
-
-			fmt.Fprintf(conn, "columnName:"+columnName+":::columnValue:"+columnValue+"\n")
-			res, err := bufio.NewReader(conn).ReadString('\n')
-			if err != nil {
-				log.Fatal("",zap.Any("err", err))
-			}
-
-			fmt.Println(string(res))
-			//fmt.Fprintf(conn, value+"\n")
-
-			conn.Close()
-
-
-		}*/
-
-
 	}
 
-	///////////////////////////////////////////////////////////////////////////////
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>======================================================================================>>>>>>>>>>>>>>>>>>>")
 	var eventTypeValue int32
 	var schemaName string
@@ -119,33 +95,44 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 	for _, row := range rows {
 		log.Info("show::::::::::::::::::::::::::::: row", zap.Any("row", row))
+		rowInfos := make([]*vo.RowInfos, 0);
 
-		//解析数据为json字符串
-		rowdata := &RowJson{}
+		rowdata := new(vo.RowInfos)
+
+		columnInfos  :=make([]*vo.ColumnVo,0);
+		//rowdata := &vo.RowInfos{}
+		//rowdata := make([]*vo.RowInfos, 0);
 		if eventTypeValue == 2 {
 			//insert
-			rowdata = getRowData(0, row.Columns, rowdata)
+			columnInfos = getColumnInfos(0, row.Columns)
 		} else if eventTypeValue == 4 {
 			//delete
-			rowdata = getRowData(0, row.PreColumns, rowdata)
+			columnInfos = getColumnInfos(0, row.PreColumns)
 		} else if eventTypeValue == 3 {
 			//update
 			//after
-			rowdata = getRowData(0, row.Columns, rowdata)
+			columnInfos = getColumnInfos(0, row.Columns)
 			//before
-			rowdata = getRowData(1, row.PreColumns, rowdata)
+			columnInfos = getColumnInfos(1, row.PreColumns)
 
 		}
-
-
+		rowdata.StartTimer = int64(row.StartTs)
+		rowdata.CommitTimer = int64(row.CommitTs)
+		rowdata.ColumnNo = int32(len(columnInfos))
 		rowdata.SchemaName = schemaName
 		rowdata.TableName = tableName
-		fmt.Println("show rowdata1 ：：：：：：：：：：：：：：", rowdata)
+		rowdata.OperType = eventTypeValue
+		rowdata.ColumnList = columnInfos
 
-		log.Info("show rowdata ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowdata))
+		rowInfos = append(rowInfos,rowdata)
+		fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
+
+		log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
+
 		//send
+		socket.JddmClient("10.0.0.72",19850,rowInfos)
 
-		sender(rowdata)
+	    //sender(rowdata)
 
 	}
 
@@ -154,6 +141,26 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 	atomic.AddUint64(&b.accumulated, uint64(rowsCount))
 	b.statistics.AddRowsCount(rowsCount)
 	return nil
+}
+
+
+func getColumnInfos(colFlag int, columns []*model.Column) []*vo.ColumnVo {
+	//rowdata := &vo.RowInfos{}
+	columnInfos :=make([]*vo.ColumnVo,0);
+
+	for _, column := range columns {
+		columnVo := new(vo.ColumnVo)
+
+		columnVo.ColumnName = column.Name
+		columnVo.ColumnValue = model.ColumnValueString(column.Value)
+		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()
+		columnVo.ColumnType = column.Type
+		fmt.Println("column.Value:::::",column.Value)
+		fmt.Println("IsPrimaryKey:::::",column.Flag.IsPrimaryKey())
+		columnInfos = append(columnInfos,columnVo)
+
+	}
+	return columnInfos
 }
 
 func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
@@ -243,7 +250,7 @@ func getRowData(colFlag int32, columns []*model.Column, json *RowJson) *RowJson 
 		//columnBuilder.ColValue = model.ColumnValueString(column.Value, column.Flag)
 		//columnBuilder.ColType = &column.Type
 		fmt.Println("column.Value:::::",column.Value)
-		fmt.Println("columnBuilder.ColValue:::::",columnBuilder.ColValue)
+		fmt.Println("IsPrimaryKey:::::",column.Flag.IsPrimaryKey())
 		columnBuilder.ColFlags = &colFlag
 		//columnBuilder.ColType = &column.Type
 		rowdata.Columns = append(rowdata.Columns,columnBuilder)
