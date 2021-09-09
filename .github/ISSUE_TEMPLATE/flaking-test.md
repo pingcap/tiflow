@@ -15,7 +15,7 @@ name: Flaking Test about: Report flaky tests or jobs in TiCDC CI labels: compone
 
 #### Anything else we need to know:
 
-- In which branch?
+- Does this test exist for other branches as well?
 - Has there been a high frequency of failure lately?
 
 <!-- Please link this report to https://github.com/pingcap/ticdc/issues/2246 as a subtask. -->
