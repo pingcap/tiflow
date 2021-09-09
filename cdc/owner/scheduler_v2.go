@@ -14,21 +14,85 @@
 package owner
 
 import (
+	"context"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 type schedulerV2 struct {
 	state         *model.ChangefeedReactorState
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
+
+	tableToCaptureMap map[model.TableID]*tableRecord
+
+	changefeedID model.ChangeFeedID
 }
 
-func (s *schedulerV2) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) {
+type tableStatus = int32
+
+const (
+	addingTable = tableStatus(iota)
+	removingTable
+	runningTable
+)
+
+type tableRecord struct {
+	capture model.CaptureID
+	status  tableStatus
+}
+
+func (s *schedulerV2) Tick(state *model.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) error {
+	shouldReplicateTableSet := make(map[model.TableID]struct{})
+	for _, tableID := range currentTables {
+		shouldReplicateTableSet[tableID] = struct{}{}
+	}
+
+	for tableID := range shouldReplicateTableSet {
+		_, ok := s.tableToCaptureMap[tableID]
+		if ok {
+			continue
+		}
+		// table not found
+		// if s.dispatchTable(tableID, "", false)
+	}
+	return nil
 }
 
 func (s *schedulerV2) MoveTable(tableID model.TableID, target model.CaptureID) {
 }
 
 func (s *schedulerV2) Rebalance() {
+}
+
+func (s *schedulerV2) dispatchTable(tableID model.TableID, target model.CaptureID, isDelete bool) (bool, error) {
+	client := s.messageRouter.GetClient(p2p.SenderID(target))
+	if client == nil {
+		log.Warn("No gRPC client to send to capture", zap.String("capture-id", target))
+		return false, nil
+	}
+
+	_, err := client.TrySendMessage(context.Background(), model.DispatchTableTopic(s.changefeedID), &model.DispatchTableMessage {
+		ID: tableID,
+		IsDelete: isDelete,
+		BoundaryTs: s.state.Status.CheckpointTs,
+	})
+	if err != nil {
+		if cerrors.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
+		}
+		return false, errors.Trace(err)
+	}
+
+	return true, nil
+}
+
+func (s *schedulerV2) findTargetCapture() (model.CaptureID, bool) {
+	// TODO
+	return "", false
 }

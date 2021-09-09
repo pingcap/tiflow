@@ -13,8 +13,17 @@
 
 package model
 
-type TableOperationMessage struct {
+import (
+	"fmt"
+	"github.com/pingcap/ticdc/pkg/p2p"
+)
+
+type DispatchTableMessage struct {
 	ID         TableID `json:"id"`
 	IsDelete   bool    `json:"is-delete"`
 	BoundaryTs Ts      `json:"boundary-ts"`
+}
+
+func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
+	return p2p.Topic(fmt.Sprintf("dispatch/%s", changefeedID))
 }
