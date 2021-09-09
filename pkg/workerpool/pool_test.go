@@ -115,7 +115,6 @@ func (s *workerPoolSuite) TestTimerError(c *check.C) {
 func (s *workerPoolSuite) TestMultiError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
 
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	errg, ctx := errgroup.WithContext(ctx)
@@ -134,7 +133,7 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
-				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				c.Assert(err, check.ErrorMatches, "context canceled")
 			}
 		}
 		return nil
