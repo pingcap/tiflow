@@ -642,6 +642,41 @@ func TestServerSingleClientReconnection(t *testing.T) {
 	wg.Wait()
 }
 
+func TestServerClosed(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	cctx, cancelServer := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(cctx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	client, closeClient := newClient()
+	defer closeClient()
+
+	stream, err := client.SendMessage(ctx)
+	require.NoError(t, err)
+	cancelServer()
+
+	var clientErr error
+	require.Eventually(t, func() bool {
+		_, clientErr = stream.Recv()
+		return clientErr != nil
+	}, time.Second * 1, time.Millisecond * 10)
+	require.Regexp(t, ".*CDC capture closing.*", clientErr.Error())
+
+	wg.Wait()
+}
+
 func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 	defer testleak.AfterTestT(t)()
 

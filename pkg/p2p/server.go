@@ -16,13 +16,15 @@ package p2p
 import (
 	"context"
 	"encoding/json"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/workerpool"
@@ -56,6 +58,9 @@ type MessageServer struct {
 
 	taskQueue chan interface{}
 	pool      workerpool.WorkerPool
+
+	isRunning int32
+	closeCh   chan struct{}
 }
 
 type taskOnMessageBatch struct {
@@ -95,12 +100,19 @@ func NewMessageServer(serverID SenderID) *MessageServer {
 		acksMap:         make(map[SenderID]map[Topic]Seq),
 		taskQueue:       make(chan interface{}, maxPendingTaskCount),
 		pool:            workerpool.NewDefaultWorkerPool(workerPoolSize),
+		closeCh:         make(chan struct{}),
 	}
 }
 
 // Run starts the MessageServer's worker goroutines.
 // It must be running to provide the gRPC service.
 func (m *MessageServer) Run(ctx context.Context) error {
+	atomic.StoreInt32(&m.isRunning, 1)
+	defer func() {
+		atomic.StoreInt32(&m.isRunning, 0)
+		close(m.closeCh)
+	}()
+
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		return errors.Trace(m.run(ctx))
@@ -406,7 +418,7 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	sendCh := make(chan p2p.SendMessageResponse, sendChSize)
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
-	errg, ctx := errgroup.WithContext(stream.Context())
+	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
 		sender := &streamSender{
@@ -446,7 +458,16 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 		}
 	})
 
-	return errg.Wait()
+	select {
+	case <-ctx.Done():
+		return status.New(codes.Canceled, "context canceled").Err()
+	case <-m.closeCh:
+		return status.New(codes.Aborted, "CDC capture closing").Err()
+	}
+
+	// NB: `errg` will NOT be waited on because due to the limitation of grpc-go, we cannot cancel Send & Recv
+	// with contexts, and the only reliable way to cancel these operations is to return the gRPC call handler,
+	// namely this function.
 }
 
 func (m *MessageServer) receive(ctx context.Context, stream p2p.CDCPeerToPeer_SendMessageServer, sender *streamSender) error {

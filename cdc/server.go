@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/p2p"
+	p2p_pb "github.com/pingcap/ticdc/proto/p2p"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/capture"
@@ -65,6 +67,7 @@ type Server struct {
 	grpcListener net.Listener
 	tcpListener  net.Listener
 	mux          cmux.CMux
+	grpcServer   *p2p.ResettableServer
 }
 
 // NewServer creates a Server instance.
@@ -77,6 +80,7 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 
 	s := &Server{
 		pdEndpoints: pdEndpoints,
+		grpcServer:  p2p.NewResettableServer(),
 	}
 	return s, nil
 }
@@ -245,6 +249,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg, cctx := errgroup.WithContext(ctx)
 
+	server := grpc.NewServer()
+	p2p_pb.RegisterCDCPeerToPeerServer(server, s.grpcServer)
+
 	wg.Go(func() error {
 		return s.capture.Run(cctx)
 	})
@@ -268,7 +275,12 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		<-cctx.Done()
+		server.Stop()
 		return errors.Trace(s.tcpListener.Close())
+	})
+
+	wg.Go(func() error {
+		return errors.Trace(server.Serve(s.grpcListener))
 	})
 
 	return wg.Wait()

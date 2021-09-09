@@ -21,8 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -44,6 +42,7 @@ import (
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
