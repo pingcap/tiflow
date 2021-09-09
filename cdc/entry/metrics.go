@@ -38,7 +38,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "mounter",
 			Name:      "total_rows_count",
-			Help:      "total count of rows",
+			Help:      "The total count of rows that are processed by mounter",
 		}, []string{"capture", "changefeed"})
 )
 

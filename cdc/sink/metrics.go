@@ -69,7 +69,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "total_rows_count",
-			Help:      "total count of rows",
+			Help:      "The total count of rows that are processed by sink",
 		}, []string{"capture", "changefeed"})
 	totalFlushedRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -99,7 +99,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "table_sink_total_rows_count",
-			Help:      "total count of rows",
+			Help:      "The total count of rows that are processed by table sink",
 		}, []string{"capture", "changefeed"})
 
 	bufferSinkTotalRowsCountCounter = prometheus.NewCounterVec(
@@ -107,7 +107,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "buffer_sink_total_rows_count",
-			Help:      "total count of rows",
+			Help:      "The total count of rows that are processed by buffer sink",
 		}, []string{"capture", "changefeed"})
 )
 

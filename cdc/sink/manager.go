@@ -45,6 +45,8 @@ type Manager struct {
 
 	drawbackChan chan drawbackMsg
 
+	captureAddr               string
+	changefeedID              model.ChangeFeedID
 	metricsTableSinkTotalRows prometheus.Counter
 }
 
@@ -59,6 +61,8 @@ func NewManager(
 		checkpointTs:              checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
+		captureAddr:               captureAddr,
+		changefeedID:              changefeedID,
 		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
 	}
 }
@@ -82,6 +86,7 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
+	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	return m.backendSink.Close(ctx)
 }
 
@@ -218,6 +223,9 @@ type bufferSink struct {
 	bufferMu     sync.Mutex
 	flushTsChan  chan uint64
 	drawbackChan chan drawbackMsg
+
+	captureAddr  string
+	changefeedID model.ChangeFeedID
 }
 
 func newBufferSink(
@@ -246,6 +254,12 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
 	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
 	metricTotalRows := bufferSinkTotalRowsCountCounter.WithLabelValues(advertiseAddr, changefeedID)
+	defer func() {
+		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "Flush")
+		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "EmitRow")
+		bufferChanSizeGauge.DeleteLabelValues(advertiseAddr, changefeedID)
+		bufferSinkTotalRowsCountCounter.DeleteLabelValues(advertiseAddr, changefeedID)
+	}()
 	for {
 		select {
 		case <-ctx.Done():
