@@ -131,14 +131,9 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 
 	errg.Go(func() error {
 		for i := 0; i < 10; i++ {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
-				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				c.Assert(err, check.ErrorMatches, ".*(ErrWorkerPoolHandleCancelled|context canceled).*")
 			}
 		}
 		return nil
