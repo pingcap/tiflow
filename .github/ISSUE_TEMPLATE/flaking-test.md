@@ -9,7 +9,7 @@ name: Flaking Test about: Report flaky tests or jobs in TiCDC CI labels: compone
 
 #### Which test(s) are flaking:
 
-#### Jenkins Or GitHub Actions link:
+#### Jenkins logs or GitHub Actions link:
 
 #### Reason for failure:
 
