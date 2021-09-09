@@ -51,7 +51,7 @@ type SliceMock struct {
 }
 
 
-func JddmClient(hostIpAddress string, hostPort int,rowInfos []*vo.RowInfos){
+func JddmDDLClient(hostIpAddress string, hostPort int,ddlInfos []*vo.DDLInfos){
 
 	fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
 	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
@@ -101,14 +101,111 @@ func JddmClient(hostIpAddress string, hostPort int,rowInfos []*vo.RowInfos){
 	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
 	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
 
-    /*** ***
-    _, err = conn.Write(clientSendArr)
+
+
+	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",ddlInfos)
+	//=============================================
+	/***
+	row1 := new(vo.RowInfos)
+	row1.SchemaName = "dsg_test1123456789"
+	row1.TableName = "tbl_pk"
+	row1.ColumnNo=2
+
+	columnInfos2 :=make([]*vo.ColumnVo,0);
+	columnVo2 := new(vo.ColumnVo)
+	columnVo2.ColumnName =" column_1"
+	columnVo2.ColumnValue = "row_2_column_1 -> Value_01"
+
+	columnInfos2 = append(columnInfos2,columnVo2)
+
+	columnVo3 := new(vo.ColumnVo)
+	columnVo3.ColumnName =" column_2"
+	columnVo3.ColumnValue = "row_2_column_2 -> Value_02"
+	columnInfos2 = append(columnInfos2,columnVo3)
+
+	row1.ColumnList = columnInfos2;
+	rowInfos = append(rowInfos,row1)
+	//createBytesFromRowInfoList(rowInfos);
+	***/
+
+	_, err = conn.Write(createBytesFromDDLInfoList(ddlInfos))
     if err != nil {
 		return
 	}
-	***/
 
-    /*rowInfoVo:= vo.CreateRowInfo();
+	// 声明链表
+	l := list.New()
+	// 数据添加到尾部
+	l.PushBack(4)
+	l.PushBack(5)
+	l.PushBack(6)
+
+	// 遍历
+	for e := l.Front(); e != nil; e = e.Next() {
+	     fmt.Printf("%v\n", e.Value)
+	}
+
+}
+
+
+func JddmClient(hostIpAddress string, hostPort int,rowInfos []*vo.RowInfos){
+
+	fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
+	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
+
+	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)
+
+	conn, err := net.Dial("tcp", serverAddress)
+	if err != nil {
+		fmt.Println("Error dialing", err.Error())
+		return
+	}
+
+	//serviceNum := 1742
+	//// 前4bytes消息长度
+	//lengthArr := make([]byte,4)
+
+
+	//serviceNumArr := publicUtils.IntTo2Bytes(serviceNum)
+	//tradCodeArr := publicUtils.IntTo2Bytes(113)
+	// 4-8bytes服务号和主次命令
+	//verifyArr := make([]byte,4)
+	verifyArr := make([]byte,4)
+	//serviceNumArr := make([]byte,4)
+
+	verifyArr[0] = 0x06
+	verifyArr[1] = 0xce
+	verifyArr[2] = 0x01
+	verifyArr[3] = 0x13
+	//serviceNumArr = intTo4Bytes(serviceNum)
+	//fmt.Printf(" %s \n",publicUtils.BytestoHex(verifyArr))
+	//verifyArr[0] := 0x06;
+	//verifyArr[1] := 0xCE;
+
+	//校验码
+	//verifyArr[2] := 0x01;
+	//verifyArr[3] := 0x13;
+
+	defer conn.Close()
+
+
+	sendMsg :=" Connect Server Test  !";
+	clientSendArr := make([]byte,8+len(sendMsg))
+	lengthArr := publicUtils.IntegerToBytes(len(sendMsg));
+	//fmt.Printf(" %s \n",publicUtils.BytestoHex(lengthArr))
+	publicUtils.BlockByteArrCopy([]byte(lengthArr),0,clientSendArr,0,len(lengthArr))
+	publicUtils.BlockByteArrCopy([]byte(verifyArr),0,clientSendArr,4,len(verifyArr))
+	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
+	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
+
+	/*** ***
+	    _, err = conn.Write(clientSendArr)
+	    if err != nil {
+			return
+		}
+		***/
+
+	/*rowInfoVo:= vo.CreateRowInfo();
 
 	rowInfoVo.SetOwnerName("dsg_test1123456789");
 	rowInfoVo.SetTableName("tbl_pk");
@@ -179,7 +276,7 @@ func JddmClient(hostIpAddress string, hostPort int,rowInfos []*vo.RowInfos){
 	***/
 
 	_, err = conn.Write(createBytesFromRowInfoList(rowInfos))
-    if err != nil {
+	if err != nil {
 		return
 	}
 
@@ -192,24 +289,14 @@ func JddmClient(hostIpAddress string, hostPort int,rowInfos []*vo.RowInfos){
 
 	// 遍历
 	for e := l.Front(); e != nil; e = e.Next() {
-	     fmt.Printf("%v\n", e.Value)
+		fmt.Printf("%v\n", e.Value)
 	}
 
-	//vo.rowInfoToBytes(rowInfoVo);
-	//rowInfoToBytes_ByInterFace(rowInfoVo);
-	/*** *** *** *** *** ***
-	Len := unsafe.Sizeof(*rowInfoVo)
-	testBytes := &SliceMock{
-		len:  int(Len),
-		addr: uintptr(unsafe.Pointer(rowInfoVo)),
-
-	}
-	data := *(*[]byte)(unsafe.Pointer(testBytes))
-	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(data))
-	//fmt.Println("[]byte is : ", data)
-	***/
 
 }
+
+
+
 
 func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
@@ -273,6 +360,76 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 }
 
+func createBytesFromDDLInfoList(rowInfos []*vo.DDLInfos) []byte{
+
+
+
+	//var buffer bytes.Buffer
+	//colsArr = make([]byte,0)
+	fmt.Printf(" rowCount = %d\n", len(rowInfos))
+
+
+	verifyArr := make([]byte,4)
+	//serviceNumArr := make([]byte,4)
+
+	verifyArr[0] = 0x06
+	verifyArr[1] = 0xce
+	verifyArr[2] = 0x01
+	verifyArr[3] = 0x12
+
+	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
+	sendBatchRowsArr :=new(bytes.Buffer)
+	for _, rowInfo := range rowInfos {
+
+		//当前时间戳
+		t1 := time.Now().Unix()  //1564552562
+		fmt.Println(t1)
+
+		fmt.Println(rowInfo.TableName+"::::"+rowInfo.SchemaName)
+
+		buffer.Write(publicUtils.LongToBytes(t1))
+		buffer.Write(publicUtils.LongToBytes(t1))
+
+		buffer.Write(publicUtils.IntegerToBytes(2))
+
+		operTypeArr := make([]byte,4)
+		operTypeArr[3]=byte('I')
+		buffer.Write(operTypeArr)
+		schemaNameArr := make([]byte,1+len(rowInfo.SchemaName))
+		publicUtils.BlockByteArrCopy([]byte(rowInfo.SchemaName),0,schemaNameArr,0,len(rowInfo.SchemaName))
+		buffer.Write(schemaNameArr)
+		tableNameArr := make([]byte,1+len(rowInfo.TableName))
+		publicUtils.BlockByteArrCopy([]byte(rowInfo.TableName),0,tableNameArr,0,len(rowInfo.TableName))
+		buffer.Write(tableNameArr)
+
+
+		for _,col2 := range rowInfo.TableInfoList {
+			fmt.Println("value:"+col2.ColumnName+"::name::"+col2.ColumnName)
+			fmt.Println("ColumnType:",col2.ColumnType)
+
+			buffer.Write(colVoToByte(col2))
+		}
+
+		for _,col2 := range rowInfo.PreTableInfoList {
+			fmt.Println("value:"+col2.ColumnName+"::name::"+col2.ColumnName)
+			fmt.Println("ColumnType:",col2.ColumnType)
+
+			buffer.Write(colVoToByte(col2))
+		}
+
+		fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
+	}
+	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
+	sendBatchRowsArr.Write(lengthArr)
+	sendBatchRowsArr.Write(verifyArr)
+	sendBatchRowsArr.Write(buffer.Bytes())
+	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
+
+
+	return sendBatchRowsArr.Bytes()
+
+}
+
 func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
 	colPos:=0;
@@ -302,6 +459,36 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     colPos = colPos+len(columnNameArr);
     publicUtils.BlockByteArrCopy([]byte(ColumnValueArr),0,columnInfoArr,colPos,len(ColumnValueArr))
     //fmt.Printf(" pos : %d  namArrLen : %s -> %d \n", colPos,columnInfo.ColumnValue,len(ColumnValueArr))
+
+	fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
+	return columnInfoArr;
+}
+
+
+func colVoToByte(columnInfo *vo.ColVo) []byte{
+
+	colPos:=0;
+	thisColLen := 2+len(columnInfo.ColumnName)+1;
+
+	columnInfoArr := make([]byte,thisColLen)
+
+	//lengthArr := publicUtils.IntegerToBytes(thisColLen);
+	columnNameArr := make([]byte,1+len(columnInfo.ColumnName))
+	publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnName),0,columnNameArr,0,len(columnInfo.ColumnName))
+
+	//Create byte[] Array
+	//publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
+	//colPos = colPos+len(lengthArr);
+	if(columnInfo.IsPkFlag){
+		columnInfoArr[colPos]=0x01
+	}else{
+		columnInfoArr[colPos]=0x00
+	}
+	colPos = colPos+1;
+	columnInfoArr[colPos]=columnInfo.ColumnType
+	colPos = colPos+1;
+	publicUtils.BlockByteArrCopy([]byte(columnNameArr),0,columnInfoArr,colPos,len(columnNameArr))
+
 
 	fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
 	return columnInfoArr;

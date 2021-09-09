@@ -222,7 +222,73 @@ func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 
 func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Debug("dsgSocketSink: DDL Event", zap.Any("ddl", ddl))
+
+	ddlInfos := make([]*vo.DDLInfos, 0);
+
+	ddldata := new(vo.DDLInfos)
+
+	//tableInfo
+	columnInfos  :=make([]*vo.ColVo,0);
+	columnInfos = getTableColumnInfos(0, ddl.TableInfo)
+    ddldata.TableInfoList = columnInfos
+
+	//pretableInfo
+	PreColumnInfos  :=make([]*vo.ColVo,0);
+	PreColumnInfos = getPreTableColumnInfos(0, ddl.PreTableInfo)
+	ddldata.PreTableInfoList = PreColumnInfos
+    //
+    ddldata.StartTimer = int64(ddl.StartTs)
+	ddldata.CommitTimer = int64(ddl.CommitTs)
+
+	ddldata.SchemaName = ddl.TableInfo.Schema
+	ddldata.TableName = ddl.TableInfo.Table
+
+	ddldata.DDLType = int32(ddl.Type)
+	ddldata.TableColumnNo = int32(len(columnInfos))
+	ddldata.PreTableColumnNo = int32(len(PreColumnInfos))
+	ddldata.Query = ddl.Query
+	ddlInfos = append(ddlInfos,ddldata)
+
+	fmt.Println("show ddlInfos ：：：：：：：：：：：：：：", ddlInfos)
+	log.Info("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddlInfos))
+	//send
+	socket.JddmDDLClient("10.0.0.72",19850,ddlInfos)
+
 	return nil
+}
+
+func getTableColumnInfos(colFlag int, tableInfo *model.SimpleTableInfo) []*vo.ColVo {
+
+	//rowdata := &vo.RowInfos{}
+
+	columnInfos :=make([]*vo.ColVo,0);
+
+	for _, column := range tableInfo.ColumnInfo {
+		columnVo := new(vo.ColVo)
+        columnVo.ColumnName = column.Name
+		columnVo.ColumnType = column.Type
+		fmt.Println("column.Value:::::",columnVo.ColumnName)
+		columnInfos = append(columnInfos,columnVo)
+
+	}
+	return columnInfos
+}
+
+func getPreTableColumnInfos(colFlag int, preTableInfo *model.SimpleTableInfo) []*vo.ColVo {
+
+	//rowdata := &vo.RowInfos{}
+
+	columnInfos :=make([]*vo.ColVo,0);
+
+	for _, column := range preTableInfo.ColumnInfo {
+		columnVo := new(vo.ColVo)
+		columnVo.ColumnName = column.Name
+		columnVo.ColumnType = column.Type
+		fmt.Println("column.Value:::::",columnVo.ColumnName)
+		columnInfos = append(columnInfos,columnVo)
+
+	}
+	return columnInfos
 }
 
 // Initialize is no-op for blackhole
