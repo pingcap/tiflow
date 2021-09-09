@@ -31,6 +31,7 @@ import (
 )
 
 type serverSuite struct {
+	server    *Server
 	e         *embed.Etcd
 	clientURL *url.URL
 	ctx       context.Context
@@ -39,15 +40,27 @@ type serverSuite struct {
 }
 
 func (s *serverSuite) SetUpTest(c *check.C) {
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+
+	pdEndpoints := []string{
+		"http://" + s.clientURL.Host,
+		"http://invalid-pd-host:2379",
+	}
+	server, err := NewServer(pdEndpoints)
+	c.Assert(err, check.IsNil)
+	c.Assert(server, check.NotNil)
+
+	s.server = server
+
 	dir := c.MkDir()
-	var err error
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	s.ctx, s.cancel = context.WithCancel(context.Background())
+
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *serverSuite) TearDownTest(c *check.C) {
+	s.server.Close()
 	s.e.Close()
 	s.cancel()
 	err := s.errg.Wait()
@@ -62,60 +75,42 @@ func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	pdEndpoints := []string{
-		"http://" + s.clientURL.Host,
-		"http://invalid-pd-host:2379",
-	}
-	server, err := NewServer(pdEndpoints)
-	c.Assert(err, check.IsNil)
-	c.Assert(server, check.NotNil)
-
 	s.errg.Go(func() error {
-		err := server.etcdHealthChecker(ctx)
+		err := s.server.etcdHealthChecker(s.ctx)
 		c.Assert(err, check.Equals, context.Canceled)
 		return nil
 	})
 	// longer than one check tick 3s
 	time.Sleep(time.Second * 4)
-	cancel()
+	s.cancel()
 }
 
 func (s *serverSuite) TestInitDataDir(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	pdEndpoints := []string{
-		"http://" + s.clientURL.Host,
-		"http://invalid-pd-host:2379",
-	}
-	server, err := NewServer(pdEndpoints)
-	c.Assert(err, check.IsNil)
-	c.Assert(server, check.NotNil)
-
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   server.pdEndpoints,
-		Context:     ctx,
+		Endpoints:   s.server.pdEndpoints,
+		Context:     s.ctx,
 		DialTimeout: 5 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	etcdClient := kv.NewCDCEtcdClient(ctx, client)
-	server.etcdClient = &etcdClient
+	etcdClient := kv.NewCDCEtcdClient(s.ctx, client)
+	s.server.etcdClient = &etcdClient
 
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = c.MkDir()
 
-	err = server.initDataDir(ctx)
+	err = s.server.initDataDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
 	config.StoreGlobalServerConfig(conf)
 
 	conf.DataDir = ""
-	err = server.initDataDir(ctx)
+	err = s.server.initDataDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 
-	cancel()
+	s.cancel()
 }
