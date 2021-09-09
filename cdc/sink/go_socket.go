@@ -15,7 +15,7 @@ import (
 func sender(jsonStr *RowJson) {
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>jsonStr:",jsonStr)
-	server := "127.0.0.1:8300"
+	server := "127.0.0.1:9300"
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", server)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())

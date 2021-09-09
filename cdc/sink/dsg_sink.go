@@ -39,38 +39,50 @@ type dsgSocketSink struct {
 	lastAccumulated uint64
 }
 
+
+
 func (b *dsgSocketSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+
+	//var columnName = ""
+	var msg = ""
 
 
 	for _, row := range rows {
+		msg = ""
 		log.Debug("dsgSocketSink: EmitRowChangedEvents", zap.Any("row", row))
 
+		schema := row.Table.Schema
+		table := row.Table.Table
+
+		log.Debug("schema::"+schema+"::table:"+table)
 
 		for _, column := range row.Columns {
 			columnName := column.Name
 			columnValue := model.ColumnValueString(column.Value)
 			//fmt.Println(value)
-			conn, err := net.Dial("tcp", ":2300")
-			if err != nil {
-				log.Fatal("",zap.Any("err", err))
-			}
 
-			fmt.Fprintf(conn, "columnName:"+columnName+":::columnValue:"+columnValue+"\n")
-			res, err := bufio.NewReader(conn).ReadString('\n')
-			if err != nil {
-				log.Fatal("",zap.Any("err", err))
-			}
-
-			fmt.Println(string(res))
 			//fmt.Fprintf(conn, value+"\n")
-
-			conn.Close()
-
-
+			msg += "columnName:"+columnName+":::columnValue:" +columnValue
 		}
 
+		conn, err := net.Dial("tcp", ":2300")
+		if err != nil {
+			log.Fatal("",zap.Any("err", err))
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, msg+"\n")
 
+
+		res, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			log.Fatal("",zap.Any("err", err))
+		}
+
+		fmt.Println(string(res))
 	}
+
+
+
 	rowsCount := len(rows)
 	atomic.AddUint64(&b.accumulated, uint64(rowsCount))
 	b.statistics.AddRowsCount(rowsCount)
