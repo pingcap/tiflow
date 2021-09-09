@@ -4173,7 +4173,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (instance, type)",
+              "expr": "sum(ticdc_sink_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (capture, type)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -4364,7 +4364,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (instance, type)",
+              "expr": "sum(ticdc_sink_total_flushed_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (capture, type)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
