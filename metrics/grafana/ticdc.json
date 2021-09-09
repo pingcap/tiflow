@@ -3190,7 +3190,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of events that puller outputs to sorter \n per second",
+          "description": "The total number of events that puller outputs",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -3200,7 +3200,7 @@
             "y": 3
           },
           "hiddenSeries": false,
-          "id": 220,
+          "id": 229,
           "legend": {
             "alignAsTable": false,
             "avg": false,
@@ -3230,7 +3230,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum (rate(ticdc_puller_txn_collect_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
+              "expr": "sum(ticdc_puller_txn_collect_event_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (instance, type)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{type}}",
@@ -3241,7 +3241,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Puller output events/s",
+          "title": "Puller output events",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -3388,7 +3388,7 @@
             "y": 7
           },
           "hiddenSeries": false,
-          "id": 229,
+          "id": 220,
           "legend": {
             "alignAsTable": false,
             "avg": false,
