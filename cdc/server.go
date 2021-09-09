@@ -191,7 +191,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.grpcListener = s.mux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
 	httpLn := s.mux.Match(cmux.Any())
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcListener)
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcServer)
 
 	err = s.startStatusHTTP(httpLn)
 	if err != nil {

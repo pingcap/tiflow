@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"sync"
 	"time"
 
@@ -42,7 +41,6 @@ import (
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
@@ -63,10 +61,9 @@ type Capture struct {
 	etcdClient *kv.CDCEtcdClient
 	grpcPool   kv.GrpcPool
 
-	peerMessageServer *p2p.MessageServer
-	peerMessageRouter p2p.MessageRouter
-	grpcListener      net.Listener
-	grpcServer        *grpc.Server
+	peerMessageServer    *p2p.MessageServer
+	peerMessageRouter    p2p.MessageRouter
+	grpcResettableServer *p2p.ResettableServer
 
 	cancel context.CancelFunc
 
@@ -75,14 +72,13 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, grpcListener net.Listener) *Capture {
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, grpcServer *p2p.ResettableServer) *Capture {
 	return &Capture{
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
 		etcdClient: etcdClient,
 		cancel:     func() {},
-
-		grpcListener: grpcListener,
+		grpcResettableServer: grpcServer,
 
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
@@ -180,10 +176,9 @@ func (c *Capture) run(stdCtx context.Context) error {
 		}
 		cancel()
 	}()
-	c.grpcServer = grpc.NewServer()
-
+	c.grpcResettableServer.Reset(c.peerMessageServer)
 	wg := new(sync.WaitGroup)
-	wg.Add(5)
+	wg.Add(4)
 	// TODO refactor error handling here, probably using errgroup.
 	var ownerErr, processorErr, messageServerErr, grpcServerErr error
 	go func() {
@@ -211,13 +206,6 @@ func (c *Capture) run(stdCtx context.Context) error {
 		defer c.AsyncClose()
 		messageServerErr = c.peerMessageServer.Run(ctx)
 		log.Info("message server has exited", zap.Error(messageServerErr))
-	}()
-	go func() {
-		defer wg.Done()
-		defer c.AsyncClose()
-
-		grpcServerErr = c.grpcServer.Serve(c.grpcListener)
-		log.Info("grpc server has exited", zap.Error(grpcServerErr))
 	}()
 	go func() {
 		defer wg.Done()
@@ -392,9 +380,7 @@ func (c *Capture) AsyncClose() {
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
 	}
-	if c.grpcServer != nil {
-		c.grpcServer.Stop()
-	}
+	c.grpcResettableServer.Reset(nil)
 }
 
 // WriteDebugInfo writes the debug info into writer.
