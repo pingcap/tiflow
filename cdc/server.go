@@ -290,7 +290,7 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
-	// data-dir will be decide by exist changefeed for backward compatibility
+	// data-dir will be decided by exist changefeed for backward compatibility
 	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -300,7 +300,7 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	for id := range allStatus {
 		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
 		if err != nil {
-			return errors.Trace(err)
+			continue
 		}
 		if info.SortDir != "" {
 			candidates = append(candidates, info.SortDir)
