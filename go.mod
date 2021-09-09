@@ -66,7 +66,12 @@ require (
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/bbolt v1.3.4 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
+<<<<<<< HEAD
 	go.uber.org/zap v1.17.0
+=======
+	go.uber.org/goleak v1.1.10
+	go.uber.org/zap v1.19.0
+>>>>>>> 7ccdd2f8f (http: add unit test for http validator (#2602))
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
 	golang.org/x/exp v0.0.0-20200513190911-00229845015e // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
