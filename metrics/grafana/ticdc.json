@@ -1130,7 +1130,7 @@
           ],
           "targets": [
             {
-              "expr": "max(ticdc_processor_table_resolved_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,changefeed,table)",
+              "expr": "bottomk(10, max(ticdc_processor_table_resolved_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,changefeed,table))",
               "format": "time_series",
               "instant": true,
               "interval": "",
@@ -1139,11 +1139,11 @@
               "refId": "A"
             },
             {
-              "expr": "max(ticdc_processor_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,changefeed,table) > 0",
+              "expr": "bottomk(10, max(ticdc_processor_checkpoint_ts{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,changefeed,table) > 0)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "checkpoint-{{changefeed}}",
+              "legendFormat": "checkpoint-{{capture}}-{{changefeed}}",
               "refId": "B"
             }
           ],
