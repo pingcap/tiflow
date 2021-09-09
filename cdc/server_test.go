@@ -56,8 +56,16 @@ func (s *serverSuite) SetUpTest(c *check.C) {
 	server, err := NewServer(pdEndpoints)
 	c.Assert(err, check.IsNil)
 	c.Assert(server, check.NotNil)
-
 	s.server = server
+
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   s.server.pdEndpoints,
+		Context:     s.ctx,
+		DialTimeout: 5 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	etcdClient := kv.NewCDCEtcdClient(s.ctx, client)
+	s.server.etcdClient = &etcdClient
 
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
@@ -92,19 +100,10 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   s.server.pdEndpoints,
-		Context:     s.ctx,
-		DialTimeout: 5 * time.Second,
-	})
-	c.Assert(err, check.IsNil)
-	etcdClient := kv.NewCDCEtcdClient(s.ctx, client)
-	s.server.etcdClient = &etcdClient
-
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = c.MkDir()
 
-	err = s.server.initDataDir(s.ctx)
+	err := s.server.initDataDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
@@ -116,4 +115,10 @@ func (s *serverSuite) TestInitDataDir(c *check.C) {
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 
 	s.cancel()
+}
+
+func (s *serverSuite) TestSetUpDataDir(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
 }
