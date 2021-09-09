@@ -499,12 +499,12 @@ func (w *Writer) flush() error {
 }
 
 func (w *Writer) writeToS3(ctx context.Context) error {
-	name := w.filePath()
+	name := w.file.Name()
 	// TODO: use small file in s3, if read takes too long
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 	//	Key: aws.String(rs.options.Prefix + name), prefix should be changefeed name
-	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, w.getLogFileName(), fileData))
+	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))
 }
