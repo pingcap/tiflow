@@ -144,6 +144,7 @@ func (c *Capture) Run(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		err = c.run(ctx)
+		log.Warn("capture exited", zap.Error(err))
 		// if capture suicided, reset the capture and run again.
 		// if the canceled error throw, there are two possible scenarios:
 		//   1. the internal context canceled, it means some error happened in the internal, and the routine is exited, we should restart the capture
@@ -291,8 +292,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
 		if resignErr := c.resign(ctx); resignErr != nil {
-			// if resigning owner failed, return error to let capture exits
-			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
+			log.Warn("failed to resign owner. Probably the cluster has been reset", zap.Error(err))
 		}
 		if err != nil {
 			// for errors, return error and let capture exits or restart
@@ -376,6 +376,9 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 // AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
+
+	log.Info("async close", zap.Stack("stack"))
+
 	// Safety: Here we mainly want to stop the owner
 	// and ignore it if the owner does not exist or is not set.
 	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {

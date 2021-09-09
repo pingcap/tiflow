@@ -60,7 +60,10 @@ type Server struct {
 	etcdClient   *kv.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
+
+	// TODO remove these by refactoring Run
 	grpcListener net.Listener
+	tcpListener  net.Listener
 	mux          cmux.CMux
 }
 
@@ -174,13 +177,13 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	ln, err := net.Listen("tcp", conf.Addr)
+	s.tcpListener, err = net.Listen("tcp", conf.Addr)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	// TODO refactor the use of listeners and the management of the server goroutines.
-	s.mux = cmux.New(ln)
+	s.mux = cmux.New(s.tcpListener)
 	s.grpcListener = s.mux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
 	httpLn := s.mux.Match(cmux.Any())
 
@@ -259,7 +262,13 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return s.mux.Serve()
+		defer log.Info("mux has exited")
+		return errors.Trace(s.mux.Serve())
+	})
+
+	wg.Go(func() error {
+		<-cctx.Done()
+		return errors.Trace(s.tcpListener.Close())
 	})
 
 	return wg.Wait()
