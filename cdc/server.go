@@ -300,6 +300,7 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	for id := range allStatus {
 		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
 		if err != nil {
+			log.Warn("try get changefeed info failed, maybe removed.", zap.String("id", id))
 			continue
 		}
 		if info.SortDir != "" {
