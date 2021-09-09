@@ -51,6 +51,8 @@ type Reader interface {
 
 // LogReaderConfig ...
 type LogReaderConfig struct {
+	// Dir is the folder contains the redo logs need to apply when OP environment or
+	// the folder used to download redo logs to if s3 enabled
 	Dir       string
 	startTs   uint64
 	endTs     uint64
