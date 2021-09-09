@@ -42,6 +42,13 @@ type serverSuite struct {
 func (s *serverSuite) SetUpTest(c *check.C) {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
+	var (
+		err error
+		dir = c.MkDir()
+	)
+	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
+	c.Assert(err, check.IsNil)
+
 	pdEndpoints := []string{
 		"http://" + s.clientURL.Host,
 		"http://invalid-pd-host:2379",
@@ -51,10 +58,6 @@ func (s *serverSuite) SetUpTest(c *check.C) {
 	c.Assert(server, check.NotNil)
 
 	s.server = server
-
-	dir := c.MkDir()
-	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
-	c.Assert(err, check.IsNil)
 
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
