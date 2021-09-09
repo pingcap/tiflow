@@ -291,18 +291,13 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	}
 
 	// data-dir will be decided by exist changefeed for backward compatibility
-	allStatus, err := s.etcdClient.GetAllChangeFeedStatus(ctx)
+	allInfo, err := s.etcdClient.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	candidates := make([]string, 0, len(allStatus))
-	for id := range allStatus {
-		info, err := s.etcdClient.GetChangeFeedInfo(ctx, id)
-		if err != nil {
-			log.Warn("try get changefeed info failed, maybe removed.", zap.String("id", id))
-			continue
-		}
+	candidates := make([]string, 0, len(allInfo))
+	for _, info := range allInfo {
 		if info.SortDir != "" {
 			candidates = append(candidates, info.SortDir)
 		}
