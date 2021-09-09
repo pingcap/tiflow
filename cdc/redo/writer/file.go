@@ -486,6 +486,7 @@ func (w *Writer) flushAll() error {
 	if err != nil {
 		return err
 	}
+	log.Debug("s3 enable", zap.Bool("s3 enabled", w.cfg.S3Storage))
 	if !w.cfg.S3Storage {
 		return nil
 	}
@@ -496,6 +497,8 @@ func (w *Writer) flushAll() error {
 func (w *Writer) Flush() error {
 	w.Lock()
 	defer w.Unlock()
+
+	log.Debug("flushAll")
 
 	return w.flushAll()
 }
@@ -513,11 +516,15 @@ func (w *Writer) flush() error {
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {
-	// TODO: use small file in s3, if read takes too long
+	log.Debug("writeToS3", zap.String("name", name))
+
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
+
+	log.Debug("storage.WriteFile", zap.String("name", filepath.Base(name)), zap.Int("data size", len(fileData)))
+
 	//	Key: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))
 }
