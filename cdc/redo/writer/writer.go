@@ -111,6 +111,8 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 			CreateTime:        cfg.CreateTime,
 			MaxLogSize:        cfg.MaxLogSize,
 			FlushIntervalInMs: cfg.FlushIntervalInMs,
+			S3Storage:         cfg.S3Storage,
+			S3URI:             cfg.S3URI,
 		}
 		ddlCfg := &FileWriterConfig{
 			Dir:               cfg.Dir,
@@ -120,6 +122,8 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 			CreateTime:        cfg.CreateTime,
 			MaxLogSize:        cfg.MaxLogSize,
 			FlushIntervalInMs: cfg.FlushIntervalInMs,
+			S3Storage:         cfg.S3Storage,
+			S3URI:             cfg.S3URI,
 		}
 		logWriter = &LogWriter{
 			cfg:       cfg,
