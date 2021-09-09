@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -96,29 +97,39 @@ func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 	s.cancel()
 }
 
-func (s *serverSuite) TestInitDataDir(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-
-	conf := config.GetGlobalServerConfig()
-	conf.DataDir = c.MkDir()
-
-	err := s.server.initDataDir(s.ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(conf.DataDir, check.Not(check.Equals), "")
-	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
-	config.StoreGlobalServerConfig(conf)
-
-	conf.DataDir = ""
-	err = s.server.initDataDir(s.ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(conf.DataDir, check.Not(check.Equals), "")
-
-	s.cancel()
-}
-
 func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
+	conf := config.GetGlobalServerConfig()
+	// DataDir is not set, and no changefeed exist, use the default
+	conf.DataDir = ""
+	err := s.server.setUpDataDir(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(conf.DataDir, check.Equals, defaultDataDir)
+	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(defaultDataDir, config.DefaultSortDir))
+
+	// DataDir is not set, but has existed changefeed, use the one with the largest available space
+	dir := c.MkDir()
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{SortDir: dir}, "a")
+	c.Assert(err, check.IsNil)
+
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, "b")
+	c.Assert(err, check.IsNil)
+
+	err = s.server.setUpDataDir(s.ctx)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(conf.DataDir, check.Equals, dir)
+	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(dir, config.DefaultSortDir))
+
+	conf.DataDir = c.MkDir()
+	config.StoreGlobalServerConfig(conf)
+	// DataDir has been set
+	err = s.server.setUpDataDir(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(conf.DataDir, check.Not(check.Equals), "")
+	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, config.DefaultSortDir))
+
+	s.cancel()
 }
