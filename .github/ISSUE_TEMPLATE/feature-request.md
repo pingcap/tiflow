@@ -1,6 +1,6 @@
 ---
 name: "\U0001F680 Feature Request"
-labels: "type/feature-request"
+labels: "subject/new-feature"
 about: I have a suggestion
 
 ---
