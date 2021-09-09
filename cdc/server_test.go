@@ -41,12 +41,8 @@ type serverSuite struct {
 }
 
 func (s *serverSuite) SetUpTest(c *check.C) {
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-
-	var (
-		err error
-		dir = c.MkDir()
-	)
+	var err error
+	dir := c.MkDir()
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
 
@@ -59,6 +55,7 @@ func (s *serverSuite) SetUpTest(c *check.C) {
 	c.Assert(server, check.NotNil)
 	s.server = server
 
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   s.server.pdEndpoints,
 		Context:     s.ctx,
@@ -125,7 +122,7 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 
 	conf.DataDir = c.MkDir()
 	config.StoreGlobalServerConfig(conf)
-	// DataDir has been set
+	// DataDir has been set, just use it
 	err = s.server.setUpDataDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
