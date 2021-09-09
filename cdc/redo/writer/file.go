@@ -294,15 +294,29 @@ func (w *Writer) close() error {
 
 	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
 	w.commitTS.Store(w.maxCommitTS.Load())
-	// TODO: rename in s3
 	err = os.Rename(w.file.Name(), w.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
+	if w.cfg.S3Storage {
+		err = w.renameInS3(context.Background(), w.file.Name(), w.filePath())
+		if err != nil {
+			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		}
+	}
+
 	err = w.file.Close()
 	w.file = nil
 	return cerror.WrapError(cerror.ErrRedoFileOp, err)
+}
+
+func (w *Writer) renameInS3(ctx context.Context, oldPath, newPath string) error {
+	err := w.writeToS3(ctx, newPath)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+	}
+	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.DeleteFile(ctx, filepath.Base(oldPath)))
 }
 
 func (w *Writer) getLogFileName() string {
@@ -387,7 +401,7 @@ func (w *Writer) rotate() error {
 	return w.openNew()
 }
 
-// GC ... TODO: gc in s3, already added a new delete api in br
+// GC ...
 func (w *Writer) GC(checkPointTs uint64) error {
 	if !w.IsRunning() || w.isGCRunning() {
 		return nil
@@ -411,22 +425,21 @@ func (w *Writer) GC(checkPointTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errs)
 	}
 
-	// forget to cp to 5.2, need wait pick to tidb 5.2.1
-	//if w.cfg.S3Storage {
-	//	// since if fail delete in s3, do not block any path, so just log the error if any
-	//	go func() {
-	//		var errs error
-	//		for _, f := range remove {
-	// 		// TODO: retry
-	//			err := w.storage.DeleteFile(context.Background(), f.Name())
-	//			errs = multierr.Append(errs, err)
-	//		}
-	//		if errs != nil {
-	//			errs = cerror.WrapError(cerror.ErrS3StorageAPI, errs)
-	//			log.Warn("delete redo log in s3 fail", zap.Error(errs))
-	//		}
-	//	}()
-	//}
+	if w.cfg.S3Storage {
+		// since if fail delete in s3, do not block any path, so just log the error if any
+		go func() {
+			var errs error
+			for _, f := range remove {
+				// TODO: retry
+				err := w.storage.DeleteFile(context.Background(), f.Name())
+				errs = multierr.Append(errs, err)
+			}
+			if errs != nil {
+				errs = cerror.WrapError(cerror.ErrS3StorageAPI, errs)
+				log.Warn("delete redo log in s3 fail", zap.Error(errs))
+			}
+		}()
+	}
 
 	return nil
 }
@@ -476,7 +489,7 @@ func (w *Writer) flushAll() error {
 	if !w.cfg.S3Storage {
 		return nil
 	}
-	return w.writeToS3(context.Background())
+	return w.writeToS3(context.Background(), w.file.Name())
 }
 
 // Flush ...
@@ -499,8 +512,7 @@ func (w *Writer) flush() error {
 	return cerror.WrapError(cerror.ErrRedoFileOp, w.file.Sync())
 }
 
-func (w *Writer) writeToS3(ctx context.Context) error {
-	name := w.file.Name()
+func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	// TODO: use small file in s3, if read takes too long
 	fileData, err := os.ReadFile(name)
 	if err != nil {
