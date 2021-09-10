@@ -172,6 +172,34 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 		return nil
 	}
 
+	doneCh3, _, err := ret.messageServer.AddHandler(ctx,
+		string(model.ProcessorFailedTopic(changefeedID)),
+		&model.ProcessorFailedMessage{}, func(senderID string, data interface{}) error {
+			captureID := senderID
+			message := data.(*model.ProcessorFailedMessage)
+
+			ret.mu.Lock()
+			defer ret.mu.Unlock()
+
+			if message.ProcessorID != message.ProcessorID {
+				log.Panic("unexpected processor failed message",
+					zap.String("capture-id", captureID),
+					zap.Any("message", message))
+			}
+
+			for tableID, record := range ret.tableToCaptureMap {
+				if record.Capture == captureID {
+					delete(ret.tableToCaptureMap, tableID)
+					log.Info("processor reported failure, removing table", zap.Int64("table-id", tableID))
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		log.Error("Failed to add handler", zap.Error(err))
+		return nil
+	}
+
 	select {
 	case <-ctx.Done():
 		return nil
@@ -182,6 +210,12 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 	case <-ctx.Done():
 		return nil
 	case <-doneCh2:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-doneCh3:
 	}
 
 	return ret

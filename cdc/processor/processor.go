@@ -329,6 +329,23 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	default:
 		return nil
 	}
+
+	// We use a special context to send the message because the main ctx might have been canceled.
+	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+
+	err1 := p.sendProcessorFailed(ctx1)
+	if err1 != nil {
+		// TODO better error handling
+		log.Panic("failed to report processor failure to owner. Panic for the protection of whole cluster", zap.Error(err))
+	}
+
+	err1 = p.removePeerMessageHandler(ctx1)
+	if err1 != nil {
+		// TODO better error handling
+		log.Panic("failed to report processor failure to owner. Panic for the protection of whole cluster", zap.Error(err))
+	}
+
 	cause := errors.Cause(err)
 	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 		log.Error("error on running processor",
@@ -794,9 +811,16 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) Close() error {
-	// TODO pass in a context here
-	if err := p.deregisterPeerMessageHandler(context.Background()); err != nil {
-		return errors.Trace(err)
+	err1 := p.sendProcessorFailed(context.Background())
+	if err1 != nil {
+		// TODO better error handling
+		log.Panic("failed to report proce ssor failure to owner. Panic for the protection of whole cluster", zap.Error(err1))
+	}
+
+	err1 = p.removePeerMessageHandler(context.Background())
+	if err1 != nil {
+		// TODO better error handling
+		log.Panic("failed to report processor failure to owner. Panic for the protection of whole cluster", zap.Error(err1))
 	}
 
 	for _, tbl := range p.tables {
@@ -918,8 +942,14 @@ func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
 	return nil
 }
 
-func (p *processor) deregisterPeerMessageHandler(ctx context.Context) error {
-	doneCh, err := p.messageServer.RemoveHandler(ctx, string(model.DispatchTableTopic(p.changefeedID)))
+func (p *processor) removePeerMessageHandler(ctx context.Context) error {
+	// TODO refactor this logical so that it is clearer when the handlers are to be removed.
+	doneCh1, err := p.messageServer.RemoveHandler(ctx, string(model.DispatchTableTopic(p.changefeedID)))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	doneCh2, err := p.messageServer.RemoveHandler(ctx, string(model.RequestSendTableStatusTopic(p.changefeedID)))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -927,9 +957,13 @@ func (p *processor) deregisterPeerMessageHandler(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(err)
-	case <-doneCh:
+	case <-doneCh1:
 	}
-
+	select {
+	case <-ctx.Done():
+		return errors.Trace(err)
+	case <-doneCh2:
+	}
 	return nil
 }
 
@@ -1045,6 +1079,23 @@ func (p *processor) waitOwnerAck() bool {
 		return false
 	}
 	return true
+}
+
+func (p *processor) sendProcessorFailed(ctx context.Context) error {
+	p.ownerInfoMu.RLock()
+	ownerID := p.ownerID
+	p.ownerInfoMu.RUnlock()
+
+	client := p.messageRouter.GetClient(p2p.SenderID(ownerID))
+	if client == nil {
+		log.Warn("Cannot find a gRPC client to the owner", zap.String("owner-id", p.ownerID))
+		// TODO use a proper error type here
+		return errors.Trace(errors.New("no gRPC client to owner"))
+	}
+
+	_, err := client.SendMessage(ctx, model.ProcessorFailedTopic(p.changefeedID),
+		&model.ProcessorFailedMessage{ProcessorID: p.captureInfo.ID})
+	return errors.Trace(err)
 }
 
 // WriteDebugInfo write the debug info to Writer

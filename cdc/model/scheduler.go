@@ -79,3 +79,11 @@ func (m *RequestSendTableStatusResponseMessage) UnmarshalJSON(data []byte) error
 	}
 	return msgpack.Unmarshal(raw, m)
 }
+
+func ProcessorFailedTopic(changefeedID ChangeFeedID) p2p.Topic {
+	return p2p.Topic(fmt.Sprintf("processor-fail/%s", changefeedID))
+}
+
+type ProcessorFailedMessage struct {
+	ProcessorID CaptureID `json:"capture-id"`
+}
