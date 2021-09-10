@@ -96,7 +96,8 @@ type processor struct {
 	ownerRev    int64
 	// next tick will happen after the owner has acknowledged the peer message
 	// with sequence number `waitForAck`.
-	waitForAck p2p.Seq
+	waitForAck           p2p.Seq
+	needSyncWithNewOwner bool
 }
 
 // newProcessor creates a new processor
@@ -341,6 +342,16 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 
 // handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
 func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
+	ok, err := p.syncWithOwner(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
+		log.Info("processor waiting to sync current status with owner",
+			zap.String("changefeed-id", p.changefeedID))
+		return nil
+	}
+
 	p.pendingOpsMu.Lock()
 	for !p.pendingOps.Empty() {
 		// TODO add a constant for this value
@@ -813,26 +824,74 @@ func (p *processor) Close() error {
 }
 
 func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
-	doneCh, _, err := p.messageServer.AddHandler(ctx,
+	// TODO refactor this function
+
+	doneCh1, _, err := p.messageServer.AddHandler(ctx,
 		string(model.DispatchTableTopic(p.changefeedID)),
 		&model.DispatchTableMessage{},
 		func(senderID string, data interface{}) error {
 			msg := data.(*model.DispatchTableMessage)
 			log.Debug("processor received message", zap.Any("msg", msg))
+			// TODO factor these
+			hasOwnerChanged := false
 			p.ownerInfoMu.Lock()
 			if p.ownerRev < msg.OwnerRev {
 				p.ownerID = senderID
 				p.ownerRev = msg.OwnerRev
 				p.waitForAck = 0
+				hasOwnerChanged = true
 				log.Debug("processor updated owner ID",
 					zap.String("owner-id", senderID),
 					zap.Int64("owner-rev", msg.OwnerRev))
+			} else if p.ownerRev > msg.OwnerRev {
+				log.Info("stale message from old owner, ignore",
+					zap.String("owner-id", senderID),
+					zap.Int64("owner-rev", msg.OwnerRev))
+				p.ownerInfoMu.Unlock()
+				return nil
 			}
 			p.ownerInfoMu.Unlock()
 
 			p.pendingOpsMu.Lock()
 			defer p.pendingOpsMu.Unlock()
+			if hasOwnerChanged {
+				// clears stale ops
+				p.pendingOps = deque.NewDeque()
+			}
 			p.pendingOps.PushBack(data)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	doneCh2, _, err := p.messageServer.AddHandler(ctx,
+		string(model.RequestSendTableStatusTopic(p.changefeedID)),
+		&model.RequestSendTableStatusMessage{},
+		func(senderID string, data interface{}) error {
+			msg := data.(*model.RequestSendTableStatusMessage)
+			log.Debug("processor received message", zap.Any("msg", msg))
+			p.ownerInfoMu.Lock()
+			if p.ownerRev > msg.OwnerRev {
+				log.Info("stale message from old owner, ignore",
+					zap.String("owner-id", senderID),
+					zap.Int64("owner-rev", msg.OwnerRev))
+				p.ownerInfoMu.Unlock()
+				return nil
+			} else if p.ownerRev == msg.OwnerRev {
+				log.Panic("duplicate sync message from owner",
+					zap.String("owner-id", senderID),
+					zap.Int64("owner-rev", msg.OwnerRev))
+			}
+			p.ownerRev = msg.OwnerRev
+			p.ownerInfoMu.Unlock()
+
+			p.pendingOpsMu.Lock()
+			defer p.pendingOpsMu.Unlock()
+
+			// clears the previous pending ops queue
+			p.pendingOps = deque.NewDeque()
+			p.needSyncWithNewOwner = true
 			return nil
 		})
 	if err != nil {
@@ -842,11 +901,15 @@ func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(err)
-	case <-doneCh:
+	case <-doneCh1:
+	}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(err)
+	case <-doneCh2:
 	}
 
-	log.Debug("processor registered message handler",
-		zap.String("topic", string(model.DispatchTableTopic(p.changefeedID))))
+	log.Debug("processor registered message handler")
 	return nil
 }
 
@@ -879,6 +942,9 @@ func (p *processor) ackDispatchTable(ctx context.Context, tableID model.TableID)
 	seq, err := client.TrySendMessage(ctx,
 		model.DispatchTableResponseTopic(p.changefeedID), &model.DispatchTableResponseMessage{ID: tableID})
 	if err != nil {
+		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
+		}
 		return false, errors.Trace(err)
 	}
 
@@ -888,6 +954,55 @@ func (p *processor) ackDispatchTable(ctx context.Context, tableID model.TableID)
 	}
 	p.ownerInfoMu.Unlock()
 
+	return true, nil
+}
+
+func (p *processor) syncWithOwner(ctx context.Context) (bool, error) {
+	p.ownerInfoMu.Lock()
+	defer p.ownerInfoMu.Unlock()
+
+	if !p.needSyncWithNewOwner {
+		return true, nil
+	}
+
+	client := p.messageRouter.GetClient(p2p.SenderID(p.ownerID))
+	if client == nil {
+		log.Warn("Cannot find a gRPC client to the owner", zap.String("owner-id", p.ownerID))
+		return false, nil
+	}
+
+	resp := new(model.RequestSendTableStatusResponseMessage)
+
+	// Adds the running tables
+	for tableID := range p.tables {
+		if _, ok := p.operations[tableID]; ok {
+			// there is a pending operation, so this table does not belong here.
+			continue
+		}
+		resp.Running = append(resp.Running, tableID)
+	}
+
+	// Adds the tables with currently pending operations
+	for tableID, op := range p.operations {
+		if op.IsDelete {
+			resp.Removing = append(resp.Removing, tableID)
+		} else {
+			resp.Adding = append(resp.Adding, tableID)
+		}
+	}
+
+	seq, err := client.TrySendMessage(ctx, model.RequestSendTableStatusResponseTopic(p.changefeedID), resp)
+	if err != nil {
+		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
+		}
+		return false, errors.Trace(err)
+	}
+
+	// TODO do we need this?
+	p.waitForAck = seq
+
+	p.needSyncWithNewOwner = false
 	return true, nil
 }
 

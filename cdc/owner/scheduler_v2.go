@@ -35,12 +35,16 @@ type schedulerV2 struct {
 
 	mu                sync.Mutex
 	tableToCaptureMap map[model.TableID]*tableRecord
+	// captureSynced records whether the capture has sent us the tables
+	// it is currently replicating. We need them to tell us their status
+	// when we just have succeeded a previous owner.
+	captureSynced map[model.CaptureID]bool
 
 	moveTableJobQueue []*moveTableJob
 	moveTableTarget   map[model.TableID]model.CaptureID
 
 	lastTickCaptureCount int
-	needRebalance bool
+	needRebalance        bool
 
 	changefeedID model.ChangeFeedID
 }
@@ -68,7 +72,8 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 		changefeedID:      changefeedID,
 	}
 
-	doneCh, _, err := ret.messageServer.AddHandler(ctx,
+	// TODO add function MustAddHandler
+	doneCh1, _, err := ret.messageServer.AddHandler(ctx,
 		string(model.DispatchTableResponseTopic(changefeedID)),
 		&model.DispatchTableResponseMessage{}, func(senderID string, data interface{}) error {
 			captureID := senderID
@@ -108,10 +113,61 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 		return nil
 	}
 
+	doneCh2, _, err := ret.messageServer.AddHandler(ctx,
+		string(model.RequestSendTableStatusResponseTopic(changefeedID)),
+		&model.RequestSendTableStatusResponseMessage{}, func(senderID string, data interface{}) error {
+			captureID := senderID
+			message := data.(*model.RequestSendTableStatusResponseMessage)
+
+			ret.mu.Lock()
+			defer ret.mu.Unlock()
+
+			for _, tableID := range message.Adding {
+				if record, ok := ret.tableToCaptureMap[tableID]; ok {
+					log.Panic("duplicate table tasks",
+						zap.Int64("table-id", tableID),
+						zap.String("capture-id-1", record.Capture),
+						zap.String("capture-id-2", captureID))
+				}
+				ret.tableToCaptureMap[tableID] = &tableRecord{Capture: captureID, Status: addingTable}
+			}
+			for _, tableID := range message.Running {
+				if record, ok := ret.tableToCaptureMap[tableID]; ok {
+					log.Panic("duplicate table tasks",
+						zap.Int64("table-id", tableID),
+						zap.String("capture-id-1", record.Capture),
+						zap.String("capture-id-2", captureID))
+				}
+				ret.tableToCaptureMap[tableID] = &tableRecord{Capture: captureID, Status: runningTable}
+			}
+			for _, tableID := range message.Removing {
+				if record, ok := ret.tableToCaptureMap[tableID]; ok {
+					log.Panic("duplicate table tasks",
+						zap.Int64("table-id", tableID),
+						zap.String("capture-id-1", record.Capture),
+						zap.String("capture-id-2", captureID))
+				}
+				ret.tableToCaptureMap[tableID] = &tableRecord{Capture: captureID, Status: removingTable}
+			}
+
+			ret.captureSynced[captureID] = true
+			return nil
+		})
+	if err != nil {
+		log.Error("Failed to add handler", zap.Error(err))
+		return nil
+	}
+
 	select {
 	case <-ctx.Done():
 		return nil
-	case <-doneCh:
+	case <-doneCh1:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-doneCh2:
 	}
 
 	return ret
@@ -142,6 +198,15 @@ func (s *schedulerV2) Tick(
 	s.state = state
 	s.captures = captures
 
+	ok, err := s.syncAllCaptureTasks(ctx)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if !ok {
+		// returns early if not all captures have synced their states with us.
+		return false, nil
+	}
+
 	if s.needRebalance {
 		ok, err := s.rebalance(ctx)
 		if err != nil {
@@ -151,7 +216,6 @@ func (s *schedulerV2) Tick(
 			s.needRebalance = false
 		}
 	}
-
 
 	for tableID, record := range s.tableToCaptureMap {
 		if _, ok := s.captures[record.Capture]; !ok {
@@ -387,6 +451,53 @@ func (s *schedulerV2) dispatchTable(ctx context.Context, tableID model.TableID, 
 	}
 
 	return true, nil
+}
+
+func (s *schedulerV2) syncAllCaptureTasks(ctx context.Context) (bool, error) {
+	for captureID := range s.captureSynced {
+		if _, ok := s.captures[captureID]; !ok {
+			// removes expired captures from the captureSynced map
+			delete(s.captureSynced, captureID)
+		}
+	}
+
+	isAllSynced := true
+	for captureID := range s.captures {
+		ok, err := s.syncCaptureTasks(ctx, captureID)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		isAllSynced = isAllSynced && ok
+	}
+
+	return isAllSynced, nil
+}
+
+func (s *schedulerV2) syncCaptureTasks(ctx context.Context, target model.CaptureID) (bool, error) {
+	synced, ok := s.captureSynced[target]
+	if !ok {
+		log.Info("requesting current tasks from capture",
+			zap.String("changefeed-id", s.changefeedID),
+			zap.String("capture-id", target))
+
+		client := s.messageRouter.GetClient(p2p.SenderID(target))
+		if client == nil {
+			log.Warn("syncCaptureTasks: no client to capture", zap.String("capture-id", target))
+			return false, nil
+		}
+
+		_, err := client.TrySendMessage(ctx, model.RequestSendTableStatusTopic(s.changefeedID),
+			&model.RequestSendTableStatusMessage{OwnerRev: ctx.GlobalVars().OwnerRev})
+		if err != nil {
+			if cerrors.ErrPeerMessageSendTryAgain.Equal(err) {
+				return false, nil
+			}
+			return false, errors.Trace(err)
+		}
+		s.captureSynced[target] = false
+		return false, nil
+	}
+	return synced, nil
 }
 
 func (s *schedulerV2) findTargetCapture() (model.CaptureID, bool) {

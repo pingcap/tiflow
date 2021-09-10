@@ -17,7 +17,12 @@ import (
 	"fmt"
 
 	"github.com/pingcap/ticdc/pkg/p2p"
+	"github.com/vmihailenco/msgpack/v5"
 )
+
+func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
+	return p2p.Topic(fmt.Sprintf("dispatch/%s", changefeedID))
+}
 
 type DispatchTableMessage struct {
 	OwnerRev   int64   `json:"owner-rev"`
@@ -29,14 +34,36 @@ type DispatchTableMessage struct {
 	Processed bool `json:"-"`
 }
 
+func DispatchTableResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
+	return p2p.Topic(fmt.Sprintf("dispatch-resp/%s", changefeedID))
+}
+
 type DispatchTableResponseMessage struct {
 	ID TableID `json:"id"`
 }
 
-func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
-	return p2p.Topic(fmt.Sprintf("dispatch/%s", changefeedID))
+func RequestSendTableStatusTopic(changefeedID ChangeFeedID) p2p.Topic {
+	return p2p.Topic(fmt.Sprintf("send-status/%s", changefeedID))
 }
 
-func DispatchTableResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
-	return p2p.Topic(fmt.Sprintf("dispatch-resp/%s", changefeedID))
+type RequestSendTableStatusMessage struct {
+	OwnerRev int64 `json:"owner-rev"`
+}
+
+func RequestSendTableStatusResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
+	return p2p.Topic(fmt.Sprintf("send-status-resp/%s", changefeedID))
+}
+
+type RequestSendTableStatusResponseMessage struct {
+	Running  []TableID
+	Adding   []TableID
+	Removing []TableID
+}
+
+func (m *RequestSendTableStatusResponseMessage) MarshalJSON() ([]byte, error) {
+	return msgpack.Marshal(m)
+}
+
+func (m *RequestSendTableStatusResponseMessage) UnmarshalJSON(data []byte) error {
+	return msgpack.Unmarshal(data, m)
 }
