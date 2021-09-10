@@ -126,11 +126,12 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 		rowInfos = append(rowInfos,rowdata)
 		fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
-
+		log.Info("show ColumnNo ：：：：：：：：：：：：：：", zap.Reflect("ColumnNo", rowdata.ColumnNo))
 		log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
 
 		//send
-		socket.JddmClient("10.0.0.72",19850,rowInfos)
+		//socket.JddmClient("10.0.0.72",19850,rowInfos)
+		socket.JddmClient("127.0.0.1",9889,rowInfos)
 
 	    //sender(rowdata)
 

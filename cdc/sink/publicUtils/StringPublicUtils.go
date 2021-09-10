@@ -8,12 +8,12 @@
 package publicUtils
 
 import (
-	"fmt"
 	"bytes"
+	"container/list"
+	"encoding/binary"
+	"errors"
+	"fmt"
 	"strconv"
-    "encoding/binary"
-    "errors"
-    "container/list"
 )
 
 /*** *** *** *** *** *** ***
@@ -46,6 +46,13 @@ func IntegerToBytes(n int) []byte {
   bytesBuffer := bytes.NewBuffer([]byte{})
   binary.Write(bytesBuffer, binary.BigEndian, x)
   return bytesBuffer.Bytes()
+}
+
+func Int32ToBytes(n int32) []byte {
+	x := int32(n)
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, x)
+	return bytesBuffer.Bytes()
 }
 
 // int to 4 bytes
