@@ -579,7 +579,7 @@ func TestNewLogWriter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cfg := &LogWriterConfig{
-		Dir:               "dir",
+		Dir:               "dirt",
 		ChangeFeedID:      "test-cf",
 		CaptureID:         "cp",
 		MaxLogSize:        10,
@@ -589,6 +589,7 @@ func TestNewLogWriter(t *testing.T) {
 	var ll *LogWriter
 	initOnce = sync.Once{}
 	require.NotPanics(t, func() { ll = NewLogWriter(ctx, cfg) })
+	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
 	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
 
 	cfg.Dir += "ttt"

@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,8 +102,6 @@ func TestWriterWrite(t *testing.T) {
 }
 
 func TestWriterGC(t *testing.T) {
-	require.Panics(t, func() { NewWriter(context.Background(), nil) })
-
 	dir, err := ioutil.TempDir("", "redo-GC")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
@@ -155,4 +154,21 @@ func TestAdvanceTs(t *testing.T) {
 	w := &Writer{}
 	w.AdvanceTs(111)
 	require.EqualValues(t, 111, w.eventCommitTS.Load())
+}
+
+func TestNewWriter(t *testing.T) {
+	require.Panics(t, func() {
+		NewWriter(context.Background(), nil)
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
+	require.Nil(t, err)
+	require.NotPanics(t, func() {
+		NewWriter(ctx, &FileWriterConfig{
+			S3Storage: true,
+			S3URI:     s3URI,
+		})
+	})
+	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 }

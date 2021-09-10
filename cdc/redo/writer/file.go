@@ -460,7 +460,7 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
 	files, err := ioutil.ReadDir(w.cfg.Dir)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", w.cfg.Dir))
 	}
 
 	logFiles := []os.FileInfo{}
@@ -482,6 +482,10 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 }
 
 func (w *Writer) flushAll() error {
+	if w.file == nil {
+		return nil
+	}
+
 	err := w.flush()
 	if err != nil {
 		return err
