@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"github.com/pingcap/ticdc/cdc/sink/socket"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
-
+	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	//"net"
 	"sync/atomic"
 
@@ -68,6 +68,14 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 	}
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>======================================================================================>>>>>>>>>>>>>>>>>>>")
+
+	/*//读取配置文件
+	configMap := publicUtils.InitConfig("configuration.txt")
+	//获取配置里host属性的value
+	fmt.Println(configMap["addr"])
+	//查看配置文件里所有键值对
+	fmt.Println(configMap)*/
+
 	var eventTypeValue int32
 	var schemaName string
 	var tableName string
@@ -224,7 +232,7 @@ func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Debug("dsgSocketSink: DDL Event", zap.Any("ddl", ddl))
 
-	ddlInfos := make([]*vo.DDLInfos, 0);
+
 
 	ddldata := new(vo.DDLInfos)
 
@@ -247,13 +255,13 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	ddldata.DDLType = int32(ddl.Type)
 	ddldata.TableColumnNo = int32(len(columnInfos))
 	ddldata.PreTableColumnNo = int32(len(PreColumnInfos))
-	ddldata.Query = ddl.Query
-	ddlInfos = append(ddlInfos,ddldata)
+	ddldata.QuerySql = ddl.Query
+	//ddlInfos =ddldata
 
-	fmt.Println("show ddlInfos ：：：：：：：：：：：：：：", ddlInfos)
-	log.Info("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddlInfos))
+	fmt.Println("show ddlInfos ：：：：：：：：：：：：：：", ddldata)
+	log.Info("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddldata))
 	//send
-	socket.JddmDDLClient("10.0.0.72",19850,ddlInfos)
+	socket.JddmDDLClient("10.0.0.72",19850,ddldata)
 
 	return nil
 }
@@ -267,7 +275,7 @@ func getTableColumnInfos(colFlag int, tableInfo *model.SimpleTableInfo) []*vo.Co
 	for _, column := range tableInfo.ColumnInfo {
 		columnVo := new(vo.ColVo)
         columnVo.ColumnName = column.Name
-		columnVo.ColumnType = column.Type
+		columnVo.ColumnType = int(column.Type)
 		fmt.Println("column.Value:::::",columnVo.ColumnName)
 		columnInfos = append(columnInfos,columnVo)
 
@@ -284,7 +292,7 @@ func getPreTableColumnInfos(colFlag int, preTableInfo *model.SimpleTableInfo) []
 	for _, column := range preTableInfo.ColumnInfo {
 		columnVo := new(vo.ColVo)
 		columnVo.ColumnName = column.Name
-		columnVo.ColumnType = column.Type
+		columnVo.ColumnType = int(column.Type)
 		fmt.Println("column.Value:::::",columnVo.ColumnName)
 		columnInfos = append(columnInfos,columnVo)
 
