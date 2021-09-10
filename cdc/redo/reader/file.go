@@ -74,7 +74,7 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 		return nil
 	}
 	if cfg.s3Storage {
-		s3storage, err := common.InitS3storage(ctx, cfg.s3URI)
+		s3storage, err := common.InitS3storage(ctx, *cfg.s3URI)
 		if err != nil {
 			log.Panic("initS3storage fail",
 				zap.Error(err),

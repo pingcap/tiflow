@@ -24,9 +24,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -297,6 +299,11 @@ func TestLogWriter_FlushLog(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	for _, tt := range tests {
+		controller := gomock.NewController(t)
+		mockStorage := mockstorage.NewMockExternalStorage(controller)
+		if tt.isRunning && tt.name != "context cancel" {
+			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("Flush", mock.Anything).Return(tt.flushErr)
 		mockWriter.On("IsRunning").Return(tt.isRunning)
@@ -307,12 +314,14 @@ func TestLogWriter_FlushLog(t *testing.T) {
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			FlushIntervalInMs: 5,
+			S3Storage:         true,
 		}
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
+			storage:   mockStorage,
 		}
 
 		if tt.name == "context cancel" {
@@ -379,6 +388,12 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	for _, tt := range tests {
+		controller := gomock.NewController(t)
+		mockStorage := mockstorage.NewMockExternalStorage(controller)
+		if tt.isRunning && tt.name != "context cancel" {
+			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+		}
+
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
@@ -388,12 +403,14 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			FlushIntervalInMs: 5,
+			S3Storage:         true,
 		}
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
+			storage:   mockStorage,
 		}
 
 		if tt.name == "context cancel" {
@@ -461,6 +478,11 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	for _, tt := range tests {
+		controller := gomock.NewController(t)
+		mockStorage := mockstorage.NewMockExternalStorage(controller)
+		if tt.isRunning && tt.name != "context cancel" {
+			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
@@ -470,12 +492,14 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			FlushIntervalInMs: 5,
+			S3Storage:         true,
 		}
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
 			cfg:       cfg,
+			storage:   mockStorage,
 		}
 
 		if tt.name == "context cancel" {

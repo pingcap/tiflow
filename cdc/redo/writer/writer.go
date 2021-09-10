@@ -137,8 +137,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 				zap.Error(err))
 		}
 		if cfg.S3Storage {
-			uri := *cfg.S3URI
-			s3storage, err := common.InitS3storage(ctx, &uri)
+			s3storage, err := common.InitS3storage(ctx, *cfg.S3URI)
 			if err != nil {
 				log.Panic("initS3storage fail",
 					zap.Error(err),

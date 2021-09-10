@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/stretchr/testify/require"
@@ -108,18 +109,40 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
+
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
+
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
+
+	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
+
 	megabyte = 1
 	cfg := &FileWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      "test-cf",
+		ChangeFeedID:      "test",
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		FileType:          common.DefaultRowLogFileType,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
+		S3Storage:         true,
 	}
-	w := NewWriter(context.Background(), cfg)
-
+	w := &Writer{
+		cfg:       cfg,
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+	}
+	w.state.Store(started)
 	w.eventCommitTS.Store(1)
 	_, err = w.Write([]byte("t1111"))
 	require.Nil(t, err)
@@ -149,7 +172,7 @@ func TestWriterGC(t *testing.T) {
 	require.EqualValues(t, 3, ts)
 	require.Equal(t, common.DefaultRowLogFileType, fileType)
 
-	time.Sleep(time.Duration(w.cfg.FlushIntervalInMs+1) * time.Millisecond)
+	time.Sleep(time.Duration(100) * time.Millisecond)
 }
 
 func TestAdvanceTs(t *testing.T) {
@@ -182,9 +205,11 @@ func TestNewWriter(t *testing.T) {
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1000) * time.Millisecond)
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
+
 	w := &Writer{
 		cfg: &FileWriterConfig{
 			Dir:          dir,
@@ -196,11 +221,16 @@ func TestNewWriter(t *testing.T) {
 			MaxLogSize:   defaultMaxLogSize,
 		},
 		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
 	}
-	w.storage = mockStorage
+	w.state.Store(started)
 	_, err = w.Write([]byte("test"))
 	require.Nil(t, err)
 	//
 	err = w.Flush()
 	require.Nil(t, err)
+
+	err = w.Close()
+	require.Nil(t, err)
+	require.Equal(t, w.state.Load(), stopped)
 }
