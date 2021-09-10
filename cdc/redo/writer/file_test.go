@@ -23,7 +23,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/ticdc/cdc/redo/common"
+	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
 	"go.uber.org/goleak"
@@ -160,15 +162,45 @@ func TestNewWriter(t *testing.T) {
 	require.Panics(t, func() {
 		NewWriter(context.Background(), nil)
 	})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	require.Nil(t, err)
+
+	dir, err := ioutil.TempDir("", "redo-NewWriter")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
 	require.NotPanics(t, func() {
 		NewWriter(ctx, &FileWriterConfig{
+			Dir:       "sdfsf",
 			S3Storage: true,
 			S3URI:     s3URI,
 		})
 	})
-	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
+	time.Sleep(time.Duration(defaultFlushIntervalInMs+1000) * time.Millisecond)
+
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(1)
+	w := &Writer{
+		cfg: &FileWriterConfig{
+			Dir:          dir,
+			CaptureID:    "cp",
+			ChangeFeedID: "test",
+			FileType:     common.DefaultDDLLogFileType,
+			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			S3Storage:    true,
+			MaxLogSize:   defaultMaxLogSize,
+		},
+		uint64buf: make([]byte, 8),
+	}
+	w.storage = mockStorage
+	_, err = w.Write([]byte("test"))
+	require.Nil(t, err)
+	//
+	err = w.Flush()
+	require.Nil(t, err)
 }

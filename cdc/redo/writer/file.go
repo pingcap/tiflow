@@ -159,7 +159,8 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) *Writ
 	}
 
 	if cfg.S3Storage {
-		s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
+		uri := *cfg.S3URI
+		s3storage, err := common.InitS3storage(ctx, &uri)
 		if err != nil {
 			log.Panic("initS3storage fail",
 				zap.Error(err),
@@ -337,7 +338,7 @@ func openTruncFile(name string) (*os.File, error) {
 func (w *Writer) openNew() error {
 	err := os.MkdirAll(w.cfg.Dir, common.DefaultDirMode)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't make dir: %s for new redo logfile", w.cfg.Dir))
 	}
 
 	// reset ts used in file name when new file
@@ -430,7 +431,6 @@ func (w *Writer) GC(checkPointTs uint64) error {
 		go func() {
 			var errs error
 			for _, f := range remove {
-				// TODO: retry
 				err := w.storage.DeleteFile(context.Background(), f.Name())
 				errs = multierr.Append(errs, err)
 			}
