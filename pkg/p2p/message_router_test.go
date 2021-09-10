@@ -62,7 +62,7 @@ func (s *messageRouterTestSuite) addServer(ctx context.Context, t *testing.T, id
 	s.cancels[id] = cancel
 	s.servers[id] = newServer
 
-	s.messageRouter.AddSenderID(id, addr)
+	s.messageRouter.AddPeer(id, addr)
 
 	s.wg.Add(1)
 	go func() {
@@ -74,7 +74,7 @@ func (s *messageRouterTestSuite) addServer(ctx context.Context, t *testing.T, id
 	go func() {
 		defer s.wg.Done()
 		defer grpcServer.Stop()
-		defer s.messageRouter.RemoveSenderID(id)
+		defer s.messageRouter.RemovePeer(id)
 		err := newServer.Run(ctx)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
@@ -230,7 +230,7 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 			_, err = client.SendMessage(ctx, "test-topic", &testTopicContent{int64(i + 1)})
 			require.NoError(t, err)
 		}
-		suite.messageRouter.RemoveSenderID("server-2")
+		suite.messageRouter.RemovePeer("server-2")
 
 		var err error
 		require.Eventually(t, func() bool {

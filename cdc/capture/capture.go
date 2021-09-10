@@ -449,10 +449,10 @@ func (c *Capture) MakeGlobalEtcdStateWithCaptureChangeEventHandler() *model.Glob
 	ret := model.NewGlobalState()
 	ret.SetUpdateCaptureFn(func(id model.CaptureID, addr string) {
 		if addr == "" {
-			c.peerMessageRouter.RemoveSenderID(p2p.SenderID(id))
+			c.peerMessageRouter.RemovePeer(p2p.SenderID(id))
 			return
 		}
-		c.peerMessageRouter.AddSenderID(p2p.SenderID(id), addr)
+		c.peerMessageRouter.AddPeer(p2p.SenderID(id), addr)
 	})
 	return ret
 }

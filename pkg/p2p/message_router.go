@@ -22,14 +22,25 @@ import (
 	"go.uber.org/zap"
 )
 
+// MessageRouter is used to maintain clients to all the peers in the cluster
+// that the local node needs to communicate with.
 type MessageRouter interface {
-	AddSenderID(id SenderID, addr string)
-	RemoveSenderID(id SenderID)
+	// AddPeer should be invoked when a new peer is discovered.
+	AddPeer(id SenderID, addr string)
+	// RemovePeer should be invoked when a peer is determined to
+	// be permanently unavailable.
+	RemovePeer(id SenderID)
+	// GetClient returns a MessageClient for `target`. It returns
+	// nil if the target peer does not exist. The returned client
+	// is canceled if RemovePeer is called on `target`.
 	GetClient(target SenderID) *MessageClient
+	// Close cancels all clients maintained internally.
 	Close()
+	// Wait waits for all clients to exit.
 	Wait()
 }
 
+// NewMessageRouter creates a new MessageRouter
 func NewMessageRouter(selfID SenderID, credentials *security.Credential) MessageRouter {
 	return &messageRouterImpl{
 		addressMap:  make(map[SenderID]string),
@@ -56,14 +67,16 @@ type clientWrapper struct {
 	cancelFn context.CancelFunc
 }
 
-func (m *messageRouterImpl) AddSenderID(id SenderID, addr string) {
+// AddPeer implements MessageRouter.
+func (m *messageRouterImpl) AddPeer(id SenderID, addr string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.addressMap[id] = addr
 }
 
-func (m *messageRouterImpl) RemoveSenderID(id SenderID) {
+// RemovePeer implements MessageRouter.
+func (m *messageRouterImpl) RemovePeer(id SenderID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -73,6 +86,7 @@ func (m *messageRouterImpl) RemoveSenderID(id SenderID) {
 	}
 }
 
+// GetClient implements MessageRouter. The client will be created lazily.
 func (m *messageRouterImpl) GetClient(target SenderID) *MessageClient {
 	m.mu.RLock()
 	// fast path
@@ -83,17 +97,19 @@ func (m *messageRouterImpl) GetClient(target SenderID) *MessageClient {
 
 	// There is no ready-to-use client for target
 	m.mu.RUnlock()
+	// escalate the lock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// repeats the logic in fast path after taking the exclusive lock
+	// repeats the logic in fast path after escalating the lock, since
+	// the lock was briefly released.
 	if cliWrapper, ok := m.clients[target]; ok {
 		return cliWrapper.MessageClient
 	}
 
 	addr, ok := m.addressMap[target]
 	if !ok {
-		log.Info("failed to create client", zap.String("target", string(target)))
+		log.Info("failed to create client, no peer", zap.String("target", string(target)))
 		// there is no address for this target. We are not able to create a client.
 		return nil
 	}

@@ -31,15 +31,19 @@ import (
 	"github.com/pingcap/ticdc/proto/p2p"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
 
 const (
-	clientSendChanSize      = 128
-	clientBatchSendInterval = time.Millisecond * 200
-	clientSendMaxBatchBytes = 8192
+	clientSendChanSize            = 128
+	clientBatchSendInterval       = time.Millisecond * 200
+	clientSendMaxBatchBytes       = 8192
+	clientRetryRateLimitPerSecond = 1.0
 )
 
+// MessageClient is a client used to send peer messages.
+// `Run` must be running before sending any message.
 type MessageClient struct {
 	sendCh chan *messageEntry
 
@@ -71,6 +75,8 @@ type messageEntry struct {
 	seq     Seq
 }
 
+// NewMessageClient creates a new MessageClient
+// senderID is an identifier for the local node.
 func NewMessageClient(senderID SenderID) *MessageClient {
 	return &MessageClient{
 		sendCh:   make(chan *messageEntry, clientSendChanSize),
@@ -80,10 +86,15 @@ func NewMessageClient(senderID SenderID) *MessageClient {
 	}
 }
 
+// Run launches background goroutines for MessageClient to work.
 func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverID SenderID, credential *security.Credential) error {
 	defer func() {
 		atomic.StoreInt32(&c.isClosed, 1)
 		close(c.closeCh)
+
+		log.Info("peer message client exited",
+			zap.String("addr", addr),
+			zap.String("capture-id", string(receiverID)))
 	}()
 
 	securityOption, err := credential.ToGRPCDialOption()
@@ -91,12 +102,17 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 		return errors.Trace(err)
 	}
 
+	rl := rate.NewLimiter(clientRetryRateLimitPerSecond, 1)
 	epoch := int64(0)
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(err)
 		default:
+		}
+
+		if err := rl.Wait(ctx); err != nil {
+			return errors.Trace(err)
 		}
 
 		// TODO add configuration Dial timeout
@@ -107,14 +123,16 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 				return net.Dial(network, s)
 			}))
 		if err != nil {
-			return errors.Trace(err)
+			log.Warn("gRPC dial error, retrying", zap.Error(err))
+			continue
 		}
 
 		grpcClient := p2p.NewCDCPeerToPeerClient(conn)
 		clientStream, err := grpcClient.SendMessage(ctx)
 		if err != nil {
 			_ = conn.Close()
-			return errors.Trace(err)
+			log.Warn("establish stream to peer failed, retrying", zap.Error(err))
+			continue
 		}
 
 		epoch++
@@ -125,15 +143,13 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 		}})
 		if err != nil {
 			_ = conn.Close()
-			return errors.Trace(err)
+			log.Warn("send metadata to peer failed, retrying", zap.Error(err))
+			continue
 		}
 
 		if err := c.run(ctx, clientStream); err != nil {
-			if cerrors.ErrPeerMessageTopicCongested.Equal(err) || errors.Cause(err) == io.EOF {
-				log.Warn("client detected recoverable error, restarting", zap.Error(err))
-				continue
-			}
-			return errors.Trace(err)
+			log.Warn("peer message client detected error, restarting", zap.Error(err))
+			continue
 		}
 	}
 }
@@ -240,6 +256,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 	}
 }
 
+// retrySending retries sending messages when the gRPC stream is re-established.
 func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) error {
 	topicsCloned := make(map[string]*topicEntry)
 	c.topicMu.RLock()
@@ -325,10 +342,15 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 	}
 }
 
+// SendMessage sends a message. It will block if the client is not ready to
+// accept the message for now. Once the function returns without an error,
+// the client will try its best to send the message, until `Run` is canceled.
 func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
 	return c.sendMessage(ctx, topic, value, false)
 }
 
+// TrySendMessage tries to send a message. It will return ErrPeerMessageSendTryAgain
+// if the client is not ready to accept the message.
 func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
 	return c.sendMessage(ctx, topic, value, true)
 }
@@ -388,6 +410,9 @@ func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value inte
 	return Seq(nextSeq), nil
 }
 
+// CurrentAck returns (s, true) if all messages with sequence less than or
+// equal to s have been processed by the receiver. It returns (0, false) if
+// no message for `topic` has been sent.
 func (c *MessageClient) CurrentAck(topic Topic) (Seq, bool) {
 	c.topicMu.RLock()
 	defer c.topicMu.RUnlock()

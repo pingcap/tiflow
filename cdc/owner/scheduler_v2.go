@@ -39,6 +39,9 @@ type schedulerV2 struct {
 	moveTableJobQueue []*moveTableJob
 	moveTableTarget   map[model.TableID]model.CaptureID
 
+	lastTickCaptureCount int
+	needRebalance bool
+
 	changefeedID model.ChangeFeedID
 }
 
@@ -139,6 +142,17 @@ func (s *schedulerV2) Tick(
 	s.state = state
 	s.captures = captures
 
+	if s.needRebalance {
+		ok, err := s.rebalance(ctx)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		if ok {
+			s.needRebalance = false
+		}
+	}
+
+
 	for tableID, record := range s.tableToCaptureMap {
 		if _, ok := s.captures[record.Capture]; !ok {
 			log.Info("capture down, redispatching table",
@@ -217,6 +231,10 @@ func (s *schedulerV2) Tick(
 		return false, errors.Trace(err)
 	}
 
+	if !s.needRebalance && s.lastTickCaptureCount != len(captures) {
+		s.needRebalance = true
+	}
+
 	hasPendingJob := false
 	for _, record := range s.tableToCaptureMap {
 		if record.Status != runningTable {
@@ -225,7 +243,11 @@ func (s *schedulerV2) Tick(
 		}
 	}
 
-	log.Debug("scheduler has pending jobs", zap.Any("jobs", s.tableToCaptureMap))
+	if hasPendingJob {
+		log.Debug("scheduler has pending jobs", zap.Any("jobs", s.tableToCaptureMap))
+	}
+
+	s.lastTickCaptureCount = len(captures)
 	shouldUpdateState = !hasPendingJob
 	return
 }
@@ -285,7 +307,63 @@ func (s *schedulerV2) handleMoveTableJobs(ctx context.Context) error {
 }
 
 func (s *schedulerV2) Rebalance() {
-	// TODO
+	s.needRebalance = true
+}
+
+func (s *schedulerV2) rebalance(ctx context.Context) (bool, error) {
+	totalTableNum := len(s.tableToCaptureMap)
+	captureNum := len(s.captures)
+	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
+
+	log.Info("Start rebalancing",
+		zap.String("changefeed", s.state.ID),
+		zap.Int("table-num", totalTableNum),
+		zap.Int("capture-num", captureNum),
+		zap.Int("target-limit", upperLimitPerCapture))
+
+	captureToTablesMap := make(map[model.CaptureID][]model.TableID)
+	for tableID, record := range s.tableToCaptureMap {
+		captureToTablesMap[record.Capture] = append(captureToTablesMap[record.Capture], tableID)
+	}
+
+	for captureID, tableIDs := range captureToTablesMap {
+		tableNum2Remove := len(tableIDs) - upperLimitPerCapture
+		if tableNum2Remove <= 0 {
+			continue
+		}
+
+		// here we pick `tableNum2Remove` tables to delete,
+		// and then the removed tables will be dispatched by `Tick` function in the next tick
+		for _, tableID := range tableIDs {
+			tableID := tableID
+			if tableNum2Remove <= 0 {
+				break
+			}
+
+			ok, err := s.dispatchTable(ctx, tableID, captureID, true)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+
+			if !ok {
+				log.Warn("removing table failed, client congested, will try again",
+					zap.String("changefeed-id", s.changefeedID),
+					zap.String("target", captureID),
+					zap.Int64("table-id", tableID))
+				return false, nil
+			}
+
+			log.Info("Rebalance: Move table",
+				zap.Int64("table-id", tableID),
+				zap.String("capture", captureID),
+				zap.String("changefeed-id", s.state.ID))
+
+			s.tableToCaptureMap[tableID].Status = removingTable
+
+			tableNum2Remove--
+		}
+	}
+	return true, nil
 }
 
 func (s *schedulerV2) dispatchTable(ctx context.Context, tableID model.TableID, target model.CaptureID, isDelete bool) (bool, error) {
