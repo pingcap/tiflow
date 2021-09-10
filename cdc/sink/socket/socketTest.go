@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
+	"log"
 	"net"
-    "log"
-    "os"
-    "strconv"
+	"os"
+	"strconv"
 
-    "time"
-    "bytes"
-    "container/list"
-    //"unsafe"
+	"bytes"
+	"container/list"
+	"time"
+	//"unsafe"
 )
 
 
@@ -323,10 +323,10 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 		fmt.Println(rowInfo.TableName+"::::"+rowInfo.SchemaName)
 
-		buffer.Write(publicUtils.LongToBytes(t1))
-		buffer.Write(publicUtils.LongToBytes(t1))
+		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
+		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
 
-		buffer.Write(publicUtils.IntegerToBytes(2))
+		buffer.Write(publicUtils.Int32ToBytes(rowInfo.ColumnNo))
 
 		operTypeArr := make([]byte,4)
 		operTypeArr[3]=byte('I')
@@ -554,11 +554,11 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 	//Create byte[] Array
 	//publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
 	//colPos = colPos+len(lengthArr);
-	if(columnInfo.IsPkFlag){
+	/*if(columnInfo.IsPkFlag){
 		columnInfoArr[colPos]=0x01
 	}else{
 		columnInfoArr[colPos]=0x00
-	}
+	}*/
 	colPos = colPos+1;
 	columnInfoArr[colPos]=columnInfo.ColumnType
 	colPos = colPos+1;
