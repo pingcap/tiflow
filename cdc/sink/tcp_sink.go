@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"github.com/pingcap/ticdc/cdc/sink/socket"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
-	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	//"net"
 	"sync/atomic"
 
@@ -69,10 +68,11 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 	fmt.Println(">>>>>>>>>>>>>>>>>>>>======================================================================================>>>>>>>>>>>>>>>>>>>")
 
-	/*//读取配置文件
-	configMap := publicUtils.InitConfig("configuration.txt")
+	//读取配置文件
+	/*configMap := publicUtils.InitConfig("./configuration.txt")
 	//获取配置里host属性的value
-	fmt.Println(configMap["addr"])
+	fmt.Println(configMap["host"])
+	fmt.Println(configMap["port"])
 	//查看配置文件里所有键值对
 	fmt.Println(configMap)*/
 

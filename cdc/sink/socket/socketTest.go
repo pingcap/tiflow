@@ -504,6 +504,7 @@ func ddlColumnInfoVoToByte(columnInfo *vo.ColVo) []byte{
 
 }*/
 
+
 func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
 	colPos:=0;
