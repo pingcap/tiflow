@@ -70,6 +70,7 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 		messageRouter:     ctx.GlobalVars().MessageRouter,
 		tableToCaptureMap: map[model.TableID]*tableRecord{},
 		changefeedID:      changefeedID,
+		captureSynced:     map[model.CaptureID]bool{},
 	}
 
 	// TODO add function MustAddHandler
@@ -82,6 +83,13 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 			ret.mu.Lock()
 			defer ret.mu.Unlock()
 
+			if _, ok := ret.captures[captureID]; !ok {
+				log.Warn("stale message from dead processor, ignore",
+					zap.String("capture-id", captureID),
+					zap.Any("message", message))
+				return nil
+			}
+
 			record, ok := ret.tableToCaptureMap[message.ID]
 			if !ok {
 				log.Panic("response to invalid dispatch message",
@@ -90,6 +98,12 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 					zap.Int64("table-id", message.ID))
 			}
 
+			if record.Capture != senderID {
+				log.Panic("message from unexpected capture",
+					zap.String("expected", record.Capture),
+					zap.String("actual", captureID),
+					zap.Any("message", message))
+			}
 			log.Info("owner received dispatch finished",
 				zap.String("capture", captureID),
 				zap.Int64("table-id", message.ID))

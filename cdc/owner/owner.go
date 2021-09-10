@@ -43,16 +43,16 @@ const (
 )
 
 type ownerJob struct {
-	tp           ownerJobType
-	changefeedID model.ChangeFeedID
+	Tp           ownerJobType
+	ChangefeedID model.ChangeFeedID
 
 	// for ManualSchedule only
-	targetCaptureID model.CaptureID
+	TargetCaptureID model.CaptureID
 	// for ManualSchedule only
-	tableID model.TableID
+	TableID model.TableID
 
 	// for Admin Job only
-	adminJob *model.AdminJob
+	AdminJob *model.AdminJob
 
 	// for debug info only
 	debugInfoWriter io.Writer
@@ -154,9 +154,9 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 // EnqueueJob enqueues a admin job into a internal queue, and the Owner will handle the job in the next tick
 func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
 	o.pushOwnerJob(&ownerJob{
-		tp:           ownerJobTypeAdminJob,
-		adminJob:     &adminJob,
-		changefeedID: adminJob.CfID,
+		Tp:           ownerJobTypeAdminJob,
+		AdminJob:     &adminJob,
+		ChangefeedID: adminJob.CfID,
 		done:         make(chan struct{}),
 	})
 }
@@ -164,8 +164,8 @@ func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
 // TriggerRebalance triggers a rebalance for the specified changefeed
 func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
 	o.pushOwnerJob(&ownerJob{
-		tp:           ownerJobTypeRebalance,
-		changefeedID: cfID,
+		Tp:           ownerJobTypeRebalance,
+		ChangefeedID: cfID,
 		done:         make(chan struct{}),
 	})
 }
@@ -173,10 +173,10 @@ func (o *Owner) TriggerRebalance(cfID model.ChangeFeedID) {
 // ManualSchedule moves a table from a capture to another capture
 func (o *Owner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID) {
 	o.pushOwnerJob(&ownerJob{
-		tp:              ownerJobTypeManualSchedule,
-		changefeedID:    cfID,
-		targetCaptureID: toCapture,
-		tableID:         tableID,
+		Tp:              ownerJobTypeManualSchedule,
+		ChangefeedID:    cfID,
+		TargetCaptureID: toCapture,
+		TableID:         tableID,
 		done:            make(chan struct{}),
 	})
 }
@@ -186,7 +186,7 @@ func (o *Owner) WriteDebugInfo(w io.Writer) {
 	timeout := time.Second * 3
 	done := make(chan struct{})
 	o.pushOwnerJob(&ownerJob{
-		tp:              ownerJobTypeDebugInfo,
+		Tp:              ownerJobTypeDebugInfo,
 		debugInfoWriter: w,
 		done:            done,
 	})
@@ -265,17 +265,17 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 func (o *Owner) handleJobs() {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
-		changefeedID := job.changefeedID
+		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
 			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
 			continue
 		}
-		switch job.tp {
+		switch job.Tp {
 		case ownerJobTypeAdminJob:
-			cfReactor.feedStateManager.PushAdminJob(job.adminJob)
+			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeManualSchedule:
-			cfReactor.scheduler.MoveTable(job.tableID, job.targetCaptureID)
+			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeDebugInfo:

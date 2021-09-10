@@ -14,7 +14,10 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
+
+	"github.com/pingcap/errors"
 
 	"github.com/pingcap/ticdc/pkg/p2p"
 	"github.com/vmihailenco/msgpack/v5"
@@ -61,9 +64,18 @@ type RequestSendTableStatusResponseMessage struct {
 }
 
 func (m *RequestSendTableStatusResponseMessage) MarshalJSON() ([]byte, error) {
-	return msgpack.Marshal(m)
+	raw, err := msgpack.Marshal(m)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return json.Marshal(raw)
 }
 
 func (m *RequestSendTableStatusResponseMessage) UnmarshalJSON(data []byte) error {
-	return msgpack.Unmarshal(data, m)
+	var raw []byte
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return msgpack.Unmarshal(raw, m)
 }

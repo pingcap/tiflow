@@ -33,7 +33,7 @@ require (
 	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
+	github.com/modern-go/reflect2 v1.0.1
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63
@@ -56,7 +56,7 @@ require (
 	github.com/tikv/pd v1.1.0-beta.0.20210818082359-acba1da0018d
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
-	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
 	go.uber.org/zap v1.19.0

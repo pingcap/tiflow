@@ -13,7 +13,7 @@ function test_owner_ha() {
     test_kill_owner
     test_hang_up_owner
     test_expire_owner
-    test_owner_cleanup_stale_tasks
+    # test_owner_cleanup_stale_tasks
     test_owner_retryable_error
     test_gap_between_watch_capture
 }

@@ -97,6 +97,7 @@ type processor struct {
 	// next tick will happen after the owner has acknowledged the peer message
 	// with sequence number `waitForAck`.
 	waitForAck           p2p.Seq
+	waitForSync          p2p.Seq
 	needSyncWithNewOwner bool
 }
 
@@ -839,6 +840,7 @@ func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
 				p.ownerID = senderID
 				p.ownerRev = msg.OwnerRev
 				p.waitForAck = 0
+				p.waitForSync = 0
 				hasOwnerChanged = true
 				log.Debug("processor updated owner ID",
 					zap.String("owner-id", senderID),
@@ -883,7 +885,10 @@ func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
 					zap.String("owner-id", senderID),
 					zap.Int64("owner-rev", msg.OwnerRev))
 			}
+			p.ownerID = senderID
 			p.ownerRev = msg.OwnerRev
+			p.waitForAck = 0
+			p.waitForSync = 0
 			p.ownerInfoMu.Unlock()
 
 			p.pendingOpsMu.Lock()
@@ -998,10 +1003,9 @@ func (p *processor) syncWithOwner(ctx context.Context) (bool, error) {
 		}
 		return false, errors.Trace(err)
 	}
-
-	// TODO do we need this?
-	p.waitForAck = seq
-
+	if p.waitForSync < seq {
+		p.waitForSync = seq
+	}
 	p.needSyncWithNewOwner = false
 	return true, nil
 }
@@ -1009,10 +1013,11 @@ func (p *processor) syncWithOwner(ctx context.Context) (bool, error) {
 func (p *processor) waitOwnerAck() bool {
 	p.ownerInfoMu.RLock()
 	targetAck := p.waitForAck
+	targetSync := p.waitForSync
 	ownerID := p.ownerID
 	p.ownerInfoMu.RUnlock()
 
-	if targetAck == 0 {
+	if targetAck == 0 && targetSync == 0 {
 		return true
 	}
 
@@ -1024,10 +1029,22 @@ func (p *processor) waitOwnerAck() bool {
 
 	curAck, ok := client.CurrentAck(model.DispatchTableResponseTopic(p.changefeedID))
 	if !ok {
+		if targetAck > 0 {
+			return false
+		}
+	} else if curAck < targetAck {
 		return false
 	}
 
-	return curAck >= targetAck
+	curSync, ok := client.CurrentAck(model.RequestSendTableStatusResponseTopic(p.changefeedID))
+	if !ok {
+		if targetSync > 0 {
+			return false
+		}
+	} else if curSync < targetSync {
+		return false
+	}
+	return true
 }
 
 // WriteDebugInfo write the debug info to Writer
