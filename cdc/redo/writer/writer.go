@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -210,8 +209,11 @@ func (l *LogWriter) runGC(ctx context.Context) {
 }
 
 func (l *LogWriter) gc() error {
+	l.metaLock.RUnlock()
+	defer l.metaLock.RUnlock()
+
 	var err error
-	ts := atomic.LoadUint64(&l.meta.CheckPointTs)
+	ts := l.meta.CheckPointTs
 	err = multierr.Append(err, l.rowWriter.GC(ts))
 	err = multierr.Append(err, l.ddlWriter.GC(ts))
 	return err
@@ -321,8 +323,7 @@ func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if l.isStopped() {
 		return cerror.ErrRedoWriterStopped
 	}
-	atomic.StoreUint64(&l.meta.CheckPointTs, ts)
-	return l.flushLogMeta()
+	return l.flushLogMeta(ts, 0)
 }
 
 // EmitResolvedTs implement EmitResolvedTs api
@@ -336,9 +337,8 @@ func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	if l.isStopped() {
 		return cerror.ErrRedoWriterStopped
 	}
-	atomic.StoreUint64(&l.meta.ResolvedTs, ts)
 
-	return l.flushLogMeta()
+	return l.flushLogMeta(0, ts)
 }
 
 // GetCurrentResolvedTs implement GetCurrentResolvedTs api
@@ -398,7 +398,7 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 
 // flush flushes all the buffered data to the disk.
 func (l *LogWriter) flush() error {
-	err1 := l.flushLogMeta()
+	err1 := l.flushLogMeta(0, 0)
 	err2 := l.ddlWriter.Flush()
 	err3 := l.rowWriter.Flush()
 
@@ -415,10 +415,16 @@ func (l *LogWriter) getMetafileName() string {
 	return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, common.DefaultMetaFileType, common.MetaEXT)
 }
 
-func (l *LogWriter) flushLogMeta() error {
+func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
+	if checkPointTs != 0 {
+		l.meta.CheckPointTs = checkPointTs
+	}
+	if resolvedTs != 0 {
+		l.meta.ResolvedTs = resolvedTs
+	}
 	data, err := l.meta.MarshalMsg(nil)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
