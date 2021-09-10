@@ -209,7 +209,7 @@ func (l *LogWriter) runGC(ctx context.Context) {
 }
 
 func (l *LogWriter) gc() error {
-	l.metaLock.RUnlock()
+	l.metaLock.RLock()
 	defer l.metaLock.RUnlock()
 
 	var err error
