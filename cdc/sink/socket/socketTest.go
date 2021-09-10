@@ -51,7 +51,7 @@ type SliceMock struct {
 }
 
 
-func JddmDDLClient(hostIpAddress string, hostPort int,ddlInfos []*vo.DDLInfos){
+func JddmDDLClient(hostIpAddress string, hostPort int,ddlInfos *vo.DDLInfos){
 
 	fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
 	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
@@ -128,7 +128,7 @@ func JddmDDLClient(hostIpAddress string, hostPort int,ddlInfos []*vo.DDLInfos){
 	//createBytesFromRowInfoList(rowInfos);
 	***/
 
-	_, err = conn.Write(createBytesFromDDLInfoList(ddlInfos))
+	_, err = conn.Write(createBytes_FromDdlInfoVo(ddlInfos))
     if err != nil {
 		return
 	}
@@ -360,7 +360,81 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 }
 
-func createBytesFromDDLInfoList(rowInfos []*vo.DDLInfos) []byte{
+
+func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
+
+	verifyArr := make([]byte,4)
+	//serviceNumArr := make([]byte,4)
+
+	verifyArr[0] = 0x06
+	verifyArr[1] = 0xce
+	verifyArr[2] = 0x01
+	verifyArr[3] = 0x12
+
+	buffer := new(bytes.Buffer)   //直接使用 new 初始化，可以直接使用
+	sendBatchDDLArr :=new(bytes.Buffer)
+	//当前时间戳
+	t1 := time.Now().Unix()  //1564552562
+	fmt.Println(t1)
+	fmt.Println(ddlInfos.TableName+"::::"+ddlInfos.SchemaName)
+	buffer.Write(publicUtils.LongToBytes(t1))
+	buffer.Write(publicUtils.LongToBytes(t1))
+	operTypeArr := make([]byte,4)
+	operTypeArr[3]=byte(12)
+	buffer.Write(operTypeArr)
+	schemaNameArr := make([]byte,1+len(ddlInfos.SchemaName))
+	publicUtils.BlockByteArrCopy([]byte(ddlInfos.SchemaName),0,schemaNameArr,0,len(ddlInfos.SchemaName))
+	buffer.Write(schemaNameArr)
+	tableNameArr := make([]byte,1+len(ddlInfos.TableName))
+	publicUtils.BlockByteArrCopy([]byte(ddlInfos.TableName),0,tableNameArr,0,len(ddlInfos.TableName))
+	buffer.Write(tableNameArr)
+	buffer.Write(publicUtils.IntegerToBytes(len(ddlInfos.TableInfoList)))
+	for _,colInfo := range ddlInfos.TableInfoList{
+		fmt.Printf(" nowCol Type:%d ::name::%s\n",colInfo.ColumnType,colInfo.ColumnName)
+		buffer.Write(ddlColumnInfoVoToByte(colInfo))
+	}
+	buffer.Write(publicUtils.IntegerToBytes(len(ddlInfos.PreTableInfoList)))
+	for _,preColInfo := range ddlInfos.PreTableInfoList{
+		fmt.Printf(" preCol Type:%d ::name::%s\n",preColInfo.ColumnType,preColInfo.ColumnName)
+		buffer.Write(ddlColumnInfoVoToByte(preColInfo))
+	}
+
+	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
+	sendBatchDDLArr.Write(lengthArr)
+	sendBatchDDLArr.Write(verifyArr)
+	sendBatchDDLArr.Write(buffer.Bytes())
+	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchDDLArr.Bytes()))
+
+
+	return sendBatchDDLArr.Bytes()
+
+}
+
+
+func ddlColumnInfoVoToByte(columnInfo *vo.ColVo) []byte{
+
+	colPos:=0;
+
+	columnTypeArr := publicUtils.IntegerToBytes(columnInfo.ColumnType);
+
+	thisColLen := len(columnInfo.ColumnName)+1+len(columnTypeArr);
+	columnInfoArr := make([]byte,thisColLen)
+
+	columnNameArr := make([]byte,1+len(columnInfo.ColumnName))
+	publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnName),0,columnNameArr,0,len(columnInfo.ColumnName))
+
+	publicUtils.BlockByteArrCopy([]byte(columnNameArr),0,columnInfoArr,colPos,len(columnNameArr))
+	colPos = colPos+len(columnNameArr);
+	publicUtils.BlockByteArrCopy([]byte(columnTypeArr),0,columnInfoArr,colPos,len(columnTypeArr))
+	//fmt.Printf(" pos : %d  namArrLen : %s -> %d \n", colPos,columnInfo.columnNameArr,len(columnTypeArr))
+
+	fmt.Printf(" DDL columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
+	return columnInfoArr;
+}
+
+
+
+/*func createBytesFromDDLInfoList(rowInfos []*vo.DDLInfos) []byte{
 
 
 
@@ -428,7 +502,7 @@ func createBytesFromDDLInfoList(rowInfos []*vo.DDLInfos) []byte{
 
 	return sendBatchRowsArr.Bytes()
 
-}
+}*/
 
 func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
@@ -465,7 +539,7 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 }
 
 
-func colVoToByte(columnInfo *vo.ColVo) []byte{
+/*func colVoToByte(columnInfo *vo.ColVo) []byte{
 
 	colPos:=0;
 	thisColLen := 2+len(columnInfo.ColumnName)+1;
@@ -492,7 +566,7 @@ func colVoToByte(columnInfo *vo.ColVo) []byte{
 
 	fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
 	return columnInfoArr;
-}
+}*/
 
 /*func rowInfoToBytes_ByInterFace(rowInfo *vo.RowInfoVo){
 
