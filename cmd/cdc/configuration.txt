@@ -1,5 +1,6 @@
 host=10.0.0.72
-port=19853
+port=19850
 user=postgres
 passwor=123
 dbname=test
+//addr =123
