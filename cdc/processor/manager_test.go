@@ -48,7 +48,7 @@ func (s *managerSuite) resetSuit(ctx cdcContext.Context, c *check.C) {
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	})
-	s.state = model.NewGlobalState().(*model.GlobalReactorState)
+	s.state = model.NewGlobalState()
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	c.Assert(err, check.IsNil)
 	s.tester = orchestrator.NewReactorStateTester(c, s.state, map[string]string{

@@ -671,7 +671,7 @@ func TestServerClosed(t *testing.T) {
 	require.Eventually(t, func() bool {
 		_, clientErr = stream.Recv()
 		return clientErr != nil
-	}, time.Second * 1, time.Millisecond * 10)
+	}, time.Second*1, time.Millisecond*10)
 	require.Regexp(t, ".*CDC capture closing.*", clientErr.Error())
 
 	wg.Wait()

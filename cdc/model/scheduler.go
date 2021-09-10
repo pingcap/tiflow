@@ -15,15 +15,28 @@ package model
 
 import (
 	"fmt"
+
 	"github.com/pingcap/ticdc/pkg/p2p"
 )
 
 type DispatchTableMessage struct {
+	OwnerRev   int64   `json:"owner-rev"`
 	ID         TableID `json:"id"`
 	IsDelete   bool    `json:"is-delete"`
 	BoundaryTs Ts      `json:"boundary-ts"`
+
+	// For internal use by the processor
+	Processed bool `json:"-"`
+}
+
+type DispatchTableResponseMessage struct {
+	ID TableID `json:"id"`
 }
 
 func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
 	return p2p.Topic(fmt.Sprintf("dispatch/%s", changefeedID))
+}
+
+func DispatchTableResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
+	return p2p.Topic(fmt.Sprintf("dispatch-resp/%s", changefeedID))
 }

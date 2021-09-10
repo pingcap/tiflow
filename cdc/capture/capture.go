@@ -74,10 +74,10 @@ type Capture struct {
 // NewCapture returns a new Capture instance
 func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, grpcServer *p2p.ResettableServer) *Capture {
 	return &Capture{
-		pdClient:   pdClient,
-		kvStorage:  kvStorage,
-		etcdClient: etcdClient,
-		cancel:     func() {},
+		pdClient:             pdClient,
+		kvStorage:            kvStorage,
+		etcdClient:           etcdClient,
+		cancel:               func() {},
 		grpcResettableServer: grpcServer,
 
 		newProcessorManager: processor.NewManager,
@@ -164,6 +164,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		EtcdClient:    c.etcdClient,
 		GrpcPool:      c.grpcPool,
 		MessageRouter: c.peerMessageRouter,
+		MessageServer: c.peerMessageServer,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -274,7 +275,19 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
 		owner := c.newOwner()
 		c.setOwner(owner)
+
+		// TODO refactor this piece of code into a function
+		leaderResp, err := c.election.Leader(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if len(leaderResp.Kvs) != 1 {
+			return errors.New("unexpected response when querying about leader")
+		}
+		ownerRev := leaderResp.Kvs[0].CreateRevision
+		ctx.GlobalVars().OwnerRev = ownerRev
 		err = c.runEtcdWorker(ctx, owner, c.MakeGlobalEtcdStateWithCaptureChangeEventHandler(), ownerFlushInterval)
+		ctx.GlobalVars().OwnerRev = 0
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key

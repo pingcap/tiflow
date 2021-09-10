@@ -22,6 +22,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edwingeng/deque"
+	"github.com/pingcap/ticdc/pkg/p2p"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -77,6 +80,23 @@ type processor struct {
 	metricCheckpointTsLagGauge  prometheus.Gauge
 	metricSyncTableNumGauge     prometheus.Gauge
 	metricProcessorErrorCounter prometheus.Counter
+
+	pendingOpsMu sync.Mutex
+	pendingOps   deque.Deque
+
+	operations map[model.TableID]*model.DispatchTableMessage
+
+	messageServer *p2p.MessageServer
+	messageRouter p2p.MessageRouter
+
+	// ownerID and ownerRev are used to make sure we send peer messages
+	// to the correct owner
+	ownerInfoMu sync.RWMutex
+	ownerID     model.CaptureID
+	ownerRev    int64
+	// next tick will happen after the owner has acknowledged the peer message
+	// with sequence number `waitForAck`.
+	waitForAck p2p.Seq
 }
 
 // newProcessor creates a new processor
@@ -96,6 +116,9 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+
+		messageServer: ctx.GlobalVars().MessageServer,
+		messageRouter: ctx.GlobalVars().MessageRouter,
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -271,6 +294,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		opts[k] = v
 	}
 
+	if err := p.setupPeerMessageHandler(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	// TODO(neil) find a better way to let sink know cyclic is enabled.
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
 		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
@@ -314,125 +341,113 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 
 // handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
 func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
-	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
-		p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			if status == nil || status.Operation == nil {
-				log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-				return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
-			}
-			opt := status.Operation[tableID]
-			if opt == nil {
-				log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-				return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
-			}
-			if err := fn(opt); err != nil {
-				return nil, false, errors.Trace(err)
-			}
-			return status, true, nil
-		})
-	}
-	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
-	for tableID, opt := range taskStatus.Operation {
-		if opt.TableApplied() {
-			continue
-		}
-		globalCheckpointTs := p.changefeed.Status.CheckpointTs
-		if opt.Delete {
-			table, exist := p.tables[tableID]
-			if !exist {
-				log.Warn("table which will be deleted is not found",
-					cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.Status = model.OperFinished
-					operation.Done = true
-					return nil
-				})
+	p.pendingOpsMu.Lock()
+	for !p.pendingOps.Empty() {
+		// TODO add a constant for this value
+		ops := p.pendingOps.PopManyFront(128)
+		for _, op := range ops {
+			op := op.(*model.DispatchTableMessage)
+			if _, ok := p.operations[op.ID]; ok {
+				// operation from the previous owner
 				continue
 			}
-			switch opt.Status {
-			case model.OperDispatched:
-				if opt.BoundaryTs < globalCheckpointTs {
-					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
-				}
-				if !table.AsyncStop(opt.BoundaryTs) {
+			p.operations[op.ID] = op
+		}
+	}
+	// We unlock as early as possible to avoid contention with
+	// the peer message handler. Blocking the message handler could
+	// block the whole gRPC server.
+	p.pendingOpsMu.Unlock()
+
+	for tableID, op := range p.operations {
+		globalCheckpointTs := p.changefeed.Status.CheckpointTs
+
+		if !op.Processed {
+			// TODO do we need to remove this?
+			if op.BoundaryTs != globalCheckpointTs {
+				log.Warn("boundary-ts does not match global checkpoint-ts",
+					zap.Uint64("globalCheckpointTs", globalCheckpointTs),
+					zap.Any("operation", op))
+			}
+			if op.IsDelete {
+				table, ok := p.tables[tableID]
+				if !ok {
+					log.Warn("table which will be deleted is not found",
+						cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+				} else if !table.AsyncStop(op.BoundaryTs) {
 					// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 					// and we do not want to alarm the user.
 					log.Debug("AsyncStop has failed, possible due to a full pipeline",
 						zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.Status = model.OperProcessed
-					return nil
-				})
-			case model.OperProcessed:
-				if table.Status() != tablepipeline.TableStatusStopped {
+				op.Processed = true
+			} else {
+				err := p.addTable(ctx, tableID, &model.TableReplicaInfo{StartTs: op.BoundaryTs})
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
+		} else {
+			if op.IsDelete {
+				table, exist := p.tables[tableID]
+				if !exist {
+					log.Warn("table which was added is not found",
+						cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+					ok, err := p.ackDispatchTable(ctx, tableID)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					if ok {
+						delete(p.operations, tableID)
+					}
+					continue
+				} else if table.Status() != tablepipeline.TableStatusStopped {
 					log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.BoundaryTs = table.CheckpointTs()
-					operation.Status = model.OperFinished
-					operation.Done = true
-					return nil
-				})
+
+				ok, err := p.ackDispatchTable(ctx, tableID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if ok {
+					delete(p.operations, tableID)
+				}
+
 				table.Cancel()
 				table.Wait()
 				delete(p.tables, tableID)
 				log.Debug("Operation done signal received",
 					cdcContext.ZapFieldChangefeed(ctx),
 					zap.Int64("tableID", tableID),
-					zap.Reflect("operation", opt))
-			default:
-				log.Panic("unreachable")
-			}
-		} else {
-			switch opt.Status {
-			case model.OperDispatched:
-				replicaInfo, exist := taskStatus.Tables[tableID]
-				if !exist {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
-				}
-				if replicaInfo.StartTs != opt.BoundaryTs {
-					log.Warn("the startTs and BoundaryTs of add table operation should be always equaled", zap.Any("replicaInfo", replicaInfo))
-				}
-				err := p.addTable(ctx, tableID, replicaInfo)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.Status = model.OperProcessed
-					return nil
-				})
-			case model.OperProcessed:
+					zap.Reflect("operation", op))
+			} else {
 				table, exist := p.tables[tableID]
 				if !exist {
-					log.Warn("table which was added is not found",
+					log.Panic("table which was added is not found",
 						cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperDispatched
-						return nil
-					})
-					continue
 				}
 				localResolvedTs := p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs
 				globalResolvedTs := p.changefeed.Status.ResolvedTs
 				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperFinished
-						operation.Done = true
-						return nil
-					})
+					ok, err := p.ackDispatchTable(ctx, tableID)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					if ok {
+						delete(p.operations, tableID)
+					}
+
 					log.Debug("Operation done signal received",
 						cdcContext.ZapFieldChangefeed(ctx),
 						zap.Int64("tableID", tableID),
-						zap.Reflect("operation", opt))
+						zap.Reflect("operation", op))
 				}
-			default:
-				log.Panic("unreachable")
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -555,6 +570,11 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 
 // handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition() {
+	if !p.waitOwnerAck() {
+		log.Debug("waiting for owner to ack pending dispatch responses")
+		return
+	}
+
 	minResolvedTs := uint64(math.MaxUint64)
 	if p.schemaStorage != nil {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
@@ -760,6 +780,11 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) Close() error {
+	// TODO pass in a context here
+	if err := p.deregisterPeerMessageHandler(context.Background()); err != nil {
+		return errors.Trace(err)
+	}
+
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -783,6 +808,106 @@ func (p *processor) Close() error {
 		return p.sinkManager.Close(ctx)
 	}
 	return nil
+}
+
+func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
+	doneCh, _, err := p.messageServer.AddHandler(ctx,
+		string(model.DispatchTableTopic(p.changefeedID)),
+		&model.DispatchTableMessage{},
+		func(senderID string, data interface{}) error {
+			msg := data.(*model.DispatchTableMessage)
+			p.ownerInfoMu.Lock()
+			if p.ownerRev < msg.OwnerRev {
+				p.ownerID = senderID
+				p.ownerRev = msg.OwnerRev
+				p.waitForAck = 0
+				log.Debug("processor updated owner ID",
+					zap.String("owner-id", senderID),
+					zap.Int64("owner-rev", msg.OwnerRev))
+			}
+			p.ownerInfoMu.Unlock()
+
+			p.pendingOpsMu.Lock()
+			defer p.pendingOpsMu.Unlock()
+			p.pendingOps.PushBack(data)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	select {
+	case <-ctx.Done():
+		return errors.Trace(err)
+	case <-doneCh:
+	}
+
+	return nil
+}
+
+func (p *processor) deregisterPeerMessageHandler(ctx context.Context) error {
+	doneCh, err := p.messageServer.RemoveHandler(ctx, string(model.DispatchTableTopic(p.changefeedID)))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	select {
+	case <-ctx.Done():
+		return errors.Trace(err)
+	case <-doneCh:
+	}
+
+	return nil
+}
+
+func (p *processor) ackDispatchTable(ctx context.Context, tableID model.TableID) (bool, error) {
+	p.ownerInfoMu.RLock()
+	ownerID := p.ownerID
+	p.ownerInfoMu.RUnlock()
+
+	client := p.messageRouter.GetClient(p2p.SenderID(ownerID))
+	if client == nil {
+		log.Warn("Cannot find a gRPC client to the owner", zap.String("owner-id", p.ownerID))
+		return false, nil
+	}
+
+	seq, err := client.TrySendMessage(ctx,
+		model.DispatchTableResponseTopic(p.changefeedID), &model.DispatchTableResponseMessage{ID: tableID})
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+
+	p.ownerInfoMu.Lock()
+	if p.waitForAck < seq {
+		p.waitForAck = seq
+	}
+	p.ownerInfoMu.Unlock()
+
+	return true, nil
+}
+
+func (p *processor) waitOwnerAck() bool {
+	p.ownerInfoMu.RLock()
+	targetAck := p.waitForAck
+	ownerID := p.ownerID
+	p.ownerInfoMu.RUnlock()
+
+	if targetAck == 0 {
+		return true
+	}
+
+	client := p.messageRouter.GetClient(p2p.SenderID(ownerID))
+	if client == nil {
+		log.Warn("Cannot find a gRPC client to the owner", zap.String("owner-id", p.ownerID))
+		return false
+	}
+
+	curAck, ok := client.CurrentAck(model.DispatchTableResponseTopic(p.changefeedID))
+	if !ok {
+		return false
+	}
+
+	return curAck >= targetAck
 }
 
 // WriteDebugInfo write the debug info to Writer

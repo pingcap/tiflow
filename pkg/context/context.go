@@ -41,6 +41,11 @@ type GlobalVars struct {
 	EtcdClient    *kv.CDCEtcdClient
 	GrpcPool      kv.GrpcPool
 	MessageRouter p2p.MessageRouter
+	MessageServer *p2p.MessageServer
+	// If this node has been elected the owner,
+	// OwnerRev stores a non-zero integer larger
+	// than the OwnerRev assigned for any previous owner.
+	OwnerRev int64
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
