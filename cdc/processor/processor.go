@@ -119,6 +119,9 @@ func newProcessor(ctx cdcContext.Context) *processor {
 
 		messageServer: ctx.GlobalVars().MessageServer,
 		messageRouter: ctx.GlobalVars().MessageRouter,
+
+		pendingOps: deque.NewDeque(),
+		operations: make(map[model.TableID]*model.DispatchTableMessage),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -194,9 +197,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 		return nil, errors.Trace(err)
 	}
 	if err := p.handleTableOperation(ctx); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
 	p.handlePosition()
@@ -348,6 +348,7 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 		for _, op := range ops {
 			op := op.(*model.DispatchTableMessage)
 			if _, ok := p.operations[op.ID]; ok {
+				log.Warn("skipped duplicate operation", zap.Any("op", op))
 				// operation from the previous owner
 				continue
 			}
@@ -381,13 +382,14 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 						zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
 					continue
 				}
-				op.Processed = true
 			} else {
+				log.Info("adding table", zap.Int64("table-id", tableID))
 				err := p.addTable(ctx, tableID, &model.TableReplicaInfo{StartTs: op.BoundaryTs})
 				if err != nil {
 					return errors.Trace(err)
 				}
 			}
+			op.Processed = true
 		} else {
 			if op.IsDelete {
 				table, exist := p.tables[tableID]
@@ -816,6 +818,7 @@ func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
 		&model.DispatchTableMessage{},
 		func(senderID string, data interface{}) error {
 			msg := data.(*model.DispatchTableMessage)
+			log.Debug("processor received message", zap.Any("msg", msg))
 			p.ownerInfoMu.Lock()
 			if p.ownerRev < msg.OwnerRev {
 				p.ownerID = senderID
@@ -842,6 +845,8 @@ func (p *processor) setupPeerMessageHandler(ctx context.Context) error {
 	case <-doneCh:
 	}
 
+	log.Debug("processor registered message handler",
+		zap.String("topic", string(model.DispatchTableTopic(p.changefeedID))))
 	return nil
 }
 

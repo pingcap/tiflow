@@ -188,7 +188,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// TODO refactor the use of listeners and the management of the server goroutines.
 	s.mux = cmux.New(s.tcpListener)
-	s.grpcListener = s.mux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	s.grpcListener = s.mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
 	httpLn := s.mux.Match(cmux.Any())
 
 	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcServer)

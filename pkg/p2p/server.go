@@ -239,12 +239,12 @@ func (m *MessageServer) AddHandler(
 	tpi interface{},
 	fn func(string, interface{}) error) (chan struct{}, <-chan error, error) {
 	tp := reflect.TypeOf(tpi)
-	e := reflect.New(tp.Elem()).Interface()
 
 	poolHandle := m.pool.RegisterEvent(func(ctx context.Context, argsI interface{}) error {
 		args := argsI.(poolEventArgs)
 		senderID := args.senderID
 		entry := args.entry
+		e := reflect.New(tp.Elem()).Interface()
 
 		m.acksMapLock.Lock()
 		lastAck := m.getAck(SenderID(senderID), Topic(entry.GetTopic()))

@@ -237,7 +237,7 @@ func (s *ChangefeedReactorState) Exist() bool {
 
 // Active return true if the changefeed is ready to be processed
 func (s *ChangefeedReactorState) Active(captureID CaptureID) bool {
-	return s.Info != nil && s.Status != nil && s.TaskStatuses[captureID] != nil
+	return s.Info != nil && s.Status != nil /*&& s.TaskStatuses[captureID] != nil*/
 }
 
 // GetPatches implements the ReactorState interface

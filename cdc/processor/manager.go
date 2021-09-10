@@ -96,12 +96,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
-				continue
-			}
-			// the processor should start after at least one table has been added to this capture
-			taskStatus := changefeedState.TaskStatuses[captureID]
-			if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
+			if changefeedState.Status.AdminJobType.IsStopState() /*|| changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState()*/ {
 				continue
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)

@@ -27,7 +27,9 @@ import (
 )
 
 type schedulerV2 struct {
-	state         *model.ChangefeedReactorState
+	state    *model.ChangefeedReactorState
+	captures map[model.CaptureID]*model.CaptureInfo
+
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
 
@@ -49,10 +51,12 @@ const (
 )
 
 type tableRecord struct {
-	capture model.CaptureID
-	status  tableStatus
+	Capture model.CaptureID
+	Status  tableStatus
 }
 
+// NewSchedulerV2 creates a new schedulerV2
+// TODO return an error
 func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *schedulerV2 {
 	ret := &schedulerV2{
 		messageServer:     ctx.GlobalVars().MessageServer,
@@ -78,9 +82,12 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 					zap.Int64("table-id", message.ID))
 			}
 
-			switch record.status {
+			log.Info("owner received dispatch finished",
+				zap.String("capture", captureID),
+				zap.Int64("table-id", message.ID))
+			switch record.Status {
 			case addingTable:
-				record.status = runningTable
+				record.Status = runningTable
 				delete(ret.moveTableTarget, message.ID)
 			case removingTable:
 				delete(ret.tableToCaptureMap, message.ID)
@@ -94,6 +101,7 @@ func NewSchedulerV2(ctx context.Context, changefeedID model.ChangeFeedID) *sched
 			return nil
 		})
 	if err != nil {
+		log.Error("Failed to add handler", zap.Error(err))
 		return nil
 	}
 
@@ -123,11 +131,22 @@ func (s *schedulerV2) Close(ctx context.Context) error {
 func (s *schedulerV2) Tick(
 	ctx context.Context,
 	state *model.ChangefeedReactorState,
-	currentTables []model.TableID) (shouldUpdateState bool, err error) {
+	currentTables []model.TableID,
+	captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.state = state
+	s.captures = captures
+
+	for tableID, record := range s.tableToCaptureMap {
+		if _, ok := s.captures[record.Capture]; !ok {
+			log.Info("capture down, redispatching table",
+				zap.String("capture-id", record.Capture),
+				zap.Int64("table-id", tableID))
+			delete(s.tableToCaptureMap, tableID)
+		}
+	}
 
 	shouldReplicateTableSet := make(map[model.TableID]struct{})
 	for _, tableID := range currentTables {
@@ -163,8 +182,8 @@ func (s *schedulerV2) Tick(
 		}
 
 		s.tableToCaptureMap[tableID] = &tableRecord{
-			capture: target,
-			status:  addingTable,
+			Capture: target,
+			Status:  addingTable,
 		}
 	}
 
@@ -172,13 +191,13 @@ func (s *schedulerV2) Tick(
 		if _, ok := shouldReplicateTableSet[tableID]; ok {
 			continue
 		}
-		if record.status != runningTable {
+		if record.Status != runningTable {
 			// another operation is in progress
 			continue
 		}
 
 		// need to delete table
-		captureID := record.capture
+		captureID := record.Capture
 		ok, err := s.dispatchTable(ctx, tableID, captureID, true)
 		if err != nil {
 			return false, errors.Trace(err)
@@ -191,7 +210,7 @@ func (s *schedulerV2) Tick(
 				zap.Int64("table-id", tableID))
 			return false, nil
 		}
-		record.status = removingTable
+		record.Status = removingTable
 	}
 
 	if err := s.handleMoveTableJobs(ctx); err != nil {
@@ -200,12 +219,13 @@ func (s *schedulerV2) Tick(
 
 	hasPendingJob := false
 	for _, record := range s.tableToCaptureMap {
-		if record.status != runningTable {
+		if record.Status != runningTable {
 			hasPendingJob = true
 			break
 		}
 	}
 
+	log.Debug("scheduler has pending jobs", zap.Any("jobs", s.tableToCaptureMap))
 	shouldUpdateState = !hasPendingJob
 	return
 }
@@ -228,13 +248,13 @@ func (s *schedulerV2) handleMoveTableJobs(ctx context.Context) error {
 			continue
 		}
 
-		if !s.state.Active(job.target) {
+		if _, ok := s.captures[record.Capture]; !ok {
 			log.Warn("tried to move table to a non-existent capture", zap.Any("job", job))
 			s.moveTableJobQueue = s.moveTableJobQueue[1:]
 			continue
 		}
 
-		if job.target == record.capture {
+		if job.target == record.Capture {
 			log.Info("try to move table to its current capture, doing nothing", zap.Any("job", job))
 			s.moveTableJobQueue = s.moveTableJobQueue[1:]
 			continue
@@ -245,19 +265,19 @@ func (s *schedulerV2) handleMoveTableJobs(ctx context.Context) error {
 		s.moveTableTarget[job.tableID] = job.target
 
 		// Removes the table from the current capture
-		ok, err := s.dispatchTable(ctx, job.tableID, record.capture, true)
+		ok, err := s.dispatchTable(ctx, job.tableID, record.Capture, true)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if !ok {
 			log.Warn("dispatching table failed, client congested, will try again",
 				zap.String("changefeed-id", s.changefeedID),
-				zap.String("target", record.capture),
+				zap.String("target", record.Capture),
 				zap.Int64("table-id", job.tableID))
 			return nil
 		}
 
-		record.status = removingTable
+		record.Status = removingTable
 		s.moveTableJobQueue = s.moveTableJobQueue[1:]
 	}
 
@@ -292,13 +312,17 @@ func (s *schedulerV2) dispatchTable(ctx context.Context, tableID model.TableID, 
 }
 
 func (s *schedulerV2) findTargetCapture() (model.CaptureID, bool) {
-	if len(s.tableToCaptureMap) == 0 {
+	if len(s.captures) == 0 {
 		return "", false
 	}
 
 	captureWorkload := make(map[model.CaptureID]int)
+	for captureID := range s.captures {
+		captureWorkload[captureID] = 0
+	}
+
 	for _, record := range s.tableToCaptureMap {
-		captureWorkload[record.capture]++
+		captureWorkload[record.Capture]++
 	}
 
 	candidate := ""
