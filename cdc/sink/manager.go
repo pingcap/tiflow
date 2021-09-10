@@ -223,9 +223,6 @@ type bufferSink struct {
 	bufferMu     sync.Mutex
 	flushTsChan  chan uint64
 	drawbackChan chan drawbackMsg
-
-	captureAddr  string
-	changefeedID model.ChangeFeedID
 }
 
 func newBufferSink(
