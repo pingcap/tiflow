@@ -554,11 +554,11 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 	//Create byte[] Array
 	//publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
 	//colPos = colPos+len(lengthArr);
-	/*if(columnInfo.IsPkFlag){
+	if(columnInfo.IsPkFlag){
 		columnInfoArr[colPos]=0x01
 	}else{
 		columnInfoArr[colPos]=0x00
-	}*/
+	}
 	colPos = colPos+1;
 	columnInfoArr[colPos]=columnInfo.ColumnType
 	colPos = colPos+1;
@@ -567,8 +567,8 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
 	fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
 	return columnInfoArr;
-}*/
-
+}
+*/
 /*func rowInfoToBytes_ByInterFace(rowInfo *vo.RowInfoVo){
 
 
