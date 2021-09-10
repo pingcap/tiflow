@@ -86,7 +86,7 @@ func TestReader_Read(t *testing.T) {
 		fileType: common.DefaultRowLogFileType,
 	})
 	require.Equal(t, 1, len(r))
-	defer r[0].Close()
+	defer r[0].Close() //nolint:errcheck
 	log = &model.RedoLog{}
 	err = r[0].Read(log)
 	require.Nil(t, err)
@@ -139,7 +139,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 
 	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
 	require.Nil(t, err)
-	defer os.RemoveAll(dir1)
+	defer os.RemoveAll(dir1)//nolint:errcheck
 	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+"test")
 	path = filepath.Join(dir1, fileName)
 	_, err = os.Create(path)
