@@ -1700,7 +1700,7 @@
               "label": null,
               "logBase": 2,
               "max": "3600",
-              "min": "0.01",
+              "min": "0.001",
               "show": true
             },
             {
