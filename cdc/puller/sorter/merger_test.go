@@ -34,7 +34,10 @@ type mockFlushTaskBuilder struct {
 	totalCount int
 }
 
-var backEndCounterForTest int64
+var (
+	backEndCounterForTest int64
+	taskID                int64
+)
 
 func newMockFlushTaskBuilder() *mockFlushTaskBuilder {
 	backEnd := newMemoryBackEnd()
@@ -42,6 +45,7 @@ func newMockFlushTaskBuilder() *mockFlushTaskBuilder {
 
 	task := &flushTask{
 		backend:       backEnd,
+		taskID:        int(atomic.AddInt64(&taskID, 1)),
 		tsLowerBound:  0,
 		maxResolvedTs: 0,
 		finished:      make(chan error, 2),

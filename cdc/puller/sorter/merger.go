@@ -18,7 +18,6 @@ import (
 	"context"
 	"math"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,9 +49,13 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
 	var workingSet map[*flushTask]struct{}
-	pendingSet := &sync.Map{}
+	pendingSet := newPendingSet()
 
 	defer func() {
+		panicData := recover()
+		if panicData != nil {
+			log.Warn("panicked", zap.Any("data", panicData))
+		}
 		log.Debug("Unified Sorter: merger exiting, cleaning up resources")
 		// cancel pending async IO operations.
 		onExit()
@@ -94,13 +97,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			cleanUpTask(task)
 		}
 
-		pendingSet.Range(func(task, _ interface{}) bool {
-			cleanUpTask(task.(*flushTask))
-			return true
-		})
-		for task := range workingSet {
+		_ = pendingSet.ForAll(func(task *flushTask) (bool, error) {
 			cleanUpTask(task)
-		}
+			return true, nil
+		})
+		pendingSet.Clear()
 	}()
 
 	lastOutputTs := uint64(0)
@@ -128,41 +129,20 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
-		// loopErr is used to return an error out of the closure taken by `pendingSet.Range`.
-		var loopErr error
-		// NOTE 1: We can block the closure passed to `pendingSet.Range` WITHOUT worrying about
-		// deadlocks because the closure is NOT called with any lock acquired in the implementation
-		// of Sync.Map.
-		// NOTE 2: It is safe to used `Range` to iterate through the pendingSet, in spite of NOT having
-		// a snapshot consistency because (1) pendingSet is updated first before minResolvedTs is updated,
-		// which guarantees that useful new flushTasks are not missed, and (2) by design, once minResolvedTs is updated,
-		// new flushTasks will satisfy `task.tsLowerBound > minResolvedTs`, and such flushTasks are ignored in
-		// the closure.
-		pendingSet.Range(func(iTask, iCache interface{}) bool {
-			task := iTask.(*flushTask)
-			var cache *model.PolymorphicEvent
-			if iCache != nil {
-				cache = iCache.(*model.PolymorphicEvent)
-			}
-
+		err := pendingSet.AscendLessThanOrEqualTo(minResolvedTs, func(task *flushTask) (bool, error) {
 			if task.tsLowerBound > minResolvedTs {
-				// the condition above implies that for any event in task.backend, CRTs > minResolvedTs.
-				return true
+				panic("unreachable")
 			}
 			var event *model.PolymorphicEvent
-			if cache != nil {
-				event = cache
+			if task.itemCache != nil {
+				event = task.itemCache
 			} else {
 				select {
 				case <-ctx.Done():
-					loopErr = ctx.Err()
-					// terminates the loop
-					return false
+					return false, errors.Trace(ctx.Err())
 				case err := <-task.finished:
 					if err != nil {
-						loopErr = errors.Trace(err)
-						// terminates the loop
-						return false
+						return false, errors.Trace(err)
 					}
 				}
 
@@ -170,18 +150,14 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					var err error
 					task.reader, err = task.GetBackEnd().reader()
 					if err != nil {
-						loopErr = errors.Trace(err)
-						// terminates the loop
-						return false
+						return false, errors.Trace(ctx.Err())
 					}
 				}
 
 				var err error
 				event, err = task.reader.readNext()
 				if err != nil {
-					loopErr = errors.Trace(err)
-					// terminates the loop
-					return false
+					return false, errors.Trace(ctx.Err())
 				}
 
 				if event == nil {
@@ -191,22 +167,22 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if event.CRTs > minResolvedTs {
-				pendingSet.Store(task, event)
+				task.itemCache = event
 				// continues the loop
-				return true
+				return true, nil
 			}
 
-			pendingSet.Store(task, nil)
+			task.itemCache = nil
 			workingSet[task] = struct{}{}
 
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
 				data:  task,
 			})
-			return true
+			return true, nil
 		})
-		if loopErr != nil {
-			return errors.Trace(loopErr)
+		if err != nil {
+			return errors.Trace(err)
 		}
 
 		resolvedTicker := time.NewTicker(1 * time.Second)
@@ -214,12 +190,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		retire := func(task *flushTask) error {
 			delete(workingSet, task)
-			cached, ok := pendingSet.Load(task)
-			if !ok {
-				log.Panic("task not found in pendingSet")
-			}
 
-			if cached != nil {
+			if task.itemCache != nil {
 				return nil
 			}
 
@@ -231,7 +203,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if nextEvent == nil {
-				pendingSet.Delete(task)
+				if !pendingSet.Delete(task) {
+					panic("unreachable")
+				}
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -244,7 +218,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					return errors.Trace(err)
 				}
 			} else {
-				pendingSet.Store(task, nextEvent)
+				task.itemCache = nextEvent
 				if nextEvent.CRTs < minResolvedTs {
 					log.Panic("remaining event CRTs too small",
 						zap.Uint64("next-ts", nextEvent.CRTs),
@@ -334,7 +308,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if event == nil {
 				// EOF
 				delete(workingSet, task)
-				pendingSet.Delete(task)
+				if !pendingSet.Delete(task) {
+					panic("unreachable")
+				}
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -353,7 +329,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.RawKV.OpType == model.OpTypeResolved) {
 				// we have processed all events from this task that need to be processed in this merge
 				if event.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
-					pendingSet.Store(task, event)
+					task.itemCache = event
 				}
 				err := retire(task)
 				if err != nil {
@@ -391,7 +367,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
 			}
 		})
-		err := sendResolvedEvent(minResolvedTs)
+		err = sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -426,7 +402,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if !task.isEmpty {
-				pendingSet.Store(task, nil)
+				pendingSet.Insert(task)
 			} // otherwise it is an empty flush
 
 			if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
@@ -476,6 +452,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					log.Panic("resolved-ts regressed in sorter",
 						zap.Uint64("cur-resolved-ts", curResolvedTs),
 						zap.Uint64("last-resolved-ts", lastResolvedTs))
+				} else {
+					if err := pendingSet.Compact(ctx, curResolvedTs); err != nil {
+						return errors.Trace(err)
+					}
 				}
 			}
 		}

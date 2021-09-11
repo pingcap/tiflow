@@ -18,7 +18,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -29,12 +28,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/workerpool"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 const (
-	flushRateLimitPerSecond = 10
-	sortHeapCapacity        = 32
-	sortHeapInputChSize     = 1024
+	sortHeapCapacity    = 32
+	sortHeapInputChSize = 1024
 )
 
 type flushTask struct {
@@ -54,6 +53,8 @@ type flushTask struct {
 	deallocLock   sync.RWMutex
 	isDeallocated bool    // do not access directly
 	backend       backEnd // do not access directly
+
+	itemCache *model.PolymorphicEvent
 }
 
 func (t *flushTask) markDeallocated() {
@@ -289,14 +290,15 @@ var (
 type heapSorterInternalState struct {
 	maxResolved           uint64
 	heapSizeBytesEstimate int64
-	rateCounter           int
 	sorterConfig          *config.SorterConfig
-	timerMultiplier       int
+
+	rl *rate.Limiter
 }
 
 func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	state := &heapSorterInternalState{
 		sorterConfig: config.GetGlobalServerConfig().Sorter,
+		rl:           rate.NewLimiter(1.0, 10),
 	}
 
 	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
@@ -318,11 +320,11 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 
 		// 5 * 8 is for the 5 fields in PolymorphicEvent
 		state.heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
-		needFlush := state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit) ||
-			(isResolvedEvent && state.rateCounter < flushRateLimitPerSecond)
+
+		needFlush := (state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit)) ||
+			(isResolvedEvent && state.rl.Allow())
 
 		if needFlush {
-			state.rateCounter++
 			err := h.flush(ctx, state.maxResolved)
 			if err != nil {
 				return errors.Trace(err)
@@ -330,17 +332,6 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 			state.heapSizeBytesEstimate = 0
 		}
 
-		return nil
-	}).SetTimer(ctx, 1*time.Second, func(ctx context.Context) error {
-		state.rateCounter = 0
-		state.timerMultiplier = (state.timerMultiplier + 1) % 5
-		if state.timerMultiplier == 0 && state.rateCounter < flushRateLimitPerSecond {
-			err := h.flush(ctx, state.maxResolved)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			state.heapSizeBytesEstimate = 0
-		}
 		return nil
 	}).OnExit(onError)
 
