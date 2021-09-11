@@ -64,15 +64,7 @@ func (c *column) FromSinkColumn(col *model.Column) {
 	}
 	switch col.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		var str string
-		switch col.Value.(type) {
-		case []byte:
-			str = string(col.Value.([]byte))
-		case string:
-			str = col.Value.(string)
-		default:
-			log.Panic("invalid column value, please report a bug", zap.Any("col", col))
-		}
+		str := string(col.Value.([]byte))
 		if c.Flag.IsBinary() {
 			str = strconv.Quote(str)
 			str = str[1 : len(str)-1]
