@@ -150,8 +150,8 @@ integration_test_kafka: check_third_party_binary
 fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
-	echo "run shfmt";
-	tools/bin/shfmt -d -w .;
+	@echo "run shfmt"
+	tools/bin/shfmt -d -w .
 
 errdoc: tools/bin/errdoc-gen
 	@echo "generator errors.toml"
