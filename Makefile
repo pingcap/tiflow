@@ -151,6 +151,10 @@ fmt: tools/bin/gofumports
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
+lint: tools/bin/revive
+	@echo "linting"
+	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
+
 errdoc: tools/bin/errdoc-gen
 	@echo "generator errors.toml"
 	./tools/check/check-errdoc.sh
@@ -175,7 +179,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: check-copyright fmt check-static tidy errdoc check-leaktest-added check-merge-conflicts
+check: check-copyright fmt lint check-static tidy errdoc check-leaktest-added check-merge-conflicts
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -207,13 +211,17 @@ tools/bin/gofumports: tools/check/go.mod
 	cd tools/check; test -e ../bin/gofumports || \
 	$(GO) build -o ../bin/gofumports mvdan.cc/gofumpt
 
+tools/bin/revive: tools/check/go.mod
+	cd tools/check; test -e ../bin/revive || \
+	$(GO) build -o ../bin/revive github.com/mgechev/revive
+
 tools/bin/errdoc-gen: tools/check/go.mod
 	cd tools/check; test -e ../bin/errdoc-gen || \
 	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/errors/errdoc-gen
 
 tools/bin/golangci-lint:
 	cd tools/check; test -e ../bin/golangci-lint || \
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.42.1
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.30.0
 
 failpoint-enable: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)

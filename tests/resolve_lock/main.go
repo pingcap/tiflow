@@ -335,7 +335,7 @@ func randStr() string {
 	length := rand.Intn(128)
 	res := ""
 	for i := 0; i < length; i++ {
-		res += fmt.Sprintf("a%d", rand.Intn(26))
+		res += string('a' + rand.Intn(26))
 	}
 	return res
 }
