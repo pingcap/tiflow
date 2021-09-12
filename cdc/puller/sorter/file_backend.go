@@ -385,11 +385,11 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 }
 
 func (w *fileBackEndWriter) writtenCount() int {
-	return int(w.bytesWritten)
+	return int(w.eventsWritten)
 }
 
 func (w *fileBackEndWriter) dataSize() uint64 {
-	return uint64(w.eventsWritten)
+	return uint64(w.bytesWritten)
 }
 
 func (w *fileBackEndWriter) flushAndClose() error {

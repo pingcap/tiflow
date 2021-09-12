@@ -28,6 +28,7 @@ import (
 )
 
 const (
+	minCompactionFactor  = 16
 	maxCompactionFactor  = 512
 	maxCompactedFileSize = 128 * 1024 * 1024 // 128M
 )
@@ -192,7 +193,7 @@ func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error)
 		return errors.Trace(err)
 	}
 
-	if len(candidates) == 0 {
+	if len(candidates) < minCompactionFactor {
 		return nil
 	}
 
@@ -313,6 +314,7 @@ func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error)
 func (s *pendingSet) findCompactCandidates(ctx context.Context, resolvedTs uint64) (ret []*flushTask, err error) {
 	totalSize := int64(0)
 
+	log.Info("start findCompactCandidates", zap.Int("btree-size", s.tree.Len()))
 	var (
 		candidates []*flushTask
 		retErr     error
