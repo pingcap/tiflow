@@ -1,0 +1,17 @@
+version: "3"
+
+services:
+  test:
+    build:
+      context: .
+      dockerfile: test.Dockerfile
+    deploy:
+      resources: # 限制测试资源，这是原来 TiCDC CI 每个 pod 能获取到的最小资源
+        limits:
+           cpus: '1'
+           memory: 2G
+        reservations:
+           cpus: '1'
+           memory: 2G
+    volumes:
+      - ./test-logs:/test-logs/ # 挂载日志文件目录
