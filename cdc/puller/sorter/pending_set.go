@@ -20,6 +20,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 )
@@ -182,12 +185,20 @@ func (s *pendingSet) Clear() {
 func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error) {
 	s.flushInserted()
 
+	candidates, err := s.findCompactCandidates(ctx, resolvedTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if len(candidates) == 0 {
+		return nil
+	}
+
 	backEnd, err := pool.alloc(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	candidates := s.findCompactCandidates(resolvedTs)
 	sortHeap := new(sortHeap)
 	newFlushTask := &flushTask{
 		taskID:        int(atomic.AddInt64(&s.nextTaskID, 1)),
@@ -271,6 +282,7 @@ func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error)
 			if s.tree.Delete(task) == nil {
 				panic("unreachable")
 			}
+			_ = task.dealloc()
 			continue
 		}
 
@@ -289,10 +301,14 @@ func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error)
 
 	s.compacted[newFlushTask] = struct{}{}
 
+	log.Info("files compacted",
+		zap.Int("num-files", len(candidates)),
+		zap.Int64("data-size", newFlushTask.dataSize))
+
 	return nil
 }
 
-func (s *pendingSet) findCompactCandidates(resolvedTs uint64) (ret []*flushTask) {
+func (s *pendingSet) findCompactCandidates(ctx context.Context, resolvedTs uint64) (ret []*flushTask, err error) {
 	totalSize := int64(0)
 	s.tree.Descend(func(taskI btree.Item) bool {
 		task := taskI.(*flushTask)
@@ -301,11 +317,10 @@ func (s *pendingSet) findCompactCandidates(resolvedTs uint64) (ret []*flushTask)
 		}
 
 		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+			return false
 		case <-task.finished:
-		default:
-			// We do not wait for the task to finish.
-			// Instead, we move on to the next task.
-			return true
 		}
 
 		ret = append(ret, task)

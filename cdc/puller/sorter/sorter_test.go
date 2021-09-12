@@ -148,6 +148,9 @@ func testSorter(ctx context.Context, c *check.C, sorter puller.EventSorter, coun
 	})
 
 	producerProgress := make([]uint64, numProducers)
+	for i := range producerProgress {
+		producerProgress[i] = 1
+	}
 
 	// launch the producers
 	for i := 0; i < numProducers; i++ {

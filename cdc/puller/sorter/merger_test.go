@@ -39,6 +39,23 @@ var (
 	taskID                int64
 )
 
+func initBackEndPool(c *check.C) {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	var err error
+	pool, err = newBackEndPool(c.MkDir(), "")
+	c.Assert(err, check.IsNil)
+}
+
+func resetBackEndPool(_ *check.C) {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	pool.terminate()
+	pool = nil
+}
+
 func newMockFlushTaskBuilder() *mockFlushTaskBuilder {
 	backEnd := newMemoryBackEnd()
 	atomic.AddInt64(&backEndCounterForTest, 1)
@@ -101,6 +118,9 @@ func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
+
+	initBackEndPool(c)
+	defer resetBackEndPool(c)
 
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
 	defer cancel()
@@ -173,6 +193,9 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
 
+	initBackEndPool(c)
+	defer resetBackEndPool(c)
+
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
 	defer cancel()
 	wg, ctx := errgroup.WithContext(ctx)
@@ -243,6 +266,9 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 	defer testleak.AfterTest(c)()
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
+
+	initBackEndPool(c)
+	defer resetBackEndPool(c)
 
 	// enable the failpoint to simulate delays
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay", "sleep(5)")
@@ -324,6 +350,9 @@ func (s *sorterSuite) TestMergerCancel(c *check.C) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 
+	initBackEndPool(c)
+	defer resetBackEndPool(c)
+
 	// enable the failpoint to simulate delays
 	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterMergeDelay", "sleep(10)")
 	c.Assert(err, check.IsNil)
@@ -387,6 +416,9 @@ func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 
+	initBackEndPool(c)
+	defer resetBackEndPool(c)
+
 	log.SetLevel(zapcore.DebugLevel)
 	defer log.SetLevel(zapcore.InfoLevel)
 
@@ -443,6 +475,9 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 
+	initBackEndPool(c)
+	defer resetBackEndPool(c)
+
 	log.SetLevel(zapcore.DebugLevel)
 	defer log.SetLevel(zapcore.InfoLevel)
 
@@ -489,6 +524,9 @@ func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
 	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	c.Assert(err, check.IsNil)
 	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug") //nolint:errcheck
+
+	initBackEndPool(c)
+	defer resetBackEndPool(c)
 
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*25)
 	defer cancel()

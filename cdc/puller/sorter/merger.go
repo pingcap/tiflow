@@ -452,11 +452,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					log.Panic("resolved-ts regressed in sorter",
 						zap.Uint64("cur-resolved-ts", curResolvedTs),
 						zap.Uint64("last-resolved-ts", lastResolvedTs))
-				} else {
-					if err := pendingSet.Compact(ctx, curResolvedTs); err != nil {
-						return errors.Trace(err)
-					}
 				}
+				if err := pendingSet.Compact(ctx, curResolvedTs); err != nil {
+					return errors.Trace(err)
+				}
+
 			}
 		}
 	})
