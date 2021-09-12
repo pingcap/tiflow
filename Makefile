@@ -219,7 +219,7 @@ tools/bin/golangci-lint:
 
 tools/bin/shfmt: tools/check/go.mod
 	cd tools/check; test -e ../bin/shfmt || \
-    $(GO) build -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
+	$(GO) build -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
 
 failpoint-enable: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
