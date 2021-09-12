@@ -106,6 +106,7 @@ func (s *pendingSet) Delete(task *flushTask) bool {
 func (s *pendingSet) AscendLessThanOrEqualTo(ts uint64, fn func(task *flushTask) (bool, error)) (ret error) {
 	s.flushInserted()
 
+	var retErr error
 	s.tree.Ascend(func(taskI btree.Item) bool {
 		task := taskI.(*flushTask)
 		if task.tsLowerBound > ts {
@@ -113,13 +114,13 @@ func (s *pendingSet) AscendLessThanOrEqualTo(ts uint64, fn func(task *flushTask)
 		}
 		ok, err := fn(task)
 		if err != nil {
-			ret = errors.Trace(err)
+			retErr = errors.Trace(err)
 			return false
 		}
 		return ok
 	})
-	if ret != nil {
-		return
+	if retErr != nil {
+		return retErr
 	}
 
 	for task := range s.compacted {
@@ -149,17 +150,18 @@ var closedCh = func() chan error {
 func (s *pendingSet) ForAll(fn func(task *flushTask) (bool, error)) (ret error) {
 	s.flushInserted()
 
+	var retErr error
 	s.tree.Ascend(func(taskI btree.Item) bool {
 		task := taskI.(*flushTask)
 		ok, err := fn(task)
 		if err != nil {
-			ret = errors.Trace(err)
+			retErr = errors.Trace(err)
 			return false
 		}
 		return ok
 	})
-	if ret != nil {
-		return
+	if retErr != nil {
+		return retErr
 	}
 
 	for task := range s.compacted {
@@ -310,28 +312,39 @@ func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error)
 
 func (s *pendingSet) findCompactCandidates(ctx context.Context, resolvedTs uint64) (ret []*flushTask, err error) {
 	totalSize := int64(0)
+
+	var (
+		candidates []*flushTask
+		retErr     error
+	)
 	s.tree.Descend(func(taskI btree.Item) bool {
 		task := taskI.(*flushTask)
+		log.Info("findCompactCandidates",
+			zap.Uint64("tsLowerBound", task.tsLowerBound),
+			zap.Uint64("resolvedTs", resolvedTs))
 		if task.tsLowerBound <= resolvedTs {
-			return true
+			return false
 		}
 
 		select {
 		case <-ctx.Done():
-			err = ctx.Err()
+			retErr = errors.Trace(ctx.Err())
 			return false
 		case <-task.finished:
 		}
 
-		ret = append(ret, task)
+		candidates = append(candidates, task)
 		totalSize += task.dataSize
 		if len(ret) >= maxCompactionFactor || totalSize >= maxCompactedFileSize {
 			return false
 		}
 		return true
 	})
+	if retErr != nil {
+		return nil, errors.Trace(retErr)
+	}
 
-	return
+	return candidates, nil
 }
 
 // Less implements the btree.Item interface, used to perform comparison in the btree.
