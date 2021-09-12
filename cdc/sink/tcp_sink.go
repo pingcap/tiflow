@@ -138,8 +138,8 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
 
 		//send
-		//socket.JddmClient("10.0.0.72",19850,rowInfos)
-		socket.JddmClient("127.0.0.1",9889,rowInfos)
+		socket.JddmClient("10.0.0.72",19850,rowInfos)
+		//socket.JddmClient("127.0.0.1",9889,rowInfos)
 
 	    //sender(rowdata)
 
@@ -262,6 +262,7 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Info("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddldata))
 	//send
 	socket.JddmDDLClient("10.0.0.72",19850,ddldata)
+	//socket.JddmDDLClient("127.0.0.1",9889,ddldata)
 
 	return nil
 }
