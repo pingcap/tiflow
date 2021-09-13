@@ -129,7 +129,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		workingSet = make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
-		err := pendingSet.AscendLessThanOrEqualTo(minResolvedTs, func(task *flushTask) (bool, error) {
+		err := pendingSet.ForAllCurrentFlushTasks(func(task *flushTask) (bool, error) {
 			if task.tsLowerBound > minResolvedTs {
 				panic("unreachable")
 			}
@@ -203,9 +203,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if nextEvent == nil {
-				if !pendingSet.Delete(task) {
-					panic("unreachable")
-				}
+				pendingSet.Retire(task)
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -308,9 +306,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if event == nil {
 				// EOF
 				delete(workingSet, task)
-				if !pendingSet.Delete(task) {
-					panic("unreachable")
-				}
+				pendingSet.Retire(task)
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -436,7 +432,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		defer resolvedTsReceiver.Stop()
 
-		var lastResolvedTs uint64
+		var (
+			lastResolvedTs  uint64
+			mergeResolvedTs uint64
+		)
 		for {
 			select {
 			case <-ctx.Done():
@@ -444,7 +443,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			case <-resolvedTsReceiver.C:
 				curResolvedTs := atomic.LoadUint64(&minResolvedTs)
 				if curResolvedTs > lastResolvedTs {
-					err := onMinResolvedTsUpdate(curResolvedTs)
+					mergeResolvedTs = pendingSet.AdvanceResolvedTs(curResolvedTs)
+					log.Info("mergeResolvedTs", zap.Uint64("mergeResolvedTs", mergeResolvedTs))
+					err := onMinResolvedTsUpdate(mergeResolvedTs)
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -453,7 +454,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						zap.Uint64("cur-resolved-ts", curResolvedTs),
 						zap.Uint64("last-resolved-ts", lastResolvedTs))
 				}
-				if err := pendingSet.Compact(ctx, curResolvedTs); err != nil {
+				if err := pendingSet.Compact(ctx); err != nil {
 					return errors.Trace(err)
 				}
 

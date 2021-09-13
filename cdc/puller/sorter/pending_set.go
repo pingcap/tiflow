@@ -28,14 +28,17 @@ import (
 )
 
 const (
-	minCompactionFactor  = 16
-	maxCompactionFactor  = 512
-	maxCompactedFileSize = 128 * 1024 * 1024 // 128M
+	minCompactionFactor     = 4
+	maxCompactionFactor     = 512
+	maxCompactedFileSize    = 128 * 1024 * 1024 // 128M
+	advisedAdvanceStepFiles = 4
 )
 
 type pendingSet struct {
-	tree      *btree.BTree
-	compacted map[*flushTask]struct{}
+	tree           *btree.BTree
+	compacted      *btree.BTree
+	current        map[*flushTask]struct{}
+	lastResolvedTs uint64
 
 	insertMu sync.Mutex
 	inserted []*flushTask
@@ -58,7 +61,8 @@ func newPendingSet() *pendingSet {
 
 	return &pendingSet{
 		tree:      btree.NewWithFreeList(3, pendingSetFreeList),
-		compacted: map[*flushTask]struct{}{},
+		compacted: btree.NewWithFreeList(3, pendingSetFreeList),
+		current:   map[*flushTask]struct{}{},
 	}
 }
 
@@ -84,59 +88,95 @@ func (s *pendingSet) flushInserted() {
 	s.inserted = s.inserted[:0]
 }
 
-// Delete deletes `task` from the pendingSet.
+// Retire deletes `task` from the pendingSet.
 // If `task` was not previously in the pendingSet,
 // the function returns false.
-func (s *pendingSet) Delete(task *flushTask) bool {
-	s.flushInserted()
-
-	if s.tree.Delete(task) != nil {
-		return true
+func (s *pendingSet) Retire(task *flushTask) {
+	if _, ok := s.current[task]; ok {
+		delete(s.current, task)
+		return
 	}
 
-	if _, ok := s.compacted[task]; ok {
-		delete(s.compacted, task)
-		return true
-	}
-
-	return false
+	panic("unreachable")
 }
 
-// AscendLessThanOrEqualTo iterates through the pendingSet in ascending order of `tsLowerBound`,
-// until `fn` returns false or the `tsLowerBound` of a task is larger than `ts`.
-func (s *pendingSet) AscendLessThanOrEqualTo(ts uint64, fn func(task *flushTask) (bool, error)) (ret error) {
+func (s *pendingSet) AdvanceResolvedTs(resolvedTs uint64) uint64 {
 	s.flushInserted()
 
-	var retErr error
-	s.tree.Ascend(func(taskI btree.Item) bool {
-		task := taskI.(*flushTask)
-		if task.tsLowerBound > ts {
-			return false
+	var (
+		i             int
+		newResolvedTs uint64
+	)
+
+	for {
+		if s.compacted.Len() == 0 && s.tree.Len() == 0 {
+			return resolvedTs
 		}
-		ok, err := fn(task)
-		if err != nil {
-			retErr = errors.Trace(err)
-			return false
+
+		var nextStepResolvedTs uint64
+		for {
+			var treeToPop *btree.BTree
+			if s.compacted.Len() == 0 && s.tree.Len() > 0 {
+				treeToPop = s.tree
+			} else if s.tree.Len() == 0 && s.compacted.Len() > 0 {
+				treeToPop = s.compacted
+			} else if s.tree.Min().(*flushTask).tsLowerBound < s.compacted.Min().(*flushTask).tsLowerBound {
+				treeToPop = s.tree
+			} else {
+				treeToPop = s.compacted
+			}
+
+			taskToPop := treeToPop.Min().(*flushTask)
+			nextStepResolvedTs = taskToPop.tsLowerBound
+			if nextStepResolvedTs > resolvedTs {
+				log.Info("wee!")
+				return newResolvedTs
+			}
+
+			log.Info("addToCurrent",
+				zap.Uint64("nextStepResolvedTs", nextStepResolvedTs),
+				zap.Uint64("newResolvedTs", newResolvedTs))
+			s.current[taskToPop] = struct{}{}
+			treeToPop.DeleteMin()
+			i++
+
+			if s.compacted.Len() > 0 && s.compacted.Min().(*flushTask).tsLowerBound == nextStepResolvedTs {
+				continue
+			}
+			if s.tree.Len() > 0 && s.tree.Min().(*flushTask).tsLowerBound == nextStepResolvedTs {
+				continue
+			}
+			break
 		}
-		return ok
-	})
-	if retErr != nil {
-		return retErr
+		if nextStepResolvedTs <= newResolvedTs {
+			panic("bug?")
+		}
+		newResolvedTs = nextStepResolvedTs
+		log.Info("update newResolvedTs", zap.Uint64("nextStepResolvedTs", nextStepResolvedTs))
+		if newResolvedTs >= resolvedTs {
+			newResolvedTs = resolvedTs
+			break
+		}
+		if i >= advisedAdvanceStepFiles {
+			break
+		}
 	}
 
-	for task := range s.compacted {
-		if task.tsLowerBound > ts {
-			continue
-		}
+	s.lastResolvedTs = newResolvedTs
+	return newResolvedTs
+}
+
+func (s *pendingSet) ForAllCurrentFlushTasks(fn func(task *flushTask) (bool, error)) error {
+	for task := range s.current {
 		ok, err := fn(task)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if !ok {
-			break
+			return nil
 		}
 	}
-	return
+	return nil
 }
 
 // closedCh is a closed channel used as the placeholder for
@@ -165,15 +205,29 @@ func (s *pendingSet) ForAll(fn func(task *flushTask) (bool, error)) (ret error) 
 		return retErr
 	}
 
-	for task := range s.compacted {
+	s.compacted.Ascend(func(taskI btree.Item) bool {
+		task := taskI.(*flushTask)
+		ok, err := fn(task)
+		if err != nil {
+			retErr = errors.Trace(err)
+			return false
+		}
+		return ok
+	})
+	if retErr != nil {
+		return retErr
+	}
+
+	for task := range s.current {
 		ok, err := fn(task)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if !ok {
-			break
+			return nil
 		}
 	}
+
 	return
 }
 
@@ -182,13 +236,13 @@ func (s *pendingSet) Clear() {
 	s.flushInserted()
 
 	s.tree.Clear(false)
-	s.compacted = nil
+	s.compacted.Clear(false)
 }
 
-func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error) {
+func (s *pendingSet) Compact(ctx context.Context) (ret error) {
 	s.flushInserted()
 
-	candidates, err := s.findCompactCandidates(ctx, resolvedTs)
+	candidates, err := s.findCompactCandidates(ctx, s.lastResolvedTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -302,7 +356,7 @@ func (s *pendingSet) Compact(ctx context.Context, resolvedTs uint64) (ret error)
 		return errors.Trace(err)
 	}
 
-	s.compacted[newFlushTask] = struct{}{}
+	s.compacted.ReplaceOrInsert(newFlushTask)
 
 	log.Info("files compacted",
 		zap.Int("num-files", len(candidates)),
