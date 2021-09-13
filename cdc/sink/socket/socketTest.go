@@ -1,16 +1,14 @@
 package socket
 
 import (
+	"bytes"
+	"container/list"
 	"fmt"
 	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
 	"log"
 	"net"
 	"os"
-	"strconv"
-
-	"bytes"
-	"container/list"
 	"time"
 	//"unsafe"
 )
@@ -51,14 +49,15 @@ type SliceMock struct {
 }
 
 
-func JddmDDLClient(hostIpAddress string, hostPort int,ddlInfos *vo.DDLInfos){
+func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
-	fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
+	/*fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
 	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
 
-	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)
+	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)*/
 
-	conn, err := net.Dial("tcp", serverAddress)
+	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
+	conn, err := net.Dial("tcp", host)
     if err != nil {
         fmt.Println("Error dialing", err.Error())
         return
@@ -148,14 +147,14 @@ func JddmDDLClient(hostIpAddress string, hostPort int,ddlInfos *vo.DDLInfos){
 }
 
 
-func JddmClient(hostIpAddress string, hostPort int,rowInfos []*vo.RowInfos){
+func JddmClient(host string, rowInfos []*vo.RowInfos){
 
-	fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
-	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)
+	/*fmt.Printf(" Go Engine Input Host Port: [%d]-- ToString(%s)\n",hostPort,strconv.Itoa(hostPort))
+	serverAddress := hostIpAddress+":"+strconv.Itoa(hostPort)*/
 
-	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)
+	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 
-	conn, err := net.Dial("tcp", serverAddress)
+	conn, err := net.Dial("tcp", host)
 	if err != nil {
 		fmt.Println("Error dialing", err.Error())
 		return

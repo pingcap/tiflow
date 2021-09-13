@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"github.com/pingcap/ticdc/cdc/sink/socket"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
+	"net/url"
+
 	//"net"
 	"sync/atomic"
 
@@ -28,9 +30,10 @@ import (
 )
 
 // newDsgTestSink creates a block hole sink
-func newDsgSink(ctx context.Context, opts map[string]string) *dsgSink {
+func newDsgSink(ctx context.Context, opts map[string]string,sinkURI *url.URL) *dsgSink {
 	return &dsgSink{
 		statistics: NewStatistics(ctx, "rowsocket", opts),
+		sinkURI:sinkURI,
 	}
 }
 
@@ -39,6 +42,7 @@ type dsgSink struct {
 	checkpointTs    uint64
 	accumulated     uint64
 	lastAccumulated uint64
+	sinkURI *url.URL
 }
 
 type RowJson struct {
@@ -138,7 +142,7 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
 
 		//send
-		socket.JddmClient("10.0.0.72",19850,rowInfos)
+		socket.JddmClient(b.sinkURI.Host,rowInfos)
 		//socket.JddmClient("127.0.0.1",9889,rowInfos)
 
 	    //sender(rowdata)
@@ -261,7 +265,7 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	fmt.Println("show ddlInfos ：：：：：：：：：：：：：：", ddldata)
 	log.Info("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddldata))
 	//send
-	socket.JddmDDLClient("10.0.0.72",19850,ddldata)
+	socket.JddmDDLClient(b.sinkURI.Host,ddldata)
 	//socket.JddmDDLClient("127.0.0.1",9889,ddldata)
 
 	return nil
