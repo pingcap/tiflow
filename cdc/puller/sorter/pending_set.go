@@ -27,10 +27,10 @@ import (
 )
 
 const (
-	minCompactionFactor     = 4
-	maxCompactionFactor     = 512
-	maxCompactedFileSize    = 128 * 1024 * 1024 // 128M
-	advisedAdvanceStepFiles = 4
+	maxCompactionFactor        = 512
+	maxCompactedFileSize       = 128 * 1024 * 1024 // 128M
+	maxCompactedPendingSetSize = 16
+	advisedAdvanceStepFiles    = 4
 )
 
 type pendingSet struct {
@@ -101,7 +101,7 @@ func (s *pendingSet) Retire(task *flushTask) {
 
 func (s *pendingSet) peekMin() (*flushTask, *btree.BTree) {
 	if s.tree.Len() == 0 && s.compacted.Len() == 0 {
-		return nil
+		return nil, nil
 	}
 	if s.tree.Len() > 0 && s.compacted.Len() == 0 {
 		return s.tree.Min().(*flushTask), s.tree
@@ -117,74 +117,51 @@ func (s *pendingSet) peekMin() (*flushTask, *btree.BTree) {
 	return compactedMin, s.compacted
 }
 
-func (s *pendingSet) AdvanceResolvedTs(resolvedTs uint64) uint64 {
+func (s *pendingSet) AdvanceResolvedTs(resolvedTs uint64) (newResolvedTs uint64) {
+	defer func() {
+		s.lastResolvedTs = newResolvedTs
+	}()
+
 	// We need to insert the newly received flushTasks to the tree,
 	// so that they can be properly sorted.
 	s.flushInserted()
 
-	// There are no unprocessed flushTasks, we can push resolvedTs all
-	// the way to the last received resolvedTs.
-	if s.compacted.Len() == 0 && s.tree.Len() == 0 {
-		return resolvedTs
-	}
-	
 	var (
-		i             int
-		newResolvedTs uint64
+		i                  int
+		nextStepResolvedTs uint64
 	)
-
 	for {
-		var nextStepResolvedTs uint64
-		for {
-			var treeToPop *btree.BTree
-			if s.compacted.Len() == 0 && s.tree.Len() > 0 {
-				treeToPop = s.tree
-			} else if s.tree.Len() == 0 && s.compacted.Len() > 0 {
-				treeToPop = s.compacted
-			} else if s.tree.Min().(*flushTask).tsLowerBound < s.compacted.Min().(*flushTask).tsLowerBound {
-				treeToPop = s.tree
-			} else {
-				treeToPop = s.compacted
-			}
-
-			taskToPop := treeToPop.Min().(*flushTask)
-			nextStepResolvedTs = taskToPop.tsLowerBound
-			if nextStepResolvedTs > resolvedTs {
-				log.Info("wee!")
-				return newResolvedTs
-			}
-
-			log.Info("addToCurrent",
-				zap.Uint64("nextStepResolvedTs", nextStepResolvedTs),
-				zap.Uint64("newResolvedTs", newResolvedTs))
-			s.current[taskToPop] = struct{}{}
-			treeToPop.DeleteMin()
-			i++
-
-			if s.compacted.Len() > 0 && s.compacted.Min().(*flushTask).tsLowerBound == nextStepResolvedTs {
-				continue
-			}
-			if s.tree.Len() > 0 && s.tree.Min().(*flushTask).tsLowerBound == nextStepResolvedTs {
-				continue
-			}
-			break
+		task, treeToPop := s.peekMin()
+		if task == nil {
+			// We have exhausted all unprocessed flushTasks
+			return resolvedTs
 		}
-		if nextStepResolvedTs <= newResolvedTs {
-			panic("bug?")
+
+		if task.tsLowerBound < nextStepResolvedTs {
+			panic("unreachable")
 		}
-		newResolvedTs = nextStepResolvedTs
-		log.Info("update newResolvedTs", zap.Uint64("nextStepResolvedTs", nextStepResolvedTs))
-		if newResolvedTs >= resolvedTs {
-			newResolvedTs = resolvedTs
-			break
+		if task.tsLowerBound > resolvedTs {
+			return resolvedTs
+		}
+		nextStepResolvedTs = task.tsLowerBound
+
+		log.Info("addToCurrent",
+			zap.Uint64("nextStepResolvedTs", nextStepResolvedTs),
+			zap.Uint64("newResolvedTs", newResolvedTs))
+		s.current[task] = struct{}{}
+		treeToPop.DeleteMin()
+		i++
+
+		nextTask, _ := s.peekMin()
+		if nextTask != nil && nextTask.tsLowerBound == nextStepResolvedTs {
+			continue
 		}
 		if i >= advisedAdvanceStepFiles {
 			break
 		}
 	}
 
-	s.lastResolvedTs = newResolvedTs
-	return newResolvedTs
+	return nextStepResolvedTs
 }
 
 func (s *pendingSet) ForAllCurrentFlushTasks(fn func(task *flushTask) (bool, error)) error {
@@ -261,6 +238,17 @@ func (s *pendingSet) Clear() {
 }
 
 func (s *pendingSet) Compact(ctx context.Context) (ret error) {
+	for {
+		if err := s.compactOnce(ctx); err != nil {
+			return errors.Trace(err)
+		}
+		if s.tree.Len() <= maxCompactedPendingSetSize {
+			return nil
+		}
+	}
+}
+
+func (s *pendingSet) compactOnce(ctx context.Context) (ret error) {
 	s.flushInserted()
 
 	candidates, err := s.findCompactCandidates(ctx, s.lastResolvedTs)
@@ -268,7 +256,8 @@ func (s *pendingSet) Compact(ctx context.Context) (ret error) {
 		return errors.Trace(err)
 	}
 
-	if len(candidates) < minCompactionFactor {
+	// Compacting 0 or 1 files is meaningless.
+	if len(candidates) < 2 {
 		return nil
 	}
 
