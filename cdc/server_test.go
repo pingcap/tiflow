@@ -20,15 +20,13 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
@@ -86,22 +84,6 @@ func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-<<<<<<< HEAD
-	ctx, cancel := context.WithCancel(context.Background())
-	pdEndpoints := []string{
-		"http://" + s.clientURL.Host,
-		"http://invalid-pd-host:2379",
-	}
-	conf := config.GetDefaultServerConfig()
-	conf.Addr = advertiseAddr4Test
-	conf.AdvertiseAddr = advertiseAddr4Test
-	config.StoreGlobalServerConfig(conf)
-	server, err := NewServer(pdEndpoints)
-	c.Assert(err, check.IsNil)
-	c.Assert(server, check.NotNil)
-
-=======
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 	s.errg.Go(func() error {
 		err := s.server.etcdHealthChecker(s.ctx)
 		c.Assert(err, check.Equals, context.Canceled)
@@ -124,10 +106,6 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	c.Assert(conf.DataDir, check.Equals, defaultDataDir)
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(defaultDataDir, config.DefaultSortDir))
 
-<<<<<<< HEAD
-	conf := config.GetGlobalServerConfig()
-	conf.DataDir = c.MkDir()
-=======
 	// DataDir is not set, but has existed changefeed, use the one with the largest available space
 	conf.DataDir = ""
 	dir := c.MkDir()
@@ -136,23 +114,16 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 
 	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, "b")
 	c.Assert(err, check.IsNil)
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 
 	err = s.server.setUpDataDir(s.ctx)
 	c.Assert(err, check.IsNil)
 
-<<<<<<< HEAD
-	server.etcdClient = nil
-	conf.DataDir = ""
-	err = server.initDataDir(ctx)
-=======
 	c.Assert(conf.DataDir, check.Equals, dir)
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(dir, config.DefaultSortDir))
 
 	conf.DataDir = c.MkDir()
 	// DataDir has been set, just use it
 	err = s.server.setUpDataDir(s.ctx)
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, config.DefaultSortDir))
