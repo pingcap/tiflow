@@ -7,7 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.27.2
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
-	github.com/apache/pulsar-client-go v0.1.1
+	github.com/apache/pulsar-client-go v0.6.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
@@ -29,7 +29,7 @@ require (
 	github.com/jarcoal/httpmock v1.0.5
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/lib/pq v1.3.0 // indirect
-	github.com/linkedin/goavro/v2 v2.9.7
+	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
@@ -42,7 +42,7 @@ require (
 	github.com/pingcap/parser v0.0.0-20210819101755-48d84c1db428
 	github.com/pingcap/tidb v1.1.0-beta.0.20210825080806-0f459efafd8a
 	github.com/pingcap/tidb-tools v5.0.3+incompatible
-	github.com/prometheus/client_golang v1.5.1
+	github.com/prometheus/client_golang v1.7.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
@@ -56,6 +56,7 @@ require (
 	github.com/uber-go/atomic v1.4.0
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
+	go.uber.org/goleak v1.1.10
 	go.uber.org/zap v1.19.0
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
 	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420
