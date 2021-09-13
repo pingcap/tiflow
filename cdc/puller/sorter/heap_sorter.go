@@ -104,9 +104,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		lowerBound uint64
 	)
 
-	if h.heap.Len() > 0 {
-		lowerBound = h.heap[0].entry.CRTs
-	} else {
+	if h.heap.Len() == 0 {
 		return nil
 	}
 
@@ -118,8 +116,16 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	// Since when a table is mostly idle or near-idle, most flushes would contain one ResolvedEvent alone,
 	// this optimization will greatly improve performance when (1) total number of table is large,
 	// and (2) most tables do not have many events.
-	if h.heap.Len() == 1 && h.heap[0].entry.RawKV.OpType == model.OpTypeResolved {
-		h.heap.Pop()
+	for h.heap.Len() > 0 {
+		if h.heap[0].entry.RawKV.OpType == model.OpTypeResolved {
+			heap.Pop(&h.heap)
+		} else {
+			break
+		}
+	}
+
+	if h.heap.Len() > 0 {
+		lowerBound = h.heap[0].entry.RawKV.CRTs
 	}
 
 	isEmptyFlush := h.heap.Len() == 0

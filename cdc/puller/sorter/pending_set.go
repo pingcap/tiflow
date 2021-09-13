@@ -298,6 +298,9 @@ func (s *pendingSet) compactOnce(ctx context.Context) (ret error) {
 		}
 
 		var err error
+		if task.GetBackEnd() == nil {
+			panic("unreachable")
+		}
 		task.reader, err = task.GetBackEnd().reader()
 		if err != nil {
 			return errors.Trace(err)
@@ -396,7 +399,11 @@ func (s *pendingSet) findCompactCandidates(ctx context.Context, resolvedTs uint6
 		case <-ctx.Done():
 			retErr = errors.Trace(ctx.Err())
 			return false
-		case <-task.finished:
+		case err := <-task.finished:
+			if err != nil {
+				retErr = err
+				return false
+			}
 		}
 
 		candidates = append(candidates, task)
