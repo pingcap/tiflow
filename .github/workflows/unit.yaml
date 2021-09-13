@@ -1,0 +1,36 @@
+name: unit-test
+
+on:
+  push:
+    branches:
+      - master
+      - 'release-[0-9].[0-9]*'
+  pull_request:
+    branches:
+      - master
+      - 'release-[0-9].[0-9]*'
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  make_unit_tests:
+    name: Make Check & Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Setup Go environment
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.16.4'
+
+    - name: Testing
+      run: make unit_test
