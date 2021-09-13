@@ -102,7 +102,7 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		Version string `json:"version"`
 	}{}
 
-	httpCli, err := httputil.NewClient(credential)
+	httpClient, err := httputil.NewClient(credential)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
 
-	resp, err := httpCli.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
