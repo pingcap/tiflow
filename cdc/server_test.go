@@ -20,15 +20,13 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
