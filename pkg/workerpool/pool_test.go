@@ -56,17 +56,15 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	errg.Go(func() error {
+	go func() {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
 				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
-				return nil
 			}
 		}
-		return nil
-	})
+	}()
 
 	select {
 	case <-ctx.Done():
@@ -136,7 +134,7 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	errg.Go(func() error {
+	go func() {
 		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
@@ -144,8 +142,7 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
 			}
 		}
-		return nil
-	})
+	}()
 
 	select {
 	case <-ctx.Done():
