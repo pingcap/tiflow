@@ -140,9 +140,11 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/run.sh kafka "$(CASE)"
 
-fmt: tools/bin/gofumports
+fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	@echo "run shfmt"
+	tools/bin/shfmt -d -w .
 
 lint: tools/bin/revive
 	@echo "linting"
@@ -215,6 +217,10 @@ tools/bin/errdoc-gen: tools/check/go.mod
 tools/bin/golangci-lint:
 	cd tools/check; test -e ../bin/golangci-lint || \
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.30.0
+
+tools/bin/shfmt: tools/check/go.mod
+	cd tools/check; test -e ../bin/shfmt || \
+	$(GO) build -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt
 
 failpoint-enable: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)

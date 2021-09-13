@@ -25,11 +25,18 @@ sed -i'~' -e '
 ' $@
 
 for i in $@; do
+<<<<<<< HEAD
   if ! cmp -s $i $i~ ; then
     goimports -w $i
     gofmt -w $i
   fi
   rm -f $i~
+=======
+	if ! cmp -s $i $i~; then
+		tools/bin/gofumports -s -w $i
+	fi
+	rm -f $i~
+>>>>>>> 257041655 (lint: add shfmt to format sh scripts (#2798))
 done
 
 git --no-pager diff --exit-code
