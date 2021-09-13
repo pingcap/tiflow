@@ -6,7 +6,7 @@ result=$(find ./ -name "*.go" | grep -vE '.pb.go|vendor/|leaktest.go|kv_gen|meta
 done)
 
 if [ -n "$result" ]; then
-    echo "The copyright information of following files is incorrect:"
-    echo "$result"
-    exit 1
+	echo "The copyright information of following files is incorrect:"
+	echo "$result"
+	exit 1
 fi
