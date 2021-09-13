@@ -258,14 +258,6 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 }
 
 func (m *feedStateManager) handleError(errs ...*model.RunningError) {
-	// if one of the error stored by changefeed state(error in the last tick)
-	// is a fast-fail error, the changefeed should be failed
-	if m.state.Info.HasFastFailError() {
-		m.shouldBeRunning = false
-		m.patchState(model.StateFailed)
-		return
-	}
-
 	// if there are a fastFail error in errs, we can just fastFail the changefeed
 	// and no need to patch other error to the changefeed info
 	for _, err := range errs {
