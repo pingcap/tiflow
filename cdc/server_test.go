@@ -108,10 +108,6 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	c.Assert(conf.DataDir, check.Equals, defaultDataDir)
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(defaultDataDir, config.DefaultSortDir))
 
-<<<<<<< HEAD
-	conf := config.GetGlobalServerConfig()
-	conf.DataDir = c.MkDir()
-=======
 	// DataDir is not set, but has existed changefeed, use the one with the largest available space
 	conf.DataDir = ""
 	dir := c.MkDir()
@@ -120,23 +116,16 @@ func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 
 	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, "b")
 	c.Assert(err, check.IsNil)
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 
 	err = s.server.setUpDataDir(s.ctx)
 	c.Assert(err, check.IsNil)
 
-<<<<<<< HEAD
-	server.etcdClient = nil
-	conf.DataDir = ""
-	err = server.initDataDir(ctx)
-=======
 	c.Assert(conf.DataDir, check.Equals, dir)
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(dir, config.DefaultSortDir))
 
 	conf.DataDir = c.MkDir()
 	// DataDir has been set, just use it
 	err = s.server.setUpDataDir(s.ctx)
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
 	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, config.DefaultSortDir))
