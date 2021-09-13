@@ -20,11 +20,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 const (
@@ -100,19 +99,41 @@ func (s *pendingSet) Retire(task *flushTask) {
 	panic("unreachable")
 }
 
+func (s *pendingSet) peekMin() (*flushTask, *btree.BTree) {
+	if s.tree.Len() == 0 && s.compacted.Len() == 0 {
+		return nil
+	}
+	if s.tree.Len() > 0 && s.compacted.Len() == 0 {
+		return s.tree.Min().(*flushTask), s.tree
+	}
+	if s.tree.Len() == 0 && s.compacted.Len() > 0 {
+		return s.compacted.Min().(*flushTask), s.compacted
+	}
+	treeMin := s.tree.Min().(*flushTask)
+	compactedMin := s.compacted.Min().(*flushTask)
+	if treeMin.tsLowerBound < compactedMin.tsLowerBound {
+		return treeMin, s.tree
+	}
+	return compactedMin, s.compacted
+}
+
 func (s *pendingSet) AdvanceResolvedTs(resolvedTs uint64) uint64 {
+	// We need to insert the newly received flushTasks to the tree,
+	// so that they can be properly sorted.
 	s.flushInserted()
 
+	// There are no unprocessed flushTasks, we can push resolvedTs all
+	// the way to the last received resolvedTs.
+	if s.compacted.Len() == 0 && s.tree.Len() == 0 {
+		return resolvedTs
+	}
+	
 	var (
 		i             int
 		newResolvedTs uint64
 	)
 
 	for {
-		if s.compacted.Len() == 0 && s.tree.Len() == 0 {
-			return resolvedTs
-		}
-
 		var nextStepResolvedTs uint64
 		for {
 			var treeToPop *btree.BTree
