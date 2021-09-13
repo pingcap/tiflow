@@ -201,6 +201,24 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*m
 	return revision, details, nil
 }
 
+// GetAllChangeFeedInfo queries all changefeed information
+func (c CDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[string]*model.ChangeFeedInfo, error) {
+	_, details, err := c.GetChangeFeeds(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	allFeedInfo := make(map[string]*model.ChangeFeedInfo, len(details))
+	for id, rawDetail := range details {
+		info := &model.ChangeFeedInfo{}
+		if err := info.Unmarshal(rawDetail.Value); err != nil {
+			return nil, errors.Trace(err)
+		}
+		allFeedInfo[id] = info
+	}
+
+	return allFeedInfo, nil
+}
+
 // GetChangeFeedInfo queries the config of a given changefeed
 func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id string) (*model.ChangeFeedInfo, error) {
 	key := GetEtcdKeyChangeFeedInfo(id)
