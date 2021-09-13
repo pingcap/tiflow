@@ -205,7 +205,7 @@ LOOP:
 	if c.state.Info.Config.CheckGCSafePoint {
 		// Check TiDB GC safepoint does not exceed the checkpoint.
 		//
-		// We update TTL to 10 mintues,
+		// We update TTL to 10 minutes,
 		//  1. to delete the service GC safepoint effectively,
 		//  2. in case owner update TiCDC service GC safepoint fails.
 		//

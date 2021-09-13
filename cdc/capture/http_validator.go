@@ -63,7 +63,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
 	}
 
-	// Ensure the start ts is validate in the next 1 hour.
+	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx, capture.pdClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
