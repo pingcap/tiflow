@@ -208,7 +208,7 @@ func TestReader_openSelectedFiles(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		ret, err := openSelectedFiles(ctx, tt.args.dir, tt.args.fixedName, tt.args.startTs, tt.args.endTs)
+		ret, err := openSelectedFiles(ctx, tt.args.dir, tt.args.fixedName, tt.args.startTs, tt.args.endTs, 100)
 		if !tt.wantErr {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, len(tt.wantRet), len(ret), tt.name)

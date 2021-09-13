@@ -54,11 +54,11 @@ type LogReaderConfig struct {
 	// Dir is the folder contains the redo logs need to apply when OP environment or
 	// the folder used to download redo logs to if s3 enabled
 	Dir       string
-	startTs   uint64
-	endTs     uint64
 	S3Storage bool
 	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-	S3URI *url.URL
+	S3URI   *url.URL
+	startTs uint64
+	endTs   uint64
 }
 
 // LogReader ...
