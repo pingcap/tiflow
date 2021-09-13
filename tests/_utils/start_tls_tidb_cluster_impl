@@ -9,24 +9,25 @@ OUT_DIR=
 TLS_DIR=
 
 while [[ ${1} ]]; do
-    case "${1}" in
-        --workdir)
-            OUT_DIR=${2}
-            shift
-            ;;
-        --tlsdir)
-            TLS_DIR=${2}
-            shift
-            ;;
-        *)
-            echo "Unknown parameter: ${1}" >&2
-            exit 1
-    esac
+	case "${1}" in
+	--workdir)
+		OUT_DIR=${2}
+		shift
+		;;
+	--tlsdir)
+		TLS_DIR=${2}
+		shift
+		;;
+	*)
+		echo "Unknown parameter: ${1}" >&2
+		exit 1
+		;;
+	esac
 
-    if ! shift; then
-        echo 'Missing parameter argument.' >&2
-        exit 1
-    fi
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
 done
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -34,7 +35,7 @@ source $CUR/../_utils/test_prepare
 
 cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 
-cat - > "$OUT_DIR/pd-config-tls.toml" <<EOF
+cat - >"$OUT_DIR/pd-config-tls.toml" <<EOF
 [replication]
 # The number of replicas for each region.
 max-replicas = 1
@@ -46,29 +47,29 @@ EOF
 
 echo "Starting TLS PD..."
 pd-server \
-    --client-urls https://${TLS_PD_HOST}:${TLS_PD_PORT}\
-    --peer-urls https://${TLS_PD_HOST}:${TLS_PD_PEER_PORT}\
-    --config "$OUT_DIR/pd-config-tls.toml" \
-    --log-file "$OUT_DIR/pd_tls.log" \
-    --data-dir "$OUT_DIR/pd_tls" &
+	--client-urls https://${TLS_PD_HOST}:${TLS_PD_PORT} \
+	--peer-urls https://${TLS_PD_HOST}:${TLS_PD_PEER_PORT} \
+	--config "$OUT_DIR/pd-config-tls.toml" \
+	--log-file "$OUT_DIR/pd_tls.log" \
+	--data-dir "$OUT_DIR/pd_tls" &
 
 # wait until PD is online...
 while ! curl --cacert $TLS_DIR/ca.pem \
-        --cert $TLS_DIR/client.pem \
-        --key $TLS_DIR/client-key.pem \
-        -o /dev/null -sf https://${TLS_PD_HOST}:${TLS_PD_PORT}/pd/api/v1/version; do
-    sleep 1
+	--cert $TLS_DIR/client.pem \
+	--key $TLS_DIR/client-key.pem \
+	-o /dev/null -sf https://${TLS_PD_HOST}:${TLS_PD_PORT}/pd/api/v1/version; do
+	sleep 1
 done
 
 while [ -z "$(curl --cacert $TLS_DIR/ca.pem \
-        --cert $TLS_DIR/client.pem \
-        --key $TLS_DIR/client-key.pem \
-        https://${TLS_PD_HOST}:${TLS_PD_PORT}/pd/health 2> /dev/null | grep 'health' | grep 'true')" ]; do
-    sleep 1
+	--cert $TLS_DIR/client.pem \
+	--key $TLS_DIR/client-key.pem \
+	https://${TLS_PD_HOST}:${TLS_PD_PORT}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+	sleep 1
 done
 
 # Tries to limit the max number of open files under the system limit
-cat - > "$OUT_DIR/tikv-config-tls.toml" <<EOF
+cat - >"$OUT_DIR/tikv-config-tls.toml" <<EOF
 [storage]
 # Disable creating a large temp file.
 reserve-space = "0MB"
@@ -86,7 +87,7 @@ key-path = "$TLS_DIR/server-key.pem"
 EOF
 
 # tidb server config file
-cat - > "$OUT_DIR/tidb-config-tls.toml" <<EOF
+cat - >"$OUT_DIR/tidb-config-tls.toml" <<EOF
 split-table = true
 alter-primary-key = true
 new_collations_enabled_on_first_bootstrap = true
@@ -105,47 +106,54 @@ echo "Starting TLS TiKV..."
 # GRPC_VERBOSITY=debug \
 # GRPC_TRACE=server_channel,call_error,handshaker,tsi \
 tikv-server \
-    --pd ${TLS_PD_HOST}:${TLS_PD_PORT} \
-    -A ${TLS_TIKV_HOST}:${TLS_TIKV_PORT} \
-    --status-addr ${TLS_TIKV_HOST}:${TLS_TIKV_STATUS_PORT} \
-    --log-file "$OUT_DIR/tikv_tls.log" \
-    -C "$OUT_DIR/tikv-config-tls.toml" \
-    -s "$OUT_DIR/tikv_tls" &> $OUT_DIR/tikv_tls.stdout &
+	--pd ${TLS_PD_HOST}:${TLS_PD_PORT} \
+	-A ${TLS_TIKV_HOST}:${TLS_TIKV_PORT} \
+	--status-addr ${TLS_TIKV_HOST}:${TLS_TIKV_STATUS_PORT} \
+	--log-file "$OUT_DIR/tikv_tls.log" \
+	-C "$OUT_DIR/tikv-config-tls.toml" \
+	-s "$OUT_DIR/tikv_tls" &>$OUT_DIR/tikv_tls.stdout &
 
 sleep 2
 
 echo "Starting TLS TiDB..."
 tidb-server \
-    -P ${TLS_TIDB_PORT} \
-    -config "$OUT_DIR/tidb-config-tls.toml" \
-    --store tikv \
-    --path ${TLS_PD_HOST}:${TLS_PD_PORT} \
-    --status=${TLS_TIDB_STATUS} \
-    --log-file "$OUT_DIR/tidb_tls.log" &
+	-P ${TLS_TIDB_PORT} \
+	-config "$OUT_DIR/tidb-config-tls.toml" \
+	--store tikv \
+	--path ${TLS_PD_HOST}:${TLS_PD_PORT} \
+	--status=${TLS_TIDB_STATUS} \
+	--log-file "$OUT_DIR/tidb_tls.log" &
 
 echo "Verifying TLS TiDB is started..."
 i=0
 while ! mysql -uroot -h${TLS_TIDB_HOST} -P${TLS_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start upstream TiDB'
-        exit 2
-    fi
-    sleep 2
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start upstream TiDB'
+		exit 2
+	fi
+	sleep 2
 done
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-    --ssl-ca=$TLS_DIR/ca.pem \
-    --ssl-cert=$TLS_DIR/server.pem \
-    --ssl-key=$TLS_DIR/server-key.pem
+	--ssl-ca=$TLS_DIR/ca.pem \
+	--ssl-cert=$TLS_DIR/server.pem \
+	--ssl-key=$TLS_DIR/server-key.pem
 
 echo "Starting CDC state checker..."
 cd $CUR/../../testing_utils/cdc_state_checker
 if [ ! -f ./cdc_state_checker ]; then
-  GO111MODULE=on go build
+	GO111MODULE=on go build
 fi
+<<<<<<< HEAD
 ./cdc_state_checker -pd ${TLS_PD_HOST}:${TLS_PD_PORT} \
     -ca $TLS_DIR/ca.pem \
     -cert $TLS_DIR/server.pem \
     -key $TLS_DIR/server-key.pem > $OUT_DIR/cdc_etcd_check.log &
+=======
+./cdc_state_checker -pd https://${TLS_PD_HOST}:${TLS_PD_PORT} \
+	-ca $TLS_DIR/ca.pem \
+	-cert $TLS_DIR/server.pem \
+	-key $TLS_DIR/server-key.pem >$OUT_DIR/cdc_etcd_check.log &
+>>>>>>> 257041655 (lint: add shfmt to format sh scripts (#2798))
 cd $OUT_DIR

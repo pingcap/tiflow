@@ -25,6 +25,7 @@ config_path=
 data_dir=
 
 while [[ ${1} ]]; do
+<<<<<<< HEAD
     case "${1}" in
         --workdir)
             workdir=${2}
@@ -87,6 +88,74 @@ done
 
 if [ -z "$data_dir" ]; then
     data_dir=${workdir}/cdc_data${logsuffix}
+=======
+	case "${1}" in
+	--workdir)
+		workdir=${2}
+		shift
+		;;
+	--tlsdir)
+		tls_dir=${2}
+		tls="--ca ${2}/ca.pem --cert ${2}/server.pem --key ${2}/server-key.pem"
+		shift
+		;;
+	--cert-allowed-cn)
+		certcn_name=${2}
+		certcn="--cert-allowed-cn ${2}"
+		shift
+		;;
+	--binary)
+		binary=${2}
+		shift
+		;;
+	--logsuffix)
+		logsuffix=${2}
+		shift
+		;;
+	--addr)
+		addr_url=${2}
+		addr="--addr ${2}"
+		shift
+		;;
+	--pd)
+		pd_addr="--pd ${2}"
+		shift
+		;;
+	--loglevel)
+		log_level=${2}
+		shift
+		;;
+	--restart)
+		restart=${2}
+		shift
+		;;
+	--failpoint)
+		failpoint=${2}
+		shift
+		;;
+	--config)
+		config_path="--config ${2}"
+		shift
+		;;
+	--data-dir)
+		data_dir=${2}
+		shift
+		;;
+	*)
+		echo "Unknown parameter: ${1}" >&2
+		exit 1
+		;;
+	esac
+
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
+done
+
+if [ -z "$data_dir" ]; then
+	data_dir=${workdir}/cdc_data${logsuffix}
+>>>>>>> 257041655 (lint: add shfmt to format sh scripts (#2798))
 fi
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
@@ -96,6 +165,7 @@ pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
 # GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=debug \
 
 if [[ "$restart" == "true" ]]; then
+<<<<<<< HEAD
   while true; do
       GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
         --log-file $workdir/cdc$logsuffix.log \
@@ -126,5 +196,64 @@ else
 fi
 
 cd $pwd
+=======
+	while true; do
+		GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
+			--log-file $workdir/cdc$logsuffix.log \
+			--log-level $log_level \
+			--sorter-num-workerpool-goroutine 4 \
+			--data-dir "$data_dir" \
+			$config_path \
+			$tls \
+			$certcn \
+			$addr \
+			$pd_addr &>>$workdir/stdout$logsuffix.log
+		if [ $? -eq 143 ]; then
+			break
+		fi
+		sleep 1
+	done &
+else
+	GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
+		--log-file $workdir/cdc$logsuffix.log \
+		--log-level $log_level \
+		--sorter-num-workerpool-goroutine 4 \
+		--data-dir "$data_dir" \
+		$config_path \
+		$tls \
+		$certcn \
+		$addr \
+		$pd_addr &>>$workdir/stdout$log_suffix.log &
+fi
+
+# Make sure cdc is ready to serve
+
+# Because curl may encounter errors,
+# it is acceptable and will retry, so you cannot quit.
+set +e
+
+get_info_fail_msg="failed to get info:"
+etcd_info_msg="etcd info"
+# If tls is set, then we need to pass the certificate and use https.
+# Note that the certificate name may be specified.
+if [ -z "$tls_dir" ]; then
+	curl_status_cmd="curl -vsL http://$addr_url/debug/info"
+else
+	curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -vsL https://$addr_url/debug/info"
+fi
+
+for ((i = 0; i <= 50; i++)); do
+	res=$($curl_status_cmd)
+	# Make sure we get the capture info(etcd_info_msg) and that there are no errors(get_info_fail_msg).
+	if (! echo "$res" | grep -q "$get_info_fail_msg") && (echo "$res" | grep -q "$etcd_info_msg"); then
+		break
+	fi
+	if [ "$i" -eq 50 ]; then
+		echo 'Failed to start TiCDC'
+		exit 1
+	fi
+	sleep 3
+done
+>>>>>>> 257041655 (lint: add shfmt to format sh scripts (#2798))
 
 
