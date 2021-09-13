@@ -285,7 +285,6 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
-<<<<<<< HEAD
 	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
 	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
 	cli := s.etcdClient
@@ -303,27 +302,14 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		defer cli.Close()
 	}
 
-	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := cli.GetAllChangeFeedStatus(ctx)
-=======
 	// data-dir will be decided by exist changefeed for backward compatibility
 	allInfo, err := s.etcdClient.GetAllChangeFeedInfo(ctx)
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-<<<<<<< HEAD
-	candidates := make([]string, 0, len(allStatus))
-	for id := range allStatus {
-		info, err := cli.GetChangeFeedInfo(ctx, id)
-		if err != nil {
-			return errors.Trace(err)
-		}
-=======
 	candidates := make([]string, 0, len(allInfo))
 	for _, info := range allInfo {
->>>>>>> e98c25758 (server: when init data dir, skip if get changefeed info failed. (#2778))
 		if info.SortDir != "" {
 			candidates = append(candidates, info.SortDir)
 		}
