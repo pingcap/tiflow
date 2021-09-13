@@ -76,7 +76,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "total_flushed_rows_count",
-			Help:      "total count of flushed rows",
+			Help:      "The total count of rows that are flushed by sink",
 		}, []string{"capture", "changefeed"})
 	flushRowChangedDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
