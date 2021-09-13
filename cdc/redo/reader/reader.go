@@ -56,9 +56,13 @@ type LogReaderConfig struct {
 	Dir       string
 	S3Storage bool
 	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-	S3URI   *url.URL
-	startTs uint64
-	endTs   uint64
+	S3URI *url.URL
+	// WorkerNums is the num of workers used to sort the log file to sorted file,
+	// will load the file to memory first then write the sorted file to disk
+	// the memory used is WorkerNums * defaultMaxLogSize (64 * megabyte) total
+	WorkerNums int
+	startTs    uint64
+	endTs      uint64
 }
 
 // LogReader ...
@@ -147,12 +151,13 @@ func (l *LogReader) setUpRowReader(ctx context.Context, startTs, endTs uint64) e
 	}
 
 	rowCfg := &readerConfig{
-		dir:       l.cfg.Dir,
-		fileType:  common.DefaultRowLogFileType,
-		startTs:   startTs,
-		endTs:     endTs,
-		s3Storage: l.cfg.S3Storage,
-		s3URI:     l.cfg.S3URI,
+		dir:        l.cfg.Dir,
+		fileType:   common.DefaultRowLogFileType,
+		startTs:    startTs,
+		endTs:      endTs,
+		s3Storage:  l.cfg.S3Storage,
+		s3URI:      l.cfg.S3URI,
+		workerNums: l.cfg.WorkerNums,
 	}
 	l.rowReader = newReader(ctx, rowCfg)
 	l.rowHeap = logHeap{}
@@ -171,12 +176,13 @@ func (l *LogReader) setUpDDLReader(ctx context.Context, startTs, endTs uint64) e
 	}
 
 	ddlCfg := &readerConfig{
-		dir:       l.cfg.Dir,
-		fileType:  common.DefaultDDLLogFileType,
-		startTs:   startTs,
-		endTs:     endTs,
-		s3Storage: l.cfg.S3Storage,
-		s3URI:     l.cfg.S3URI,
+		dir:        l.cfg.Dir,
+		fileType:   common.DefaultDDLLogFileType,
+		startTs:    startTs,
+		endTs:      endTs,
+		s3Storage:  l.cfg.S3Storage,
+		s3URI:      l.cfg.S3URI,
+		workerNums: l.cfg.WorkerNums,
 	}
 	l.ddlReader = newReader(ctx, ddlCfg)
 	l.ddlHeap = logHeap{}
