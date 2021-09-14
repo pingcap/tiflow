@@ -14,7 +14,8 @@ type RowInfos struct{
 	OperType  int32
 	SchemaName string
 	TableName string
-	CFlag  byte
+	//CFlag  byte
+	EventTypeValue int32
 	ColumnList   []*ColumnVo
 
 }
@@ -23,6 +24,7 @@ type ColumnVo struct{
 
 	IsPkFlag bool
 	ColumnType byte
+	CFlag  byte
 	ColumnValue string
 	ColumnName string
 

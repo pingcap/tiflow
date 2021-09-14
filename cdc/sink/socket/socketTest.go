@@ -328,8 +328,17 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 		buffer.Write(publicUtils.LongToBytes(rowInfo.RowID))
 		buffer.Write(publicUtils.Int32ToBytes(rowInfo.ColumnNo))
 
-		operTypeArr := make([]byte,4)
-		operTypeArr[3]=byte('I')
+		operTypeArr := make([]byte,1)
+		if rowInfo.EventTypeValue==2{
+			operTypeArr[0]=byte('I')
+			//publicUtils.BlockByteArrCopy([]byte("I"),0,operTypeArr,0,len(rowInfo.SchemaName))
+
+		}else if rowInfo.EventTypeValue == 4{
+			operTypeArr[0]=byte('D')
+		}else if rowInfo.EventTypeValue == 3{
+			operTypeArr[0]=byte('U')
+		}
+
 		buffer.Write(operTypeArr)
 		schemaNameArr := make([]byte,1+len(rowInfo.SchemaName))
 		publicUtils.BlockByteArrCopy([]byte(rowInfo.SchemaName),0,schemaNameArr,0,len(rowInfo.SchemaName))
@@ -338,9 +347,7 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 		publicUtils.BlockByteArrCopy([]byte(rowInfo.TableName),0,tableNameArr,0,len(rowInfo.TableName))
 		buffer.Write(tableNameArr)
 
-		cfgArr := make([]byte,4)
-		cfgArr[3]=rowInfo.CFlag
-		buffer.Write(cfgArr)
+
 
 		for _,col2 := range rowInfo.ColumnList{
 			fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
@@ -534,6 +541,8 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     colPos = colPos+1;
     columnInfoArr[colPos]=columnInfo.ColumnType
     colPos = colPos+1;
+	columnInfoArr[colPos]=columnInfo.CFlag
+	colPos = colPos+1;
     publicUtils.BlockByteArrCopy([]byte(columnNameArr),0,columnInfoArr,colPos,len(columnNameArr))
     colPos = colPos+len(columnNameArr);
     publicUtils.BlockByteArrCopy([]byte(ColumnValueArr),0,columnInfoArr,colPos,len(ColumnValueArr))

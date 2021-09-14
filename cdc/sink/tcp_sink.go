@@ -115,6 +115,25 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		//rowdata := &vo.RowInfos{}
 		//rowdata := make([]*vo.RowInfos, 0);
 
+
+		if eventTypeValue == 2 {
+			//insert
+			columnInfos = getColumnInfos(0, row.Columns)
+
+		} else if eventTypeValue == 4 {
+			//delete
+			columnInfos = getColumnInfos(0, row.PreColumns)
+
+
+		} else if eventTypeValue == 3 {
+			//update
+			//before
+			columnInfos = getColumnInfos(0, row.PreColumns)
+
+			//after
+			columnInfos = append(columnInfos, getColumnInfos(1, row.Columns)...)
+
+		}
 		rowdata.StartTimer = int64(row.StartTs)
 		rowdata.CommitTimer = int64(row.CommitTs)
 		rowdata.RowID = row.RowID
@@ -127,59 +146,15 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
 		log.Info("show ColumnNo ：：：：：：：：：：：：：：", zap.Reflect("ColumnNo", rowdata.ColumnNo))
 		log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
-		if eventTypeValue == 2 {
-			//insert
-			columnInfos = getColumnInfos(0, row.Columns)
+		//rowdata.CFlag = 0
 
-			rowdata.CFlag = 1
-			rowdata.ColumnNo = int32(len(columnInfos))
-			rowdata.ColumnList = columnInfos
-			rowInfos = append(rowInfos,rowdata)
-			//send
-			//socket.JddmClient(b.sinkURI.Host,rowInfos)
-			socket.JddmClient("127.0.0.1:9889",rowInfos)
-
-		} else if eventTypeValue == 4 {
-			//delete
-			columnInfos = getColumnInfos(0, row.PreColumns)
-
-			rowdata.CFlag = 0
-			rowdata.ColumnNo = int32(len(columnInfos))
-			rowdata.ColumnList = columnInfos
-			rowInfos = append(rowInfos,rowdata)
-			//send
-			//socket.JddmClient(b.sinkURI.Host,rowInfos)
-			socket.JddmClient("127.0.0.1:9889",rowInfos)
-
-		} else if eventTypeValue == 3 {
-			//update
-			//before
-			columnInfos = getColumnInfos(1, row.PreColumns)
-			rowdata.CFlag = 0
-			rowdata.ColumnNo = int32(len(columnInfos))
-			rowdata.ColumnList = columnInfos
-			rowInfos = append(rowInfos,rowdata)
-			//send
-			//socket.JddmClient(b.sinkURI.Host,rowInfos)
-			socket.JddmClient("127.0.0.1:9889",rowInfos)
-
-			//after
-			columnInfos = getColumnInfos(0, row.Columns)
-			rowdata.CFlag = 1
-			rowdata.ColumnNo = int32(len(columnInfos))
-			rowdata.ColumnList = columnInfos
-			rowInfos = append(rowInfos,rowdata)
-			//send
-			//socket.JddmClient(b.sinkURI.Host,rowInfos)
-			socket.JddmClient("127.0.0.1:9889",rowInfos)
-
-
-		}
-
-
-
-
-
+		rowdata.ColumnNo = int32(len(columnInfos))
+		rowdata.ColumnList = columnInfos
+		rowdata.EventTypeValue = eventTypeValue
+		rowInfos = append(rowInfos,rowdata)
+		//send
+		//socket.JddmClient(b.sinkURI.Host,rowInfos)
+		socket.JddmClient("127.0.0.1:9889",rowInfos)
 
 
 		//socket.JddmClient("127.0.0.1",9889,rowInfos)
@@ -197,7 +172,7 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 }
 
 
-func getColumnInfos(colFlag int, columns []*model.Column) []*vo.ColumnVo {
+func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 	//rowdata := &vo.RowInfos{}
 	columnInfos :=make([]*vo.ColumnVo,0);
 
@@ -207,6 +182,7 @@ func getColumnInfos(colFlag int, columns []*model.Column) []*vo.ColumnVo {
 		columnVo.ColumnName = column.Name
 		columnVo.ColumnValue = model.ColumnValueString(column.Value)
 		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()
+		columnVo.CFlag = colFlag
 		columnVo.ColumnType = column.Type
 		fmt.Println("column.Value:::::",column.Value)
 		fmt.Println("IsPrimaryKey:::::",column.Flag.IsPrimaryKey())
