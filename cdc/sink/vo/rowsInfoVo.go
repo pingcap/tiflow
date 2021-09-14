@@ -14,7 +14,9 @@ type RowInfos struct{
 	OperType  int32
 	SchemaName string
 	TableName string
+	CFlag  byte
 	ColumnList   []*ColumnVo
+
 }
 
 type ColumnVo struct{

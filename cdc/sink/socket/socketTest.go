@@ -337,6 +337,10 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 		publicUtils.BlockByteArrCopy([]byte(rowInfo.TableName),0,tableNameArr,0,len(rowInfo.TableName))
 		buffer.Write(tableNameArr)
 
+		cfgArr := make([]byte,4)
+		cfgArr[3]=rowInfo.CFlag
+		buffer.Write(cfgArr)
+
 		for _,col2 := range rowInfo.ColumnList{
 			fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
 			//fmt.Println（"%s",col.ColumnValue)
@@ -348,7 +352,7 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 		fmt.Printf(" allColumnArrByRow[%d]Arr %s \n",len(buffer.Bytes()),publicUtils.BytestoHex(buffer.Bytes()))
 	}
-	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
+	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()))
 	sendBatchRowsArr.Write(lengthArr)
 	sendBatchRowsArr.Write(verifyArr)
 	sendBatchRowsArr.Write(buffer.Bytes())

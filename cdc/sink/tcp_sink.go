@@ -114,36 +114,74 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		columnInfos  :=make([]*vo.ColumnVo,0);
 		//rowdata := &vo.RowInfos{}
 		//rowdata := make([]*vo.RowInfos, 0);
-		if eventTypeValue == 2 {
-			//insert
-			columnInfos = getColumnInfos(0, row.Columns)
-		} else if eventTypeValue == 4 {
-			//delete
-			columnInfos = getColumnInfos(0, row.PreColumns)
-		} else if eventTypeValue == 3 {
-			//update
-			//after
-			columnInfos = getColumnInfos(0, row.Columns)
-			//before
-			columnInfos = getColumnInfos(1, row.PreColumns)
 
-		}
 		rowdata.StartTimer = int64(row.StartTs)
 		rowdata.CommitTimer = int64(row.CommitTs)
 		rowdata.RowID = row.RowID
-		rowdata.ColumnNo = int32(len(columnInfos))
+
 		rowdata.SchemaName = schemaName
 		rowdata.TableName = tableName
 		rowdata.OperType = eventTypeValue
-		rowdata.ColumnList = columnInfos
 
-		rowInfos = append(rowInfos,rowdata)
+
 		fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
 		log.Info("show ColumnNo ：：：：：：：：：：：：：：", zap.Reflect("ColumnNo", rowdata.ColumnNo))
 		log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
+		if eventTypeValue == 2 {
+			//insert
+			columnInfos = getColumnInfos(0, row.Columns)
 
-		//send
-		socket.JddmClient(b.sinkURI.Host,rowInfos)
+			rowdata.CFlag = 1
+			rowdata.ColumnNo = int32(len(columnInfos))
+			rowdata.ColumnList = columnInfos
+			rowInfos = append(rowInfos,rowdata)
+			//send
+			socket.JddmClient(b.sinkURI.Host,rowInfos)
+			//socket.JddmClient("127.0.0.1:9889",rowInfos)
+
+		} else if eventTypeValue == 4 {
+			//delete
+			columnInfos = getColumnInfos(0, row.PreColumns)
+
+			rowdata.CFlag = 0
+			rowdata.ColumnNo = int32(len(columnInfos))
+			rowdata.ColumnList = columnInfos
+			rowInfos = append(rowInfos,rowdata)
+			//send
+			socket.JddmClient(b.sinkURI.Host,rowInfos)
+			//socket.JddmClient("127.0.0.1:9889",rowInfos)
+
+		} else if eventTypeValue == 3 {
+			//update
+			//before
+			columnInfos = getColumnInfos(1, row.PreColumns)
+			rowdata.CFlag = 0
+			rowdata.ColumnNo = int32(len(columnInfos))
+			rowdata.ColumnList = columnInfos
+			rowInfos = append(rowInfos,rowdata)
+			//send
+			socket.JddmClient(b.sinkURI.Host,rowInfos)
+			//socket.JddmClient("127.0.0.1:9889",rowInfos)
+
+			//after
+			columnInfos = getColumnInfos(0, row.Columns)
+			rowdata.CFlag = 1
+			rowdata.ColumnNo = int32(len(columnInfos))
+			rowdata.ColumnList = columnInfos
+			rowInfos = append(rowInfos,rowdata)
+			//send
+			socket.JddmClient(b.sinkURI.Host,rowInfos)
+			//socket.JddmClient("127.0.0.1:9889",rowInfos)
+
+
+		}
+
+
+
+
+
+
+
 		//socket.JddmClient("127.0.0.1",9889,rowInfos)
 
 	    //sender(rowdata)
