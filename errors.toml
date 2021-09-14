@@ -631,6 +631,16 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRedoFileOp"]
+error = '''
+redo file operation
+'''
+
+["CDC:ErrRedoWriterStopped"]
+error = '''
+redo log writer stopped
+'''
+
 ["CDC:ErrRegionWorkerExit"]
 error = '''
 region worker exited
@@ -659,6 +669,11 @@ s3 sink storage api
 ["CDC:ErrS3SinkWriteStorage"]
 error = '''
 write to storage
+'''
+
+["CDC:ErrS3StorageAPI"]
+error = '''
+s3 storage api
 '''
 
 ["CDC:ErrS3StorageInitialize"]
