@@ -17,6 +17,7 @@ import (
 	"os"
 
 	"github.com/pingcap/ticdc/pkg/cmd/cli"
+	"github.com/pingcap/ticdc/pkg/cmd/redo"
 	"github.com/pingcap/ticdc/pkg/cmd/server"
 	"github.com/pingcap/ticdc/pkg/cmd/version"
 	"github.com/spf13/cobra"
@@ -41,6 +42,7 @@ func Run() {
 	cmd.AddCommand(server.NewCmdServer())
 	cmd.AddCommand(cli.NewCmdCli())
 	cmd.AddCommand(version.NewCmdVersion())
+	cmd.AddCommand(redo.NewCmdRedo())
 
 	if err := cmd.Execute(); err != nil {
 		cmd.Println(err)

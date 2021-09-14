@@ -35,6 +35,7 @@ require (
 	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
+	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63

@@ -982,10 +982,10 @@ func (s MySQLSinkSuite) TestAdjustSQLMode(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	changefeed := "test-changefeed"
@@ -1107,10 +1107,10 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDML(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1247,10 +1247,10 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrDatabaseNotExists(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1315,10 +1315,10 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrTableNotExists(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1385,10 +1385,10 @@ func (s MySQLSinkSuite) TestExecDMLRollbackErrRetryable(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConnErrDatabaseNotExists
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1440,10 +1440,10 @@ func (s MySQLSinkSuite) TestNewMySQLSinkExecDDL(c *check.C) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1513,10 +1513,10 @@ func (s MySQLSinkSuite) TestNewMySQLSink(c *check.C) {
 		c.Assert(err, check.IsNil)
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1554,10 +1554,10 @@ func (s MySQLSinkSuite) TestMySQLSinkClose(c *check.C) {
 		c.Assert(err, check.IsNil)
 		return db, nil
 	}
-	backupGetDBConn := getDBConnImpl
-	getDBConnImpl = mockGetDBConn
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
 	defer func() {
-		getDBConnImpl = backupGetDBConn
+		GetDBConnImpl = backupGetDBConn
 	}()
 
 	ctx := context.Background()

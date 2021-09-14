@@ -144,9 +144,13 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrInvalidS3URI, err)
 			}
-			writerCfg.S3URI = s3URI
+			writerCfg.S3URI = *s3URI
 		}
-		m.writer = writer.NewLogWriter(ctx, writerCfg)
+		writer, err := writer.NewLogWriter(ctx, writerCfg)
+		if err != nil {
+			return nil, err
+		}
+		m.writer = writer
 	default:
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storage)
 	}
