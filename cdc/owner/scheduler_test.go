@@ -59,7 +59,6 @@ func (s *schedulerSuite) addCapture(captureID model.CaptureID) {
 func (s *schedulerSuite) finishTableOperation(captureID model.CaptureID, tableIDs ...model.TableID) {
 	s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		for _, tableID := range tableIDs {
-			status.Operation[tableID].Done = true
 			status.Operation[tableID].Status = model.OperFinished
 		}
 		return status, true, nil
@@ -97,10 +96,10 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 		1: {StartTs: 0}, 2: {StartTs: 0}, 3: {StartTs: 0}, 4: {StartTs: 0},
 	})
 	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		1: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
-		2: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
-		3: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
-		4: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		1: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		2: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		3: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		4: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 	shouldUpdateState, err = s.scheduler.Tick(s.state, []model.TableID{1, 2, 3, 4}, s.captures)
 	c.Assert(err, check.IsNil)
@@ -119,10 +118,10 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 		3: {StartTs: 0}, 4: {StartTs: 0}, 5: {StartTs: 0},
 	})
 	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		1: {Done: false, Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
-		2: {Done: false, Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
-		4: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
-		5: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		1: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
+		2: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
+		4: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		5: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
 	// move a non exist table to a non exist capture
@@ -138,11 +137,11 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 		4: {StartTs: 0}, 5: {StartTs: 0},
 	})
 	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		1: {Done: false, Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
-		2: {Done: false, Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
-		3: {Done: false, Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
-		4: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
-		5: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		1: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
+		2: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
+		3: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
+		4: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		5: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
 	// finish all operations
@@ -176,7 +175,7 @@ func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 		3: {StartTs: 0}, 4: {StartTs: 0}, 5: {StartTs: 0},
 	})
 	c.Assert(s.state.TaskStatuses[captureID].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		3: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		3: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 }
 
@@ -196,7 +195,7 @@ func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
 		1: {StartTs: 0},
 	})
 	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		1: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		1: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
 	s.finishTableOperation(captureID1, 1)
@@ -220,7 +219,7 @@ func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
 		2: {StartTs: 0},
 	})
 	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		2: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		2: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
 	s.finishTableOperation(captureID2, 2)
@@ -236,7 +235,7 @@ func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
 	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
 	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{})
 	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		2: {Done: false, Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
+		2: {Delete: true, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 
 	s.finishTableOperation(captureID2, 2)
@@ -260,7 +259,7 @@ func (s *schedulerSuite) TestScheduleMoveTable(c *check.C) {
 		1: {StartTs: 0}, 2: {StartTs: 0},
 	})
 	c.Assert(s.state.TaskStatuses[captureID1].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{
-		2: {Done: false, Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
+		2: {Delete: false, BoundaryTs: 0, Status: model.OperDispatched},
 	})
 	c.Assert(s.state.TaskStatuses[captureID2].Tables, check.DeepEquals, map[model.TableID]*model.TableReplicaInfo{})
 	c.Assert(s.state.TaskStatuses[captureID2].Operation, check.DeepEquals, map[model.TableID]*model.TableOperation{})
@@ -300,7 +299,6 @@ func (s *schedulerSuite) TestScheduleRebalance(c *check.C) {
 
 	s.state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		for _, opt := range status.Operation {
-			opt.Done = true
 			opt.Status = model.OperFinished
 		}
 		return status, true, nil

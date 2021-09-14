@@ -54,7 +54,6 @@ func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
 			c.Assert(exist, check.IsTrue)
 			c.Assert(op.Delete, check.IsFalse)
 			c.Assert(op.BoundaryTs, check.Equals, ts)
-			c.Assert(op.Done, check.IsFalse)
 			totalTableNum++
 		}
 	}
