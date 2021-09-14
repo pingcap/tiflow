@@ -1,5 +1,6 @@
 ---
-name: Flaking Test about: Report flaky tests or jobs in TiCDC CI labels: component/test
+name: "Flaking Test about: Report flaky tests or jobs in TiCDC CI"
+labels: component/test
 
 ---
 
