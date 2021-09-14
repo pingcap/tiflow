@@ -1565,16 +1565,6 @@ ReceiveLoop:
 // logs the error and re-establish new request.
 func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
-
-	// test client v2
-	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
-
-	// test client v1
-	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
 	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 }
 
@@ -1586,13 +1576,6 @@ func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
 
 	// test client v2
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
-
-	// test client v1
-	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 }
 
@@ -1746,28 +1729,14 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	defer grpcPool.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
 	eventCh := make(chan model.RegionFeedEvent, 10)
-	var wg2 sync.WaitGroup
-	if enableKVClientV2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-			c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-			cdcClient.Close() //nolint:errcheck
-		}()
-	} else {
-		wg2.Add(1)
-		go func() {
-			defer wg2.Done()
-			err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-			if enableKVClientV2 {
-				c.Assert(err, check.IsNil)
-			} else {
-				c.Assert(cerror.ErrNoPendingRegion.Equal(err), check.IsTrue)
-			}
-			cdcClient.Close() //nolint:errcheck
-		}()
-	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		cdcClient.Close() //nolint:errcheck
+	}()
 
 	// wait request id allocated with: new session, new request
 	waitRequestID(c, baseAllocatedID+1)
@@ -1779,26 +1748,25 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 		},
 	}}
 	ch1 <- noPendingRegionEvent
-	if enableKVClientV2 {
-		initialized := mockInitializedEvent(3, currentRequestID())
-		ch1 <- initialized
-		ev := <-eventCh
-		c.Assert(ev.Resolved, check.NotNil)
-		c.Assert(ev.Resolved.ResolvedTs, check.Equals, uint64(100))
 
-		resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
-			{
-				RegionId:  3,
-				RequestId: currentRequestID(),
-				Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 200},
-			},
-		}}
-		ch1 <- resolved
-		ev = <-eventCh
-		c.Assert(ev.Resolved, check.NotNil)
-		c.Assert(ev.Resolved.ResolvedTs, check.Equals, uint64(200))
-	}
-	wg2.Wait()
+	initialized := mockInitializedEvent(3, currentRequestID())
+	ch1 <- initialized
+	ev := <-eventCh
+	c.Assert(ev.Resolved, check.NotNil)
+	c.Assert(ev.Resolved.ResolvedTs, check.Equals, uint64(100))
+
+	resolved := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: 200},
+		},
+	}}
+	ch1 <- resolved
+	ev = <-eventCh
+	c.Assert(ev.Resolved, check.NotNil)
+	c.Assert(ev.Resolved.ResolvedTs, check.Equals, uint64(200))
+
 	cancel()
 }
 
@@ -2742,12 +2710,6 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
@@ -2805,16 +2767,6 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 // The difference is the delay injected point for region 2
 func (s *etcdSuite) TestClientErrNoPendingRegion(c *check.C) {
 	defer testleak.AfterTest(c)()
-	clientv2 := enableKVClientV2
-	enableKVClientV2 = false
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
-	// test for client v1
-	s.testClientErrNoPendingRegion(c)
-
-	enableKVClientV2 = true
-	// test for client v2
 	s.testClientErrNoPendingRegion(c)
 }
 
@@ -3027,16 +2979,6 @@ func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	clientv2 := enableKVClientV2
-	defer func() {
-		enableKVClientV2 = clientv2
-	}()
-
-	// test kv client v1
-	enableKVClientV2 = false
-	s.testKVClientForceReconnect(c)
-
-	enableKVClientV2 = true
 	s.testKVClientForceReconnect(c)
 }
 
@@ -3287,10 +3229,6 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
-
-	if !enableKVClientV2 {
-		return
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
