@@ -822,6 +822,9 @@ func getWorkerPoolSize() (size int) {
 // InitWorkerPool initialize: workerpool once, the workerpool must be initialized
 // before any kv event is received.
 func InitWorkerPool() {
+	if !enableKVClientV2 {
+		return
+	}
 	workerPoolOnce.Do(func() {
 		size := getWorkerPoolSize()
 		regionWorkerPool = workerpool.NewDefaultWorkerPool(size)
@@ -831,6 +834,9 @@ func InitWorkerPool() {
 // RunWorkerPool runs the worker pool used by the region worker in kv client v2
 // It must be running before region worker starts to work
 func RunWorkerPool(ctx context.Context) error {
+	if !enableKVClientV2 {
+		return nil
+	}
 	InitWorkerPool()
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
