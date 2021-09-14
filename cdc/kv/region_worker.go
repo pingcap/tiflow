@@ -819,7 +819,7 @@ func getWorkerPoolSize() (size int) {
 	return
 }
 
-// InitWorkerPool initialize workerpool once, the workerpool must be initialized
+// InitWorkerPool initialize: workerpool once, the workerpool must be initialized
 // before any kv event is received.
 func InitWorkerPool() {
 	workerPoolOnce.Do(func() {
