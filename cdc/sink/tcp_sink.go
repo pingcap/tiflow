@@ -130,6 +130,7 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		}
 		rowdata.StartTimer = int64(row.StartTs)
 		rowdata.CommitTimer = int64(row.CommitTs)
+		rowdata.RowID = row.RowID
 		rowdata.ColumnNo = int32(len(columnInfos))
 		rowdata.SchemaName = schemaName
 		rowdata.TableName = tableName
@@ -178,7 +179,14 @@ func getColumnInfos(colFlag int, columns []*model.Column) []*vo.ColumnVo {
 
 func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	log.Debug("dsgSocketSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
-	err := b.statistics.RecordBatchExecution(func() (int, error) {
+
+	commitTs,err:=socket.JddmClientFlush(b.sinkURI.Host,resolvedTs)
+	if err != nil {
+		fmt.Println("err=", err) //出错退出
+		return 0, nil
+	}
+	fmt.Println("commitTs============>>>",commitTs)
+	/*err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
 		accumulated := atomic.LoadUint64(&b.accumulated)
 		batchSize := accumulated - b.lastAccumulated
@@ -186,8 +194,8 @@ func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) 
 		return int(batchSize), nil
 	})
 	b.statistics.PrintStatus(ctx)
-	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
-	return resolvedTs, err
+	atomic.StoreUint64(&b.checkpointTs, resolvedTs)*/
+	return commitTs, err
 }
 
 /*func analysisRowsAndSend(b *dsgSocketSink, ctx context.Context, singleTableTxn *model.SingleTableTxn) error {
