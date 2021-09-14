@@ -1,5 +1,5 @@
 ---
-name: Flaking Test 
+name: "\U0001F608 Flaking Test" 
 about: Report flaky tests or jobs in TiCDC CI 
 labels: component/test
 
