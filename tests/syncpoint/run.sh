@@ -129,7 +129,7 @@ function run() {
     run_sql "CREATE DATABASE testSync;"
     run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    start_ts=$(query_tso ${UP_PD_HOST_1} ${UP_PD_PORT_1})
+    start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     

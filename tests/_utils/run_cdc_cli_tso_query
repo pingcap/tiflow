@@ -9,6 +9,7 @@ pd_host=${1}
 pd_port=${2}
 
 tso=$(run_cdc_cli tso query --pd=http://${pd_host}:${pd_port})
+# make sure get tso only
 echo $tso | awk -F " " '{print $1}'
 
 set +x

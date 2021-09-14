@@ -18,7 +18,7 @@ function run() {
 
     cd $WORK_DIR
 
-    start_ts=$(query_tso ${UP_PD_HOST_1} ${UP_PD_PORT_1})
+    start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
     run_sql "CREATE DATABASE sink_retry;"
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=sink_retry
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkTxnRandomError=25%return(true)'

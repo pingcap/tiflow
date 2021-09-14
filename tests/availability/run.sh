@@ -21,7 +21,7 @@ function prepare() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(query_tso ${UP_PD_HOST_1} ${UP_PD_PORT_1})
+    start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
     run_sql "CREATE table test.availability1(id int primary key, val int);"
     run_sql "CREATE table test.availability2(id int primary key, val int);"
