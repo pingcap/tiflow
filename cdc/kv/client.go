@@ -752,6 +752,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			limiter := s.client.getRegionLimiter(regionID)
 			g.Go(func() error {
 				defer s.deleteStream(rpcCtx.Addr)
+				if !s.enableKVClientV2 {
+					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions, limiter)
+				}
 				return s.receiveFromStreamV2(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions, limiter)
 			})
 		}
