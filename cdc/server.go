@@ -427,17 +427,13 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 	}
 
 	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := cli.GetAllChangeFeedStatus(ctx)
+	allInfo, err := cli.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	candidates := make([]string, 0, len(allStatus))
-	for id := range allStatus {
-		info, err := cli.GetChangeFeedInfo(ctx, id)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	candidates := make([]string, 0, len(allInfo))
+	for _, info := range allInfo {
 		if info.SortDir != "" {
 			candidates = append(candidates, info.SortDir)
 		}
