@@ -324,7 +324,7 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
 		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
-
+		buffer.Write(publicUtils.LongToBytes(rowInfo.RowID))
 		buffer.Write(publicUtils.Int32ToBytes(rowInfo.ColumnNo))
 
 		operTypeArr := make([]byte,4)
