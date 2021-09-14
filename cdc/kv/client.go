@@ -119,6 +119,9 @@ var (
 	// internal error, force the gPRC stream terminate and reconnect
 	errReconnect = errors.New("internal error, reconnect all regions")
 	logPanic     = log.Panic
+
+	// A special event that indicates singleEventFeed is closed.
+	emptyRegionEvent = regionEvent{}
 )
 
 func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
@@ -154,9 +157,6 @@ type regionEvent struct {
 	changeEvent *cdcpb.Event
 	resolvedTs  *cdcpb.ResolvedTs
 }
-
-// A special event that indicates singleEventFeed is closed.
-var emptyRegionEvent = regionEvent{}
 
 type regionFeedState struct {
 	sri           singleRegionInfo
