@@ -38,7 +38,6 @@ var _ = check.Suite(&workerPoolSuite{})
 func (s *workerPoolSuite) TestTaskError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
 
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	errg, ctx := errgroup.WithContext(ctx)
@@ -55,16 +54,17 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 		c.Assert(err, check.ErrorMatches, "test error")
 	})
 
-	errg.Go(func() error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
 				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
-				return nil
 			}
 		}
-		return nil
-	})
+	}()
 
 	select {
 	case <-ctx.Done():
@@ -72,6 +72,9 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 	case err := <-handle.ErrCh():
 		c.Assert(err, check.ErrorMatches, "test error")
 	}
+	// Only cancel the context after all events have been sent,
+	// otherwise the event delivery may fail due to context cancellation.
+	wg.Wait()
 	cancel()
 
 	err := errg.Wait()
@@ -115,7 +118,6 @@ func (s *workerPoolSuite) TestTimerError(c *check.C) {
 func (s *workerPoolSuite) TestMultiError(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
 
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	errg, ctx := errgroup.WithContext(ctx)
@@ -130,15 +132,17 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 		return nil
 	})
 
-	errg.Go(func() error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
 				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
 			}
 		}
-		return nil
-	})
+	}()
 
 	select {
 	case <-ctx.Done():
@@ -146,6 +150,9 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 	case err := <-handle.ErrCh():
 		c.Assert(err, check.ErrorMatches, "test error")
 	}
+	// Only cancel the context after all events have been sent,
+	// otherwise the event delivery may fail due to context cancellation.
+	wg.Wait()
 	cancel()
 
 	err := errg.Wait()
