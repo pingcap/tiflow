@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	serverConfig "github.com/pingcap/ticdc/pkg/config"
@@ -69,6 +70,8 @@ type tablePipelineImpl struct {
 	sorterNode *sorterNode
 	sinkNode   *sinkNode
 	cancel     context.CancelFunc
+
+	replConfig *serverConfig.ReplicaConfig
 }
 
 // TODO find a better name or avoid using an interface
@@ -82,6 +85,13 @@ type tableFlowController interface {
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tablePipelineImpl) ResolvedTs() model.Ts {
+	// TODO: after TiCDC introduces p2p based resolved ts mechanism, TiCDC nodes
+	// will be able to cooperate replication status directly. Then we will add
+	// another replication barrier for consistent replication instead of reusing
+	// the global resolved-ts.
+	if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
+		return t.sinkNode.ResolvedTs()
+	}
 	return t.sorterNode.ResolvedTs()
 }
 
@@ -150,6 +160,11 @@ func (t *tablePipelineImpl) Wait() {
 	t.p.Wait()
 }
 
+// ReplConfig implements TablePipeline.ReplConfig
+func (t *tablePipelineImpl) ReplConfig() *serverConfig.ReplicaConfig {
+	return t.replConfig
+}
+
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
 // replicating 1024 tables in the worst case.
 const defaultOutputChannelSize = 64
@@ -173,6 +188,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 		markTableID: replicaInfo.MarkTableID,
 		tableName:   tableName,
 		cancel:      cancel,
+		replConfig:  ctx.ChangefeedVars().Info.Config,
 	}
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
