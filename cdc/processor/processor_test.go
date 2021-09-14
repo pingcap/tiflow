@@ -180,7 +180,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 			66: {StartTs: 60},
 		},
 		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+			66: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
 		},
 	})
 
@@ -193,7 +193,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 			66: {StartTs: 60},
 		},
 		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+			66: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
 		},
 	})
 
@@ -208,7 +208,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 			66: {StartTs: 60},
 		},
 		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+			66: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
 		},
 	})
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs, check.Equals, uint64(101))
@@ -222,7 +222,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 			66: {StartTs: 60},
 		},
 		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Done: true, Status: model.OperFinished},
+			66: {Delete: false, BoundaryTs: 60, Status: model.OperFinished},
 		},
 	})
 
@@ -241,7 +241,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 		Operation: map[int64]*model.TableOperation{
-			66: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+			66: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
 		},
 	})
 	c.Assert(table66.stopTs, check.Equals, uint64(120))
@@ -253,7 +253,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 		Operation: map[int64]*model.TableOperation{
-			66: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+			66: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
 		},
 	})
 
@@ -266,7 +266,7 @@ func (s *processorSuite) TestHandleTableOperation4SingleTable(c *check.C) {
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 		Operation: map[int64]*model.TableOperation{
-			66: {Delete: true, BoundaryTs: 121, Done: true, Status: model.OperFinished},
+			66: {Delete: true, BoundaryTs: 121, Status: model.OperFinished},
 		},
 	})
 	c.Assert(table66.canceled, check.IsTrue)
@@ -320,9 +320,9 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 			4: {StartTs: 30},
 		},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
-			2: {Delete: false, BoundaryTs: 50, Done: false, Status: model.OperProcessed},
-			3: {Delete: false, BoundaryTs: 40, Done: false, Status: model.OperProcessed},
+			1: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
+			2: {Delete: false, BoundaryTs: 50, Status: model.OperProcessed},
+			3: {Delete: false, BoundaryTs: 40, Status: model.OperProcessed},
 		},
 	})
 	c.Assert(p.tables, check.HasLen, 4)
@@ -354,9 +354,9 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 			4: {StartTs: 30},
 		},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Done: true, Status: model.OperFinished},
-			2: {Delete: false, BoundaryTs: 50, Done: true, Status: model.OperFinished},
-			3: {Delete: true, BoundaryTs: 60, Done: false, Status: model.OperProcessed},
+			1: {Delete: false, BoundaryTs: 60, Status: model.OperFinished},
+			2: {Delete: false, BoundaryTs: 50, Status: model.OperFinished},
+			3: {Delete: true, BoundaryTs: 60, Status: model.OperProcessed},
 		},
 	})
 	c.Assert(p.tables, check.HasLen, 4)
@@ -377,9 +377,9 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 			4: {StartTs: 30},
 		},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Done: true, Status: model.OperFinished},
-			2: {Delete: false, BoundaryTs: 50, Done: true, Status: model.OperFinished},
-			3: {Delete: true, BoundaryTs: 65, Done: true, Status: model.OperFinished},
+			1: {Delete: false, BoundaryTs: 60, Status: model.OperFinished},
+			2: {Delete: false, BoundaryTs: 50, Status: model.OperFinished},
+			3: {Delete: true, BoundaryTs: 65, Status: model.OperFinished},
 		},
 	})
 	c.Assert(p.tables, check.HasLen, 3)
@@ -402,8 +402,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
-			4: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+			1: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
+			4: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
 		},
 	})
 	c.Assert(table1.stopTs, check.Equals, uint64(120))
@@ -418,8 +418,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
-			4: {Delete: true, BoundaryTs: 120, Done: false, Status: model.OperProcessed},
+			1: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
+			4: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
 		},
 	})
 
@@ -434,8 +434,8 @@ func (s *processorSuite) TestHandleTableOperation4MultiTable(c *check.C) {
 	c.Assert(p.changefeed.TaskStatuses[p.captureInfo.ID], check.DeepEquals, &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{},
 		Operation: map[int64]*model.TableOperation{
-			1: {Delete: true, BoundaryTs: 121, Done: true, Status: model.OperFinished},
-			4: {Delete: true, BoundaryTs: 122, Done: true, Status: model.OperFinished},
+			1: {Delete: true, BoundaryTs: 121, Status: model.OperFinished},
+			4: {Delete: true, BoundaryTs: 122, Status: model.OperFinished},
 		},
 	})
 	c.Assert(table1.canceled, check.IsTrue)
@@ -670,7 +670,7 @@ func cleanUpFinishedOpOperation(state *model.ChangefeedReactorState, captureID m
 			return status, false, nil
 		}
 		for tableID, opt := range status.Operation {
-			if opt.Done && opt.Status == model.OperFinished {
+			if opt.Status == model.OperFinished {
 				delete(status.Operation, tableID)
 			}
 		}
