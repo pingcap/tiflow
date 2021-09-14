@@ -246,6 +246,46 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
 }
 
+func (s etcdSuite) TestGetAllChangeFeedInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx := context.Background()
+	infos := []struct {
+		id   string
+		info *model.ChangeFeedInfo
+	}{
+		{
+			id: "a",
+			info: &model.ChangeFeedInfo{
+				SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
+				SortDir: "/old-version/sorter",
+			},
+		},
+		{
+			id: "b",
+			info: &model.ChangeFeedInfo{
+				SinkURI: "root@tcp(127.0.0.1:4000)/mysql",
+			},
+		},
+	}
+
+	for _, item := range infos {
+		err := s.client.SaveChangeFeedInfo(ctx, item.info, item.id)
+		c.Assert(err, check.IsNil)
+	}
+
+	allChangFeedInfo, err := s.client.GetAllChangeFeedInfo(ctx)
+	c.Assert(err, check.IsNil)
+
+	for _, item := range infos {
+		obtained, found := allChangFeedInfo[item.id]
+		c.Assert(found, check.IsTrue)
+		c.Assert(item.info.SinkURI, check.Equals, obtained.SinkURI)
+		c.Assert(item.info.SortDir, check.Equals, obtained.SortDir)
+	}
+}
+
 func (s *etcdSuite) TestRemoveAllTaskXXX(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
