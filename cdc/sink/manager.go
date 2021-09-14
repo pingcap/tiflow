@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	redo "github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -68,17 +69,18 @@ func NewManager(
 }
 
 // CreateTableSink creates a table sink
-func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) Sink {
+func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, redoManager redo.LogManager) Sink {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	if _, exist := m.tableSinks[tableID]; exist {
 		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
 	}
 	sink := &tableSink{
-		tableID:   tableID,
-		manager:   m,
-		buffer:    make([]*model.RowChangedEvent, 0, 128),
-		emittedTs: checkpointTs,
+		tableID:     tableID,
+		manager:     m,
+		buffer:      make([]*model.RowChangedEvent, 0, 128),
+		emittedTs:   checkpointTs,
+		redoManager: redoManager,
 	}
 	m.tableSinks[tableID] = sink
 	return sink
@@ -98,9 +100,9 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 	}
 	minTs := model.Ts(math.MaxUint64)
 	for _, tableSink := range m.tableSinks {
-		emittedTs := tableSink.getEmittedTs()
-		if minTs > emittedTs {
-			minTs = emittedTs
+		resolvedTs := tableSink.getResolvedTs()
+		if minTs > resolvedTs {
+			minTs = resolvedTs
 		}
 	}
 	return minTs
@@ -154,7 +156,8 @@ type tableSink struct {
 	manager *Manager
 	buffer  []*model.RowChangedEvent
 	// emittedTs means all of events which of commitTs less than or equal to emittedTs is sent to backendSink
-	emittedTs model.Ts
+	emittedTs   model.Ts
+	redoManager redo.LogManager
 }
 
 func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
@@ -165,6 +168,9 @@ func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
+	if t.redoManager.Enabled() {
+		return t.redoManager.EmitRowChangedEvents(ctx, t.tableID, rows...)
+	}
 	return nil
 }
 
@@ -173,11 +179,20 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	return nil
 }
 
+// FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
+// is required to be no more than global resolvedTs, table barrierTs and table
+// redo log watermarkTs.
 func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	i := sort.Search(len(t.buffer), func(i int) bool {
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
+		if t.redoManager.Enabled() {
+			err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
+			if err != nil {
+				return t.manager.getCheckpointTs(), err
+			}
+		}
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
 		return t.manager.flushBackendSink(ctx)
 	}
@@ -189,11 +204,27 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return t.manager.getCheckpointTs(), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
+	if t.redoManager.Enabled() {
+		err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
+		if err != nil {
+			return t.manager.getCheckpointTs(), err
+		}
+	}
 	return t.manager.flushBackendSink(ctx)
 }
 
-func (t *tableSink) getEmittedTs() uint64 {
-	return atomic.LoadUint64(&t.emittedTs)
+// getResolvedTs returns resolved ts, which means all events before resolved ts
+// have been sent to sink manager, if redo log is enabled, it also means all events
+// before resolved ts have been persisted to redo log storage.
+func (t *tableSink) getResolvedTs() uint64 {
+	ts := atomic.LoadUint64(&t.emittedTs)
+	if t.redoManager.Enabled() {
+		redoResolvedTs := t.redoManager.GetMinResolvedTs()
+		if redoResolvedTs < ts {
+			ts = redoResolvedTs
+		}
+	}
+	return ts
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {

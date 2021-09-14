@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/redo"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
@@ -62,6 +63,7 @@ type processor struct {
 	filter        *filter.Filter
 	mounter       entry.Mounter
 	sinkManager   *sink.Manager
+	redoManager   redo.LogManager
 
 	initialized bool
 	errCh       chan error
@@ -106,7 +108,10 @@ func newProcessor4Test(ctx cdcContext.Context,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
 	p := newProcessor(ctx)
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		p.redoManager = redo.NewDisabledManager()
+		return nil
+	}
 	p.createTablePipeline = createTablePipeline
 	return p
 }
@@ -258,6 +263,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
@@ -288,6 +294,11 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
+	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	if err != nil {
+		return err
+	}
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
@@ -375,9 +386,7 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					operation.Status = model.OperFinished
 					return nil
 				})
-				table.Cancel()
-				table.Wait()
-				delete(p.tables, tableID)
+				p.removeTable(table, tableID)
 				log.Debug("Operation done signal received",
 					cdcContext.ZapFieldChangefeed(ctx),
 					zap.Int64("tableID", tableID),
@@ -545,9 +554,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 			// table will be removed by normal logic
 			continue
 		}
-		tablePipeline.Cancel()
-		tablePipeline.Wait()
-		delete(p.tables, tableID)
+		p.removeTable(tablePipeline, tableID)
 		log.Warn("the table was forcibly deleted", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
 	}
 	return nil
@@ -640,9 +647,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	if table, ok := p.tables[tableID]; ok {
 		if table.Status() == tablepipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			table.Cancel()
-			table.Wait()
-			delete(p.tables, tableID)
+			p.removeTable(table, tableID)
 		} else {
 			log.Warn("Ignore existing table", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			return nil
@@ -715,7 +720,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		tableNameStr = tableName.QuoteString()
 	}
 
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs)
+	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
 	table := tablepipeline.NewTablePipeline(
 		ctx,
 		p.mounter,
@@ -737,6 +742,10 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			zap.Any("replicaInfo", replicaInfo))
 	}()
 
+	if p.redoManager.Enabled() {
+		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	}
+
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx),
 		zap.String("name", table.Name()),
@@ -744,6 +753,15 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		zap.Uint64("globalResolvedTs", p.changefeed.Status.ResolvedTs))
 
 	return table, nil
+}
+
+func (p *processor) removeTable(table tablepipeline.TablePipeline, tableID model.TableID) {
+	table.Cancel()
+	table.Wait()
+	delete(p.tables, tableID)
+	if p.redoManager.Enabled() {
+		p.redoManager.RemoveTable(tableID)
+	}
 }
 
 // doGCSchemaStorage trigger the schema storage GC
