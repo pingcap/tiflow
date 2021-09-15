@@ -4700,11 +4700,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(ticdc_puller_output_chan_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s]) / rate(ticdc_puller_output_chan_size_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s])) by (capture)",
-=======
               "expr": "sum(increase(ticdc_kvclient_event_feed_error_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (type)",
->>>>>>> 06a674ba6 (metrics: add data flow metrics (#2763))
               "format": "time_series",
               "hide": false,
               "interval": "1m",
@@ -4722,11 +4718,7 @@
               "refId": "B"
             },
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(ticdc_puller_event_chan_size_sum{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s]) / rate(ticdc_puller_event_chan_size_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[30s])) by (capture)",
-=======
               "expr": "-sum(increase(pd_schedule_operators_count{tidb_cluster=\"$tidb_cluster\", event=\"create\", type=~\".*(peer|region)\"}[1m]))",
->>>>>>> 06a674ba6 (metrics: add data flow metrics (#2763))
               "format": "time_series",
               "interval": "1m",
               "intervalFactor": 1,
