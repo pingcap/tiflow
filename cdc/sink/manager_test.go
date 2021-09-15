@@ -92,7 +92,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
@@ -147,7 +147,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 200
 	var wg sync.WaitGroup
@@ -232,7 +232,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	defer cancel()
 
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 
 	tableID := int64(49)
@@ -253,7 +253,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{}, errCh, 0, "", "")
 
 	// Init table sinks.
 	goroutineNum := 2000
@@ -364,7 +364,7 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	sink := manager.CreateTableSink(1, 0)
 	err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
