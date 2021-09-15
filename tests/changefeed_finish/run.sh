@@ -47,7 +47,7 @@ function run() {
 	target_ts=$(($now + 90 * 10 ** 3 * 2 ** 18))
 	changefeed_id=$(cdc cli changefeed create --sink-uri="$SINK_URI" --target-ts=$target_ts 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 
-  if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
 	fi
 
