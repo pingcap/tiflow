@@ -344,7 +344,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 					cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.Status = model.OperFinished
-					operation.Done = true
 					return nil
 				})
 				continue
@@ -373,7 +372,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				patchOperation(tableID, func(operation *model.TableOperation) error {
 					operation.BoundaryTs = table.CheckpointTs()
 					operation.Status = model.OperFinished
-					operation.Done = true
 					return nil
 				})
 				table.Cancel()
@@ -420,7 +418,6 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 					patchOperation(tableID, func(operation *model.TableOperation) error {
 						operation.Status = model.OperFinished
-						operation.Done = true
 						return nil
 					})
 					log.Debug("Operation done signal received",
