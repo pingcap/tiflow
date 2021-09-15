@@ -143,17 +143,6 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 			rowdata.OperType = eventTypeValue
 
 
-<<<<<<< HEAD
-		rowdata.ColumnNo = int32(len(columnInfos))
-		rowdata.ColumnList = columnInfos
-		rowdata.EventTypeValue = eventTypeValue
-		rowInfos = append(rowInfos,rowdata)
-		//send
-		socket.JddmClient(b.sinkURI.Host,rowInfos)
-		//socket.JddmClient("127.0.0.1:9889",rowInfos)
-=======
->>>>>>> efc2b1d88f7fde2ea9e03ee6b5a5633ac35f0a92
-
 			fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
 			log.Info("show ColumnNo ：：：：：：：：：：：：：：", zap.Reflect("ColumnNo", rowdata.ColumnNo))
 			log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
@@ -164,8 +153,8 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 			rowdata.OperType = eventTypeValue
 			rowInfos = append(rowInfos,rowdata)
 			//send
-			//socket.JddmClient(b.sinkURI.Host,rowInfos)
-			socket.JddmClient("127.0.0.1:9889",rowInfos)
+			socket.JddmClient(b.sinkURI.Host,rowInfos)
+			//socket.JddmClient("127.0.0.1:9889",rowInfos)
 
 
 		}
