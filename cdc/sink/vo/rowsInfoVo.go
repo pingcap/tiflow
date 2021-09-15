@@ -14,11 +14,7 @@ type RowInfos struct{
 	OperType  int32
 	SchemaName string
 	TableName string
-<<<<<<< HEAD
-=======
-	//CFlag  byte
-	EventTypeValue int32
->>>>>>> 9a419b58b242d93bf1a26da2c9bc6bdd01e34df0
+	ObjnNo    int64
 	ColumnList   []*ColumnVo
 
 }
