@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
+
 	"github.com/pingcap/ticdc/cdc/sink/publicUtils"
 	"github.com/pingcap/ticdc/cdc/sink/vo"
 	"log"
@@ -327,8 +328,17 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 		buffer.Write(publicUtils.LongToBytes(rowInfo.RowID))
 		buffer.Write(publicUtils.Int32ToBytes(rowInfo.ColumnNo))
 
-		operTypeArr := make([]byte,4)
-		operTypeArr[3]=byte('I')
+		operTypeArr := make([]byte,1)
+		if rowInfo.EventTypeValue==2{
+			operTypeArr[0]=byte('I')
+			//publicUtils.BlockByteArrCopy([]byte("I"),0,operTypeArr,0,len(rowInfo.SchemaName))
+
+		}else if rowInfo.EventTypeValue == 4{
+			operTypeArr[0]=byte('D')
+		}else if rowInfo.EventTypeValue == 3{
+			operTypeArr[0]=byte('U')
+		}
+
 		buffer.Write(operTypeArr)
 		schemaNameArr := make([]byte,1+len(rowInfo.SchemaName))
 		publicUtils.BlockByteArrCopy([]byte(rowInfo.SchemaName),0,schemaNameArr,0,len(rowInfo.SchemaName))
@@ -337,9 +347,7 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 		publicUtils.BlockByteArrCopy([]byte(rowInfo.TableName),0,tableNameArr,0,len(rowInfo.TableName))
 		buffer.Write(tableNameArr)
 
-		cfgArr := make([]byte,4)
-		cfgArr[3]=rowInfo.CFlag
-		buffer.Write(cfgArr)
+
 
 		for _,col2 := range rowInfo.ColumnList{
 			fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
@@ -380,8 +388,8 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 	t1 := time.Now().Unix()  //1564552562
 	fmt.Println(t1)
 	fmt.Println(ddlInfos.TableName+"::::"+ddlInfos.SchemaName)
-	buffer.Write(publicUtils.LongToBytes(t1))
-	buffer.Write(publicUtils.LongToBytes(t1))
+	buffer.Write(publicUtils.LongToBytes(ddlInfos.StartTimer))
+	buffer.Write(publicUtils.LongToBytes(ddlInfos.CommitTimer))
 	operTypeArr := make([]byte,4)
 	operTypeArr[3]=byte(12)
 	buffer.Write(operTypeArr)
@@ -533,6 +541,8 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     colPos = colPos+1;
     columnInfoArr[colPos]=columnInfo.ColumnType
     colPos = colPos+1;
+	columnInfoArr[colPos]=columnInfo.CFlag
+	colPos = colPos+1;
     publicUtils.BlockByteArrCopy([]byte(columnNameArr),0,columnInfoArr,colPos,len(columnNameArr))
     colPos = colPos+len(columnNameArr);
     publicUtils.BlockByteArrCopy([]byte(ColumnValueArr),0,columnInfoArr,colPos,len(ColumnValueArr))
@@ -761,7 +771,7 @@ func Log(v ...interface{}) {
 
 func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
-	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
+	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 
 	conn, err := net.Dial("tcp", host)
 	if err != nil {
@@ -779,7 +789,8 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 
 	defer conn.Close()
 
-	fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
+	//fmt.Println("resolvedTs：：：：：：：：：：：：：：：：：：：：：：：：",resolvedTs)
+
 	//=============================================
 
 	_, err = conn.Write(createBytesFromResolvedTs(resolvedTs))
@@ -795,9 +806,9 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 	l.PushBack(6)
 
 	// 遍历
-	for e := l.Front(); e != nil; e = e.Next() {
+	/*for e := l.Front(); e != nil; e = e.Next() {
 		fmt.Printf("%v\n", e.Value)
-	}
+	}*/
 
 	//创建切片
 	buf := make([]byte, 1024)
@@ -812,14 +823,14 @@ func JddmClientFlush(host string,resolvedTs uint64) (uint64, error){
 	//3. 显示读取内容到终端
 
 	//fmt.Print("read:::::::::::::::",string(buf[:re]))
-	tt := buf[:re]
-	fmt.Print("\nread:::::::::::::::",tt)
-	fmt.Print("\n")
-	tt1 := buf[:4]
-	fmt.Print("\n",publicUtils.BytestoHex(tt1))
+	_ = buf[:re]
+	//fmt.Print("\nread:::::::::::::::",tt)
+	//fmt.Print("\n")
+	_ = buf[:4]
+	//fmt.Print("\n",publicUtils.BytestoHex(tt1))
 	result := buf[4:re]
 	commitTs := publicUtils.BytesToLong(result)
-	fmt.Print("\nCommitTs:::::::::",commitTs)
+	//fmt.Print("\nCommitTs:::::::::",commitTs)
 
 	return uint64(commitTs), err
 
@@ -829,7 +840,7 @@ func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 
 	//var buffer bytes.Buffer
 	//colsArr = make([]byte,0)
-	fmt.Printf(" resolvedTs   = %d\n", resolvedTs)
+	//fmt.Printf(" resolvedTs   = %d\n", resolvedTs)
 
 
 	verifyArr := make([]byte,4)
@@ -844,8 +855,8 @@ func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 	sendBatchRowsArr :=new(bytes.Buffer)
 
 	//当前时间戳
-	t1 := time.Now().Unix()  //1564552562
-	fmt.Println(t1)
+	/*t1 := time.Now().Unix()  //1564552562
+	fmt.Println(t1)*/
 
 	//	buffer.Write(publicUtils.LongToBytes(rowInfo.StartTimer))
 	buffer.Write(publicUtils.LongToBytes(int64(resolvedTs)))
@@ -860,7 +871,7 @@ func createBytesFromResolvedTs(resolvedTs uint64)  []byte{
 	sendBatchRowsArr.Write(lengthArr)
 	sendBatchRowsArr.Write(verifyArr)
 	sendBatchRowsArr.Write(buffer.Bytes())
-	fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
+	//fmt.Printf(" allColumnArrByRow[]Arr %s \n",publicUtils.BytestoHex(sendBatchRowsArr.Bytes()))
 
 
 	return sendBatchRowsArr.Bytes()
