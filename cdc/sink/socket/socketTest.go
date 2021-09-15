@@ -323,19 +323,20 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 		fmt.Println(rowInfo.TableName+"::::"+rowInfo.SchemaName)
 
+		buffer.Write(publicUtils.LongToBytes(rowInfo.StartTimer))
 		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
-		buffer.Write(publicUtils.LongToBytes(rowInfo.CommitTimer))
+		buffer.Write(publicUtils.LongToBytes(rowInfo.ObjnNo))
 		buffer.Write(publicUtils.LongToBytes(rowInfo.RowID))
 		buffer.Write(publicUtils.Int32ToBytes(rowInfo.ColumnNo))
 
 		operTypeArr := make([]byte,1)
-		if rowInfo.EventTypeValue==2{
+		if rowInfo.OperType==2{
 			operTypeArr[0]=byte('I')
 			//publicUtils.BlockByteArrCopy([]byte("I"),0,operTypeArr,0,len(rowInfo.SchemaName))
 
-		}else if rowInfo.EventTypeValue == 4{
+		}else if rowInfo.OperType == 4{
 			operTypeArr[0]=byte('D')
-		}else if rowInfo.EventTypeValue == 3{
+		}else if rowInfo.OperType == 3{
 			operTypeArr[0]=byte('U')
 		}
 
@@ -390,6 +391,8 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 	fmt.Println(ddlInfos.TableName+"::::"+ddlInfos.SchemaName)
 	buffer.Write(publicUtils.LongToBytes(ddlInfos.StartTimer))
 	buffer.Write(publicUtils.LongToBytes(ddlInfos.CommitTimer))
+	buffer.Write(publicUtils.LongToBytes(ddlInfos.ObjnNo))
+
 	operTypeArr := make([]byte,4)
 	operTypeArr[3]=byte(12)
 	buffer.Write(operTypeArr)
