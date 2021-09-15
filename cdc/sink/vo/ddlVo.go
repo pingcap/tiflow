@@ -10,7 +10,7 @@ type DDLInfos struct{
 	StartTimer int64
 	CommitTimer int64
 	DDLType  int32
-
+	ObjnNo    int64
 	SchemaName string
 	TableName string
 
