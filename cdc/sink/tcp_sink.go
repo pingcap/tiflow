@@ -153,8 +153,8 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		rowdata.EventTypeValue = eventTypeValue
 		rowInfos = append(rowInfos,rowdata)
 		//send
-		//socket.JddmClient(b.sinkURI.Host,rowInfos)
-		socket.JddmClient("127.0.0.1:9889",rowInfos)
+		socket.JddmClient(b.sinkURI.Host,rowInfos)
+		//socket.JddmClient("127.0.0.1:9889",rowInfos)
 
 
 		//socket.JddmClient("127.0.0.1",9889,rowInfos)
@@ -195,8 +195,8 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 func (b *dsgSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	log.Debug("dsgSocketSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
 
-	//commitTs,err:=socket.JddmClientFlush(b.sinkURI.Host,resolvedTs)
-	commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)
+	commitTs,err:=socket.JddmClientFlush(b.sinkURI.Host,resolvedTs)
+	//commitTs,err:=socket.JddmClientFlush("127.0.0.1:9889",resolvedTs)
 	if err != nil {
 		fmt.Println("err=", err) //出错退出
 		return 0, nil
@@ -290,8 +290,8 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	fmt.Println("show ddlInfos ：：：：：：：：：：：：：：", ddldata)
 	log.Info("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddldata))
 	//send
-	//socket.JddmDDLClient(b.sinkURI.Host,ddldata)
-	socket.JddmDDLClient("127.0.0.1:9889",ddldata)
+	socket.JddmDDLClient(b.sinkURI.Host,ddldata)
+	//socket.JddmDDLClient("127.0.0.1:9889",ddldata)
 	//socket.JddmDDLClient("127.0.0.1",9889,ddldata)
 
 	b.statistics.AddDDLCount()
