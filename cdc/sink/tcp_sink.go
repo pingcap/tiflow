@@ -87,81 +87,81 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 	if len(rows) == 0 {
 		return nil
 	} else {
-		log.Info("PreColumns: ", zap.Any("", rows[0].PreColumns))
-		log.Info("Columns: ", zap.Any("", rows[0].Columns))
-		if len(rows[0].PreColumns) == 0 {
-			//insert
-			eventTypeValue = 2
-		} else if len(rows[0].Columns) == 0 {
-			//delete
-			eventTypeValue = 4
-		} else {
-			//update
-			eventTypeValue = 3
+
+		for _, row := range rows {
+			log.Info("show::::::::::::::::::::::::::::: row", zap.Any("row", row))
+
+			log.Info("PreColumns: ", zap.Any("", row.PreColumns))
+			log.Info("Columns: ", zap.Any("", row.Columns))
+			if len(row.PreColumns) == 0 {
+				//insert
+				eventTypeValue = 2
+			} else if len(row.Columns) == 0 {
+				//delete
+				eventTypeValue = 4
+			} else {
+				//update
+				eventTypeValue = 3
+			}
+
+			schemaName = row.Table.Schema
+			tableName = row.Table.Table
+
+			rowInfos := make([]*vo.RowInfos, 0);
+
+			rowdata := new(vo.RowInfos)
+
+			columnInfos  :=make([]*vo.ColumnVo,0);
+			//rowdata := &vo.RowInfos{}
+			//rowdata := make([]*vo.RowInfos, 0);
+
+
+			if eventTypeValue == 2 {
+				//insert
+				columnInfos = getColumnInfos(0, row.Columns)
+
+			} else if eventTypeValue == 4 {
+				//delete
+				columnInfos = getColumnInfos(0, row.PreColumns)
+
+
+			} else if eventTypeValue == 3 {
+				//update
+				//before
+				columnInfos = getColumnInfos(0, row.PreColumns)
+
+				//after
+				columnInfos = append(columnInfos, getColumnInfos(1, row.Columns)...)
+
+			}
+			rowdata.StartTimer = int64(row.StartTs)
+			rowdata.CommitTimer = int64(row.CommitTs)
+			rowdata.RowID = row.RowID
+			rowdata.ObjnNo = row.Table.TableID
+			rowdata.SchemaName = schemaName
+			rowdata.TableName = tableName
+			rowdata.OperType = eventTypeValue
+
+
+
+			fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
+			log.Info("show ColumnNo ：：：：：：：：：：：：：：", zap.Reflect("ColumnNo", rowdata.ColumnNo))
+			log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
+			//rowdata.CFlag = 0
+
+			rowdata.ColumnNo = int32(len(columnInfos))
+			rowdata.ColumnList = columnInfos
+			rowdata.OperType = eventTypeValue
+			rowInfos = append(rowInfos,rowdata)
+			//send
+			//socket.JddmClient(b.sinkURI.Host,rowInfos)
+			socket.JddmClient("127.0.0.1:9889",rowInfos)
+
+
 		}
-
-		schemaName = rows[0].Table.Schema
-		tableName = rows[0].Table.Table
-
 	}
 
-	for _, row := range rows {
-		log.Info("show::::::::::::::::::::::::::::: row", zap.Any("row", row))
-		rowInfos := make([]*vo.RowInfos, 0);
 
-		rowdata := new(vo.RowInfos)
-
-		columnInfos  :=make([]*vo.ColumnVo,0);
-		//rowdata := &vo.RowInfos{}
-		//rowdata := make([]*vo.RowInfos, 0);
-
-
-		if eventTypeValue == 2 {
-			//insert
-			columnInfos = getColumnInfos(0, row.Columns)
-
-		} else if eventTypeValue == 4 {
-			//delete
-			columnInfos = getColumnInfos(0, row.PreColumns)
-
-
-		} else if eventTypeValue == 3 {
-			//update
-			//before
-			columnInfos = getColumnInfos(0, row.PreColumns)
-
-			//after
-			columnInfos = append(columnInfos, getColumnInfos(1, row.Columns)...)
-
-		}
-		rowdata.StartTimer = int64(row.StartTs)
-		rowdata.CommitTimer = int64(row.CommitTs)
-		rowdata.RowID = row.RowID
-
-		rowdata.SchemaName = schemaName
-		rowdata.TableName = tableName
-		rowdata.OperType = eventTypeValue
-
-
-		fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
-		log.Info("show ColumnNo ：：：：：：：：：：：：：：", zap.Reflect("ColumnNo", rowdata.ColumnNo))
-		log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
-		//rowdata.CFlag = 0
-
-		rowdata.ColumnNo = int32(len(columnInfos))
-		rowdata.ColumnList = columnInfos
-		rowdata.EventTypeValue = eventTypeValue
-		rowInfos = append(rowInfos,rowdata)
-		//send
-		//socket.JddmClient(b.sinkURI.Host,rowInfos)
-		socket.JddmClient("127.0.0.1:9889",rowInfos)
-
-
-		//socket.JddmClient("127.0.0.1",9889,rowInfos)
-
-	    //sender(rowdata)
-
-	}
 
 
 	rowsCount := len(rows)
@@ -280,6 +280,7 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	ddldata.SchemaName = ddl.TableInfo.Schema
 	ddldata.TableName = ddl.TableInfo.Table
+	ddldata.ObjnNo = ddl.TableInfo.TableID
 
 	ddldata.DDLType = int32(ddl.Type)
 	ddldata.TableColumnNo = int32(len(columnInfos))
