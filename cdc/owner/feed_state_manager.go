@@ -24,7 +24,7 @@ import (
 )
 
 // feedStateManager manages the ReactorState of a changefeed
-// when a error or a admin job occurs, the feedStateManager is responsible for controlling the ReactorState
+// when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
 	state           *model.ChangefeedReactorState
 	shouldBeRunning bool
