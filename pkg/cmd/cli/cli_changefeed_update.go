@@ -188,7 +188,7 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
-		case "tz", "sort-dir":
+		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
 		case "changefeed-id", "no-confirm", "cyclic-filter-replica-ids":
 			// Do nothing, these are some flags from the changefeed command,
