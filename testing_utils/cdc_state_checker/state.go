@@ -17,11 +17,12 @@ import (
 	"encoding/json"
 	"regexp"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
@@ -36,10 +37,10 @@ type cdcReactorState struct {
 }
 
 var (
-	captureRegex    = regexp.MustCompile(regexp.QuoteMeta(kv.CaptureInfoKeyPrefix) + "/(.+)")
-	changefeedRegex = regexp.MustCompile(regexp.QuoteMeta(kv.JobKeyPrefix) + "/(.+)")
-	positionRegex   = regexp.MustCompile(regexp.QuoteMeta(kv.TaskPositionKeyPrefix) + "/(.+?)/(.+)")
-	statusRegex     = regexp.MustCompile(regexp.QuoteMeta(kv.TaskStatusKeyPrefix) + "/(.+?)/(.+)")
+	captureRegex    = regexp.MustCompile(regexp.QuoteMeta(etcd.CaptureInfoKeyPrefix) + "/(.+)")
+	changefeedRegex = regexp.MustCompile(regexp.QuoteMeta(etcd.JobKeyPrefix) + "/(.+)")
+	positionRegex   = regexp.MustCompile(regexp.QuoteMeta(etcd.TaskPositionKeyPrefix) + "/(.+?)/(.+)")
+	statusRegex     = regexp.MustCompile(regexp.QuoteMeta(etcd.TaskStatusKeyPrefix) + "/(.+?)/(.+)")
 )
 
 func newCDCReactorState() *cdcReactorState {
@@ -52,7 +53,7 @@ func newCDCReactorState() *cdcReactorState {
 }
 
 func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
-	if key.String() == kv.CaptureOwnerKey {
+	if key.String() == etcd.CaptureOwnerKey {
 		if value == nil {
 			log.Info("Owner lost", zap.String("old-owner", s.Owner))
 			return nil

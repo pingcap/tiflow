@@ -44,7 +44,7 @@ func (m *mockGcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpoin
 
 var _ GcManager = &mockGcManager{}
 
-func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.GlobalReactorState, *orchestrator.ReactorStateTester) {
+func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &mockPDClient{updateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		return safePoint, nil
 	}}
@@ -53,7 +53,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
 	})
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// set captures

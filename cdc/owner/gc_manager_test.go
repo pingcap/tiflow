@@ -54,7 +54,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	mockPDClient := &mockPDClient{}
 	ctx.GlobalVars().PDClient = mockPDClient
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64

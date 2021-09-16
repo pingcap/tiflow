@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
@@ -76,7 +75,7 @@ func newCDCMonitor(ctx context.Context, pd string, credential *security.Credenti
 	wrappedCli := etcd.Wrap(etcdCli, map[string]prometheus.Counter{})
 	reactor := &cdcMonitReactor{}
 	initState := newCDCReactorState()
-	etcdWorker, err := orchestrator.NewEtcdWorker(wrappedCli, kv.EtcdKeyBase, reactor, initState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(wrappedCli, etcd.EtcdKeyBase, reactor, initState)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

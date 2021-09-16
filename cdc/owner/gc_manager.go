@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -39,7 +40,7 @@ var gcSafepointUpdateInterval = 1 * time.Minute
 
 // GcManager is an interface for gc manager
 type GcManager interface {
-	updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error
+	updateGCSafePoint(ctx cdcContext.Context, state *orchestrator.GlobalReactorState) error
 	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
 	checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error
 }
@@ -67,7 +68,7 @@ func newGCManager() *gcManager {
 	}
 }
 
-func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *model.GlobalReactorState) error {
+func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *orchestrator.GlobalReactorState) error {
 	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
 		return nil
 	}

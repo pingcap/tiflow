@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -115,7 +117,7 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 }
 
 // sendOwnerChangefeedQuery sends owner changefeed query request.
-func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
+func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClient,
 	id model.ChangeFeedID, credential *security.Credential,
 ) (string, error) {
 	owner, err := getOwnerCapture(ctx, etcdClient)
@@ -154,7 +156,7 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
 }
 
 // sendOwnerAdminChangeQuery sends owner admin query request.
-func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
+func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
 	owner, err := getOwnerCapture(ctx, etcdClient)
 	if err != nil {
 		return err

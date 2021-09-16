@@ -18,6 +18,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/ticdc/pkg/version"
 
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -36,7 +38,7 @@ type GlobalVars struct {
 	PDClient    pd.Client
 	KVStorage   tidbkv.Storage
 	CaptureInfo *model.CaptureInfo
-	EtcdClient  *kv.CDCEtcdClient
+	EtcdClient  *etcd.CDCEtcdClient
 	GrpcPool    kv.GrpcPool
 }
 

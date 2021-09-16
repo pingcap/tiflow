@@ -16,8 +16,9 @@ package cli
 import (
 	"context"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
@@ -35,7 +36,7 @@ type capture struct {
 
 // listCaptureOptions defines flags for the `cli capture list` command.
 type listCaptureOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 }
 
 // newListCaptureOptions creates new listCaptureOptions for the `cli capture list` command.
@@ -88,13 +89,13 @@ func newCmdListCapture(f factory.Factory) *cobra.Command {
 }
 
 // listCaptures list all the captures from the etcd.
-func listCaptures(ctx context.Context, etcdClient *kv.CDCEtcdClient) ([]*capture, error) {
+func listCaptures(ctx context.Context, etcdClient *etcd.CDCEtcdClient) ([]*capture, error) {
 	_, raw, err := etcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ownerID, err := etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
+	ownerID, err := etcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
 	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
 		return nil, err
 	}
@@ -110,7 +111,7 @@ func listCaptures(ctx context.Context, etcdClient *kv.CDCEtcdClient) ([]*capture
 }
 
 // getOwnerCapture returns the owner capture.
-func getOwnerCapture(ctx context.Context, etcdClient *kv.CDCEtcdClient) (*capture, error) {
+func getOwnerCapture(ctx context.Context, etcdClient *etcd.CDCEtcdClient) (*capture, error) {
 	captures, err := listCaptures(ctx, etcdClient)
 	if err != nil {
 		return nil, err

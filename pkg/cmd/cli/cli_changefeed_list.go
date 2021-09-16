@@ -16,9 +16,10 @@ package cli
 import (
 	"encoding/json"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
@@ -35,7 +36,7 @@ type changefeedCommonInfo struct {
 
 // listChangefeedOptions defines flags for the `cli changefeed list` command.
 type listChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 
 	credential *security.Credential
 

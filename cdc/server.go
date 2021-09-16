@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/capture"
@@ -55,7 +57,7 @@ type Server struct {
 	capture      *capture.Capture
 	statusServer *http.Server
 	pdClient     pd.Client
-	etcdClient   *kv.CDCEtcdClient
+	etcdClient   *etcd.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
@@ -135,7 +137,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 
-	cdcEtcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &cdcEtcdClient
 
 	err = s.initDataDir(ctx)

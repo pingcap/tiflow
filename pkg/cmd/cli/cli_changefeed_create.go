@@ -19,11 +19,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
@@ -109,7 +110,7 @@ func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *conf
 type createChangefeedOptions struct {
 	commonChangefeedOptions *changefeedCommonOptions
 
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 	pdClient   pd.Client
 
 	pdAddr     string
