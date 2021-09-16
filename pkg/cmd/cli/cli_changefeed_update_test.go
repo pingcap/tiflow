@@ -51,7 +51,7 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 	_, err = o.applyChanges(oldInfo, cmd)
 	c.Assert(err, check.IsNil)
 
-	// Test for cdc command flags that should be ignored.
+	// Test for cli command flags that should be ignored.
 	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
 	c.Assert(cmd.ParseFlags([]string{"--pd=http://127.0.0.1:2379"}), check.IsNil)
 	_, err = o.applyChanges(oldInfo, cmd)
