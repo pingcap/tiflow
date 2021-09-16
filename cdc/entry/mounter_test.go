@@ -34,7 +34,6 @@ import (
 )
 
 func TestMounterDisableOldValue(t *testing.T) {
-	t.Parallel()
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
