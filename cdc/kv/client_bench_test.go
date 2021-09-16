@@ -311,8 +311,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	return requestIDs, wg, cancel, eventCh, mockSrvCh
 }
 
-func benchmarkSingleWorkerResolvedTs(b *testing.B, clientV2 bool) {
-	enableKVClientV2 = clientV2
+func benchmarkSingleWorkerResolvedTs(b *testing.B) {
 	log.SetLevel(zapcore.ErrorLevel)
 	tests := []struct {
 		name      string
@@ -400,11 +399,7 @@ func benchmarkResolvedTsClientV2(b *testing.B) {
 	go func() {
 		RunWorkerPool(ctx) //nolint:errcheck
 	}()
-	benchmarkSingleWorkerResolvedTs(b, true /* clientV2 */)
-}
-
-func BenchmarkResolvedTsClientV1(b *testing.B) {
-	benchmarkSingleWorkerResolvedTs(b, false /* clientV1 */)
+	benchmarkSingleWorkerResolvedTs(b)
 }
 
 func BenchmarkResolvedTsClientV2(b *testing.B) {
@@ -423,8 +418,7 @@ func BenchmarkResolvedTsClientV2WorkerPool(b *testing.B) {
 	benchmarkResolvedTsClientV2(b)
 }
 
-func benchmarkMultipleStoreResolvedTs(b *testing.B, clientV2 bool) {
-	enableKVClientV2 = clientV2
+func benchmarkMultipleStoreResolvedTs(b *testing.B) {
 	log.SetLevel(zapcore.ErrorLevel)
 	tests := []struct {
 		name      string
@@ -522,11 +516,7 @@ func benchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
 	go func() {
 		RunWorkerPool(ctx) //nolint:errcheck
 	}()
-	benchmarkMultipleStoreResolvedTs(b, true /* clientV2 */)
-}
-
-func BenchmarkMultiStoreResolvedTsClientV1(b *testing.B) {
-	benchmarkMultipleStoreResolvedTs(b, false /* clientV1 */)
+	benchmarkMultipleStoreResolvedTs(b)
 }
 
 func BenchmarkMultiStoreResolvedTsClientV2(b *testing.B) {
