@@ -188,7 +188,7 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
-		case "tz", "changefeed-id", "no-confirm", "sort-dir":
+		case "tz", "changefeed-id", "no-confirm", "sort-dir", "cyclic-filter-replica-ids":
 			// Do nothing, these are some flags from the changefeed command that we don't use.
 		case "interact":
 			// Do nothing, this is a flags from the cli command, which we don't use.
