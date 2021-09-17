@@ -48,7 +48,6 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
-	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
@@ -65,10 +64,13 @@ func Test(t *testing.T) {
 }
 
 type clientSuite struct {
+	mu sync.Mutex
 }
 
 func (s *clientSuite) SetUpTest(c *check.C) {
-	clientv3.SetLogger(grpclog.NewLoggerV2(ioutil.Discard, ioutil.Discard, os.Stderr))
+	s.mu.Lock()
+	grpclog.SetLoggerV2(grpclog.NewLoggerV2(ioutil.Discard, ioutil.Discard, os.Stderr))
+	s.mu.Unlock()
 }
 
 var _ = check.Suite(&clientSuite{})
