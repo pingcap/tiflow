@@ -18,13 +18,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/etcd"
-
-	"github.com/pingcap/ticdc/pkg/version"
-
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"

@@ -20,8 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/etcd"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -29,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"

@@ -16,13 +16,12 @@ package cli
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/pkg/etcd"
-
 	"github.com/pingcap/errors"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )

@@ -22,12 +22,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pingcap/ticdc/pkg/etcd"
-
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"

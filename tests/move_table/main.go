@@ -19,11 +19,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/etcd"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/etcd"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

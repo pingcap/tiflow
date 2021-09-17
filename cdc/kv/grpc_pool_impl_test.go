@@ -27,7 +27,6 @@ import (
 // ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
 func (s *clientSuite) TestConnArray(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -61,7 +60,6 @@ func (s *clientSuite) TestConnArray(c *check.C) {
 
 func (s *clientSuite) TestConnArrayRecycle(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

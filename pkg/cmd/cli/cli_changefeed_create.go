@@ -19,8 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/etcd"
-
 	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -33,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/security"
 	ticdcutil "github.com/pingcap/ticdc/pkg/util"
