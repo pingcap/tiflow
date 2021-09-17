@@ -44,11 +44,16 @@ func NewStatistics(ctx context.Context, name string, opts map[string]string) *St
 	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
+	captureAddr, changefeedID := statistics.captureAddr, statistics.changefeedID
 	ticker := time.NewTicker(flushMetricsInterval)
-	metricTotalRows := totalRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	go func() {
 		defer ticker.Stop()
+		metricTotalRows := totalRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+		metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+		defer func() {
+			totalRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+			totalFlushedRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+		}()
 		for {
 			select {
 			case <-ctx.Done():
