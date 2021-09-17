@@ -109,6 +109,7 @@ func (s *clientSuite) TearDownTest(c *check.C) {
 
 func (s *clientSuite) TestNewClose(c *check.C) {
 	defer testleak.AfterTest(c)()
+	s.TearDownTest(c)
 	rpcClient, _, pdClient, err := testutils.NewMockTiKV("", nil)
 	c.Assert(err, check.IsNil)
 	defer pdClient.Close()
@@ -123,6 +124,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 
 func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
+	s.TearDownTest(c)
 	testCases := []struct {
 		regionID       uint64
 		entry          *cdcpb.Event_Row
@@ -2590,6 +2592,7 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 
 func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	defer testleak.AfterTest(c)()
+	s.TearDownTest(c)
 	sri := newSingleRegionInfo(
 		tikv.RegionVerID{},
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},

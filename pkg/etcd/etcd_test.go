@@ -87,6 +87,7 @@ logEtcdError:
 
 func (s *etcdSuite) TestEmbedEtcd(c *check.C) {
 	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	curl := s.clientURL.String()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
@@ -236,7 +237,6 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 func (s etcdSuite) TestGetAllChangeFeedInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
-
 	ctx := context.Background()
 	infos := []struct {
 		id   string
