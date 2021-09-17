@@ -362,7 +362,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			// state. If the store recovers, the gPRC conn can be reused. But if
 			// store goes away forever, the conn will be leaked, we need a better
 			// connection pool.
-			log.Error("git check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
+			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return
 		}
 		client := cdcpb.NewChangeDataClient(conn.ClientConn)
