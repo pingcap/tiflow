@@ -16,8 +16,9 @@ package kv
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
-	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -36,7 +37,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -48,10 +48,9 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
-	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/grpclog"
 )
 
 func Test(t *testing.T) {
@@ -65,12 +64,10 @@ func Test(t *testing.T) {
 }
 
 type clientSuite struct {
-	e         *embed.Etcd
-	clientURL *url.URL
-	client    etcd.CDCEtcdClient
-	ctx       context.Context
-	cancel    context.CancelFunc
-	errg      *errgroup.Group
+}
+
+func (s *clientSuite) SetUpTest(c *check.C) {
+	grpclog.SetLoggerV2(grpclog.NewLoggerV2(ioutil.Discard, ioutil.Discard, os.Stderr))
 }
 
 var _ = check.Suite(&clientSuite{})
