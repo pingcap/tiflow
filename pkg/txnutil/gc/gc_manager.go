@@ -11,10 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package gc
 
 import (
-	"math"
+	"context"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -22,10 +22,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -38,14 +38,19 @@ const (
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
-// GcManager is an interface for gc manager
-type GcManager interface {
-	updateGCSafePoint(ctx cdcContext.Context, state *orchestrator.GlobalReactorState) error
-	currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error)
-	checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error
+// Manager is an interface for gc manager
+type Manager interface {
+	// TryUpdateGCSafePoint tries to update TiCDC service GC safepoint.
+	// Manager may skip update when it thinks it is too frequent.
+	// Set `forceUpdate` to force Manager update.
+	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
+	CurrentTimeFromPDCached(ctx context.Context) (time.Time, error)
+	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
 }
 
 type gcManager struct {
+	pdClient pd.Client
+
 	gcTTL int64
 
 	lastUpdatedTime   time.Time
@@ -57,44 +62,32 @@ type gcManager struct {
 	lastUpdatedPdTime   time.Time
 }
 
-func newGCManager() *gcManager {
+// NewManager creates a new Manager.
+func NewManager(pdClint pd.Client) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
+		pdClient:          pdClint,
 		lastSucceededTime: time.Now(),
 		gcTTL:             serverConfig.GcTTL,
 	}
 }
 
-func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *orchestrator.GlobalReactorState) error {
-	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval {
+func (m *gcManager) TryUpdateGCSafePoint(
+	ctx context.Context, checkpointTs model.Ts, forceUpdate bool,
+) error {
+	if time.Since(m.lastUpdatedTime) < gcSafepointUpdateInterval && !forceUpdate {
 		return nil
-	}
-	minCheckpointTs := uint64(math.MaxUint64)
-	for _, cfState := range state.Changefeeds {
-		if cfState.Info == nil {
-			continue
-		}
-		switch cfState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateError:
-		default:
-			continue
-		}
-		// When the changefeed starts up, CDC will do a snapshot read at (checkpoint-ts - 1) from TiKV,
-		// so (checkpoint - 1) should be an upper bound for the GC safepoint.
-		gcSafepointUpperBound := cfState.Info.GetCheckpointTs(cfState.Status) - 1
-		if minCheckpointTs > gcSafepointUpperBound {
-			minCheckpointTs = gcSafepointUpperBound
-		}
 	}
 	m.lastUpdatedTime = time.Now()
 
-	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, m.gcTTL, minCheckpointTs)
+	actual, err := setServiceGCSafepoint(
+		ctx, m.pdClient, CDCServiceSafePointID, m.gcTTL, checkpointTs)
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
-			zap.Uint64("safePointTs", minCheckpointTs),
+			zap.Uint64("safePointTs", checkpointTs),
 			zap.Error(err))
 		if time.Since(m.lastSucceededTime) >= time.Second*time.Duration(m.gcTTL) {
 			return cerror.ErrUpdateServiceSafepointFailed.Wrap(err)
@@ -104,25 +97,26 @@ func (m *gcManager) updateGCSafePoint(ctx cdcContext.Context, state *orchestrato
 	failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
 		actual = uint64(val.(int))
 	})
-	if actual == minCheckpointTs {
-		log.Info("update gc safe point success", zap.Uint64("gcSafePointTs", minCheckpointTs))
+	if actual == checkpointTs {
+		log.Info("update gc safe point success", zap.Uint64("gcSafePointTs", checkpointTs))
 	}
-	if actual > minCheckpointTs {
-		log.Warn("update gc safe point failed, the gc safe point is larger than checkpointTs", zap.Uint64("actual", actual), zap.Uint64("checkpointTs", minCheckpointTs))
+	if actual > checkpointTs {
+		log.Warn("update gc safe point failed, the gc safe point is larger than checkpointTs",
+			zap.Uint64("actual", actual), zap.Uint64("checkpointTs", checkpointTs))
 	}
 	// if the min checkpoint ts is equal to the current gc safe point,
 	// it means that the service gc safe point set by TiCDC is the min service gc safe point
-	m.isTiCDCBlockGC = actual == minCheckpointTs
+	m.isTiCDCBlockGC = actual == checkpointTs
 	m.lastSafePointTs = actual
 	m.lastSucceededTime = time.Now()
 	return nil
 }
 
-func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, error) {
+func (m *gcManager) CurrentTimeFromPDCached(ctx context.Context) (time.Time, error) {
 	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
 		return m.pdPhysicalTimeCache, nil
 	}
-	physical, logical, err := ctx.GlobalVars().PDClient.GetTS(ctx)
+	physical, logical, err := m.pdClient.GetTS(ctx)
 	if err != nil {
 		return time.Now(), errors.Trace(err)
 	}
@@ -131,15 +125,17 @@ func (m *gcManager) currentTimeFromPDCached(ctx cdcContext.Context) (time.Time, 
 	return m.pdPhysicalTimeCache, nil
 }
 
-func (m *gcManager) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs model.Ts) error {
+func (m *gcManager) CheckStaleCheckpointTs(
+	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
+) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		pdTime, err := m.currentTimeFromPDCached(ctx)
+		pdTime, err := m.CurrentTimeFromPDCached(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if pdTime.Sub(oracle.GetTimeFromTS(gcSafepointUpperBound)) > time.Duration(m.gcTTL)*time.Second {
-			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, ctx.ChangefeedVars().ID)
+			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, changefeedID)
 		}
 	} else {
 		// if `isTiCDCBlockGC` is false, it means there is another service gc point less than the min checkpoint ts.
