@@ -23,18 +23,14 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-<<<<<<< HEAD:cdc/owner/gc_manager.go
 	"github.com/pingcap/tidb/store/tikv/oracle"
-=======
-	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
->>>>>>> 1251b6a36 (owner, gcutil: always update service GC safepoint when owner finds new changefeeds (#2512)):pkg/txnutil/gc/gc_manager.go
 	"go.uber.org/zap"
 )
 
 const (
-	// cdcServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	cdcServiceSafePointID = "ticdc"
+	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	CDCServiceSafePointID = "ticdc"
 	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
@@ -86,12 +82,8 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	}
 	m.lastUpdatedTime = time.Now()
 
-<<<<<<< HEAD:cdc/owner/gc_manager.go
-	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
-=======
 	actual, err := setServiceGCSafepoint(
 		ctx, m.pdClient, CDCServiceSafePointID, m.gcTTL, checkpointTs)
->>>>>>> 1251b6a36 (owner, gcutil: always update service GC safepoint when owner finds new changefeeds (#2512)):pkg/txnutil/gc/gc_manager.go
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
 			zap.Uint64("safePointTs", checkpointTs),

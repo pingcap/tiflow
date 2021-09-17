@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/tikv/client-go/v2/oracle"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
 )
 

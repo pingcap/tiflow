@@ -62,11 +62,7 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	s.pdCli.retryCount = 0
 	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, "changefeed2", TTL, 65)
 	c.Assert(err, check.NotNil)
-<<<<<<< HEAD:pkg/util/gc_service_test.go
-	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 8")
-=======
-	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 9: not pd leader")
->>>>>>> 1251b6a36 (owner, gcutil: always update service GC safepoint when owner finds new changefeeds (#2512)):pkg/txnutil/gc/gc_service_test.go
+	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 9")
 
 	s.pdCli.retryThreshold = 3
 	s.pdCli.retryCount = 0
