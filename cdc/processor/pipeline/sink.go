@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/pipeline"
+	"go.uber.org/zap"
 )
 
 const (
@@ -150,6 +151,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
+		log.Warn("skip emit empty rows", zap.Any("event", event))
 		return nil
 	}
 

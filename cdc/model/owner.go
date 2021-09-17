@@ -142,7 +142,6 @@ const (
 
 // TableOperation records the current information of a table migration
 type TableOperation struct {
-	Done   bool   `json:"done"` // deprecated, will be removed in the next version
 	Delete bool   `json:"delete"`
 	Flag   uint64 `json:"flag,omitempty"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
@@ -153,15 +152,13 @@ type TableOperation struct {
 
 // TableProcessed returns whether the table has been processed by processor
 func (o *TableOperation) TableProcessed() bool {
-	// TODO: remove o.Done
-	return o.Status == OperProcessed || o.Status == OperFinished || o.Done
+	return o.Status == OperProcessed || o.Status == OperFinished
 }
 
 // TableApplied returns whether the table has finished the startup procedure.
 // Returns true if table has been processed by processor and resolved ts reaches global resolved ts.
 func (o *TableOperation) TableApplied() bool {
-	// TODO: remove o.Done
-	return o.Status == OperFinished || o.Done
+	return o.Status == OperFinished
 }
 
 // Clone returns a deep-clone of the struct

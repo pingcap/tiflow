@@ -163,7 +163,6 @@ func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, err
 
 func (s *scheduler) collectWorkloadPerCapture() (result map[model.CaptureID]uint64) {
 	result = make(map[model.CaptureID]uint64)
-
 	for captureID := range s.captures {
 		result[captureID] = 0
 		taskWorkload := s.state.Workloads[captureID]
@@ -179,7 +178,8 @@ func (s *scheduler) collectWorkloadPerCapture() (result map[model.CaptureID]uint
 }
 
 // dispatchToTargetCaptures sets the TargetCapture of scheduler jobs
-// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload and sets the TargetCapture to the capture.
+// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload(minimum number of tables)
+// and sets the TargetCapture to the capture.
 func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 	workloads := s.collectWorkloadPerCapture()
 
