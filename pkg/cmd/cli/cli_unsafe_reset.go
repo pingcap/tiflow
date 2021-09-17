@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 )
@@ -72,7 +73,11 @@ func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
+=======
+	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, gc.CDCServiceSafePointID)
+>>>>>>> 1251b6a36 (owner, gcutil: always update service GC safepoint when owner finds new changefeeds (#2512))
 	if err != nil {
 		return errors.Trace(err)
 	}
