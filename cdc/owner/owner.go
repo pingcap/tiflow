@@ -312,7 +312,7 @@ func (o *Owner) pushOwnerJob(job *ownerJob) {
 }
 
 func (o *Owner) updateGCSafepoint(
-	ctx context.Context, state *model.GlobalReactorState,
+	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
 	forceUpdate := false
 	minCheckpointTs := uint64(math.MaxUint64)

@@ -62,7 +62,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 	},
 		ctx.GlobalVars().PDClient,
 	)
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// set captures
@@ -272,7 +272,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
