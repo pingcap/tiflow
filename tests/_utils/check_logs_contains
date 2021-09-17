@@ -1,0 +1,10 @@
+#!/bin/bash
+WORK_DIR=$1
+
+set -eu
+
+if ! grep -Eq "$2" "$WORK_DIR/cdc.log"; then
+    echo "TEST FAILED: LOGS DOES NOT CONTAIN '$2'"
+    echo "____________________________________"
+    exit 1
+fi
