@@ -105,7 +105,6 @@ export -f check_no_changefeed
 export -f check_no_capture
 
 function run() {
-<<<<<<< HEAD
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
     start_tidb_cluster --workdir $WORK_DIR
@@ -167,8 +166,7 @@ function run() {
     cleanup_process $CDC_BINARY
 
     # updating GC safepoint failure case
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectActualGCSafePoint=return(9223372036854775807)' # new owner
-    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=return(9223372036854775807)' # old owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/pkg/txnutil/gc/InjectActualGCSafePoint=return(9223372036854775807)' # new owner
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     changefeedid_2="changefeed-error-2"
@@ -178,76 +176,6 @@ function run() {
     run_cdc_cli changefeed remove -c $changefeedid_2
     export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
-=======
-	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
-
-	start_tidb_cluster --workdir $WORK_DIR
-
-	cd $WORK_DIR
-
-	start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-	run_sql "CREATE DATABASE changefeed_error;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_error
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/NewChangefeedNoRetryError=1*return(true)'
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
-
-	TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
-	case $SINK_TYPE in
-	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}" ;;
-	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
-	esac
-	changefeedid="changefeed-error"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
-	fi
-
-	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*CDC:ErrStartTsBeforeGC.*"
-	run_cdc_cli changefeed resume -c $changefeedid
-
-	check_table_exists "changefeed_error.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-
-	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_error
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/NewChangefeedRetryError=return(true)'
-	kill $capture_pid
-	ensure $MAX_RETRIES check_no_capture http://${UP_PD_HOST_1}:${UP_PD_PORT_1}
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	ensure $MAX_RETRIES check_changefeed_mark_error http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failpoint injected retriable error"
-
-	run_cdc_cli changefeed remove -c $changefeedid
-	ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST_1}:${UP_PD_PORT_1}
-
-	export GO_FAILPOINTS=''
-	cleanup_process $CDC_BINARY
-
-	# owner DDL error case
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectChangefeedDDLError=return(true)'
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	changefeedid_1="changefeed-error-1"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_1
-
-	run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
-	ensure $MAX_RETRIES check_changefeed_mark_error http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "[CDC:ErrExecDDLFailed]exec DDL failed"
-
-	run_cdc_cli changefeed remove -c $changefeedid_1
-	cleanup_process $CDC_BINARY
-
-	# updating GC safepoint failure case
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/pkg/txnutil/gc/InjectActualGCSafePoint=return(9223372036854775807)'
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-
-	changefeedid_2="changefeed-error-2"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_2
-	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "[CDC:ErrStartTsBeforeGC]"
-
-	run_cdc_cli changefeed remove -c $changefeedid_2
-	export GO_FAILPOINTS=''
-	cleanup_process $CDC_BINARY
->>>>>>> 1251b6a36 (owner, gcutil: always update service GC safepoint when owner finds new changefeeds (#2512))
 }
 
 trap stop_tidb_cluster EXIT

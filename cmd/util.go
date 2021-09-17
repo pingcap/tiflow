@@ -41,7 +41,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -228,7 +228,10 @@ func verifyStartTs(ctx context.Context, changefeedID string, startTs uint64) err
 	if disableGCSafePointCheck {
 		return nil
 	}
-	return util.CheckSafetyOfStartTs(ctx, pdCli, changefeedID, startTs)
+	// cdcChangefeedCreatingServiceGCSafePointTTL is service GC safe point TTL
+	cdcChangefeedCreatingServiceGCSafePointTTL := int64(10 * 60) // 10 mins
+	return gc.EnsureChangefeedStartTsSafety(
+		ctx, pdCli, changefeedID, cdcChangefeedCreatingServiceGCSafePointTTL, startTs)
 }
 
 func verifyTargetTs(startTs, targetTs uint64) error {

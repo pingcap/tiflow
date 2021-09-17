@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	// cdcServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	cdcServiceSafePointID = "ticdc"
+	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	CDCServiceSafePointID = "ticdc"
 	pdTimeUpdateInterval  = 10 * time.Minute
 )
 
@@ -82,12 +82,8 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	}
 	m.lastUpdatedTime = time.Now()
 
-<<<<<<< HEAD:cdc/owner/gc_manager.go
-	actual, err := ctx.GlobalVars().PDClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, m.gcTTL, minCheckpointTs)
-=======
 	actual, err := setServiceGCSafepoint(
 		ctx, m.pdClient, CDCServiceSafePointID, m.gcTTL, checkpointTs)
->>>>>>> 1251b6a36 (owner, gcutil: always update service GC safepoint when owner finds new changefeeds (#2512)):pkg/txnutil/gc/gc_manager.go
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
 			zap.Uint64("safePointTs", checkpointTs),
