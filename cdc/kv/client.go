@@ -149,16 +149,10 @@ type regionErrorInfo struct {
 	err error
 }
 
-type regionEvent struct {
-	changeEvent *cdcpb.Event
-	resolvedTs  *cdcpb.ResolvedTs
-}
-
 type regionFeedState struct {
-	sri           singleRegionInfo
-	requestID     uint64
-	regionEventCh chan regionEvent
-	stopped       int32
+	sri       singleRegionInfo
+	requestID uint64
+	stopped   int32
 
 	lock           sync.RWMutex
 	initialized    bool
@@ -169,10 +163,9 @@ type regionFeedState struct {
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
-		sri:           sri,
-		requestID:     requestID,
-		regionEventCh: make(chan regionEvent, 16),
-		stopped:       0,
+		sri:       sri,
+		requestID: requestID,
+		stopped:   0,
 	}
 }
 
