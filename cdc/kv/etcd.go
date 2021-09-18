@@ -892,6 +892,20 @@ func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, erro
 	return string(resp.Kvs[0].Value), nil
 }
 
+func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, leaseID clientv3.LeaseID, captureID model.CaptureID) (int64, error) {
+	ctx, cancel, err := c.contextWithSafeLease(ctx, leaseID)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer cancel()
+
+	resp, err := c.Client.Get(ctx, CaptureOwnerKey, clientv3.WithFirstCreate()...)
+	if len(resp.Kvs) == 0 {
+		return 0, concurrency.ErrElectionNoLeader
+	}
+	return resp.Kvs[0].CreateRevision, nil
+}
+
 // LeaseGuardDeleteTaskStatus is a wrapper to DeleteTaskStatus,
 // with a context restricted by lease TTL.
 func (c CDCEtcdClient) LeaseGuardDeleteTaskStatus(

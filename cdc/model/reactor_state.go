@@ -32,15 +32,23 @@ type GlobalReactorState struct {
 	Captures       map[CaptureID]*CaptureInfo
 	Changefeeds    map[ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]orchestrator.DataPatch
+
+	// updateCaptureFn is called when the membership of the cluster changes.
+	// An empty addr implies that a capture has been removed.
+	updateCaptureFn func(id CaptureID, addr string)
 }
 
 // NewGlobalState creates a new global state
-func NewGlobalState() orchestrator.ReactorState {
+func NewGlobalState() *GlobalReactorState {
 	return &GlobalReactorState{
 		Owner:       map[string]struct{}{},
 		Captures:    make(map[CaptureID]*CaptureInfo),
 		Changefeeds: make(map[ChangeFeedID]*ChangefeedReactorState),
 	}
+}
+
+func (s *GlobalReactorState) SetUpdateCaptureFn(f func(id CaptureID, addr string)) {
+	s.updateCaptureFn = f
 }
 
 // Update implements the ReactorState interface
@@ -61,6 +69,9 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
 			log.Info("remote capture offline", zap.String("capture-id", k.CaptureID))
+			if s.updateCaptureFn != nil {
+				s.updateCaptureFn(k.CaptureID, "")
+			}
 			delete(s.Captures, k.CaptureID)
 			return nil
 		}
@@ -72,6 +83,9 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		}
 
 		log.Info("remote capture online", zap.String("capture-id", k.CaptureID), zap.Any("info", newCaptureInfo))
+		if s.updateCaptureFn != nil {
+			s.updateCaptureFn(k.CaptureID, newCaptureInfo.AdvertiseAddr)
+		}
 		s.Captures[k.CaptureID] = &newCaptureInfo
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,
@@ -223,7 +237,7 @@ func (s *ChangefeedReactorState) Exist() bool {
 
 // Active return true if the changefeed is ready to be processed
 func (s *ChangefeedReactorState) Active(captureID CaptureID) bool {
-	return s.Info != nil && s.Status != nil && s.TaskStatuses[captureID] != nil
+	return s.Info != nil && s.Status != nil /*&& s.TaskStatuses[captureID] != nil*/
 }
 
 // GetPatches implements the ReactorState interface

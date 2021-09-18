@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,10 +31,13 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/p2p"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
+	p2p_pb "github.com/pingcap/ticdc/proto/p2p"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/soheilhy/cmux"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/logutil"
@@ -58,6 +62,12 @@ type Server struct {
 	etcdClient   *kv.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
+
+	// TODO remove these by refactoring Run
+	grpcListener net.Listener
+	tcpListener  net.Listener
+	mux          cmux.CMux
+	grpcServer   *p2p.ResettableServer
 }
 
 // NewServer creates a Server instance.
@@ -70,6 +80,7 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 
 	s := &Server{
 		pdEndpoints: pdEndpoints,
+		grpcServer:  p2p.NewResettableServer(),
 	}
 	return s, nil
 }
@@ -170,11 +181,21 @@ func (s *Server) Run(ctx context.Context) error {
 	s.kvStorage = kvStore
 	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
-
-	err = s.startStatusHTTP()
+	s.tcpListener, err = net.Listen("tcp", conf.Addr)
 	if err != nil {
-		return err
+		return errors.Trace(err)
+	}
+
+	// TODO refactor the use of listeners and the management of the server goroutines.
+	s.mux = cmux.New(s.tcpListener)
+	s.grpcListener = s.mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+	httpLn := s.mux.Match(cmux.Any())
+
+	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcServer)
+
+	err = s.startStatusHTTP(httpLn)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	return s.run(ctx)
@@ -228,6 +249,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg, cctx := errgroup.WithContext(ctx)
 
+	server := grpc.NewServer()
+	p2p_pb.RegisterCDCPeerToPeerServer(server, s.grpcServer)
+
 	wg.Go(func() error {
 		return s.capture.Run(cctx)
 	})
@@ -242,6 +266,21 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return kv.RunWorkerPool(cctx)
+	})
+
+	wg.Go(func() error {
+		defer log.Info("mux has exited")
+		return errors.Trace(s.mux.Serve())
+	})
+
+	wg.Go(func() error {
+		<-cctx.Done()
+		server.Stop()
+		return errors.Trace(s.tcpListener.Close())
+	})
+
+	wg.Go(func() error {
+		return errors.Trace(server.Serve(s.grpcListener))
 	})
 
 	return wg.Wait()

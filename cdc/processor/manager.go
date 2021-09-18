@@ -50,7 +50,7 @@ type Manager struct {
 
 	commandQueue chan *command
 
-	newProcessor func(cdcContext.Context) *processor
+	newProcessor func(cdcContext.Context) (*processor, error)
 }
 
 // NewManager creates a new processor manager
@@ -67,7 +67,7 @@ func NewManager4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
 	m := NewManager()
-	m.newProcessor = func(ctx cdcContext.Context) *processor {
+	m.newProcessor = func(ctx cdcContext.Context) (*processor, error) {
 		return newProcessor4Test(ctx, createTablePipeline)
 	}
 	return m
@@ -96,16 +96,14 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
-				continue
-			}
-			// the processor should start after at least one table has been added to this capture
-			taskStatus := changefeedState.TaskStatuses[captureID]
-			if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
+			if changefeedState.Status.AdminJobType.IsStopState() /*|| changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState()*/ {
 				continue
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(ctx)
+			processor, err = m.newProcessor(ctx)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {

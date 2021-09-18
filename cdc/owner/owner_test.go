@@ -62,7 +62,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 	},
 		ctx.GlobalVars().PDClient,
 	)
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := model.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// set captures
@@ -244,22 +244,22 @@ func (s *ownerSuite) TestAdminJob(c *check.C) {
 	}
 	c.Assert(jobs, check.DeepEquals, []*ownerJob{
 		{
-			tp: ownerJobTypeAdminJob,
-			adminJob: &model.AdminJob{
+			Tp: ownerJobTypeAdminJob,
+			AdminJob: &model.AdminJob{
 				CfID: "test-changefeed1",
 				Type: model.AdminResume,
 			},
-			changefeedID: "test-changefeed1",
+			ChangefeedID: "test-changefeed1",
 		}, {
-			tp:           ownerJobTypeRebalance,
-			changefeedID: "test-changefeed2",
+			Tp:           ownerJobTypeRebalance,
+			ChangefeedID: "test-changefeed2",
 		}, {
-			tp:              ownerJobTypeManualSchedule,
-			changefeedID:    "test-changefeed3",
-			targetCaptureID: "test-caputre1",
-			tableID:         10,
+			Tp:              ownerJobTypeManualSchedule,
+			ChangefeedID:    "test-changefeed3",
+			TargetCaptureID: "test-caputre1",
+			TableID:         10,
 		}, {
-			tp:              ownerJobTypeDebugInfo,
+			Tp:              ownerJobTypeDebugInfo,
 			debugInfoWriter: &buf,
 		},
 	})
@@ -272,7 +272,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := model.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64

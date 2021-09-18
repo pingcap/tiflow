@@ -37,7 +37,7 @@ type changefeed struct {
 	id    model.ChangeFeedID
 	state *model.ChangefeedReactorState
 
-	scheduler        *scheduler
+	scheduler        *schedulerV2
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	gcManager        gc.Manager
@@ -72,7 +72,6 @@ type changefeed struct {
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id:               id,
-		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
 		feedStateManager: new(feedStateManager),
 		gcManager:        gcManager,
@@ -97,7 +96,14 @@ func newChangefeed4Test(
 	return c
 }
 
-func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+	if c.scheduler == nil {
+		var err error
+		c.scheduler, err = NewSchedulerV2(ctx, c.id)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- errors.Trace(err)
 		return nil
@@ -118,6 +124,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		})
 		c.releaseResources()
 	}
+	return nil
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
@@ -167,7 +174,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		// So we return here.
 		return nil
 	}
-	shouldUpdateState, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+	shouldUpdateState, err := c.scheduler.Tick(ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
