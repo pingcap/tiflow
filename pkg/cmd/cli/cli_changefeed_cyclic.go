@@ -18,22 +18,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newCmdChangefeed creates the `cli changefeed` command.
-func newCmdChangefeed(f factory.Factory) *cobra.Command {
+// newCmdCyclicChangefeed creates the `cli changefeed cyclic` command.
+func newCmdCyclicChangefeed(f factory.Factory) *cobra.Command {
 	cmds := &cobra.Command{
-		Use:   "changefeed",
-		Short: "Manage changefeed (changefeed is a replication task)",
+		Use:   "cyclic",
+		Short: "(Experimental) Utility about cyclic replication",
 	}
 
-	cmds.AddCommand(newCmdCreateChangefeed(f))
-	cmds.AddCommand(newCmdUpdateChangefeed(f))
-	cmds.AddCommand(newCmdStatisticsChangefeed(f))
-	cmds.AddCommand(newCmdCyclicChangefeed(f))
-	cmds.AddCommand(newCmdListChangefeed(f))
-	cmds.AddCommand(newCmdPauseChangefeed(f))
-	cmds.AddCommand(newCmdQueryChangefeed(f))
-	cmds.AddCommand(newCmdRemoveChangefeed(f))
-	cmds.AddCommand(newCmdResumeChangefeed(f))
+	cmds.AddCommand(newCmdCyclicCreateMarktables(f))
 
 	return cmds
 }
