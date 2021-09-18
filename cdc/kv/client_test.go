@@ -17,20 +17,12 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/url"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
-	"go.etcd.io/etcd/pkg/logutil"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/check"
@@ -43,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -54,6 +47,7 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
+	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -69,12 +63,7 @@ func Test(t *testing.T) {
 }
 
 type clientSuite struct {
-	e         *embed.Etcd
-	clientURL *url.URL
-	client    etcd.CDCEtcdClient
-	ctx       context.Context
-	cancel    context.CancelFunc
-	errg      *errgroup.Group
+	e *embed.Etcd
 }
 
 var _ = check.Suite(&clientSuite{})
@@ -82,34 +71,17 @@ var _ = check.Suite(&clientSuite{})
 func (s *clientSuite) SetUpTest(c *check.C) {
 	dir := c.MkDir()
 	var err error
-	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
+	_, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{s.clientURL.String()},
-		DialTimeout: 3 * time.Second,
-		LogConfig:   &logConfig,
-	})
-	c.Assert(err, check.IsNil)
-	s.client = etcd.NewCDCEtcdClient(context.TODO(), client)
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *clientSuite) TearDownTest(c *check.C) {
 	s.e.Close()
-	s.cancel()
-	err := s.errg.Wait()
-	if err != nil {
-		c.Errorf("Error group error: %s", err)
-	}
-	s.client.Close() //nolint:errcheck
 }
 
 func (s *clientSuite) TestNewClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.TearDownTest(c)
+	defer s.TearDownTest(c)
 	rpcClient, _, pdClient, err := testutils.NewMockTiKV("", nil)
 	c.Assert(err, check.IsNil)
 	defer pdClient.Close()
@@ -124,7 +96,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 
 func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.TearDownTest(c)
+	defer s.TearDownTest(c)
 	testCases := []struct {
 		regionID       uint64
 		entry          *cdcpb.Event_Row
@@ -523,7 +495,7 @@ func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
 	select {
 	case event = <-eventCh:
 	case <-time.After(30 * time.Second): // Send 128MB object may costs lots of time.
-		c.Fatalf("recving message takes too long")
+		c.Fatalf("receiving message takes too long")
 	}
 	c.Assert(len(event.Val.Value), check.Equals, largeValSize)
 	cancel()
@@ -2592,7 +2564,7 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 
 func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.TearDownTest(c)
+	defer s.TearDownTest(c)
 	sri := newSingleRegionInfo(
 		tikv.RegionVerID{},
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
@@ -3212,7 +3184,6 @@ checkEvent:
 // should be updated correctly and no reconnect is triggered
 func (s *clientSuite) TestEvTimeUpdate(c *check.C) {
 	defer testleak.AfterTest(c)()
-
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}

@@ -83,6 +83,7 @@ logEtcdError:
 			break logEtcdError
 		}
 	}
+	s.client.Close() //nolint:errcheck
 }
 
 func (s *etcdSuite) TestEmbedEtcd(c *check.C) {
