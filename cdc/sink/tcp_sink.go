@@ -118,20 +118,20 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 
 			if eventTypeValue == 2 {
 				//insert
-				columnInfos = getColumnInfos(0, row.Columns)
+				columnInfos = getColumnInfos(0x30, row.Columns)
 
 			} else if eventTypeValue == 4 {
 				//delete
-				columnInfos = getColumnInfos(0, row.PreColumns)
+				columnInfos = getColumnInfos(0x30, row.PreColumns)
 
 
 			} else if eventTypeValue == 3 {
 				//update
 				//before
-				columnInfos = getColumnInfos(0, row.PreColumns)
+				columnInfos = getColumnInfos(0x30, row.PreColumns)
 
 				//after
-				columnInfos = append(columnInfos, getColumnInfos(1, row.Columns)...)
+				columnInfos = append(columnInfos, getColumnInfos(0x31, row.Columns)...)
 
 			}
 			rowdata.StartTimer = int64(row.StartTs)
