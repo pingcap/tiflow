@@ -1021,7 +1021,7 @@ func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.R
 	return rpcCtx, nil
 }
 
-// receiveFromStreamV2 receives gRPC messages from a stream continuously and sends
+// receiveFromStream receives gRPC messages from a stream continuously and sends
 // messages to region worker, if `stream.Recv` meets error, this routine will exit
 // silently. As for regions managed by this routine, there are two situations:
 // 1. established regions: a `nil` event will be sent to region worker, and region
