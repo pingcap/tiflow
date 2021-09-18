@@ -221,7 +221,8 @@ var (
 	ErrSortDirLockError                = errors.Normalize("error encountered when locking sort-dir", errors.RFCCodeText("ErrSortDirLockError"))
 
 	// processor errors
-	ErrTableProcessorStoppedSafely = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
+	ErrTableProcessorStoppedSafely  = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
+	ErrProcessorDuplicateOperations = errors.Normalize("table processor duplicate operation, table-id: %d", errors.RFCCodeText("CDC:ErrProcessorDuplicateOperations"))
 
 	// owner errors
 	ErrOwnerChangedUnexpectedly = errors.Normalize("owner changed unexpectedly", errors.RFCCodeText("CDC:ErrOwnerChangedUnexpectedly"))
@@ -234,4 +235,20 @@ var (
 
 	// retry error
 	ErrReachMaxTry = errors.Normalize("reach maximum try: %d", errors.RFCCodeText("CDC:ErrReachMaxTry"))
+
+	// p2p error
+	ErrPeerMessageTopicCongested        = errors.Normalize("peer-to-peer message topic has congested, aborting all connections", errors.RFCCodeText("CDC:ErrPeerMessageTopicCongested"))
+	ErrPeerMessageTaskQueueCongested    = errors.Normalize("peer-to-peer message server has too many pending tasks", errors.RFCCodeText("CDC:ErrPeerMessageTaskQueueCongested"))
+	ErrPeerMessageDecodeError           = errors.Normalize("failed to decode peer-to-peer message", errors.RFCCodeText("CDC:ErrPeerMessageDecodeError"))
+	ErrPeerMessageEncodeError           = errors.Normalize("failed to encode peer-to-peer message", errors.RFCCodeText("CDC:ErrPeerMessageEncodeError"))
+	ErrPeerMessageUnexpected            = errors.Normalize("peer-to-peer message from %s is unexpected: %s", errors.RFCCodeText("CDC:ErrPeerMessageUnexpected"))
+	ErrPeerMessageReceiverMismatch      = errors.Normalize("peer-to-peer message receiver is a mismatch: expected %s, got %s", errors.RFCCodeText("CDC:ErrPeerMessageReceiverMismatch"))
+	ErrPeerMessageStaleConnection       = errors.Normalize("peer-to-peer message stale connection: old-epoch %d, new-epoch %d", errors.RFCCodeText("CDC:ErrPeerMessageStaleConnection"))
+	ErrPeerMessageDuplicateConnection   = errors.Normalize("peer-to-peer message duplicate connection: epoch %d", errors.RFCCodeText("CDC:ErrPeerMessageDuplicateConnection"))
+	ErrPeerMessageInternalSenderClosed  = errors.Normalize("peer-to-peer message internal sender closed. Report a bug if seen externally", errors.RFCCodeText("CDC:ErrPeerMessageInternalSenderClosed"))
+	ErrPeerMessageSendTryAgain          = errors.Normalize("peer-to-peer message client has too many pending messages to send, try again later", errors.RFCCodeText("CDC:ErrPeerMessageSendTryAgain"))
+	ErrPeerMessageServerClosed          = errors.Normalize("peer-to-peer message server has closed connection: %s.", errors.RFCCodeText("CDC:ErrPeerMessageServerClosed"))
+	ErrPeerMessageInjectedServerRestart = errors.Normalize("peer-to-peer message server restarted for the purpose of testing", errors.RFCCodeText("CDC:ErrPeerMessageServerClosed"))
+	ErrPeerMessageClientClosed          = errors.Normalize("peer-to-peer message client has been closed", errors.RFCCodeText("CDC:ErrPeerMessageClientClosed"))
+	ErrPeerMessageClientPermanentFail   = errors.Normalize("peer-to-peer message client has failed permanently, no need to reconnect: %s", errors.RFCCodeText("CDC:ErrPeerMessageClientPermanentFail"))
 )
