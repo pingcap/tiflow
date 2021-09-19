@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -91,7 +92,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
@@ -146,7 +147,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 200
 	var wg sync.WaitGroup
@@ -231,7 +232,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	defer cancel()
 
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 
 	tableID := int64(49)
@@ -245,6 +246,85 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = manager.destroyTableSink(ctx, tableID)
 	c.Assert(err, check.IsNil)
+}
+
+// Run the benchmark
+// go test -benchmem -run='^$' -bench '^(BenchmarkManagerFlushing)$' github.com/pingcap/ticdc/cdc/sink
+func BenchmarkManagerFlushing(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	manager := NewManager(ctx, &checkSink{}, errCh, 0, "", "")
+
+	// Init table sinks.
+	goroutineNum := 2000
+	rowNum := 2000
+	var wg sync.WaitGroup
+	tableSinks := make([]Sink, goroutineNum)
+	for i := 0; i < goroutineNum; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0)
+		}()
+	}
+	wg.Wait()
+
+	// Concurrent emit events.
+	for i := 0; i < goroutineNum; i++ {
+		i := i
+		tableSink := tableSinks[i]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 1; j < rowNum; j++ {
+				err := tableSink.EmitRowChangedEvents(context.Background(), &model.RowChangedEvent{
+					Table:    &model.TableName{TableID: int64(i)},
+					CommitTs: uint64(j),
+				})
+				if err != nil {
+					b.Error(err)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	// All tables are flushed concurrently, except table 0.
+	for i := 1; i < goroutineNum; i++ {
+		i := i
+		tableSink := tableSinks[i]
+		go func() {
+			for j := 1; j < rowNum; j++ {
+				if j%2 == 0 {
+					_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(j))
+					if err != nil {
+						b.Error(err)
+					}
+				}
+			}
+		}()
+	}
+
+	b.ResetTimer()
+	// Table 0 flush.
+	tableSink := tableSinks[0]
+	for i := 0; i < b.N; i++ {
+		_, err := tableSink.FlushRowChangedEvents(context.Background(), uint64(rowNum))
+		if err != nil {
+			b.Error(err)
+		}
+	}
+	b.StopTimer()
+
+	cancel()
+	_ = manager.Close(ctx)
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			b.Error(err)
+		}
+	}
 }
 
 type errorSink struct {
@@ -284,7 +364,7 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0)
+	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	sink := manager.CreateTableSink(1, 0)
 	err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{

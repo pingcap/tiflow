@@ -188,8 +188,12 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
-		case "tz", "changefeed-id", "no-confirm":
-			// do nothing
+		case "tz", "changefeed-id", "no-confirm", "sort-dir":
+			// Do nothing, these are some flags from the changefeed command that we don't use.
+		case "interact":
+			// Do nothing, this is a flags from the cli command, which we don't use.
+		case "pd", "log-level", "key", "cert", "ca":
+			// Do nothing, these are some global flags from the cdc command that we don't use.
 		default:
 			// use this default branch to prevent new added parameter is not added
 			log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
