@@ -57,7 +57,7 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 
 	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",serverAddress)*/
 
-	fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
+	//fmt.Printf(" Go Engine Set Socket Server ::[%s] \n",host)
 	conn, err := net.Dial("tcp", host)
     if err != nil {
         fmt.Println("Error dialing", err.Error())
@@ -99,11 +99,11 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 	publicUtils.BlockByteArrCopy([]byte(lengthArr),0,clientSendArr,0,len(lengthArr))
 	publicUtils.BlockByteArrCopy([]byte(verifyArr),0,clientSendArr,4,len(verifyArr))
 	publicUtils.BlockByteArrCopy([]byte(sendMsg),0,clientSendArr,8,len(sendMsg))
-	fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
+	//fmt.Printf(" SendByte[]Arr %s \n",publicUtils.BytestoHex(clientSendArr))
 
 
 
-	fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",ddlInfos)
+	//fmt.Println("rowInfos：：：：：：：：：：：：：：：：：：：：：：：：",ddlInfos)
 	//=============================================
 	/***
 	row1 := new(vo.RowInfos)
@@ -351,7 +351,7 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 
 		for _,col2 := range rowInfo.ColumnList{
-			fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
+			//fmt.Println("value:"+col2.ColumnValue+"::name::"+col2.ColumnName)
 			//fmt.Println（"%s",col.ColumnValue)
 
 			//allColumnArrByRow = append(allColumnArrByRow,columnInfoVoToByte(col2))
@@ -522,7 +522,7 @@ func ddlColumnInfoVoToByte(columnInfo *vo.ColVo) []byte{
 func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 
 	colPos:=0;
-    thisColLen := 2+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+1;
+    thisColLen := 3+len(columnInfo.ColumnName)+1+len(columnInfo.ColumnValue)+1;
 
     columnInfoArr := make([]byte,thisColLen)
 
@@ -530,8 +530,8 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     //lengthArr := publicUtils.IntegerToBytes(thisColLen);
     columnNameArr := make([]byte,1+len(columnInfo.ColumnName))
     publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnName),0,columnNameArr,0,len(columnInfo.ColumnName))
-    ColumnValueArr := make([]byte,1+len(columnInfo.ColumnValue))
-    publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnValue),0,ColumnValueArr,0,len(columnInfo.ColumnValue))
+    columnValueArr := make([]byte,1+len(columnInfo.ColumnValue))
+    publicUtils.BlockByteArrCopy([]byte(columnInfo.ColumnValue),0,columnValueArr,0,len(columnInfo.ColumnValue))
 
     //Create byte[] Array
     //publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
@@ -547,11 +547,16 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
 	columnInfoArr[colPos]=columnInfo.CFlag
 	colPos = colPos+1;
     publicUtils.BlockByteArrCopy([]byte(columnNameArr),0,columnInfoArr,colPos,len(columnNameArr))
-    colPos = colPos+len(columnNameArr);
-    publicUtils.BlockByteArrCopy([]byte(ColumnValueArr),0,columnInfoArr,colPos,len(ColumnValueArr))
+	//fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
+
+	colPos = colPos+len(columnNameArr);
+
+	//fmt.Printf(" columnValueArr[] %s \n",publicUtils.BytestoHex(columnValueArr))
+
+	publicUtils.BlockByteArrCopy([]byte(columnValueArr),0,columnInfoArr,colPos,len(columnValueArr))
     //fmt.Printf(" pos : %d  namArrLen : %s -> %d \n", colPos,columnInfo.ColumnValue,len(ColumnValueArr))
 
-	fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
+	//fmt.Printf(" columnInfoArr[]Arr %s \n",publicUtils.BytestoHex(columnInfoArr))
 	return columnInfoArr;
 }
 

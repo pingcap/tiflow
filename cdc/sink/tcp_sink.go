@@ -70,7 +70,7 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 		log.Debug("dsgSocketSink: EmitRowChangedEvents", zap.Any("row", row))
 	}
 
-	fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitRowChangedEvents===================================================================>>>>>>>>>>>>>>>>>>>")
+	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitRowChangedEvents===================================================================>>>>>>>>>>>>>>>>>>>")
 
 	//读取配置文件
 	/*configMap := publicUtils.InitConfig("./configuration.txt")
@@ -143,7 +143,7 @@ func (b *dsgSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCh
 			rowdata.OperType = eventTypeValue
 
 
-			fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
+			//fmt.Println("show RowInfos ：：：：：：：：：：：：：：", rowInfos)
 			log.Info("show ColumnNo ：：：：：：：：：：：：：：", zap.Reflect("ColumnNo", rowdata.ColumnNo))
 			log.Info("show RowInfos ：：：：：：：：：：：：：：", zap.Reflect("rowdata", rowInfos))
 			//rowdata.CFlag = 0
@@ -183,8 +183,8 @@ func getColumnInfos(colFlag byte, columns []*model.Column) []*vo.ColumnVo {
 		columnVo.IsPkFlag = column.Flag.IsPrimaryKey()
 		columnVo.CFlag = colFlag
 		columnVo.ColumnType = column.Type
-		fmt.Println("column.Value:::::",column.Value)
-		fmt.Println("IsPrimaryKey:::::",column.Flag.IsPrimaryKey())
+		//fmt.Println("column.Value:::::",column.Value)
+		//fmt.Println("IsPrimaryKey:::::",column.Flag.IsPrimaryKey())
 		columnInfos = append(columnInfos,columnVo)
 
 	}
@@ -258,7 +258,7 @@ func (b *dsgSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 
 func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Debug("dsgSocketSink: DDL Event", zap.Any("ddl", ddl))
-	fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitDDLEvent===================================================================>>>>>>>>>>>>>>>>>>>")
+	//fmt.Println(">>>>>>>>>>>>>>>>>>>>===================EmitDDLEvent===================================================================>>>>>>>>>>>>>>>>>>>")
 
 
 
@@ -287,8 +287,8 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	ddldata.QuerySql = ddl.Query
 	//ddlInfos =ddldata
 
-	fmt.Println("show ddlInfos ：：：：：：：：：：：：：：", ddldata)
-	log.Info("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddldata))
+	//fmt.Println("show ddlInfos ：：：：：：：：：：：：：：", ddldata)
+	log.Debug("show ddlInfos ：：：：：：：：：：：：：：", zap.Reflect("ddlInfos", ddldata))
 	//send
 	socket.JddmDDLClient(b.sinkURI.Host,ddldata)
 	//socket.JddmDDLClient("127.0.0.1:9889",ddldata)
@@ -309,7 +309,7 @@ func getTableColumnInfos(colFlag int, tableInfo *model.SimpleTableInfo) []*vo.Co
 		columnVo := new(vo.ColVo)
         columnVo.ColumnName = column.Name
 		columnVo.ColumnType = int(column.Type)
-		fmt.Println("column.Value:::::",columnVo.ColumnName)
+		//fmt.Println("column.Value:::::",columnVo.ColumnName)
 		columnInfos = append(columnInfos,columnVo)
 
 	}
@@ -326,7 +326,7 @@ func getPreTableColumnInfos(colFlag int, preTableInfo *model.SimpleTableInfo) []
 		columnVo := new(vo.ColVo)
 		columnVo.ColumnName = column.Name
 		columnVo.ColumnType = int(column.Type)
-		fmt.Println("column.Value:::::",columnVo.ColumnName)
+		//fmt.Println("column.Value:::::",columnVo.ColumnName)
 		columnInfos = append(columnInfos,columnVo)
 
 	}
@@ -357,8 +357,8 @@ func getRowData(colFlag int32, columns []*model.Column, json *RowJson) *RowJson 
 		columnBuilder.ColValue = model.ColumnValueString(column.Value)
 		//columnBuilder.ColValue = model.ColumnValueString(column.Value, column.Flag)
 		//columnBuilder.ColType = &column.Type
-		fmt.Println("column.Value:::::",column.Value)
-		fmt.Println("IsPrimaryKey:::::",column.Flag.IsPrimaryKey())
+		//fmt.Println("column.Value:::::",column.Value)
+		//fmt.Println("IsPrimaryKey:::::",column.Flag.IsPrimaryKey())
 		columnBuilder.ColFlags = &colFlag
 		//columnBuilder.ColType = &column.Type
 		rowdata.Columns = append(rowdata.Columns,columnBuilder)
