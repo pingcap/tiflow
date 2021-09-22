@@ -904,7 +904,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 				}
 				for i, query := range dmls.sqls {
 					args := dmls.values[i]
-					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args), zap.Int("bucket", bucket))
+					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 						if rbErr := tx.Rollback(); rbErr != nil {
 							log.Warn("failed to rollback txn", zap.Error(err))
@@ -923,7 +923,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 				}
 				if err = tx.Commit(); err != nil {
 					if strings.Contains(err.Error(), "Error 9007: Write conflict") {
-						log.Info("write conflict happened", zap.Strings("query", dmls.sqls), zap.Any("args", dmls.values), zap.Int("bucket", bucket))
+						log.Info("write conflict happened", zap.Any("dmls", dmls), zap.Int("bucket", bucket))
 					}
 					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 				}
