@@ -270,9 +270,13 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
     ddldata.TableInfoList = columnInfos
 
 	//pretableInfo
-	PreColumnInfos  :=make([]*vo.ColVo,0);
-	PreColumnInfos = getPreTableColumnInfos(0, ddl.PreTableInfo)
-	ddldata.PreTableInfoList = PreColumnInfos
+	if ddl.PreTableInfo!=nil {
+		PreColumnInfos := make([]*vo.ColVo, 0);
+		PreColumnInfos = getPreTableColumnInfos(0, ddl.PreTableInfo)
+		ddldata.PreTableInfoList = PreColumnInfos
+
+		ddldata.PreTableColumnNo = int32(len(PreColumnInfos))
+	}
     //
     ddldata.StartTimer = int64(ddl.StartTs)
 	ddldata.CommitTimer = int64(ddl.CommitTs)
@@ -283,7 +287,7 @@ func (b *dsgSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	ddldata.DDLType = int32(ddl.Type)
 	ddldata.TableColumnNo = int32(len(columnInfos))
-	ddldata.PreTableColumnNo = int32(len(PreColumnInfos))
+
 	ddldata.QuerySql = ddl.Query
 	//ddlInfos =ddldata
 

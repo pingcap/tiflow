@@ -407,11 +407,14 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 		fmt.Printf(" nowCol Type:%d ::name::%s\n",colInfo.ColumnType,colInfo.ColumnName)
 		buffer.Write(ddlColumnInfoVoToByte(colInfo))
 	}
-	buffer.Write(publicUtils.IntegerToBytes(len(ddlInfos.PreTableInfoList)))
-	for _,preColInfo := range ddlInfos.PreTableInfoList{
-		fmt.Printf(" preCol Type:%d ::name::%s\n",preColInfo.ColumnType,preColInfo.ColumnName)
-		buffer.Write(ddlColumnInfoVoToByte(preColInfo))
+	if ddlInfos.PreTableInfoList!=nil{
+		buffer.Write(publicUtils.IntegerToBytes(len(ddlInfos.PreTableInfoList)))
+		for _,preColInfo := range ddlInfos.PreTableInfoList{
+			fmt.Printf(" preCol Type:%d ::name::%s\n",preColInfo.ColumnType,preColInfo.ColumnName)
+			buffer.Write(ddlColumnInfoVoToByte(preColInfo))
+		}
 	}
+
 
 	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
 	sendBatchDDLArr.Write(lengthArr)
