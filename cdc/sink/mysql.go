@@ -184,8 +184,12 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
-	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
-	return errors.Trace(err)
+	if err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime); err != nil {
+		log.Error("execute DDL failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 // Initialize is no-op for Mysql sink
