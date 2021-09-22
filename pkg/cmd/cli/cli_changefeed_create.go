@@ -57,7 +57,6 @@ type changefeedCommonOptions struct {
 	opts                   []string
 	sortEngine             string
 	sortDir                string
-	timezone               string
 	cyclicReplicaID        uint64
 	cyclicFilterReplicaIDs []uint
 	cyclicSyncDDL          bool
@@ -84,7 +83,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringSliceVar(&o.opts, "opts", nil, "Extra options, in the `key=value` format")
 	cmd.PersistentFlags().StringVar(&o.sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	cmd.PersistentFlags().StringVar(&o.sortDir, "sort-dir", "", "directory used for data sort")
-	cmd.PersistentFlags().StringVar(&o.timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	cmd.PersistentFlags().Uint64Var(&o.cyclicReplicaID, "cyclic-replica-id", 0, "(Experimental) Cyclic replication replica ID of changefeed")
 	cmd.PersistentFlags().UintSliceVar(&o.cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Experimental) Cyclic replication filter replica ID of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
@@ -118,6 +116,7 @@ type createChangefeedOptions struct {
 	changefeedID            string
 	disableGCSafePointCheck bool
 	startTs                 uint64
+	timezone                string
 
 	cfg *config.ReplicaConfig
 }
@@ -140,6 +139,7 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
+	cmd.PersistentFlags().StringVar(&o.timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 }
 
 // complete adapts from the command line args to the data and client required.
@@ -435,7 +435,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 
 	info := o.getInfo(cmd)
 
-	tz, err := ticdcutil.GetTimezone(o.commonChangefeedOptions.timezone)
+	tz, err := ticdcutil.GetTimezone(o.timezone)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
