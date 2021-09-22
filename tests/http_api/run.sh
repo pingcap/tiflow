@@ -52,9 +52,15 @@ function run() {
     "resign_owner"
     )
 
+<<<<<<< HEAD
     for case in $sequential_cases; do {
         python $CUR/util/test_case.py "$case";
     } done;
+=======
+	for case in ${sequential_cases[@]}; do
+		python $CUR/util/test_case.py "$case"
+	done
+>>>>>>> 67f994db6 (tests: iterate all cases in http api test (#2842))
 
     cleanup_process $CDC_BINARY
 }
