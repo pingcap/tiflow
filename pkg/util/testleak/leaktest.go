@@ -57,6 +57,8 @@ func interestingGoroutines() (gs []string) {
 		// kv client region worker pool
 		"github.com/pingcap/ticdc/cdc/kv.RunWorkerPool",
 		"github.com/pingcap/ticdc/pkg/workerpool.(*defaultPoolImpl).Run",
+		// library used by log
+		"gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun",
 	}
 	shouldIgnore := func(stack string) bool {
 		if stack == "" {
