@@ -331,13 +331,13 @@ func createBytesFromRowInfoList(rowInfos []*vo.RowInfos) []byte{
 
 		operTypeArr := make([]byte,4)
 		if rowInfo.OperType==2{
-			operTypeArr[0]=byte('I')
+			operTypeArr[3]=byte('I')
 			//publicUtils.BlockByteArrCopy([]byte("I"),0,operTypeArr,0,len(rowInfo.SchemaName))
 
 		}else if rowInfo.OperType == 4{
-			operTypeArr[0]=byte('D')
+			operTypeArr[3]=byte('D')
 		}else if rowInfo.OperType == 3{
-			operTypeArr[0]=byte('U')
+			operTypeArr[3]=byte('U')
 		}
 
 		buffer.Write(operTypeArr)
