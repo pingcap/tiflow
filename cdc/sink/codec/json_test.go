@@ -363,6 +363,28 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	c.Assert(row2, check.DeepEquals, row)
 }
 
+func (s *columnSuite) TestNonBinaryStringCol(c *check.C) {
+	defer testleak.AfterTest(c)()
+	col := &model.Column{
+		Name:  "test",
+		Type:  mysql.TypeString,
+		Value: "value",
+	}
+	jsonCol := column{}
+	jsonCol.FromSinkColumn(col)
+	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+	jsonCol2 := row2.Update["test"]
+	col2 := jsonCol2.ToSinkColumn("test")
+	col2.Value = string(col2.Value.([]byte))
+	c.Assert(col2, check.DeepEquals, col)
+}
+
 func (s *columnSuite) TestVarBinaryCol(c *check.C) {
 	defer testleak.AfterTest(c)()
 	col := &model.Column{
