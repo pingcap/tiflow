@@ -246,3 +246,29 @@ func (s *commonUtilSuite) TestConfirmLargeDataGap(c *check.C) {
 	err = confirmLargeDataGap(ctx, cmd, startTs)
 	c.Assert(err, check.IsNil)
 }
+
+// test cobra.NoArgs add in command can filter out some unexpected parameters
+func (s *commonUtilSuite) TestNoArgs(c *check.C) {
+	defer testleak.AfterTest(c)
+	cmd := newCreateChangefeedCommand()
+	// there is a DBC space before the flag -c
+	flags := []string{"none", "--sink-uri=blackhole://", "　-c=", "aa"}
+	os.Args = flags
+	err := cmd.Execute()
+	c.Assert(err, check.NotNil)
+	c.Assert(err.Error(), check.Matches, ".*unknown command.*u3000-c.*for.*create.*")
+
+	// there is an unknown flag "aa" after -c
+	flags = []string{"none", "--sink-uri=blackhole://", "-c=test1", "aa"}
+	os.Args = flags
+	err = cmd.Execute()
+	c.Assert(err, check.NotNil)
+	c.Assert(err.Error(), check.Matches, ".*unknown command.*aa.*for.*create.*")
+
+	// there is a "国" before the flag -start-ts
+	flags = []string{"none", "--sink-uri=blackhole://", "-c=test1", "国--start-ts=0"}
+	os.Args = flags
+	err = cmd.Execute()
+	c.Assert(err, check.NotNil)
+	c.Assert(err.Error(), check.Matches, ".*unknown command.*国.*for.*create.*")
+}
