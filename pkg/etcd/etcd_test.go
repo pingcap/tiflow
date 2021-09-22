@@ -74,6 +74,7 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 
 func (s *etcdSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
+	s.cancel()
 logEtcdError:
 	for {
 		select {
