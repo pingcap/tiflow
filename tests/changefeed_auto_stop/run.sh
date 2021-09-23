@@ -73,5 +73,7 @@ function run() {
 trap stop_tidb_cluster EXIT
 run $*
 check_logs $WORK_DIR
-check_logs_contains $WORK_DIR "processor sync resolved injected error"
+# the "2" below is the log suffix
+# only cdc2.log contain the error log "processor sync..."
+check_logs_contains $WORK_DIR "processor sync resolved injected error" "2"
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
