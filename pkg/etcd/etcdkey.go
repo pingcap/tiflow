@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	etcdKeyBase = "/tidb/cdc"
+	// EtcdKeyBase is the common prefix of the keys in CDC
+	EtcdKeyBase = "/tidb/cdc"
 	ownerKey    = "/owner"
 	captureKey  = "/capture"
 
@@ -82,10 +83,10 @@ type CDCKey struct {
 
 // Parse parses the given etcd key
 func (k *CDCKey) Parse(key string) error {
-	if !strings.HasPrefix(key, etcdKeyBase) {
+	if !strings.HasPrefix(key, EtcdKeyBase) {
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
-	key = key[len(etcdKeyBase):]
+	key = key[len(EtcdKeyBase):]
 	switch {
 	case strings.HasPrefix(key, ownerKey):
 		k.Tp = CDCKeyTypeOwner
@@ -148,21 +149,21 @@ func (k *CDCKey) String() string {
 	switch k.Tp {
 	case CDCKeyTypeOwner:
 		if len(k.OwnerLeaseID) == 0 {
-			return etcdKeyBase + ownerKey
+			return EtcdKeyBase + ownerKey
 		}
-		return etcdKeyBase + ownerKey + "/" + k.OwnerLeaseID
+		return EtcdKeyBase + ownerKey + "/" + k.OwnerLeaseID
 	case CDCKeyTypeCapture:
-		return etcdKeyBase + captureKey + "/" + k.CaptureID
+		return EtcdKeyBase + captureKey + "/" + k.CaptureID
 	case CDCKeyTypeChangefeedInfo:
-		return etcdKeyBase + changefeedInfoKey + "/" + k.ChangefeedID
+		return EtcdKeyBase + changefeedInfoKey + "/" + k.ChangefeedID
 	case CDCKeyTypeChangeFeedStatus:
-		return etcdKeyBase + jobKey + "/" + k.ChangefeedID
+		return EtcdKeyBase + jobKey + "/" + k.ChangefeedID
 	case CDCKeyTypeTaskPosition:
-		return etcdKeyBase + taskPositionKey + "/" + k.CaptureID + "/" + k.ChangefeedID
+		return EtcdKeyBase + taskPositionKey + "/" + k.CaptureID + "/" + k.ChangefeedID
 	case CDCKeyTypeTaskStatus:
-		return etcdKeyBase + taskStatusKey + "/" + k.CaptureID + "/" + k.ChangefeedID
+		return EtcdKeyBase + taskStatusKey + "/" + k.CaptureID + "/" + k.ChangefeedID
 	case CDCKeyTypeTaskWorkload:
-		return etcdKeyBase + taskWorkloadKey + "/" + k.CaptureID + "/" + k.ChangefeedID
+		return EtcdKeyBase + taskWorkloadKey + "/" + k.CaptureID + "/" + k.ChangefeedID
 	}
 	log.Panic("unreachable")
 	return ""

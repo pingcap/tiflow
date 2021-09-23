@@ -106,7 +106,7 @@ var _ = check.Suite(&changefeedSuite{})
 type changefeedSuite struct {
 }
 
-func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *model.ChangefeedReactorState,
+func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -119,7 +119,7 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *mo
 	}, func(ctx cdcContext.Context) (AsyncSink, error) {
 		return &mockAsyncSink{}, nil
 	})
-	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -62,7 +61,7 @@ func (s *serverSuite) SetUpTest(c *check.C) {
 		DialTimeout: 5 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	etcdClient := kv.NewCDCEtcdClient(s.ctx, client)
+	etcdClient := etcd.NewCDCEtcdClient(s.ctx, client)
 	s.server.etcdClient = &etcdClient
 
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })

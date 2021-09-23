@@ -49,7 +49,7 @@ func (m *mockManager) CheckStaleCheckpointTs(
 
 var _ gc.Manager = (*mockManager)(nil)
 
-func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.GlobalReactorState, *orchestrator.ReactorStateTester) {
+func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
@@ -62,7 +62,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 	},
 		ctx.GlobalVars().PDClient,
 	)
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// set captures
@@ -272,7 +272,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	state := model.NewGlobalState().(*model.GlobalReactorState)
+	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
