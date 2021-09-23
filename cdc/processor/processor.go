@@ -55,6 +55,8 @@ type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
 	changefeed   *model.ChangefeedReactorState
+	checkpointTs model.Ts
+	resolvedTs   model.Ts
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
@@ -79,6 +81,10 @@ type processor struct {
 	metricProcessorErrorCounter prometheus.Counter
 
 	messenger *Messenger
+}
+
+func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
+	return p.checkpointTs, p.resolvedTs
 }
 
 func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID, boundaryTs model.Ts) error {
@@ -111,7 +117,7 @@ func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.Tab
 		log.Panic("table which was added is not found",
 			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
 	}
-	localResolvedTs := p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs
+	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
 	if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 		log.Debug("Operation done signal received",
@@ -119,7 +125,7 @@ func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.Tab
 			zap.Int64("tableID", tableID))
 		return true, nil
 	}
-	if p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs > p.changefeed.Status.CheckpointTs {
+	if p.checkpointTs > p.changefeed.Status.CheckpointTs {
 		return false, nil
 	}
 	return false, nil
@@ -245,9 +251,12 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	if skip := p.checkPosition(); skip {
-		return p.changefeed, nil
-	}
+	// TODO remove
+	/*
+		if skip := p.checkPosition(); skip {
+			return p.changefeed, nil
+		}
+	*/
 	if err := p.handleErrorCh(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -272,28 +281,6 @@ func (p *processor) checkChangefeedNormal() bool {
 	}
 	// add a patch to check the changefeed is runnable when applying the patches in the etcd worker.
 	p.changefeed.CheckChangefeedNormal()
-	return true
-}
-
-// checkPosition create a new task position, and put it into the etcd state.
-// task position maybe be not exist only when the processor is running first time.
-func (p *processor) checkPosition() (skipThisTick bool) {
-	if p.changefeed.TaskPositions[p.captureInfo.ID] != nil {
-		return false
-	}
-	if p.initialized {
-		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
-	}
-	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		if position == nil {
-			return &model.TaskPosition{
-				CheckPointTs: checkpointTs,
-				ResolvedTs:   checkpointTs,
-			}, true, nil
-		}
-		return position, false, nil
-	})
 	return true
 }
 
@@ -519,10 +506,6 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 
 // handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition(ctx cdcContext.Context) {
-	if !p.messenger.CanUpdateCheckpoint(ctx) {
-		return
-	}
-
 	minResolvedTs := uint64(math.MaxUint64)
 	if p.schemaStorage != nil {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
@@ -554,22 +537,26 @@ func (p *processor) handlePosition(ctx cdcContext.Context) {
 	p.metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 
+	p.checkpointTs = minCheckpointTs
+	p.resolvedTs = minResolvedTs
 	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
-	if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
-		minCheckpointTs != p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs {
-		p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
-			if position == nil {
-				// when the captureInfo is deleted, the old owner will delete task status, task position, task workload in non-atomic
-				// so processor may see a intermediate state, for example the task status is exist but task position is deleted.
-				log.Warn("task position is not exist, skip to update position", zap.String("changefeed", p.changefeed.ID))
-				return nil, false, nil
-			}
-			position.CheckPointTs = minCheckpointTs
-			position.ResolvedTs = minResolvedTs
-			return position, true, nil
-		})
-	}
+	/*
+		if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
+			minCheckpointTs != p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs {
+			p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
+				if position == nil {
+					// when the captureInfo is deleted, the old owner will delete task status, task position, task workload in non-atomic
+					// so processor may see a intermediate state, for example the task status is exist but task position is deleted.
+					log.Warn("task position is not exist, skip to update position", zap.String("changefeed", p.changefeed.ID))
+					return nil, false, nil
+				}
+				position.CheckPointTs = minCheckpointTs
+				position.ResolvedTs = minResolvedTs
+				return position, true, nil
+			})
+		}
+	*/
 }
 
 // handleWorkload calculates the workload of all tables

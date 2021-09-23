@@ -77,10 +77,11 @@ func (m *SyncMessage) UnmarshalJSON(data []byte) error {
 	return msgpack.Unmarshal(raw, m)
 }
 
-func ProcessorFailedTopic(changefeedID model.ChangeFeedID) p2p.Topic {
-	return fmt.Sprintf("processor-fail/%s", changefeedID)
+func CheckpointTopic(changefeedID model.ChangeFeedID) p2p.Topic {
+	return fmt.Sprintf("checkpoint/%s", changefeedID)
 }
 
-type ProcessorFailedMessage struct {
-	ProcessorID model.CaptureID `json:"capture-id"`
+type CheckpointMessage struct {
+	CheckpointTs model.Ts `json:"checkpoint-ts"`
+	ResolvedTs   model.Ts `json:"resolved-ts"`
 }

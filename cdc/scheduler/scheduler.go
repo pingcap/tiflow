@@ -27,11 +27,12 @@ import (
 type ScheduleDispatcher interface {
 	// Tick is called periodically to update the SchedulerDispatcher on the latest state of replication.
 	// This function should NOT be assumed to be thread-safe. No concurrent calls allowed.
-	Tick(ctx context.Context,
-		checkpointTs model.Ts, // global checkpoint of the changefeed
-		currentTables []model.TableID, // tableIDs for replication tasks that are supposed to be running for now
-		captures map[model.CaptureID]*model.CaptureInfo, // a list of all captures alive now
-	) (canProceed bool, err error)
+	Tick(
+		ctx context.Context,
+		checkpointTs model.Ts,
+		currentTables []model.TableID,
+		captures map[model.CaptureID]*model.CaptureInfo,
+	) (newCheckpointTs, resolvedTs model.Ts, err error)
 
 	// MoveTable requests that a table be moved to target.
 	// It should be thread-safe.
@@ -48,8 +49,8 @@ type ScheduleDispatcher interface {
 	// OnAgentSyncTaskStatuses is called when an agent sends the schedule dispatcher its current states.
 	OnAgentSyncTaskStatuses(captureID model.CaptureID, running, adding, removing []model.TableID)
 
-	// OnAgentReset is called when an agent is reset, i.e. stops working and loses its previous states
-	OnAgentReset(captureID model.CaptureID)
+	// OnAgentCheckpoint is called when an agent sends a checkpoint.
+	OnAgentCheckpoint(captureID model.CaptureID, checkpointTs model.Ts, resolvedTs model.Ts)
 }
 
 type ScheduleDispatcherCommunicator interface {
@@ -65,15 +66,19 @@ type ScheduleDispatcherCommunicator interface {
 		captureID model.CaptureID) (done bool, err error)
 }
 
+const (
+	CheckpointCannotProceed = model.Ts(0)
+)
+
 type BaseScheduleDispatcher struct {
 	mu                sync.Mutex
 	tableToCaptureMap map[model.TableID]*tableRecord
 	// captureSynced records whether the capture has sent us the tables
 	// it is currently replicating. We need them to tell us their status
 	// when we just have succeeded a previous owner.
-	captureSyncStatus map[model.CaptureID]captureStatus
-	captures          map[model.CaptureID]*model.CaptureInfo
-	checkpointTs      model.Ts
+	captureStatus map[model.CaptureID]*captureStatus
+	captures      map[model.CaptureID]*model.CaptureInfo
+	checkpointTs  model.Ts
 
 	moveTableJobQueue []*moveTableJob
 	moveTableTarget   map[model.TableID]model.CaptureID
@@ -88,15 +93,16 @@ type BaseScheduleDispatcher struct {
 	callbacks ScheduleDispatcherCommunicator
 }
 
-func NewScheduleDispatcher(changeFeedID model.ChangeFeedID, callbacks ScheduleDispatcherCommunicator) ScheduleDispatcher {
+func NewScheduleDispatcher(changeFeedID model.ChangeFeedID, callbacks ScheduleDispatcherCommunicator, checkpointTs model.Ts) ScheduleDispatcher {
 	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
 	return &BaseScheduleDispatcher{
 		tableToCaptureMap: map[model.TableID]*tableRecord{},
-		captureSyncStatus: map[model.CaptureID]captureStatus{},
+		captureStatus:     map[model.CaptureID]*captureStatus{},
 		moveTableTarget:   map[model.TableID]model.CaptureID{},
 		changeFeedID:      changeFeedID,
 		logger:            logger,
 		callbacks:         callbacks,
+		checkpointTs:      checkpointTs,
 	}
 }
 
@@ -108,10 +114,16 @@ const (
 	runningTable
 )
 
-type captureStatus = int32
+type captureStatus struct {
+	SyncStatus   captureSyncStatus
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+}
+
+type captureSyncStatus int32
 
 const (
-	captureUninitialized = captureStatus(iota)
+	captureUninitialized = captureSyncStatus(iota)
 	captureSyncSent
 	captureSyncFinished
 )
@@ -131,7 +143,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
-) (canProceed bool, err error) {
+) (newCheckpointTs, resolvedTs model.Ts, err error) {
 	s.captures = captures
 	if s.checkpointTs > checkpointTs {
 		s.logger.Panic("checkpointTs regressed",
@@ -142,18 +154,18 @@ func (s *BaseScheduleDispatcher) Tick(
 
 	done, err := s.syncCaptures(ctx)
 	if err != nil {
-		return false, errors.Trace(err)
+		return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 	}
 	if !done {
 		// returns early if not all captures have synced their states with us.
 		// We need to know all captures' status in order to proceed.
-		return false, nil
+		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
 	if s.needRebalance {
 		ok, err := s.rebalance(ctx)
 		if err != nil {
-			return false, errors.Trace(err)
+			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 		}
 		if ok {
 			s.needRebalance = false
@@ -185,20 +197,20 @@ func (s *BaseScheduleDispatcher) Tick(
 			target, ok = s.findTargetCapture()
 			if !ok {
 				s.logger.Warn("no active capture")
-				return false, nil
+				return CheckpointCannotProceed, CheckpointCannotProceed, nil
 			}
 		}
 
 		ok, err = s.callbacks.DispatchTable(ctx, s.changeFeedID, tableID, target, s.checkpointTs, false)
 		if err != nil {
-			return false, errors.Trace(err)
+			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 		}
 
 		if !ok {
 			s.logger.Warn("dispatching table failed, will try again",
 				zap.String("target", target),
 				zap.Int64("table-id", tableID))
-			return false, nil
+			return CheckpointCannotProceed, CheckpointCannotProceed, nil
 		}
 
 		s.tableToCaptureMap[tableID] = &tableRecord{
@@ -220,19 +232,19 @@ func (s *BaseScheduleDispatcher) Tick(
 		captureID := record.Capture
 		ok, err := s.callbacks.DispatchTable(ctx, s.changeFeedID, tableID, captureID, s.checkpointTs, true)
 		if err != nil {
-			return false, errors.Trace(err)
+			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 		}
 		if !ok {
 			s.logger.Warn("removing table failed, will try again",
 				zap.String("target", captureID),
 				zap.Int64("table-id", tableID))
-			return false, nil
+			return CheckpointCannotProceed, CheckpointCannotProceed, nil
 		}
 		record.Status = removingTable
 	}
 
 	if err := s.handleMoveTableJobs(ctx); err != nil {
-		return false, errors.Trace(err)
+		return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 	}
 
 	if !s.needRebalance && s.lastTickCaptureCount != len(captures) {
@@ -246,43 +258,73 @@ func (s *BaseScheduleDispatcher) Tick(
 		}
 	}
 
-	canProceed = runningCount == len(currentTables)
+	allTasksNormal := runningCount == len(currentTables)
+	s.lastTickCaptureCount = len(captures)
 
-	if !canProceed {
+	if !allTasksNormal {
 		s.logger.Info("scheduler has pending jobs", zap.Any("jobs", s.tableToCaptureMap))
+		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
-	s.lastTickCaptureCount = len(captures)
+	newCheckpointTs, resolvedTs = s.calculateTs()
+	s.logger.Debug("scheduler checkpoint updated",
+		zap.Uint64("checkpoint-ts", newCheckpointTs),
+		zap.Uint64("resolved-ts", resolvedTs),
+		zap.Any("capture-status", s.captureStatus))
+	return
+}
+
+func (s *BaseScheduleDispatcher) calculateTs() (checkpointTs, resolvedTs model.Ts) {
+	checkpointTs = math.MaxUint64
+	resolvedTs = math.MaxUint64
+
+	for captureID, status := range s.captureStatus {
+		if s.captureTableCount(captureID) == 0 {
+			// the checkpoint (as well as resolved-ts) from a capture
+			// that is not replicating any table is meaningless.
+			continue
+		}
+		if status.ResolvedTs < resolvedTs {
+			resolvedTs = status.ResolvedTs
+		}
+		if status.CheckpointTs < checkpointTs {
+			checkpointTs = status.CheckpointTs
+		}
+	}
 	return
 }
 
 func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (bool, error) {
-	for captureID := range s.captureSyncStatus {
+	for captureID := range s.captureStatus {
 		if _, ok := s.captures[captureID]; !ok {
 			// removes expired captures from the captureSynced map
-			delete(s.captureSyncStatus, captureID)
+			delete(s.captureStatus, captureID)
 			s.logger.Debug("syncCaptures: remove offline capture",
 				zap.String("capture-id", captureID))
 		}
 	}
 	for captureID := range s.captures {
-		if _, ok := s.captureSyncStatus[captureID]; !ok {
-			s.captureSyncStatus[captureID] = captureUninitialized
+		if _, ok := s.captureStatus[captureID]; !ok {
+			s.captureStatus[captureID] = &captureStatus{
+				SyncStatus:   captureUninitialized,
+				CheckpointTs: s.checkpointTs,
+				ResolvedTs:   s.checkpointTs,
+			}
 			s.logger.Debug("syncCaptures: set capture status uninitialized",
 				zap.String("capture-id", captureID))
 		}
 	}
 
 	finishedCount := 0
-	for captureID, status := range s.captureSyncStatus {
-		switch status {
+	for captureID, status := range s.captureStatus {
+		switch status.SyncStatus {
 		case captureUninitialized:
 			done, err := s.callbacks.Announce(ctx, s.changeFeedID, captureID)
 			if err != nil {
 				return false, errors.Trace(err)
 			}
 			if done {
-				s.captureSyncStatus[captureID] = captureSyncSent
+				s.captureStatus[captureID].SyncStatus = captureSyncSent
 				s.logger.Debug("syncCaptures: sent sync request",
 					zap.String("capture-id", captureID))
 			}
@@ -293,7 +335,7 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (bool, error)
 		}
 	}
 
-	return finishedCount == len(s.captureSyncStatus), nil
+	return finishedCount == len(s.captureStatus), nil
 }
 
 func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) {
@@ -478,6 +520,18 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.logger.Debug("scheduler received sync",
+		zap.String("capture-id", captureID),
+		zap.Any("running", running),
+		zap.Any("adding", adding),
+		zap.Any("removing", removing))
+
+	for tableID, record := range s.tableToCaptureMap {
+		if record.Capture == captureID {
+			delete(s.tableToCaptureMap, tableID)
+		}
+	}
+
 	for _, tableID := range adding {
 		if record, ok := s.tableToCaptureMap[tableID]; ok {
 			s.logger.Panic("duplicate table tasks",
@@ -506,27 +560,52 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 		s.tableToCaptureMap[tableID] = &tableRecord{Capture: captureID, Status: removingTable}
 	}
 
-	s.captureSyncStatus[captureID] = captureSyncFinished
+	if _, ok := s.captureStatus[captureID]; !ok {
+		s.captureStatus[captureID] = &captureStatus{
+			CheckpointTs: s.checkpointTs,
+			ResolvedTs:   s.checkpointTs,
+		}
+		s.logger.Debug("capture status updated during sync",
+			zap.Any("capture-status", s.captureStatus))
+	}
+	s.captureStatus[captureID].SyncStatus = captureSyncFinished
 }
 
-func (s *BaseScheduleDispatcher) OnAgentReset(captureID model.CaptureID) {
+func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, checkpointTs model.Ts, resolvedTs model.Ts) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.captures[captureID]; !ok {
-		s.logger.Warn("processor reported failure in dead capture, ignore",
-			zap.String("capture-id", captureID))
+	status, ok := s.captureStatus[captureID]
+	if !ok {
+		s.logger.Info("received checkpoint from non-existing capture, ignore",
+			zap.String("capture-id", captureID),
+			zap.Uint64("checkpoint-ts", checkpointTs),
+			zap.Uint64("resolved-ts", resolvedTs))
 		return
 	}
 
-	for tableID, record := range s.tableToCaptureMap {
-		if record.Capture == captureID {
-			delete(s.tableToCaptureMap, tableID)
-			s.logger.Info("processor reported failure, removing table", zap.Int64("table-id", tableID))
-		}
+	if status.SyncStatus != captureSyncFinished {
+		s.logger.Warn("received checkpoint from a capture not synced, ignore",
+			zap.String("capture-id", captureID),
+			zap.Uint64("checkpoint-ts", checkpointTs),
+			zap.Uint64("resolved-ts", resolvedTs))
 	}
 
-	if _, ok := s.captureSyncStatus[captureID]; ok {
-		s.captureSyncStatus[captureID] = captureUninitialized
+	status.CheckpointTs = checkpointTs
+	status.ResolvedTs = resolvedTs
+	s.logger.Debug("checkpoint saved",
+		zap.String("capture-id", captureID),
+		zap.Uint64("checkpoint-ts", checkpointTs),
+		zap.Uint64("resolved-ts", resolvedTs))
+}
+
+// captureTableCount should be called with `s.mu` taken.
+// TODO add a cache for table count
+func (s *BaseScheduleDispatcher) captureTableCount(captureID model.CaptureID) (count int) {
+	for _, record := range s.tableToCaptureMap {
+		if record.Capture == captureID && record.Status == runningTable {
+			count++
+		}
 	}
+	return
 }

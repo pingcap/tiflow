@@ -32,24 +32,26 @@ type schedulerV2 struct {
 }
 
 // NewSchedulerV2 creates a new schedulerV2
-func NewSchedulerV2(ctx context.Context, changeFeedID model.ChangeFeedID) (*schedulerV2, error) {
+func NewSchedulerV2(ctx context.Context, changeFeedID model.ChangeFeedID, checkpointTs model.Ts) (*schedulerV2, error) {
 	ret := &schedulerV2{
 		changeFeedId: changeFeedID,
 	}
-	ret.ScheduleDispatcher = scheduler.NewScheduleDispatcher(changeFeedID, ret)
+	ret.ScheduleDispatcher = scheduler.NewScheduleDispatcher(changeFeedID, ret, checkpointTs)
 	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
 		return nil, err
 	}
+	log.Debug("scheduler created", zap.Uint64("checkpoint-ts", checkpointTs))
 	return ret, nil
 }
 
-func (s *schedulerV2) Tick(ctx context.Context,
+func (s *schedulerV2) Tick(
+	ctx context.Context,
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
-) (canProceed bool, err error) {
+) (checkpoint, resolvedTs model.Ts, err error) {
 	if err := s.checkForHandlerErrors(ctx); err != nil {
-		return false, errors.Trace(err)
+		return 0, 0, errors.Trace(err)
 	}
 	return s.ScheduleDispatcher.Tick(ctx, checkpointTs, currentTables, captures)
 }
@@ -170,16 +172,11 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 
 	errCh, err = ctx.GlobalVars().MessageServer.MustAddHandler(
 		ctx,
-		string(scheduler.ProcessorFailedTopic(s.changeFeedId)),
-		&scheduler.ProcessorFailedMessage{},
+		scheduler.CheckpointTopic(s.changeFeedId),
+		&scheduler.CheckpointMessage{},
 		func(sender string, messageI interface{}) error {
-			message := messageI.(*scheduler.ProcessorFailedMessage)
-			if message.ProcessorID != sender {
-				log.Panic("processor ID does not match capture ID",
-					zap.String("processor-id", message.ProcessorID),
-					zap.String("capture-id", sender))
-			}
-			s.OnAgentReset(sender)
+			message := messageI.(*scheduler.CheckpointMessage)
+			s.OnAgentCheckpoint(sender, message.CheckpointTs, message.ResolvedTs)
 			return nil
 		})
 	if err != nil {
@@ -207,7 +204,7 @@ func (s *schedulerV2) deregisterPeerMessageHandlers(ctx context.Context) {
 
 	err = ctx.GlobalVars().MessageServer.MustRemoveHandler(
 		ctx,
-		scheduler.ProcessorFailedTopic(s.changeFeedId))
+		scheduler.CheckpointTopic(s.changeFeedId))
 	if err != nil {
 		log.Error("failed to remove peer message handler", zap.Error(err))
 	}

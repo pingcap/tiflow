@@ -228,11 +228,6 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 			return nil, status != nil, nil
 		})
 	}
-	for captureID := range state.TaskPositions {
-		state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-			return nil, position != nil, nil
-		})
-	}
 	for captureID := range state.Workloads {
 		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 			return nil, workload != nil, nil

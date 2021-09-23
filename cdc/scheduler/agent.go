@@ -16,15 +16,20 @@ package scheduler
 import (
 	"sync"
 	"sync/atomic"
-
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"time"
 
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/context"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
+)
+
+const (
+	// TODO add a config
+	defaultSendCheckpointInterval = time.Second * 1
 )
 
 type Agent interface {
@@ -51,6 +56,7 @@ type Agent interface {
 	CanUpdateCheckpoint(ctx context.Context) bool
 }
 
+// TableExecutor is an abstraction for "Processor".
 type TableExecutor interface {
 	AddTable(ctx context.Context, tableID model.TableID, boundaryTs model.Ts) error
 	RemoveTable(ctx context.Context, tableID model.TableID, boundaryTs model.Ts) (bool, error)
@@ -58,6 +64,7 @@ type TableExecutor interface {
 	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (bool, error)
 
 	GetAllCurrentTables() []model.TableID
+	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 }
 
 // ProcessorMessenger implements how messages should be sent to the owner,
@@ -67,22 +74,24 @@ type ProcessorMessenger interface {
 	// FinishTableOperation notifies the owner that a table operation has finished.
 	FinishTableOperation(ctx context.Context, tableID model.TableID) (bool, error)
 	SyncTaskStatuses(ctx context.Context, running, adding, removing []model.TableID) (bool, error)
-	SendReset(ctx context.Context) (bool, error)
+	SendCheckpoint(ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts) (bool, error)
 	Barrier(ctx context.Context) (done bool)
 	OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID)
 	Close() error
 }
 
 type BaseAgent struct {
-	agentMu               sync.Mutex
-	pendingOps            deque.Deque // stores *AgentOperation
-	hasOwnerRequestedSync bool
+	agentMu                      sync.Mutex
+	pendingOps                   deque.Deque // stores *AgentOperation
+	hasOwnerRequestedSync        bool
+	lastSentCheckpoint           time.Time
+	waitingPostCheckpointBarrier bool
 
 	tableOperations map[model.TableID]*AgentOperation
 
 	logger *zap.Logger
 
-	callbacks TableExecutor
+	executor TableExecutor
 
 	ownerInfoMu sync.RWMutex
 	ownerInfo   *ownerInfo
@@ -100,12 +109,13 @@ func NewBaseAgent(
 ) Agent {
 	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
 	return &BaseAgent{
-		pendingOps:      deque.NewDeque(),
-		tableOperations: map[model.TableID]*AgentOperation{},
-		logger:          logger,
-		callbacks:       executor,
-		ownerInfo:       &ownerInfo{},
-		communicator:    messenger,
+		pendingOps:            deque.NewDeque(),
+		tableOperations:       map[model.TableID]*AgentOperation{},
+		logger:                logger,
+		executor:              executor,
+		ownerInfo:             &ownerInfo{},
+		communicator:          messenger,
+		hasOwnerRequestedSync: true,
 	}
 }
 
@@ -134,6 +144,10 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 		a.communicator.OnOwnerChanged(ctx, a.currentOwner())
 	}
 
+	if err := a.sendCheckpoint(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	var opsToApply []*AgentOperation
 
 	a.agentMu.Lock()
@@ -146,7 +160,7 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 				removing = append(removing, op.TableID)
 			}
 		}
-		for _, tableID := range a.callbacks.GetAllCurrentTables() {
+		for _, tableID := range a.executor.GetAllCurrentTables() {
 			if _, ok := a.tableOperations[tableID]; !ok {
 				continue
 			}
@@ -185,13 +199,13 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 		if !op.processed {
 			if !op.IsDelete {
 				// add table
-				if err := a.callbacks.AddTable(ctx, op.TableID, op.BoundaryTs); err != nil {
+				if err := a.executor.AddTable(ctx, op.TableID, op.BoundaryTs); err != nil {
 					return errors.Trace(err)
 				}
 				op.processed = true
 			} else {
 				// delete table
-				done, err := a.callbacks.RemoveTable(ctx, op.TableID, op.BoundaryTs)
+				done, err := a.executor.RemoveTable(ctx, op.TableID, op.BoundaryTs)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -204,9 +218,9 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 				err  error
 			)
 			if !op.IsDelete {
-				done, err = a.callbacks.IsAddTableFinished(ctx, op.TableID)
+				done, err = a.executor.IsAddTableFinished(ctx, op.TableID)
 			} else {
-				done, err = a.callbacks.IsRemoveTableFinished(ctx, op.TableID)
+				done, err = a.executor.IsRemoveTableFinished(ctx, op.TableID)
 			}
 			if err != nil {
 				return errors.Trace(err)
@@ -222,6 +236,36 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 				delete(a.tableOperations, op.TableID)
 			}
 		}
+	}
+	return nil
+}
+
+func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
+	if a.waitingPostCheckpointBarrier {
+		if !a.communicator.Barrier(ctx) {
+			return nil
+		}
+		a.waitingPostCheckpointBarrier = false
+	}
+
+	if len(a.executor.GetAllCurrentTables()) == 0 {
+		a.logger.Debug("no table is running, skip sending checkpoint")
+		return nil
+	}
+
+	if time.Since(a.lastSentCheckpoint) < defaultSendCheckpointInterval {
+		return nil
+	}
+
+	checkpointTs, resolvedTs := a.executor.GetCheckpoint()
+	done, err := a.communicator.SendCheckpoint(ctx, checkpointTs, resolvedTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if done {
+		a.waitingPostCheckpointBarrier = true
+		a.lastSentCheckpoint = time.Now()
+		return nil
 	}
 	return nil
 }

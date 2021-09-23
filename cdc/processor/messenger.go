@@ -17,6 +17,8 @@ import (
 	stdContext "context"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/kv"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -60,6 +62,13 @@ func newMessenger(
 		return nil, errors.Trace(err)
 	}
 
+	// TODO refactor this! Might block critical path
+	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	ret.ownerCaptureID = ownerCaptureID
 	return ret, nil
 }
 
@@ -96,13 +105,18 @@ func (m *Messenger) SyncTaskStatuses(
 	return done, nil
 }
 
-func (m *Messenger) SendReset(ctx context.Context) (bool, error) {
+func (m *Messenger) SendCheckpoint(
+	ctx context.Context,
+	checkpointTs model.Ts,
+	resolvedTs model.Ts,
+) (bool, error) {
 	done, err := m.trySendMessage(
 		ctx,
 		m.ownerCaptureID,
-		scheduler.ProcessorFailedTopic(m.changeFeed),
-		&scheduler.ProcessorFailedMessage{
-			ProcessorID: m.selfCaptureID,
+		scheduler.CheckpointTopic(m.changeFeed),
+		&scheduler.CheckpointMessage{
+			CheckpointTs: checkpointTs,
+			ResolvedTs:   resolvedTs,
 		})
 	if err != nil {
 		return false, errors.Trace(err)

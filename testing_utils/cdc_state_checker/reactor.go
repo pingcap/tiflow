@@ -30,17 +30,20 @@ type cdcMonitReactor struct {
 func (r *cdcMonitReactor) Tick(_ context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
 	r.state = state.(*cdcReactorState)
 
-	err := r.verifyTs()
-	if err != nil {
-		log.Error("Verifying Ts failed", zap.Error(err))
-		return r.state, err
-	}
+	// TODO use new debug API to check constraints
+	/*
+		err := r.verifyTs()
+		if err != nil {
+			log.Error("Verifying Ts failed", zap.Error(err))
+			return r.state, err
+		}
 
-	err = r.verifyStartTs()
-	if err != nil {
-		log.Error("Verifying startTs failed", zap.Error(err))
-		return r.state, err
-	}
+		err = r.verifyStartTs()
+		if err != nil {
+			log.Error("Verifying startTs failed", zap.Error(err))
+			return r.state, err
+		}
+	*/
 
 	return r.state, nil
 }
