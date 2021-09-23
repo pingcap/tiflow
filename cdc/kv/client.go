@@ -46,6 +46,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -77,6 +78,9 @@ const (
 	// channel work in an asynchronous way, the larger channel can decrease the
 	// frequency of creating new goroutine.
 	defaultRegionChanSize = 128
+	// cdcClusterIDKey specifies the ID of the cluster,
+	// which TiKV uses to verify the cluster ID of requests.
+	cdcClusterIDKey = "cdc-cluster-id"
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -286,12 +290,7 @@ type CDCKVClient interface {
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
-var NewCDCKVClient func(
-	ctx context.Context,
-	pd pd.Client,
-	kvStorage tikv.Storage,
-	grpcPool GrpcPool,
-) CDCKVClient = NewCDCClient
+var NewCDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
@@ -730,6 +729,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.String("addr", rpcCtx.Addr))
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			_ = streamCancel // to avoid possible context leak warning from govet
+			streamCtx = metadata.AppendToOutgoingContext(streamCtx, cdcClusterIDKey, fmt.Sprint(s.client.clusterID))
 			stream, err = s.client.newStream(streamCtx, rpcCtx.Addr, storeID)
 			if err != nil {
 				// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
