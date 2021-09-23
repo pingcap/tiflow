@@ -25,9 +25,7 @@ func SetUpLeakTest(m *testing.M, options ...goleak.Option) {
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 	}
 
-	for _, opt := range options {
-		opts = append(opts, opt)
-	}
+	opts = append(opts, options...)
 
 	goleak.VerifyTestMain(m, opts...)
 }
