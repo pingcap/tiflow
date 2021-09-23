@@ -466,7 +466,7 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 			log.Debug("add table partition success", zap.String("name", tbl.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
 		}
 		s.partitionTable[partition.ID] = tbl
-		if !tbl.ExistTableUniqueColumn() {
+		if !tbl.IsEligible(s.explicitTables) {
 			s.ineligibleTableID[partition.ID] = struct{}{}
 		}
 		delete(oldIDs, partition.ID)
