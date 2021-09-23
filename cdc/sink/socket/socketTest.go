@@ -540,9 +540,9 @@ func columnInfoVoToByte(columnInfo *vo.ColumnVo) []byte{
     //publicUtils.BlockByteArrCopy([]byte(lengthArr),0,columnInfoArr,colPos,len(lengthArr))
     //colPos = colPos+len(lengthArr);
     if(columnInfo.IsPkFlag){
-    	columnInfoArr[colPos]=0x01
+    	columnInfoArr[colPos]=0x31
     }else{
-    	columnInfoArr[colPos]=0x00
+    	columnInfoArr[colPos]=0x30
     }
     colPos = colPos+1;
     columnInfoArr[colPos]=columnInfo.ColumnType
