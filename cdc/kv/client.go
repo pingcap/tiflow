@@ -39,13 +39,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/tikv"
 	tidbkv "github.com/pingcap/tidb/store/tikv/kv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
-<<<<<<< HEAD
-=======
-	tidbkv "github.com/tikv/client-go/v2/kv"
-	"github.com/tikv/client-go/v2/tikv"
->>>>>>> e81c08cdd (kv: Remove old kvclient related code. (#2823))
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
