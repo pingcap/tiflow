@@ -166,8 +166,7 @@ function run() {
     cleanup_process $CDC_BINARY
 
     # updating GC safepoint failure case
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectActualGCSafePoint=return(9223372036854775807)' # new owner
-    # export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectActualGCSafePoint=return(9223372036854775807)' # old owner
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/pkg/txnutil/gc/InjectActualGCSafePoint=return(9223372036854775807)' # new owner
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     changefeedid_2="changefeed-error-2"
