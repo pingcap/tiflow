@@ -27,7 +27,7 @@ var _ = check.Suite(&schedulerSuite{})
 
 type schedulerSuite struct {
 	changefeedID model.ChangeFeedID
-	state        *model.ChangefeedReactorState
+	state        *orchestrator.ChangefeedReactorState
 	tester       *orchestrator.ReactorStateTester
 	captures     map[model.CaptureID]*model.CaptureInfo
 	scheduler    *scheduler
@@ -35,7 +35,7 @@ type schedulerSuite struct {
 
 func (s *schedulerSuite) reset(c *check.C) {
 	s.changefeedID = fmt.Sprintf("test-changefeed-%x", rand.Uint32())
-	s.state = model.NewChangefeedReactorState("test-changefeed")
+	s.state = orchestrator.NewChangefeedReactorState("test-changefeed")
 	s.tester = orchestrator.NewReactorStateTester(c, s.state, nil)
 	s.scheduler = newScheduler()
 	s.captures = make(map[model.CaptureID]*model.CaptureInfo)

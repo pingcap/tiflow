@@ -21,11 +21,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/br/pkg/httputil"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/owner"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -647,7 +647,7 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 		return
 	}
 
-	ownerID, err := h.capture.etcdClient.GetOwnerID(c, kv.CaptureOwnerKey)
+	ownerID, err := h.capture.etcdClient.GetOwnerID(c, etcd.CaptureOwnerKey)
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return

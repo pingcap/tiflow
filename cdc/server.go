@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -56,7 +57,7 @@ type Server struct {
 	capture      *capture.Capture
 	statusServer *http.Server
 	pdClient     pd.Client
-	etcdClient   *kv.CDCEtcdClient
+	etcdClient   *etcd.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
@@ -132,9 +133,18 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
+<<<<<<< HEAD
 	etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &etcdClient
 	if err := s.initDataDir(ctx); err != nil {
+=======
+
+	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
+	s.etcdClient = &cdcEtcdClient
+
+	err = s.initDataDir(ctx)
+	if err != nil {
+>>>>>>> 4c94d7880 (*: clean useless code && improvement the code struct (#2835))
 		return errors.Trace(err)
 	}
 

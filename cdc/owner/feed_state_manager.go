@@ -20,19 +20,20 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"go.uber.org/zap"
 )
 
 // feedStateManager manages the ReactorState of a changefeed
 // when a error or a admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
-	state           *model.ChangefeedReactorState
+	state           *orchestrator.ChangefeedReactorState
 	shouldBeRunning bool
 
 	adminJobQueue []*model.AdminJob
 }
 
-func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
+func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) {
 	m.state = state
 	m.shouldBeRunning = true
 	defer func() {
