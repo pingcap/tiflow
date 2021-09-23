@@ -133,17 +133,6 @@ func JddmDDLClient(host string,ddlInfos *vo.DDLInfos){
 		return
 	}
 
-	// 声明链表
-	l := list.New()
-	// 数据添加到尾部
-	l.PushBack(4)
-	l.PushBack(5)
-	l.PushBack(6)
-
-	// 遍历
-	for e := l.Front(); e != nil; e = e.Next() {
-	     fmt.Printf("%v\n", e.Value)
-	}
 
 }
 
@@ -278,18 +267,6 @@ func JddmClient(host string, rowInfos []*vo.RowInfos){
 	_, err = conn.Write(createBytesFromRowInfoList(rowInfos))
 	if err != nil {
 		return
-	}
-
-	// 声明链表
-	l := list.New()
-	// 数据添加到尾部
-	l.PushBack(4)
-	l.PushBack(5)
-	l.PushBack(6)
-
-	// 遍历
-	for e := l.Front(); e != nil; e = e.Next() {
-		fmt.Printf("%v\n", e.Value)
 	}
 
 
