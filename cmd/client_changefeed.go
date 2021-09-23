@@ -564,8 +564,17 @@ func newUpdateChangefeedCommand() *cobra.Command {
 					info.SyncPointEnabled = syncPointEnabled
 				case "sync-interval":
 					info.SyncPointInterval = syncPointInterval
-				case "pd", "tz", "start-ts", "changefeed-id", "no-confirm":
-					// do nothing
+				case "tz", "start-ts", "sort-dir":
+					log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
+				case "changefeed-id", "no-confirm", "cyclic-filter-replica-ids":
+					// Do nothing, these are some flags from the changefeed command,
+					// we don't use it to update, but we do use these flags.
+				case "interact":
+					// Do nothing, this is a flags from the cli command
+					// we don't use it to update.
+				case "pd", "log-level", "key", "cert", "ca":
+					// Do nothing, this is a flags from the cli command
+					// we don't use it to update, but we do use these flags.
 				default:
 					// use this default branch to prevent new added parameter is not added
 					log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
