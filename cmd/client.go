@@ -130,6 +130,7 @@ func newCliCommand() *cobra.Command {
 	verifyCDCClusterVersionList := make([]string, 0)
 	command := &cobra.Command{
 		Use:   "cli",
+		Args:  cobra.NoArgs,
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			initCmd(cmd, &logutil.Config{Level: cliLogLevel})

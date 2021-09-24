@@ -43,6 +43,7 @@ var (
 
 	serverCmd = &cobra.Command{
 		Use:   "server",
+		Args:  cobra.NoArgs,
 		Short: "Start a TiCDC capture server",
 		RunE:  runEServer,
 	}

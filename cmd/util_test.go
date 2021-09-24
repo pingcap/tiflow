@@ -64,7 +64,7 @@ func (s *utilsSuite) TestVerifyPdEndpoint(c *check.C) {
 	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*PD endpoint should be a valid http or https URL.*")
 
 	// invalid URL.
-	url = "\n hi"
+	url = "\r hi"
 	c.Assert(verifyPdEndpoint(url, false), check.ErrorMatches, ".*invalid control character in URL.*")
 
 	// http URL without host.
