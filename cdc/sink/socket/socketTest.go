@@ -414,9 +414,9 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 			buffer.Write(ddlColumnInfoVoToByte(preColInfo))
 		}
 	}else{
-		preTableZeroArr := make([]byte,4)
-		preTableZeroArr[3]=0x00
-		buffer.Write(preTableZeroArr)
+		//preTableZeroArr := make([]byte,4)
+		//preTableZeroArr[3]=0x00
+		buffer.Write(make([]byte,4))
 	}
 
 	querySqlArr := make([]byte,1+len(ddlInfos.QuerySql))
