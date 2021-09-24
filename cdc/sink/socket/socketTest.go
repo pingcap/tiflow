@@ -413,8 +413,17 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 			fmt.Printf(" preCol Type:%d ::name::%s\n",preColInfo.ColumnType,preColInfo.ColumnName)
 			buffer.Write(ddlColumnInfoVoToByte(preColInfo))
 		}
+	}else{
+		preTableZeroArr := make([]byte,4)
+		preTableZeroArr[3]=0x00
+		buffer.Write(preTableZeroArr)
 	}
 
+	querySqlArr := make([]byte,1+len(ddlInfos.QuerySql))
+	publicUtils.BlockByteArrCopy([]byte(ddlInfos.QuerySql),0,querySqlArr,0,len(ddlInfos.QuerySql))
+	buffer.Write(querySqlArr)
+
+	fmt.Printf(" DDL querySqlArr[]Arr %s \n",publicUtils.BytestoHex(querySqlArr))
 
 	lengthArr := publicUtils.IntegerToBytes(len(buffer.Bytes()));
 	sendBatchDDLArr.Write(lengthArr)
