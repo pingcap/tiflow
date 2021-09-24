@@ -393,9 +393,10 @@ func createBytes_FromDdlInfoVo(ddlInfos *vo.DDLInfos) []byte{
 	buffer.Write(publicUtils.LongToBytes(ddlInfos.CommitTimer))
 	buffer.Write(publicUtils.LongToBytes(ddlInfos.ObjnNo))
 
-	operTypeArr := make([]byte,4)
-	operTypeArr[3]=byte(12)
-	buffer.Write(operTypeArr)
+	//operTypeArr := make([]byte,4)
+	//operTypeArr[3]=byte(12)
+	buffer.Write(publicUtils.Int32ToBytes(ddlInfos.DDLType))
+	fmt.Printf(" ddl Type:%s\n",buffer.Bytes())
 	schemaNameArr := make([]byte,1+len(ddlInfos.SchemaName))
 	publicUtils.BlockByteArrCopy([]byte(ddlInfos.SchemaName),0,schemaNameArr,0,len(ddlInfos.SchemaName))
 	buffer.Write(schemaNameArr)
