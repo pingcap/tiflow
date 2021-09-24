@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -39,6 +40,6 @@ func init() {
 	processor.InitMetrics(registry)
 	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
-
+	etcd.InitMetrics(registry)
 	initServerMetrics(registry)
 }
