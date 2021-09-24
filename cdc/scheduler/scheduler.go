@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/scheduler/util"
 	"github.com/pingcap/ticdc/pkg/context"
 	"go.uber.org/zap"
 )
@@ -71,8 +72,8 @@ const (
 )
 
 type BaseScheduleDispatcher struct {
-	mu                sync.Mutex
-	tableToCaptureMap map[model.TableID]*tableRecord
+	mu     sync.Mutex
+	tables *util.TableSet
 	// captureSynced records whether the capture has sent us the tables
 	// it is currently replicating. We need them to tell us their status
 	// when we just have succeeded a previous owner.
@@ -93,23 +94,25 @@ type BaseScheduleDispatcher struct {
 	callbacks ScheduleDispatcherCommunicator
 }
 
-func NewScheduleDispatcher(changeFeedID model.ChangeFeedID, callbacks ScheduleDispatcherCommunicator, checkpointTs model.Ts) ScheduleDispatcher {
+func NewScheduleDispatcher(
+	changeFeedID model.ChangeFeedID,
+	callbacks ScheduleDispatcherCommunicator,
+	checkpointTs model.Ts,
+) ScheduleDispatcher {
 	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
 	return &BaseScheduleDispatcher{
-		tableToCaptureMap: map[model.TableID]*tableRecord{},
-		captureStatus:     map[model.CaptureID]*captureStatus{},
-		moveTableTarget:   map[model.TableID]model.CaptureID{},
-		changeFeedID:      changeFeedID,
-		logger:            logger,
-		callbacks:         callbacks,
-		checkpointTs:      checkpointTs,
+		tables:          util.NewTableSet(),
+		captureStatus:   map[model.CaptureID]*captureStatus{},
+		moveTableTarget: map[model.TableID]model.CaptureID{},
+		changeFeedID:    changeFeedID,
+		logger:          logger,
+		callbacks:       callbacks,
+		checkpointTs:    checkpointTs,
 	}
 }
 
-type tableStatus = int32
-
 const (
-	addingTable = tableStatus(iota)
+	addingTable = util.TableStatus(iota)
 	removingTable
 	runningTable
 )
@@ -135,7 +138,7 @@ type moveTableJob struct {
 
 type tableRecord struct {
 	Capture model.CaptureID
-	Status  tableStatus
+	Status  util.TableStatus
 }
 
 func (s *BaseScheduleDispatcher) Tick(
@@ -172,12 +175,11 @@ func (s *BaseScheduleDispatcher) Tick(
 		}
 	}
 
-	for tableID, record := range s.tableToCaptureMap {
-		if _, ok := s.captures[record.Capture]; !ok {
-			s.logger.Info("capture down, removing table",
-				zap.String("capture-id", record.Capture),
-				zap.Int64("table-id", tableID))
-			delete(s.tableToCaptureMap, tableID)
+	for _, captureID := range s.tables.GetDistinctCaptures() {
+		if _, ok := s.captures[captureID]; !ok {
+			s.logger.Info("capture down, removing tables",
+				zap.String("capture-id", captureID))
+			s.tables.RemoveTableRecordByCaptureID(captureID)
 		}
 	}
 
@@ -187,8 +189,8 @@ func (s *BaseScheduleDispatcher) Tick(
 	}
 
 	for tableID := range shouldReplicateTableSet {
-		_, ok := s.tableToCaptureMap[tableID]
-		if ok {
+		if _, ok := s.tables.GetTableRecord(tableID); ok {
+			// table is found
 			continue
 		}
 		// table not found
@@ -213,13 +215,16 @@ func (s *BaseScheduleDispatcher) Tick(
 			return CheckpointCannotProceed, CheckpointCannotProceed, nil
 		}
 
-		s.tableToCaptureMap[tableID] = &tableRecord{
-			Capture: target,
-			Status:  addingTable,
+		if ok := s.tables.AddTableRecord(&util.TableRecord{
+			TableID:   tableID,
+			CaptureID: target,
+			Status:    addingTable,
+		}); !ok {
+			s.logger.Panic("duplicate table", zap.Int64("table-id", tableID))
 		}
 	}
 
-	for tableID, record := range s.tableToCaptureMap {
+	for tableID, record := range s.tables.GetAllTables() {
 		if _, ok := shouldReplicateTableSet[tableID]; ok {
 			continue
 		}
@@ -229,7 +234,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		}
 
 		// need to delete table
-		captureID := record.Capture
+		captureID := record.CaptureID
 		ok, err := s.callbacks.DispatchTable(ctx, s.changeFeedID, tableID, captureID, s.checkpointTs, true)
 		if err != nil {
 			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
@@ -252,7 +257,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	}
 
 	runningCount := 0
-	for _, record := range s.tableToCaptureMap {
+	for _, record := range s.tables.GetAllTables() {
 		if record.Status == runningTable {
 			runningCount++
 		}
@@ -262,7 +267,8 @@ func (s *BaseScheduleDispatcher) Tick(
 	s.lastTickCaptureCount = len(captures)
 
 	if !allTasksNormal {
-		s.logger.Info("scheduler has pending jobs", zap.Any("jobs", s.tableToCaptureMap))
+		// TODO add detailed log
+		s.logger.Info("scheduler has pending jobs")
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
@@ -279,7 +285,7 @@ func (s *BaseScheduleDispatcher) calculateTs() (checkpointTs, resolvedTs model.T
 	resolvedTs = math.MaxUint64
 
 	for captureID, status := range s.captureStatus {
-		if s.captureTableCount(captureID) == 0 {
+		if s.tables.CountTableByCaptureID(captureID) == 0 {
 			// the checkpoint (as well as resolved-ts) from a capture
 			// that is not replicating any table is meaningless.
 			continue
@@ -349,20 +355,20 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) error 
 	for len(s.moveTableJobQueue) > 0 {
 		job := s.moveTableJobQueue[0]
 
-		record, ok := s.tableToCaptureMap[job.tableID]
+		record, ok := s.tables.GetTableRecord(job.tableID)
 		if !ok {
 			s.logger.Warn("table to be move does not exist", zap.Any("job", job))
 			s.moveTableJobQueue = s.moveTableJobQueue[1:]
 			continue
 		}
 
-		if _, ok := s.captures[record.Capture]; !ok {
+		if _, ok := s.captures[record.CaptureID]; !ok {
 			s.logger.Warn("tried to move table to a non-existent capture", zap.Any("job", job))
 			s.moveTableJobQueue = s.moveTableJobQueue[1:]
 			continue
 		}
 
-		if job.target == record.Capture {
+		if job.target == record.CaptureID {
 			s.logger.Info("try to move table to its current capture, doing nothing", zap.Any("job", job))
 			s.moveTableJobQueue = s.moveTableJobQueue[1:]
 			continue
@@ -373,13 +379,13 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) error 
 		s.moveTableTarget[job.tableID] = job.target
 
 		// Removes the table from the current capture
-		ok, err := s.callbacks.DispatchTable(ctx, s.changeFeedID, job.tableID, record.Capture, s.checkpointTs, true)
+		ok, err := s.callbacks.DispatchTable(ctx, s.changeFeedID, job.tableID, record.CaptureID, s.checkpointTs, true)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if !ok {
 			s.logger.Warn("dispatching table failed, will try again",
-				zap.String("target", record.Capture),
+				zap.String("target", record.CaptureID),
 				zap.Int64("table-id", job.tableID))
 			return nil
 		}
@@ -396,7 +402,7 @@ func (s *BaseScheduleDispatcher) Rebalance() {
 }
 
 func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err error) {
-	totalTableNum := len(s.tableToCaptureMap)
+	totalTableNum := len(s.tables.GetAllTables())
 	captureNum := len(s.captures)
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
 
@@ -405,21 +411,15 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 		zap.Int("capture-num", captureNum),
 		zap.Int("target-limit", upperLimitPerCapture))
 
-	captureToTablesMap := make(map[model.CaptureID][]model.TableID)
-	for tableID, record := range s.tableToCaptureMap {
-		captureToTablesMap[record.Capture] = append(captureToTablesMap[record.Capture], tableID)
-	}
-
-	for captureID, tableIDs := range captureToTablesMap {
-		tableNum2Remove := len(tableIDs) - upperLimitPerCapture
+	for captureID, tables := range s.tables.GetAllTablesGroupedByCaptures() {
+		tableNum2Remove := len(tables) - upperLimitPerCapture
 		if tableNum2Remove <= 0 {
 			continue
 		}
 
 		// here we pick `tableNum2Remove` tables to delete,
 		// and then the removed tables will be dispatched by `Tick` function in the next tick
-		for _, tableID := range tableIDs {
-			tableID := tableID
+		for tableID, record := range tables {
 			if tableNum2Remove <= 0 {
 				break
 			}
@@ -435,10 +435,14 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 				return false, nil
 			}
 
+			if record.Status != runningTable {
+				s.logger.DPanic("unexpected table status", zap.Any("table-record", record))
+			}
+
 			s.logger.Info("Rebalance: Move table",
 				zap.Int64("table-id", tableID),
 				zap.String("capture", captureID))
-			s.tableToCaptureMap[tableID].Status = removingTable
+			record.Status = removingTable
 			tableNum2Remove--
 		}
 	}
@@ -455,8 +459,8 @@ func (s *BaseScheduleDispatcher) findTargetCapture() (model.CaptureID, bool) {
 		captureWorkload[captureID] = 0
 	}
 
-	for _, record := range s.tableToCaptureMap {
-		captureWorkload[record.Capture]++
+	for _, record := range s.tables.GetAllTables() {
+		captureWorkload[record.CaptureID]++
 	}
 
 	candidate := ""
@@ -486,16 +490,16 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 			zap.Int64("tableID", tableID))
 	}
 
-	record, ok := s.tableToCaptureMap[tableID]
+	record, ok := s.tables.GetTableRecord(tableID)
 	if !ok {
 		s.logger.Warn("response about a stale table, ignore",
 			zap.String("source", captureID),
 			zap.Int64("table-id", tableID))
 	}
 
-	if record.Capture != captureID {
+	if record.CaptureID != captureID {
 		s.logger.Panic("message from unexpected capture",
-			zap.String("expected", record.Capture),
+			zap.String("expected", record.CaptureID),
 			zap.String("actual", captureID),
 			zap.Int64("tableID", tableID))
 	}
@@ -508,7 +512,7 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 		record.Status = runningTable
 		delete(s.moveTableTarget, tableID)
 	case removingTable:
-		delete(s.tableToCaptureMap, tableID)
+		s.tables.RemoveTableRecord(tableID)
 	case runningTable:
 		s.logger.Panic("response to invalid dispatch message",
 			zap.String("source", captureID),
@@ -526,38 +530,34 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 		zap.Any("adding", adding),
 		zap.Any("removing", removing))
 
-	for tableID, record := range s.tableToCaptureMap {
-		if record.Capture == captureID {
-			delete(s.tableToCaptureMap, tableID)
-		}
-	}
+	s.tables.RemoveTableRecordByCaptureID(captureID)
 
 	for _, tableID := range adding {
-		if record, ok := s.tableToCaptureMap[tableID]; ok {
+		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			s.logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
-				zap.String("capture-id-1", record.Capture),
+				zap.String("capture-id-1", record.CaptureID),
 				zap.String("capture-id-2", captureID))
 		}
-		s.tableToCaptureMap[tableID] = &tableRecord{Capture: captureID, Status: addingTable}
+		s.tables.AddTableRecord(&util.TableRecord{CaptureID: captureID, Status: addingTable})
 	}
 	for _, tableID := range running {
-		if record, ok := s.tableToCaptureMap[tableID]; ok {
+		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			s.logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
-				zap.String("capture-id-1", record.Capture),
+				zap.String("capture-id-1", record.CaptureID),
 				zap.String("capture-id-2", captureID))
 		}
-		s.tableToCaptureMap[tableID] = &tableRecord{Capture: captureID, Status: runningTable}
+		s.tables.AddTableRecord(&util.TableRecord{CaptureID: captureID, Status: runningTable})
 	}
 	for _, tableID := range removing {
-		if record, ok := s.tableToCaptureMap[tableID]; ok {
+		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			s.logger.Panic("duplicate table tasks",
 				zap.Int64("table-id", tableID),
-				zap.String("capture-id-1", record.Capture),
+				zap.String("capture-id-1", record.CaptureID),
 				zap.String("capture-id-2", captureID))
 		}
-		s.tableToCaptureMap[tableID] = &tableRecord{Capture: captureID, Status: removingTable}
+		s.tables.AddTableRecord(&util.TableRecord{CaptureID: captureID, Status: removingTable})
 	}
 
 	if _, ok := s.captureStatus[captureID]; !ok {
@@ -597,15 +597,4 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 		zap.String("capture-id", captureID),
 		zap.Uint64("checkpoint-ts", checkpointTs),
 		zap.Uint64("resolved-ts", resolvedTs))
-}
-
-// captureTableCount should be called with `s.mu` taken.
-// TODO add a cache for table count
-func (s *BaseScheduleDispatcher) captureTableCount(captureID model.CaptureID) (count int) {
-	for _, record := range s.tableToCaptureMap {
-		if record.Capture == captureID && record.Status == runningTable {
-			count++
-		}
-	}
-	return
 }

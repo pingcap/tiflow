@@ -60,7 +60,7 @@ type SyncMessage struct {
 	Removing []model.TableID
 }
 
-func (m *SyncMessage) MarshalJSON() ([]byte, error) {
+func (m *SyncMessage) Marshal() ([]byte, error) {
 	raw, err := msgpack.Marshal(m)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -68,7 +68,7 @@ func (m *SyncMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(raw)
 }
 
-func (m *SyncMessage) UnmarshalJSON(data []byte) error {
+func (m *SyncMessage) Unmarshal(data []byte) error {
 	var raw []byte
 	err := json.Unmarshal(data, &raw)
 	if err != nil {
