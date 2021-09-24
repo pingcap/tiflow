@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (s *markSuite) TestIsMarkTable(t *testing.T) {
+func TestIsMarkTable(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		schema, table string
