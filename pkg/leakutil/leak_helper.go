@@ -19,8 +19,8 @@ import (
 	"go.uber.org/goleak"
 )
 
-//SetUpLeakTest ignore unexpected common etcd and opencensus stack functions for goleak
-//options can be used to implement other ignore items
+// SetUpLeakTest ignore unexpected common etcd and opencensus stack functions for goleak
+// options can be used to implement other ignore items
 func SetUpLeakTest(m *testing.M, options ...goleak.Option) {
 	opts := []goleak.Option{
 		goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
