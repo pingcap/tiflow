@@ -58,7 +58,7 @@ func TestBasic(t *testing.T) {
 
 	cancel()
 	err := errg.Wait()
-	require.Regexp(t, "context canceled", err.Error())
+	require.Regexp(t, "context canceled", err)
 }
 
 func TestEventuallyRun(t *testing.T) {
