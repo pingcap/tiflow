@@ -15,15 +15,15 @@ package cli
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/spf13/cobra"
 )
 
 // unsafeShowMetadataOptions defines flags for the `cli unsafe show-metadata` command.
 type unsafeShowMetadataOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 }
 
 // newUnsafeShowMetadataOptions creates new unsafeShowMetadataOptions

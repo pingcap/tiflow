@@ -11,17 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package orchestrator
 
 import (
 	"time"
 
-	"github.com/google/go-cmp/cmp/cmpopts"
-
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/orchestrator/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
@@ -33,7 +32,7 @@ var _ = check.Suite(&stateSuite{})
 func (s *stateSuite) TestCheckCaptureAlive(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test")
-	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	c.Assert(stateTester.ApplyPatches(), check.ErrorMatches, ".*[CDC:ErrLeaseExpired].*")
 	err := stateTester.Update("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`))
@@ -72,12 +71,12 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 			},
 			expected: ChangefeedReactorState{
 				ID: "test1",
-				Info: &ChangeFeedInfo{
+				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
 					CreateTime:        createTime,
 					StartTs:           421980685886554116,
-					Engine:            SortInMemory,
+					Engine:            model.SortInMemory,
 					State:             "normal",
 					SyncPointInterval: time.Minute * 10,
 					Config: &config.ReplicaConfig{
@@ -90,16 +89,16 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 					},
 				},
-				Status: &ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
-				TaskStatuses: map[CaptureID]*TaskStatus{
+				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+				TaskStatuses: map[model.CaptureID]*model.TaskStatus{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
-						Tables: map[int64]*TableReplicaInfo{45: {StartTs: 421980685886554116}},
+						Tables: map[int64]*model.TableReplicaInfo{45: {StartTs: 421980685886554116}},
 					},
 				},
-				TaskPositions: map[CaptureID]*TaskPosition{
+				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 				},
-				Workloads: map[CaptureID]TaskWorkload{
+				Workloads: map[model.CaptureID]model.TaskWorkload{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
 				},
 			},
@@ -132,12 +131,12 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 			},
 			expected: ChangefeedReactorState{
 				ID: "test1",
-				Info: &ChangeFeedInfo{
+				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
 					CreateTime:        createTime,
 					StartTs:           421980685886554116,
-					Engine:            SortInMemory,
+					Engine:            model.SortInMemory,
 					State:             "normal",
 					SyncPointInterval: time.Minute * 10,
 					Config: &config.ReplicaConfig{
@@ -150,20 +149,20 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 					},
 				},
-				Status: &ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
-				TaskStatuses: map[CaptureID]*TaskStatus{
+				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+				TaskStatuses: map[model.CaptureID]*model.TaskStatus{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
-						Tables: map[int64]*TableReplicaInfo{45: {StartTs: 421980685886554116}},
+						Tables: map[int64]*model.TableReplicaInfo{45: {StartTs: 421980685886554116}},
 					},
 					"666777888": {
-						Tables: map[int64]*TableReplicaInfo{46: {StartTs: 412341234}},
+						Tables: map[int64]*model.TableReplicaInfo{46: {StartTs: 412341234}},
 					},
 				},
-				TaskPositions: map[CaptureID]*TaskPosition{
+				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 					"666777888":                            {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
 				},
-				Workloads: map[CaptureID]TaskWorkload{
+				Workloads: map[model.CaptureID]model.TaskWorkload{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
 					"666777888":                            {46: {Workload: 3}},
 				},
@@ -199,12 +198,12 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 			},
 			expected: ChangefeedReactorState{
 				ID: "test1",
-				Info: &ChangeFeedInfo{
+				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
 					CreateTime:        createTime,
 					StartTs:           421980685886554116,
-					Engine:            SortInMemory,
+					Engine:            model.SortInMemory,
 					State:             "normal",
 					SyncPointInterval: time.Minute * 10,
 					Config: &config.ReplicaConfig{
@@ -217,16 +216,16 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 					},
 				},
-				Status: &ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
-				TaskStatuses: map[CaptureID]*TaskStatus{
+				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+				TaskStatuses: map[model.CaptureID]*model.TaskStatus{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
-						Tables: map[int64]*TableReplicaInfo{45: {StartTs: 421980685886554116}},
+						Tables: map[int64]*model.TableReplicaInfo{45: {StartTs: 421980685886554116}},
 					},
 				},
-				TaskPositions: map[CaptureID]*TaskPosition{
+				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 				},
-				Workloads: map[CaptureID]TaskWorkload{
+				Workloads: map[model.CaptureID]model.TaskWorkload{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
 				},
 			},
@@ -275,11 +274,11 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 				ID:           "test1",
 				Info:         nil,
 				Status:       nil,
-				TaskStatuses: map[CaptureID]*TaskStatus{},
-				TaskPositions: map[CaptureID]*TaskPosition{
+				TaskStatuses: map[model.CaptureID]*model.TaskStatus{},
+				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"666777888": {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
 				},
-				Workloads: map[CaptureID]TaskWorkload{},
+				Workloads: map[model.CaptureID]model.TaskWorkload{},
 			},
 		},
 		{ // testing the same key case
@@ -298,13 +297,13 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 			},
 			expected: ChangefeedReactorState{
 				ID: "test1",
-				TaskStatuses: map[CaptureID]*TaskStatus{
+				TaskStatuses: map[model.CaptureID]*model.TaskStatus{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
-						Tables: map[int64]*TableReplicaInfo{47: {StartTs: 421980685886554116}},
+						Tables: map[int64]*model.TableReplicaInfo{47: {StartTs: 421980685886554116}},
 					},
 				},
-				TaskPositions: map[CaptureID]*TaskPosition{},
-				Workloads:     map[CaptureID]TaskWorkload{},
+				TaskPositions: map[model.CaptureID]*model.TaskPosition{},
+				Workloads:     map[model.CaptureID]model.TaskWorkload{},
 			},
 		},
 	}
@@ -326,16 +325,16 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 func (s *stateSuite) TestPatchInfo(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
-	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+	stateTester := NewReactorStateTester(c, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
-		return &ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
 	stateTester.MustApplyPatches()
 	defaultConfig := config.GetDefaultReplicaConfig()
-	c.Assert(state.Info, check.DeepEquals, &ChangeFeedInfo{
+	c.Assert(state.Info, check.DeepEquals, &model.ChangeFeedInfo{
 		SinkURI: "123",
-		Engine:  SortUnified,
+		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
 			Filter:    defaultConfig.Filter,
 			Mounter:   defaultConfig.Mounter,
@@ -344,15 +343,15 @@ func (s *stateSuite) TestPatchInfo(c *check.C) {
 			Scheduler: defaultConfig.Scheduler,
 		},
 	})
-	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		info.StartTs = 6
 		return info, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.Info, check.DeepEquals, &ChangeFeedInfo{
+	c.Assert(state.Info, check.DeepEquals, &model.ChangeFeedInfo{
 		SinkURI: "123",
 		StartTs: 6,
-		Engine:  SortUnified,
+		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
 			Filter:    defaultConfig.Filter,
 			Mounter:   defaultConfig.Mounter,
@@ -361,7 +360,7 @@ func (s *stateSuite) TestPatchInfo(c *check.C) {
 			Scheduler: defaultConfig.Scheduler,
 		},
 	})
-	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
@@ -371,20 +370,20 @@ func (s *stateSuite) TestPatchInfo(c *check.C) {
 func (s *stateSuite) TestPatchStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
-	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+	stateTester := NewReactorStateTester(c, state, nil)
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		c.Assert(status, check.IsNil)
-		return &ChangeFeedStatus{CheckpointTs: 5}, true, nil
+		return &model.ChangeFeedStatus{CheckpointTs: 5}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.Status, check.DeepEquals, &ChangeFeedStatus{CheckpointTs: 5})
-	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+	c.Assert(state.Status, check.DeepEquals, &model.ChangeFeedStatus{CheckpointTs: 5})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.ResolvedTs = 6
 		return status, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.Status, check.DeepEquals, &ChangeFeedStatus{CheckpointTs: 5, ResolvedTs: 6})
-	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+	c.Assert(state.Status, check.DeepEquals, &model.ChangeFeedStatus{CheckpointTs: 5, ResolvedTs: 6})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
@@ -394,23 +393,23 @@ func (s *stateSuite) TestPatchStatus(c *check.C) {
 func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
-	state.PatchTaskPosition(captureID1, func(position *TaskPosition) (*TaskPosition, bool, error) {
+	state.PatchTaskPosition(captureID1, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		c.Assert(position, check.IsNil)
-		return &TaskPosition{
+		return &model.TaskPosition{
 			CheckPointTs: 1,
 		}, true, nil
 	})
-	state.PatchTaskPosition(captureID2, func(position *TaskPosition) (*TaskPosition, bool, error) {
+	state.PatchTaskPosition(captureID2, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		c.Assert(position, check.IsNil)
-		return &TaskPosition{
+		return &model.TaskPosition{
 			CheckPointTs: 2,
 		}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
+	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*model.TaskPosition{
 		captureID1: {
 			CheckPointTs: 1,
 		},
@@ -418,16 +417,16 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 			CheckPointTs: 2,
 		},
 	})
-	state.PatchTaskPosition(captureID1, func(position *TaskPosition) (*TaskPosition, bool, error) {
+	state.PatchTaskPosition(captureID1, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		position.CheckPointTs = 3
 		return position, true, nil
 	})
-	state.PatchTaskPosition(captureID2, func(position *TaskPosition) (*TaskPosition, bool, error) {
+	state.PatchTaskPosition(captureID2, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		position.ResolvedTs = 2
 		return position, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
+	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*model.TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
 		},
@@ -436,18 +435,18 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 			ResolvedTs:   2,
 		},
 	})
-	state.PatchTaskPosition(captureID1, func(position *TaskPosition) (*TaskPosition, bool, error) {
+	state.PatchTaskPosition(captureID1, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return nil, false, nil
 	})
-	state.PatchTaskPosition(captureID2, func(position *TaskPosition) (*TaskPosition, bool, error) {
+	state.PatchTaskPosition(captureID2, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return nil, true, nil
 	})
-	state.PatchTaskPosition(captureID1, func(position *TaskPosition) (*TaskPosition, bool, error) {
+	state.PatchTaskPosition(captureID1, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		position.Count = 6
 		return position, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*TaskPosition{
+	c.Assert(state.TaskPositions, check.DeepEquals, map[string]*model.TaskPosition{
 		captureID1: {
 			CheckPointTs: 3,
 			Count:        6,
@@ -458,85 +457,85 @@ func (s *stateSuite) TestPatchTaskPosition(c *check.C) {
 func (s *stateSuite) TestPatchTaskStatus(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
-	state.PatchTaskStatus(captureID1, func(status *TaskStatus) (*TaskStatus, bool, error) {
+	state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		c.Assert(status, check.IsNil)
-		return &TaskStatus{
-			Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}},
+		return &model.TaskStatus{
+			Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}},
 		}, true, nil
 	})
-	state.PatchTaskStatus(captureID2, func(status *TaskStatus) (*TaskStatus, bool, error) {
+	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		c.Assert(status, check.IsNil)
-		return &TaskStatus{
-			Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 1}},
+		return &model.TaskStatus{
+			Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}},
 		}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
-		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}}},
-		captureID2: {Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 1}}},
+	c.Assert(state.TaskStatuses, check.DeepEquals, map[model.CaptureID]*model.TaskStatus{
+		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}}},
+		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}}},
 	})
-	state.PatchTaskStatus(captureID1, func(status *TaskStatus) (*TaskStatus, bool, error) {
-		status.Tables[46] = &TableReplicaInfo{StartTs: 2}
+	state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+		status.Tables[46] = &model.TableReplicaInfo{StartTs: 2}
 		return status, true, nil
 	})
-	state.PatchTaskStatus(captureID2, func(status *TaskStatus) (*TaskStatus, bool, error) {
+	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		status.Tables[46].StartTs++
 		return status, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
-		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
-		captureID2: {Tables: map[TableID]*TableReplicaInfo{46: {StartTs: 2}}},
+	c.Assert(state.TaskStatuses, check.DeepEquals, map[model.CaptureID]*model.TaskStatus{
+		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
+		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 2}}},
 	})
-	state.PatchTaskStatus(captureID2, func(status *TaskStatus) (*TaskStatus, bool, error) {
+	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.TaskStatuses, check.DeepEquals, map[CaptureID]*TaskStatus{
-		captureID1: {Tables: map[TableID]*TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
+	c.Assert(state.TaskStatuses, check.DeepEquals, map[model.CaptureID]*model.TaskStatus{
+		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
 	})
 }
 
 func (s *stateSuite) TestPatchTaskWorkload(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
-	state.PatchTaskWorkload(captureID1, func(workload TaskWorkload) (TaskWorkload, bool, error) {
+	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		c.Assert(workload, check.IsNil)
-		return TaskWorkload{45: {Workload: 1}}, true, nil
+		return model.TaskWorkload{45: {Workload: 1}}, true, nil
 	})
-	state.PatchTaskWorkload(captureID2, func(workload TaskWorkload) (TaskWorkload, bool, error) {
+	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		c.Assert(workload, check.IsNil)
-		return TaskWorkload{46: {Workload: 1}}, true, nil
+		return model.TaskWorkload{46: {Workload: 1}}, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
+	c.Assert(state.Workloads, check.DeepEquals, map[model.CaptureID]model.TaskWorkload{
 		captureID1: {45: {Workload: 1}},
 		captureID2: {46: {Workload: 1}},
 	})
-	state.PatchTaskWorkload(captureID1, func(workload TaskWorkload) (TaskWorkload, bool, error) {
-		workload[46] = WorkloadInfo{Workload: 2}
+	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
+		workload[46] = model.WorkloadInfo{Workload: 2}
 		return workload, true, nil
 	})
-	state.PatchTaskWorkload(captureID2, func(workload TaskWorkload) (TaskWorkload, bool, error) {
-		workload[45] = WorkloadInfo{Workload: 3}
+	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
+		workload[45] = model.WorkloadInfo{Workload: 3}
 		return workload, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
+	c.Assert(state.Workloads, check.DeepEquals, map[model.CaptureID]model.TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 		captureID2: {45: {Workload: 3}, 46: {Workload: 1}},
 	})
-	state.PatchTaskWorkload(captureID2, func(workload TaskWorkload) (TaskWorkload, bool, error) {
+	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 		return nil, true, nil
 	})
 	stateTester.MustApplyPatches()
-	c.Assert(state.Workloads, check.DeepEquals, map[CaptureID]TaskWorkload{
+	c.Assert(state.Workloads, check.DeepEquals, map[model.CaptureID]model.TaskWorkload{
 		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
 	})
 }
@@ -567,24 +566,24 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 			},
 			expected: GlobalReactorState{
 				Owner: map[string]struct{}{"22317526c4fc9a37": {}, "22317526c4fc9a38": {}},
-				Captures: map[CaptureID]*CaptureInfo{"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
+				Captures: map[model.CaptureID]*model.CaptureInfo{"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 					ID:            "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 					AdvertiseAddr: "127.0.0.1:8300",
 				}},
-				Changefeeds: map[ChangeFeedID]*ChangefeedReactorState{
+				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
 					"test1": {
 						ID:           "test1",
-						TaskStatuses: map[string]*TaskStatus{},
-						TaskPositions: map[CaptureID]*TaskPosition{
+						TaskStatuses: map[string]*model.TaskStatus{},
+						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980719742451713, ResolvedTs: 421980720003809281},
 						},
-						Workloads: map[string]TaskWorkload{},
+						Workloads: map[string]model.TaskWorkload{},
 					},
 					"test2": {
 						ID:            "test2",
-						TaskStatuses:  map[string]*TaskStatus{},
-						TaskPositions: map[CaptureID]*TaskPosition{},
-						Workloads: map[CaptureID]TaskWorkload{
+						TaskStatuses:  map[string]*model.TaskStatus{},
+						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
+						Workloads: map[model.CaptureID]model.TaskWorkload{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
 							"55551111":                             {46: {Workload: 1}},
 						},
@@ -619,13 +618,13 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 			},
 			expected: GlobalReactorState{
 				Owner:    map[string]struct{}{"22317526c4fc9a38": {}},
-				Captures: map[CaptureID]*CaptureInfo{},
-				Changefeeds: map[ChangeFeedID]*ChangefeedReactorState{
+				Captures: map[model.CaptureID]*model.CaptureInfo{},
+				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
 					"test2": {
 						ID:            "test2",
-						TaskStatuses:  map[string]*TaskStatus{},
-						TaskPositions: map[CaptureID]*TaskPosition{},
-						Workloads: map[CaptureID]TaskWorkload{
+						TaskStatuses:  map[string]*model.TaskStatus{},
+						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
+						Workloads: map[model.CaptureID]model.TaskWorkload{
 							"55551111": {46: {Workload: 1}},
 						},
 					},
@@ -651,24 +650,24 @@ func (s *stateSuite) TestGlobalStateUpdate(c *check.C) {
 func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
 	state := NewChangefeedReactorState("test1")
-	stateTester := orchestrator.NewReactorStateTester(c, state, nil)
+	stateTester := NewReactorStateTester(c, state, nil)
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
-	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
-		return &ChangeFeedInfo{SinkURI: "123", AdminJobType: AdminNone, Config: &config.ReplicaConfig{}}, true, nil
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{SinkURI: "123", AdminJobType: model.AdminNone, Config: &config.ReplicaConfig{}}, true, nil
 	})
-	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
-		return &ChangeFeedStatus{ResolvedTs: 1, AdminJobType: AdminNone}, true, nil
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		return &model.ChangeFeedStatus{ResolvedTs: 1, AdminJobType: model.AdminNone}, true, nil
 	})
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
 	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
 
-	state.PatchInfo(func(info *ChangeFeedInfo) (*ChangeFeedInfo, bool, error) {
-		info.AdminJobType = AdminStop
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		info.AdminJobType = model.AdminStop
 		return info, true, nil
 	})
-	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.ResolvedTs = 2
 		return status, true, nil
 	})
@@ -676,7 +675,7 @@ func (s *stateSuite) TestCheckChangefeedNormal(c *check.C) {
 	stateTester.MustApplyPatches()
 	c.Assert(state.Status.ResolvedTs, check.Equals, uint64(1))
 
-	state.PatchStatus(func(status *ChangeFeedStatus) (*ChangeFeedStatus, bool, error) {
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.ResolvedTs = 2
 		return status, true, nil
 	})
