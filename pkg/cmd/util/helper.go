@@ -25,8 +25,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
@@ -151,7 +151,7 @@ func JSONPrint(cmd *cobra.Command, v interface{}) error {
 // VerifyAndGetTiCDCClusterVersion verifies and gets the version of ticdc.
 // If it is an incompatible version, an error is returned.
 func VerifyAndGetTiCDCClusterVersion(
-	ctx context.Context, cdcEtcdCli *kv.CDCEtcdClient,
+	ctx context.Context, cdcEtcdCli *etcd.CDCEtcdClient,
 ) (version.TiCDCClusterVersion, error) {
 	_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
 	if err != nil {

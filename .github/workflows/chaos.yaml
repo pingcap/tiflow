@@ -59,7 +59,7 @@ jobs:
         shell: bash
 
     # this may be failed sometimes, and I want to exit the workflow directly if failed,
-    # but GitHub Actions doesnt' support early-exit yet, see https://github.com/actions/runner/issues/662.
+    # but GitHub Actions doesn't support early-exit yet, see https://github.com/actions/runner/issues/662.
     # so, simply wait for a long time.
       - name: Wait for coredns
         run: |
@@ -130,8 +130,11 @@ jobs:
           echo "wait for TiCDC Ready"
           kubectl wait --for=condition=Ready pod/cdc-0 -n playground --timeout=300s || true
 
-          echo "show pvc"
-          kubectl get pvc -n playground
+          echo "show pod"
+          kubectl get pod -n playground
+
+          echo "show cdc log"
+          kubectl logs cdc-0 -n playground
 
       - name: Create CDC changefeed
         run: |

@@ -110,7 +110,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	})
 	failpoint.Inject("sleep-in-owner-tick", nil)
 	ctx := stdCtx.(cdcContext.Context)
-	state := rawState.(*model.GlobalReactorState)
+	state := rawState.(*orchestrator.GlobalReactorState)
 	o.updateMetrics(state)
 	if !o.clusterVersionConsistent(state.Captures) {
 		// sleep one second to avoid printing too much log
@@ -215,7 +215,7 @@ func (o *Owner) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
 }
 
-func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
+func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, info != nil, nil
 	})
@@ -239,7 +239,7 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 	}
 }
 
-func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
+func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
@@ -313,7 +313,7 @@ func (o *Owner) pushOwnerJob(job *ownerJob) {
 }
 
 func (o *Owner) updateGCSafepoint(
-	ctx context.Context, state *model.GlobalReactorState,
+	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
 	forceUpdate := false
 	minCheckpointTs := uint64(math.MaxUint64)

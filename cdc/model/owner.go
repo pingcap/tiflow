@@ -83,7 +83,7 @@ type TaskPosition struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// The count of events were synchronized. This is updated by corresponding processor.
 	Count uint64 `json:"count"`
-	// Error code when error happens
+	// Error when error happens
 	Error *RunningError `json:"error"`
 }
 

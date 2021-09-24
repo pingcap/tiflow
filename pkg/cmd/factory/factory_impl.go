@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/version"
 	pd "github.com/tikv/pd/client"
@@ -73,7 +73,7 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 }
 
 // EtcdClient creates new cdc etcd client.
-func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
+func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 
 	tlsConfig, err := f.ToTLSConfig()
@@ -121,7 +121,7 @@ func (f *factoryImpl) EtcdClient() (*kv.CDCEtcdClient, error) {
 		return nil, err
 	}
 
-	client := kv.NewCDCEtcdClient(ctx, etcdClient)
+	client := etcd.NewCDCEtcdClient(ctx, etcdClient)
 	return &client, nil
 }
 
@@ -159,9 +159,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 		return nil, errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", pdAddr)
 	}
 
-	// TODO: we need to check all pd endpoint and make sure they belong to the same cluster.
-	// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673021305.
-	err = version.CheckClusterVersion(ctx, pdClient, pdEndpoints[0], credential, true)
+	err = version.CheckClusterVersion(ctx, pdClient, pdEndpoints, credential, true)
 	if err != nil {
 		return nil, err
 	}

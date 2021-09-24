@@ -78,7 +78,7 @@ func NewManager4Test(
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
 func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
-	globalState := state.(*model.GlobalReactorState)
+	globalState := state.(*orchestrator.GlobalReactorState)
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
