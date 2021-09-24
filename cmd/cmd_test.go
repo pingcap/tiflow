@@ -256,19 +256,19 @@ func (s *commonUtilSuite) TestNoArgs(c *check.C) {
 	os.Args = flags
 	err := cmd.Execute()
 	c.Assert(err, check.NotNil)
-	c.Assert(err.Error(), check.Matches, ".*unknown command.*u3000-c.*for.*create.*")
+	c.Assert(err, check.ErrorMatches, ".*unknown command.*u3000-c.*for.*create.*")
 
 	// there is an unknown flag "aa" after -c
 	flags = []string{"none", "--sink-uri=blackhole://", "-c=test1", "aa"}
 	os.Args = flags
 	err = cmd.Execute()
 	c.Assert(err, check.NotNil)
-	c.Assert(err.Error(), check.Matches, ".*unknown command.*aa.*for.*create.*")
+	c.Assert(err, check.ErrorMatches, ".*unknown command.*aa.*for.*create.*")
 
 	// there is a "国" before the flag -start-ts
 	flags = []string{"none", "--sink-uri=blackhole://", "-c=test1", "国--start-ts=0"}
 	os.Args = flags
 	err = cmd.Execute()
 	c.Assert(err, check.NotNil)
-	c.Assert(err.Error(), check.Matches, ".*unknown command.*国.*for.*create.*")
+	c.Assert(err, check.ErrorMatches, ".*unknown command.*国.*for.*create.*")
 }
