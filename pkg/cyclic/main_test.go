@@ -16,9 +16,9 @@ package cyclic
 import (
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 )
 
 func TestMain(m *testing.M) {
-	util.SetUpLeakTest(m)
+	leakutil.SetUpLeakTest(m)
 }
