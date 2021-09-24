@@ -256,6 +256,8 @@ func (s *BaseScheduleDispatcher) Tick(
 		s.needRebalance = true
 	}
 
+	allTables := s.tables.GetAllTables()
+	allCount := len(allTables)
 	runningCount := 0
 	for _, record := range s.tables.GetAllTables() {
 		if record.Status == runningTable {
@@ -263,12 +265,13 @@ func (s *BaseScheduleDispatcher) Tick(
 		}
 	}
 
-	allTasksNormal := runningCount == len(currentTables)
+	allTasksNormal := runningCount == len(currentTables) && runningCount == allCount
 	s.lastTickCaptureCount = len(captures)
 
 	if !allTasksNormal {
 		// TODO add detailed log
 		s.logger.Info("scheduler has pending jobs")
+		s.tables.PrintStatus(s.logger.Debug)
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
@@ -277,6 +280,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		zap.Uint64("checkpoint-ts", newCheckpointTs),
 		zap.Uint64("resolved-ts", resolvedTs),
 		zap.Any("capture-status", s.captureStatus))
+	s.tables.PrintStatus(s.logger.Debug)
 	return
 }
 
@@ -512,7 +516,9 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 		record.Status = runningTable
 		delete(s.moveTableTarget, tableID)
 	case removingTable:
-		s.tables.RemoveTableRecord(tableID)
+		if !s.tables.RemoveTableRecord(tableID) {
+			s.logger.Panic("failed to remove table", zap.Int64("table-id", tableID))
+		}
 	case runningTable:
 		s.logger.Panic("response to invalid dispatch message",
 			zap.String("source", captureID),
@@ -539,7 +545,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 				zap.String("capture-id-1", record.CaptureID),
 				zap.String("capture-id-2", captureID))
 		}
-		s.tables.AddTableRecord(&util.TableRecord{CaptureID: captureID, Status: addingTable})
+		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: addingTable})
 	}
 	for _, tableID := range running {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
@@ -548,7 +554,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 				zap.String("capture-id-1", record.CaptureID),
 				zap.String("capture-id-2", captureID))
 		}
-		s.tables.AddTableRecord(&util.TableRecord{CaptureID: captureID, Status: runningTable})
+		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: runningTable})
 	}
 	for _, tableID := range removing {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
@@ -557,7 +563,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 				zap.String("capture-id-1", record.CaptureID),
 				zap.String("capture-id-2", captureID))
 		}
-		s.tables.AddTableRecord(&util.TableRecord{CaptureID: captureID, Status: removingTable})
+		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: removingTable})
 	}
 
 	if _, ok := s.captureStatus[captureID]; !ok {

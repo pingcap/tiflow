@@ -37,6 +37,8 @@ type Agent interface {
 	// The returned map should not be modified by the caller.
 	Tick(ctx context.Context) error
 
+	LastSentCheckpointTs() model.Ts
+
 	// OnOwnerDispatchedTask is called when the processor node receives a table operation
 	// from the owner.
 	OnOwnerDispatchedTask(
@@ -52,8 +54,6 @@ type Agent interface {
 		ownerCaptureID model.CaptureID,
 		ownerRev int64,
 	)
-
-	CanUpdateCheckpoint(ctx context.Context) bool
 }
 
 // TableExecutor is an abstraction for "Processor".
@@ -81,11 +81,14 @@ type ProcessorMessenger interface {
 }
 
 type BaseAgent struct {
-	agentMu                      sync.Mutex
-	pendingOps                   deque.Deque // stores *AgentOperation
-	hasOwnerRequestedSync        bool
-	lastSentCheckpoint           time.Time
-	waitingPostCheckpointBarrier bool
+	agentMu               sync.Mutex
+	pendingOps            deque.Deque // stores *AgentOperation
+	hasOwnerRequestedSync bool
+
+	// TODO refactor these
+	lastSendCheckpointTime time.Time
+	lastSentCheckpoint     model.Ts
+	onRouteCheckpointTs    model.Ts
 
 	tableOperations map[model.TableID]*AgentOperation
 
@@ -240,12 +243,17 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 	return nil
 }
 
+func (a *BaseAgent) LastSentCheckpointTs() model.Ts {
+	return a.lastSentCheckpoint
+}
+
 func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
-	if a.waitingPostCheckpointBarrier {
+	if a.onRouteCheckpointTs != 0 {
 		if !a.communicator.Barrier(ctx) {
 			return nil
 		}
-		a.waitingPostCheckpointBarrier = false
+		a.lastSentCheckpoint = a.onRouteCheckpointTs
+		a.onRouteCheckpointTs = 0
 	}
 
 	if len(a.executor.GetAllCurrentTables()) == 0 {
@@ -253,7 +261,7 @@ func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
 		return nil
 	}
 
-	if time.Since(a.lastSentCheckpoint) < defaultSendCheckpointInterval {
+	if time.Since(a.lastSendCheckpointTime) < defaultSendCheckpointInterval {
 		return nil
 	}
 
@@ -263,8 +271,8 @@ func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if done {
-		a.waitingPostCheckpointBarrier = true
-		a.lastSentCheckpoint = time.Now()
+		a.onRouteCheckpointTs = checkpointTs
+		a.lastSendCheckpointTime = time.Now()
 		return nil
 	}
 	return nil
@@ -318,20 +326,6 @@ func (a *BaseAgent) OnOwnerAnnounce(
 	a.logger.Debug("OnOwnerAnnounce",
 		zap.String("owner-capture-id", ownerCaptureID),
 		zap.Int64("owner-rev", ownerRev))
-}
-
-func (a *BaseAgent) CanUpdateCheckpoint(ctx context.Context) bool {
-	if atomic.SwapInt32(&a.needResetCommunicator, 0) == 1 {
-		a.communicator.OnOwnerChanged(ctx, a.currentOwner())
-	}
-
-	a.agentMu.Lock()
-	defer a.agentMu.Unlock()
-
-	if a.hasOwnerRequestedSync {
-		return false
-	}
-	return a.communicator.Barrier(ctx)
 }
 
 // checkOwnerInfo tries to update the stored ownerInfo, and returns false if the

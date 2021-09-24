@@ -119,14 +119,16 @@ func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.Tab
 	}
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
+	localCheckpointTs := p.messenger.LastSentCheckpointTs()
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+	if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
+		return false, nil
+	}
 	if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 		log.Debug("Operation done signal received",
 			cdcContext.ZapFieldChangefeed(ctx),
 			zap.Int64("tableID", tableID))
 		return true, nil
-	}
-	if p.checkpointTs > p.changefeed.Status.CheckpointTs {
-		return false, nil
 	}
 	return false, nil
 }
