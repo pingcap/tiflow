@@ -111,11 +111,11 @@ func (s *GlobalReactorState) GetPatches() [][]DataPatch {
 
 // ChangefeedReactorState represents a changefeed state which stores all key-value pairs of a changefeed in ETCD
 type ChangefeedReactorState struct {
-	ID            model.ChangeFeedID
-	Info          *model.ChangeFeedInfo
-	Status        *model.ChangeFeedStatus
-	TaskPositions map[model.CaptureID]*model.TaskPosition
-	TaskStatuses  map[model.CaptureID]*model.TaskStatus
+	ID            model.ChangeFeedID                      `json:"id"`
+	Info          *model.ChangeFeedInfo                   `json:"info"`
+	Status        *model.ChangeFeedStatus                 `json:"status"`
+	TaskPositions map[model.CaptureID]*model.TaskPosition `json:"task-positions"`
+	TaskStatuses  map[model.CaptureID]*model.TaskStatus   `json:"task-statuses"`
 	Workloads     map[model.CaptureID]model.TaskWorkload
 
 	pendingPatches        []DataPatch

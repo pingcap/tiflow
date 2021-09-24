@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -96,6 +97,16 @@ func newChangefeed4Test(
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	return c
+}
+
+// debugInfo returns debug info or a changefeed
+// TODO: refine debug info, this function is not thread-safe
+func (c *changefeed) debugInfo() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"id":          c.id,
+		"state":       c.state,
+		"initialized": c.initialized,
+	})
 }
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {

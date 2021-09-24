@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"time"
 
 	"github.com/pingcap/check"
@@ -362,4 +363,22 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 		c.Fatal("timeout")
 	case <-ch:
 	}
+}
+
+func (s *ownerSuite) TestOwnerDebugInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	mockPDClient := &gc.MockPDClient{}
+	o := NewOwner(mockPDClient)
+	cf := "changefeed-test-1"
+	o.changefeeds[cf] = &changefeed{
+		id: cf,
+		state: &orchestrator.ChangefeedReactorState{
+			ID:     cf,
+			Info:   &model.ChangeFeedInfo{SinkURI: "blackhole://"},
+			Status: &model.ChangeFeedStatus{ResolvedTs: 100, CheckpointTs: 100},
+		},
+	}
+	info := o.debugInfo()
+	r := regexp.MustCompile("(?s).*changefeeds.*\"id\":\"changefeed-test-1\".*")
+	c.Assert(r.MatchString(string(info)), check.IsTrue)
 }

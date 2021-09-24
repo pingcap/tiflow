@@ -14,6 +14,7 @@
 package owner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -278,8 +279,10 @@ func (o *Owner) handleJobs() {
 	for _, job := range jobs {
 		changefeedID := job.changefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
-		if !exist {
-			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
+		// changefeeID is empty when job type is ownerJobTypeDebugInfo
+		if !exist && job.tp != ownerJobTypeDebugInfo {
+			log.Warn("changefeed not found when handle a job", zap.Any("job", job.changefeedID))
+			close(job.done)
 			continue
 		}
 		switch job.tp {
@@ -290,10 +293,24 @@ func (o *Owner) handleJobs() {
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeDebugInfo:
-			// TODO: implement this function
+			job.debugInfoWriter.Write(o.debugInfo())
 		}
 		close(job.done)
 	}
+}
+
+func (o *Owner) debugInfo() []byte {
+	var buf bytes.Buffer
+	buf.WriteString("** changefeeds **:\n")
+	for _, info := range o.changefeeds {
+		debugI, err := info.debugInfo()
+		if err != nil {
+			log.Warn("failed to get changefeed debug info", zap.Error(err))
+		} else {
+			buf.WriteString(fmt.Sprintf("%s\n", debugI))
+		}
+	}
+	return buf.Bytes()
 }
 
 func (o *Owner) takeOwnerJobs() []*ownerJob {
