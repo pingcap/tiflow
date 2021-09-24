@@ -140,7 +140,7 @@ function test_owner_cleanup_stale_tasks() {
 	sleep 3
 
 	# simulate task status is deleted but task position stales
-	etcdctl del /tidb/cdc/task/status --prefix
+	ETCDCTL_API=3 etcdctl del /tidb/cdc/task/status --prefix
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8302" --logsuffix test_owner_cleanup_stale_tasks.server3
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"is-owner\": true'"
 
