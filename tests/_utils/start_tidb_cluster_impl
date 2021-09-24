@@ -12,32 +12,33 @@ pd_config=
 multiple_upstream_pd=
 
 while [[ ${1} ]]; do
-    case "${1}" in
-        --workdir)
-            OUT_DIR=${2}
-            shift
-            ;;
-        --tidb-config)
-            tidb_config=${2}
-            shift
-            ;;
-        --pd-config)
-            pd_config=${2}
-            shift
-            ;;
-        --multiple-upstream-pd)
-            multiple_upstream_pd=${2}
-            shift
-            ;;
-        *)
-            echo "Unknown parameter: ${1}" >&2
-            exit 1
-    esac
+	case "${1}" in
+	--workdir)
+		OUT_DIR=${2}
+		shift
+		;;
+	--tidb-config)
+		tidb_config=${2}
+		shift
+		;;
+	--pd-config)
+		pd_config=${2}
+		shift
+		;;
+	--multiple-upstream-pd)
+		multiple_upstream_pd=${2}
+		shift
+		;;
+	*)
+		echo "Unknown parameter: ${1}" >&2
+		exit 1
+		;;
+	esac
 
-    if ! shift; then
-        echo 'Missing parameter argument.' >&2
-        exit 1
-    fi
+	if ! shift; then
+		echo 'Missing parameter argument.' >&2
+		exit 1
+	fi
 done
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -47,12 +48,11 @@ stop_tidb_cluster
 
 cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 
-
 # pd server config file
 if [[ "$pd_config" != "" ]]; then
-    cat $pd_config > $OUT_DIR/pd-config.toml
+	cat $pd_config >$OUT_DIR/pd-config.toml
 else
-    cat - >"$OUT_DIR/pd-config.toml" <<EOF
+	cat - >"$OUT_DIR/pd-config.toml" <<EOF
 [replication]
 # Set it to 1 to make sure we have enough replicas to run placement-rules.
 max-replicas = 1
@@ -62,58 +62,58 @@ fi
 
 echo "Starting Upstream PD..."
 if [[ "$multiple_upstream_pd" == "true" ]]; then
-    pd_count=3
-    initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1},pd2=http://${UP_PD_HOST_2}:${UP_PD_PEER_PORT_2},pd3=http://${UP_PD_HOST_3}:${UP_PD_PEER_PORT_3}"
+	pd_count=3
+	initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1},pd2=http://${UP_PD_HOST_2}:${UP_PD_PEER_PORT_2},pd3=http://${UP_PD_HOST_3}:${UP_PD_PEER_PORT_3}"
 else
-    pd_count=1
-    initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1}"
+	pd_count=1
+	initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1}"
 fi
 for idx in $(seq 1 $pd_count); do
-    host="UP_PD_HOST_$idx"
-    port="UP_PD_PORT_$idx"
-    peer_port="UP_PD_PEER_PORT_$idx"
-    pd-server \
-        --advertise-client-urls http://${!host}:${!port} \
-        --client-urls http://0.0.0.0:${!port} \
-        --advertise-peer-urls http://${!host}:${!peer_port} \
-        --peer-urls http://0.0.0.0:${!peer_port} \
-        --config "$OUT_DIR/pd-config.toml" \
-        --log-file "$OUT_DIR/pd$idx.log" \
-        --data-dir "$OUT_DIR/pd$idx" \
-        --name="pd$idx" \
-        --initial-cluster=${initial_cluster} &
+	host="UP_PD_HOST_$idx"
+	port="UP_PD_PORT_$idx"
+	peer_port="UP_PD_PEER_PORT_$idx"
+	pd-server \
+		--advertise-client-urls http://${!host}:${!port} \
+		--client-urls http://0.0.0.0:${!port} \
+		--advertise-peer-urls http://${!host}:${!peer_port} \
+		--peer-urls http://0.0.0.0:${!peer_port} \
+		--config "$OUT_DIR/pd-config.toml" \
+		--log-file "$OUT_DIR/pd$idx.log" \
+		--data-dir "$OUT_DIR/pd$idx" \
+		--name="pd$idx" \
+		--initial-cluster=${initial_cluster} &
 done
 
 echo "Starting Downstream PD..."
 pd-server \
-    --advertise-client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-    --client-urls http://0.0.0.0:${DOWN_PD_PORT} \
-    --advertise-peer-urls http://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT} \
-    --peer-urls http://0.0.0.0:${DOWN_PD_PEER_PORT} \
-    --config "$OUT_DIR/pd-config.toml" \
-    --log-file "$OUT_DIR/down_pd.log" \
-    --data-dir "$OUT_DIR/down_pd" &
+	--advertise-client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+	--client-urls http://0.0.0.0:${DOWN_PD_PORT} \
+	--advertise-peer-urls http://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT} \
+	--peer-urls http://0.0.0.0:${DOWN_PD_PEER_PORT} \
+	--config "$OUT_DIR/pd-config.toml" \
+	--log-file "$OUT_DIR/down_pd.log" \
+	--data-dir "$OUT_DIR/down_pd" &
 
 # wait until PD is online...
 for idx in $(seq 1 $pd_count); do
-    host="UP_PD_HOST_$idx"
-    port="UP_PD_PORT_$idx"
+	host="UP_PD_HOST_$idx"
+	port="UP_PD_PORT_$idx"
 
-    while ! curl -o /dev/null -sf http://${!host}:${!port}/pd/api/v1/version; do
-        sleep 1
-    done
+	while ! curl -o /dev/null -sf http://${!host}:${!port}/pd/api/v1/version; do
+		sleep 1
+	done
 
-    while [ -z "$(curl http://${!host}:${!port}/pd/health 2> /dev/null | grep 'health' | grep 'true')" ]; do
-        sleep 1
-    done
+	while [ -z "$(curl http://${!host}:${!port}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+		sleep 1
+	done
 done
 
 while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
-    sleep 1
+	sleep 1
 done
 
-while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/health 2> /dev/null | grep 'health' | grep 'true')" ]; do
-    sleep 1
+while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+	sleep 1
 done
 
 # Tries to limit the max number of open files under the system limit
@@ -132,9 +132,9 @@ EOF
 
 # tidb server config file
 if [[ "$tidb_config" != "" ]]; then
-    cat $tidb_config > $OUT_DIR/tidb-config.toml
+	cat $tidb_config >$OUT_DIR/tidb-config.toml
 else
-    cat - >"$OUT_DIR/tidb-config.toml" <<EOF
+	cat - >"$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
 alter-primary-key = true
 new_collations_enabled_on_first_bootstrap = true
@@ -143,87 +143,87 @@ fi
 
 echo "Starting Upstream TiKV..."
 for idx in $(seq 1 3); do
-    host="UP_TIKV_HOST_$idx"
-    port="UP_TIKV_PORT_$idx"
-    status_port="UP_TIKV_STATUS_PORT_$idx"
-    tikv-server \
-        --pd ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
-        -A ${!host}:${!port} \
-        --status-addr ${!host}:${!status_port} \
-        --log-file "$OUT_DIR/tikv$idx.log" \
-        --log-level debug \
-        -C "$OUT_DIR/tikv-config.toml" \
-        -s "$OUT_DIR/tikv$idx" &
+	host="UP_TIKV_HOST_$idx"
+	port="UP_TIKV_PORT_$idx"
+	status_port="UP_TIKV_STATUS_PORT_$idx"
+	tikv-server \
+		--pd ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
+		-A ${!host}:${!port} \
+		--status-addr ${!host}:${!status_port} \
+		--log-file "$OUT_DIR/tikv$idx.log" \
+		--log-level debug \
+		-C "$OUT_DIR/tikv-config.toml" \
+		-s "$OUT_DIR/tikv$idx" &
 done
 
 echo "Starting Downstream TiKV..."
 tikv-server \
-    --pd ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-    -A ${DOWN_TIKV_HOST}:${DOWN_TIKV_PORT} \
-    --status-addr ${DOWN_TIKV_HOST}:${DOWN_TIKV_STATUS_PORT} \
-    --log-file "$OUT_DIR/tikv_down.log" \
-    --log-level debug \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv_down" &
+	--pd ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+	-A ${DOWN_TIKV_HOST}:${DOWN_TIKV_PORT} \
+	--status-addr ${DOWN_TIKV_HOST}:${DOWN_TIKV_STATUS_PORT} \
+	--log-file "$OUT_DIR/tikv_down.log" \
+	--log-level debug \
+	-C "$OUT_DIR/tikv-config.toml" \
+	-s "$OUT_DIR/tikv_down" &
 
 sleep 2
 
 echo "Starting Upstream TiDB..."
 tidb-server \
-    -P ${UP_TIDB_PORT} \
-    -config "$OUT_DIR/tidb-config.toml" \
-    --store tikv \
-    --path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
-    --status=${UP_TIDB_STATUS} \
-    --log-file "$OUT_DIR/tidb.log" &
+	-P ${UP_TIDB_PORT} \
+	-config "$OUT_DIR/tidb-config.toml" \
+	--store tikv \
+	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
+	--status=${UP_TIDB_STATUS} \
+	--log-file "$OUT_DIR/tidb.log" &
 
 tidb-server \
-    -P ${UP_TIDB_OTHER_PORT} \
-    -config "$OUT_DIR/tidb-config.toml" \
-    --store tikv \
-    --path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
-    --status=${UP_TIDB_OTHER_STATUS} \
-    --log-file "$OUT_DIR/tidb_other.log" &
+	-P ${UP_TIDB_OTHER_PORT} \
+	-config "$OUT_DIR/tidb-config.toml" \
+	--store tikv \
+	--path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
+	--status=${UP_TIDB_OTHER_STATUS} \
+	--log-file "$OUT_DIR/tidb_other.log" &
 
 echo "Starting Downstream TiDB..."
 tidb-server \
-    -P ${DOWN_TIDB_PORT} \
-    -config "$OUT_DIR/tidb-config.toml" \
-    --store tikv \
-    --path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
-    --status=${DOWN_TIDB_STATUS} \
-    --log-file "$OUT_DIR/tidb_down.log" &
+	-P ${DOWN_TIDB_PORT} \
+	-config "$OUT_DIR/tidb-config.toml" \
+	--store tikv \
+	--path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+	--status=${DOWN_TIDB_STATUS} \
+	--log-file "$OUT_DIR/tidb_down.log" &
 
 echo "Verifying Upstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start upstream TiDB'
-        exit 2
-    fi
-    sleep 2
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start upstream TiDB'
+		exit 2
+	fi
+	sleep 2
 done
 
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start upstream TiDB'
-        exit 2
-    fi
-    sleep 2
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start upstream TiDB'
+		exit 2
+	fi
+	sleep 2
 done
 
 echo "Verifying Downstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start downstream TiDB'
-        exit 1
-    fi
-    sleep 2
+	i=$((i + 1))
+	if [ "$i" -gt 60 ]; then
+		echo 'Failed to start downstream TiDB'
+		exit 1
+	fi
+	sleep 2
 done
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -318,21 +318,21 @@ tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
 echo "Verifying Upstream TiFlash is started..."
 # Make sure TiFlash is started.
 while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; do
-    i=$((i + 1))
-    if [ "$i" -gt 10 ]; then
-        cat ${OUT_DIR}/tiflash/log/proxy.log
-        cat ${OUT_DIR}/tiflash/log/server.log
-        cat ${OUT_DIR}/tiflash/log/error.log
-        echo 'Failed to start TiFlash'
-        exit 1
-    fi
-    sleep 2
+	i=$((i + 1))
+	if [ "$i" -gt 10 ]; then
+		cat ${OUT_DIR}/tiflash/log/proxy.log
+		cat ${OUT_DIR}/tiflash/log/server.log
+		cat ${OUT_DIR}/tiflash/log/error.log
+		echo 'Failed to start TiFlash'
+		exit 1
+	fi
+	sleep 2
 done
 
 echo "Starting CDC state checker..."
 cd $CUR/../../testing_utils/cdc_state_checker
 if [ ! -f ./cdc_state_checker ]; then
-  GO111MODULE=on go build
+	GO111MODULE=on go build
 fi
-./cdc_state_checker -pd ${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1} > $OUT_DIR/cdc_etcd_check.log &
+./cdc_state_checker -pd ${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1} >$OUT_DIR/cdc_etcd_check.log &
 cd $OUT_DIR
