@@ -7,7 +7,7 @@ pids=($(pidof $process))
 echo "list pids " ${pids[@]}
 
 if [ ${#pids[@]} == 0 ]; then
-    exit 0
+	exit 0
 fi
 
 pid=${pids[$RANDOM % ${#pids[@]}]}
@@ -17,15 +17,15 @@ kill $pid
 
 counter=0
 while [ $counter -lt $retry_count ]; do
-    ps -p $pid > /dev/null 2>&1
-    ret=$?
-    if [ "$ret" != "0" ]; then
-        echo "process $pid already exit"
-        exit 0
-    fi
-    ((counter+=1))
-    sleep 0.5
-    echo "wait process $pid exit for $counter-th time..."
+	ps -p $pid >/dev/null 2>&1
+	ret=$?
+	if [ "$ret" != "0" ]; then
+		echo "process $pid already exit"
+		exit 0
+	fi
+	((counter += 1))
+	sleep 0.5
+	echo "wait process $pid exit for $counter-th time..."
 done
 
 echo "wait process $pid exit timeout"
