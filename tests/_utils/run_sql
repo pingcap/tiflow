@@ -10,20 +10,20 @@ sql=${1}
 
 host=127.0.0.1
 if [ $# -gt 1 ]; then
-    shift
-    host=${1}
+	shift
+	host=${1}
 fi
 
 port=4000
 if [ $# -gt 1 ]; then
-    shift
-    port=${1}
+	shift
+	port=${1}
 fi
 
 if [ $# -gt 1 ]; then
-    shift
-    other=${*}
+	shift
+	other=${*}
 fi
 
-echo "[$(date)] Executing SQL: ${sql}" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
-mysql -uroot -h${host} -P${port} ${other} --default-character-set utf8mb4 -E -e "${sql}" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
+echo "[$(date)] Executing SQL: ${sql}" >"$OUT_DIR/sql_res.$TEST_NAME.txt"
+mysql -uroot -h${host} -P${port} ${other} --default-character-set utf8mb4 -E -e "${sql}" >"$OUT_DIR/sql_res.$TEST_NAME.txt"
