@@ -253,7 +253,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &checkSink{}, errCh, 0)
+	manager := NewManager(ctx, &checkSink{}, errCh, 0, "", "")
 
 	// Init table sinks.
 	goroutineNum := 2000
