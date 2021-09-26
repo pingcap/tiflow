@@ -17,20 +17,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func Test(t *testing.T) {
-	check.TestingT(t)
-}
-
-var _ = check.Suite(&testTypesSuite{})
-
-type testTypesSuite struct{}
-
-func (s *testTypesSuite) TestURLs(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestURLs(t *testing.T) {
+	t.Parallel()
 	urlstrs := []string{
 		"http://www.google.com:12306",
 		"http://192.168.199.111:1080",
@@ -43,12 +34,12 @@ func (s *testTypesSuite) TestURLs(c *check.C) {
 	}
 
 	urls, err := NewURLs(urlstrs)
-	c.Assert(err, check.IsNil)
-	c.Assert(urls.String(), check.Equals, strings.Join(sorted, ","))
+	require.Nil(t, err)
+	require.Equal(t, urls.String(), strings.Join(sorted, ","))
 }
 
-func (s *testTypesSuite) TestBadURLs(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestBadURLs(t *testing.T) {
+	t.Parallel()
 	badurls := [][]string{
 		{"http://192.168.199.111"},
 		{"127.0.0.1:1080"},
@@ -57,6 +48,6 @@ func (s *testTypesSuite) TestBadURLs(c *check.C) {
 
 	for _, badurl := range badurls {
 		_, err := NewURLs(badurl)
-		c.Assert(err, check.NotNil)
+		require.NotNil(t, err)
 	}
 }
