@@ -226,7 +226,11 @@ tools/bin/errdoc-gen: tools/check/go.mod
 
 tools/bin/golangci-lint:
 	cd tools/check; test -e ../bin/golangci-lint || \
+<<<<<<< HEAD
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.30.0
+=======
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.37.0
+>>>>>>> f5aac1716 (lint: make revive happy (#2896))
 
 tools/bin/shfmt: tools/check/go.mod
 	cd tools/check; test -e ../bin/shfmt || \
