@@ -18,13 +18,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	pd "github.com/tikv/pd/client"
@@ -76,7 +76,8 @@ func TestCheckClusterVersion(t *testing.T) {
 		if err == nil {
 			break
 		}
-		fmt.Fprintf(os.Stderr, "[ERROR]:%v", err)
+
+		assert.Failf(t, "http.Get fail, need retry", "%v", err)
 		if i == 19 {
 			require.FailNowf(t, "TestCheckClusterVersion fail", "http server timeout:%v", err)
 		}
