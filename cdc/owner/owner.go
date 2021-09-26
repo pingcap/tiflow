@@ -293,7 +293,10 @@ func (o *Owner) handleJobs() {
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeDebugInfo:
-			job.debugInfoWriter.Write(o.debugInfo())
+			_, err := job.debugInfoWriter.Write(o.debugInfo())
+			if err != nil {
+				log.Warn("write debug info failed", zap.Error(err))
+			}
 		}
 		close(job.done)
 	}
