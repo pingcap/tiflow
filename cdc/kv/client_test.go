@@ -1558,15 +1558,6 @@ ReceiveLoop:
 // logs the error and re-establish new request.
 func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 	defer testleak.AfterTest(c)()
-<<<<<<< HEAD
-
-	// test client v2
-	// enableKVClientV2 = true
-	// s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
-
-	// test client v1
-=======
->>>>>>> e81c08cd (kv: Remove old kvclient related code. (#2823))
 	s.testStreamRecvWithError(c, "1*return(\"injected stream recv error\")")
 }
 
@@ -1576,15 +1567,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-<<<<<<< HEAD
-	// test client v2
-	// enableKVClientV2 = true
-	// s.testStreamRecvWithError(c, "1*return(\"EOF\")")
-
-	// test client v1
-=======
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
->>>>>>> e81c08cd (kv: Remove old kvclient related code. (#2823))
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 }
 
@@ -2776,13 +2759,10 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 // The difference is the delay injected point for region 2
 func (s *etcdSuite) TestClientV1ErrNoPendingRegion(c *check.C) {
 	defer testleak.AfterTest(c)()
-<<<<<<< HEAD
-=======
 	s.testClientErrNoPendingRegion(c)
 }
 
 func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
->>>>>>> e81c08cd (kv: Remove old kvclient related code. (#2823))
 	defer s.TearDownTest(c)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2998,16 +2978,6 @@ eventLoop:
 	cancel()
 }
 
-<<<<<<< HEAD
-=======
-func (s *etcdSuite) TestKVClientForceReconnect(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-
-	s.testKVClientForceReconnect(c)
-}
-
->>>>>>> e81c08cd (kv: Remove old kvclient related code. (#2823))
 // TestConcurrentProcessRangeRequest when region range request channel is full,
 // the kv client can process it correctly without deadlock. This is more likely
 // to happen when region split and merge frequently and large stale requests exist.
