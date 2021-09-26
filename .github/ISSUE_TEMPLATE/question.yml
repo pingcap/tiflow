@@ -15,3 +15,9 @@ body:
           required: true
         - label:  Read the [documentation]((https://pingcap.com/docs/dev/reference/tools/ticdc/ticdc/))
           required: true
+    - type: textarea
+      id: question
+      attributes:
+        label: What is your question?
+      validations:
+        required: true
