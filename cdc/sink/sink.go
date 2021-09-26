@@ -118,3 +118,29 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	}
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 }
+
+// Validate the health of the sink
+func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string) error {
+	sinkFilter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return err
+	}
+	errCh := make(chan error)
+	// TODO: find a better way to verify a sinkURI is valid
+	s, err := NewSink(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
+	if err != nil {
+		return err
+	}
+	err = s.Close(ctx)
+	if err != nil {
+		return err
+	}
+	select {
+	case err = <-errCh:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+	return nil
+}
