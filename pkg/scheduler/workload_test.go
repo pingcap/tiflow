@@ -18,19 +18,12 @@ import (
 	"testing"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func Test(t *testing.T) { check.TestingT(t) }
-
-type workloadsSuite struct{}
-
-var _ = check.Suite(&workloadsSuite{})
-
-func (s *workloadsSuite) TestWorkloads(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestWorkloads(t *testing.T) {
+	t.Parallel()
 	w := make(workloads)
 	w.SetCapture("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
@@ -45,13 +38,13 @@ func (s *workloadsSuite) TestWorkloads(c *check.C) {
 	w.RemoveTable("capture1", 4)
 	w.RemoveTable("capture5", 4)
 	w.RemoveTable("capture1", 1)
-	c.Assert(w, check.DeepEquals, workloads{
+	require.Equal(t, w, workloads{
 		"capture1": {2: model.WorkloadInfo{Workload: 2}},
 		"capture2": {4: model.WorkloadInfo{Workload: 1}, 3: model.WorkloadInfo{Workload: 2}, 5: model.WorkloadInfo{Workload: 8}},
 		"capture3": {6: model.WorkloadInfo{Workload: 1}},
 	})
-	c.Assert(w.AvgEachTable(), check.Equals, uint64(2+1+2+8+1)/5)
-	c.Assert(w.SelectIdleCapture(), check.Equals, "capture3")
+	require.Equal(t, w.AvgEachTable(), uint64(2+1+2+8+1)/5)
+	require.Equal(t, w.SelectIdleCapture(), "capture3")
 
-	c.Assert(fmt.Sprintf("%.2f%%", w.Skewness()*100), check.Equals, "96.36%")
+	require.Equal(t, fmt.Sprintf("%.2f%%", w.Skewness()*100), "96.36%")
 }
