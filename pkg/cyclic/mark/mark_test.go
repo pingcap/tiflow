@@ -16,18 +16,11 @@ package mark
 import (
 	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type markSuite struct{}
-
-var _ = check.Suite(&markSuite{})
-
-func Test(t *testing.T) { check.TestingT(t) }
-
-func (s *markSuite) TestIsMarkTable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestIsMarkTable(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		schema, table string
 		isMarkTable   bool
@@ -45,7 +38,7 @@ func (s *markSuite) TestIsMarkTable(c *check.C) {
 	}
 
 	for _, test := range tests {
-		c.Assert(IsMarkTable(test.schema, test.table), check.Equals, test.isMarkTable,
-			check.Commentf("%v", test))
+		require.Equal(t, IsMarkTable(test.schema, test.table), test.isMarkTable,
+			"%v", test)
 	}
 }
