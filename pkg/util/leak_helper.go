@@ -19,6 +19,7 @@ import (
 	"go.uber.org/goleak"
 )
 
+// SetUpLeakTest sets and ignores some functions that do not need to be tested.
 func SetUpLeakTest(m *testing.M, options ...goleak.Option) {
 	opts := []goleak.Option{
 		goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
