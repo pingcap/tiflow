@@ -30,7 +30,7 @@ import (
 )
 
 type Messenger struct {
-	scheduler.Agent
+	*scheduler.BaseAgent
 
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
@@ -57,7 +57,7 @@ func newMessenger(
 		selfCaptureID: captureID,
 		barrierSeqs:   map[p2p.Topic]p2p.Seq{},
 	}
-	ret.Agent = scheduler.NewBaseAgent(changeFeedID, executor, ret)
+	ret.BaseAgent = scheduler.NewBaseAgent(changeFeedID, executor, ret)
 	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -37,23 +37,8 @@ type Agent interface {
 	// The returned map should not be modified by the caller.
 	Tick(ctx context.Context) error
 
+	// LastSentCheckpointTs returns the last checkpoint-ts already sent to the owner.
 	LastSentCheckpointTs() model.Ts
-
-	// OnOwnerDispatchedTask is called when the processor node receives a table operation
-	// from the owner.
-	OnOwnerDispatchedTask(
-		ownerCaptureID model.CaptureID,
-		ownerRev int64,
-		tableID model.TableID,
-		boundaryTs model.Ts,
-		isDelete bool)
-
-	// OnOwnerAnnounce is called when the processor node receives an owner request to send
-	// all its statuses, usually when a new owner has just come up.
-	OnOwnerAnnounce(
-		ownerCaptureID model.CaptureID,
-		ownerRev int64,
-	)
 }
 
 // TableExecutor is an abstraction for "Processor".
@@ -101,15 +86,13 @@ type BaseAgent struct {
 
 	communicator          ProcessorMessenger
 	needResetCommunicator int32
-
-	isInitialized bool
 }
 
 func NewBaseAgent(
 	changeFeedID model.ChangeFeedID,
 	executor TableExecutor,
 	messenger ProcessorMessenger,
-) Agent {
+) *BaseAgent {
 	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
 	return &BaseAgent{
 		pendingOps:            deque.NewDeque(),

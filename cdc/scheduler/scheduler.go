@@ -42,16 +42,6 @@ type ScheduleDispatcher interface {
 	// Rebalance triggers a rebalance operation.
 	// It should be thread-safe
 	Rebalance()
-
-	// OnAgentFinishedTableOperation is called when an agent has finished processing
-	// an operation associated with the table.
-	OnAgentFinishedTableOperation(captureID model.CaptureID, tableID model.TableID)
-
-	// OnAgentSyncTaskStatuses is called when an agent sends the schedule dispatcher its current states.
-	OnAgentSyncTaskStatuses(captureID model.CaptureID, running, adding, removing []model.TableID)
-
-	// OnAgentCheckpoint is called when an agent sends a checkpoint.
-	OnAgentCheckpoint(captureID model.CaptureID, checkpointTs model.Ts, resolvedTs model.Ts)
 }
 
 type ScheduleDispatcherCommunicator interface {
@@ -94,11 +84,11 @@ type BaseScheduleDispatcher struct {
 	callbacks ScheduleDispatcherCommunicator
 }
 
-func NewScheduleDispatcher(
+func NewBaseScheduleDispatcher(
 	changeFeedID model.ChangeFeedID,
 	callbacks ScheduleDispatcherCommunicator,
 	checkpointTs model.Ts,
-) ScheduleDispatcher {
+) *BaseScheduleDispatcher {
 	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
 	return &BaseScheduleDispatcher{
 		tables:          util.NewTableSet(),
@@ -134,11 +124,6 @@ const (
 type moveTableJob struct {
 	tableID model.TableID
 	target  model.CaptureID
-}
-
-type tableRecord struct {
-	Capture model.CaptureID
-	Status  util.TableStatus
 }
 
 func (s *BaseScheduleDispatcher) Tick(
@@ -484,6 +469,8 @@ func (s *BaseScheduleDispatcher) findTargetCapture() (model.CaptureID, bool) {
 	return candidate, true
 }
 
+// OnAgentFinishedTableOperation is called when a table operation has been finished by
+// the processor.
 func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.CaptureID, tableID model.TableID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -526,6 +513,7 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 	}
 }
 
+// OnAgentSyncTaskStatuses is called when the processor sends its complete current state.
 func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.CaptureID, running, adding, removing []model.TableID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -577,6 +565,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 	s.captureStatus[captureID].SyncStatus = captureSyncFinished
 }
 
+// OnAgentCheckpoint is called when the processor sends a checkpoint.
 func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, checkpointTs model.Ts, resolvedTs model.Ts) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

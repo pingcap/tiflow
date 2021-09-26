@@ -900,6 +900,9 @@ func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, leaseID clientv3.Le
 	defer cancel()
 
 	resp, err := c.Client.Get(ctx, CaptureOwnerKey, clientv3.WithFirstCreate()...)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
 	if len(resp.Kvs) == 0 {
 		return 0, concurrency.ErrElectionNoLeader
 	}

@@ -52,7 +52,7 @@ func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, 
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 
-	server = NewMessageServer(SenderID(serverID))
+	server = NewMessageServer(serverID)
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup

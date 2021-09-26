@@ -199,8 +199,8 @@ func (m *MessageServer) tick(ctx context.Context) error {
 		m.acksMapLock.RLock()
 		for topic, ack := range m.acksMap[peer.SenderID] {
 			acks = append(acks, &p2p.Ack{
-				Topic:   string(topic),
-				LastSeq: int64(ack),
+				Topic:   topic,
+				LastSeq: ack,
 			})
 		}
 		m.acksMapLock.RUnlock()
@@ -275,7 +275,7 @@ func (m *MessageServer) AddHandler(
 				zap.String("sender-id", senderID),
 				zap.String("topic", topic),
 				zap.Int64("skipped-Seq", entry.Sequence),
-				zap.Int64("last-ack", int64(lastAck)))
+				zap.Int64("last-ack", lastAck))
 			m.acksMapLock.Unlock()
 			return nil
 		}
@@ -295,7 +295,7 @@ func (m *MessageServer) AddHandler(
 		}
 
 		m.acksMapLock.Lock()
-		m.setAck(SenderID(senderID), Topic(entry.GetTopic()), Seq(entry.GetSequence()))
+		m.setAck(senderID, entry.GetTopic(), entry.GetSequence())
 		m.acksMapLock.Unlock()
 
 		return nil
@@ -731,5 +731,4 @@ func errorToRPCResponse(err error) p2p.SendMessageResponse {
 type poolEventArgs struct {
 	senderID string
 	entry    *p2p.MessageEntry
-	handler  *handler
 }
