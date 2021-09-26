@@ -18,25 +18,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
-	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/pkg/tempurl"
 )
-
-func Test(t *testing.T) {
-	check.TestingT(t)
-}
-
-type checkSuite struct{}
-
-var _ = check.Suite(&checkSuite{})
 
 type mockPDClient struct {
 	pd.Client
@@ -63,8 +56,8 @@ func (m *mockPDClient) ServeHTTP(resp http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCheckClusterVersion(t *testing.T) {
+	t.Parallel()
 	mock := mockPDClient{
 		Client: nil,
 	}
@@ -83,9 +76,9 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		if err == nil {
 			break
 		}
-		c.Error(err)
+		fmt.Fprintf(os.Stderr, "[ERROR]:%v", err)
 		if i == 19 {
-			c.Fatal("http server timeout", err)
+			require.FailNowf(t, "TestCheckClusterVersion fail", "http server timeout:%v", err)
 		}
 	}
 
@@ -97,7 +90,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	{
@@ -108,7 +101,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
-		c.Assert(err, check.ErrorMatches, ".*PD .* is not supported.*")
+		require.Regexp(t, ".*PD .* is not supported.*", err)
 	}
 
 	// Check maximum compatible PD.
@@ -120,7 +113,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
-		c.Assert(err, check.ErrorMatches, ".*PD .* is not supported.*")
+		require.Regexp(t, ".*PD .* is not supported.*", err)
 	}
 
 	{
@@ -132,9 +125,9 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: `1.0.0-alpha-271-g824ae7fd`}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
-		c.Assert(err, check.ErrorMatches, ".*TiKV .* is not supported.*")
+		require.Regexp(t, ".*TiKV .* is not supported.*", err)
 		err = CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	// Check maximum compatible TiKV.
@@ -147,7 +140,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: `10000.0.0`}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
-		c.Assert(err, check.ErrorMatches, ".*TiKV .* is not supported.*")
+		require.Regexp(t, ".*TiKV .* is not supported.*", err)
 	}
 
 	{
@@ -156,31 +149,29 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		}
 
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
-		c.Assert(err, check.ErrorMatches, ".*response status: .*")
+		require.Regexp(t, ".*response status: .*", err)
 	}
 }
 
-func (s *checkSuite) TestCompareVersion(c *check.C) {
-	defer testleak.AfterTest(c)()
-	c.Assert(semver.New("4.0.0-rc").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
-	c.Assert(semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
-	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
-	c.Assert(semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), check.Equals, 1)
+func TestCompareVersion(t *testing.T) {
+	require.Equal(t, semver.New("4.0.0-rc").Compare(*semver.New("4.0.0-rc.2")), -1)
+	require.Equal(t, semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), -1)
+	require.Equal(t, semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), -1)
+	require.Equal(t, semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), 1)
 
-	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
-	c.Assert(semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), check.Equals, 1)
-	c.Assert(semver.New(removeVAndHash("v3.0.0-beta-211-g09beefbe0-dirty")).
-		Compare(*semver.New("3.0.0-beta")), check.Equals, 0)
-	c.Assert(semver.New(removeVAndHash("v3.0.5-dirty")).
-		Compare(*semver.New("3.0.5")), check.Equals, 0)
-	c.Assert(semver.New(removeVAndHash("v3.0.5-beta.12-dirty")).
-		Compare(*semver.New("3.0.5-beta.12")), check.Equals, 0)
-	c.Assert(semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
-		Compare(*semver.New("2.1.0-rc.1")), check.Equals, 0)
+	require.Equal(t, semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), -1)
+	require.Equal(t, semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), 1)
+	require.Equal(t, semver.New(removeVAndHash("v3.0.0-beta-211-g09beefbe0-dirty")).
+		Compare(*semver.New("3.0.0-beta")), 0)
+	require.Equal(t, semver.New(removeVAndHash("v3.0.5-dirty")).
+		Compare(*semver.New("3.0.5")), 0)
+	require.Equal(t, semver.New(removeVAndHash("v3.0.5-beta.12-dirty")).
+		Compare(*semver.New("3.0.5-beta.12")), 0)
+	require.Equal(t, semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
+		Compare(*semver.New("2.1.0-rc.1")), 0)
 }
 
-func (s *checkSuite) TestReleaseSemver(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestReleaseSemver(t *testing.T) {
 	cases := []struct{ releaseVersion, releaseSemver string }{
 		{"None", ""},
 		{"HEAD", ""},
@@ -190,12 +181,12 @@ func (s *checkSuite) TestReleaseSemver(c *check.C) {
 
 	for _, cs := range cases {
 		ReleaseVersion = cs.releaseVersion
-		c.Assert(ReleaseSemver(), check.Equals, cs.releaseSemver, check.Commentf("%v", cs))
+		require.Equal(t, ReleaseSemver(), cs.releaseSemver, "%v", cs)
 	}
 }
 
-func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGetTiCDCClusterVersion(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		captureInfos []*model.CaptureInfo
 		expected     TiCDCClusterVersion
@@ -247,61 +238,59 @@ func (s *checkSuite) TestGetTiCDCClusterVersion(c *check.C) {
 	}
 	for _, tc := range testCases {
 		ver, err := GetTiCDCClusterVersion(tc.captureInfos)
-		c.Assert(err, check.IsNil)
-		c.Assert(ver, check.DeepEquals, tc.expected)
+		require.Nil(t, err)
+		require.Equal(t, ver, tc.expected)
 	}
 }
 
-func (s *checkSuite) TestTiCDCClusterVersionFeaturesCompatible(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestTiCDCClusterVersionFeaturesCompatible(t *testing.T) {
+	t.Parallel()
 	ver := TiCDCClusterVersion{semver.New("4.0.10")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), false)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.12")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), false)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.13")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.13-hotfix")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.14")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, false)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
 
 	ver = TiCDCClusterVersion{semver.New("5.0.0-rc")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, false)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), false)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.0.0")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.1.0")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.2.0-alpha")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.2.0-master")}
-	c.Assert(ver.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(ver.ShouldEnableOldValueByDefault(), check.Equals, true)
+	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
 
-	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), check.Equals, true)
-	c.Assert(TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), check.Equals, true)
+	require.Equal(t, TiCDCClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), true)
 }
 
-func (s *checkSuite) TestCheckTiCDCClusterVersion(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestCheckTiCDCClusterVersion(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		cdcClusterVersion TiCDCClusterVersion
 		expectedErr       string
@@ -331,9 +320,9 @@ func (s *checkSuite) TestCheckTiCDCClusterVersion(c *check.C) {
 
 	for _, tc := range testCases {
 		isUnknown, err := CheckTiCDCClusterVersion(tc.cdcClusterVersion)
-		c.Assert(isUnknown, check.Equals, tc.expectedUnknown)
+		require.Equal(t, isUnknown, tc.expectedUnknown)
 		if len(tc.expectedErr) != 0 {
-			c.Assert(err, check.ErrorMatches, tc.expectedErr)
+			require.Regexp(t, tc.expectedErr, err)
 		}
 	}
 }
