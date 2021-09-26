@@ -13,7 +13,7 @@ body:
           required: true
         - label: Searched open and closed [GitHub issues](https://github.com/pingcap/ticdc/issues?q=is%3Aissue)
           required: true
-        - label:  Read the [documentation]((https://pingcap.com/docs/dev/reference/tools/ticdc/ticdc/))
+        - label:  Read the [documentation](https://docs.pingcap.com/tidb/stable/ticdc-overview)
           required: true
   - type: textarea
     id: question
