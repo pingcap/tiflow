@@ -535,12 +535,6 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
-	// TODO: remove the following three lines after kv client v2 is enabled
-	cluster.AddStore(1, addr1)
-	cluster.AddStore(2, addr2)
-	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
-
-	/* TODO: after switch to kv client v2, enable the following codes
 	region3 := uint64(3)
 	region4 := uint64(4)
 	region5 := uint64(5)
@@ -551,7 +545,6 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	// worker exits because of empty maintained region
 	cluster.SplitRaw(region3, region4, []byte("b"), []uint64{6, 7}, 6)
 	cluster.SplitRaw(region4, region5, []byte("c"), []uint64{8, 9}, 9)
-	*/
 
 	baseAllocatedID := currentRequestID()
 <<<<<<< HEAD
