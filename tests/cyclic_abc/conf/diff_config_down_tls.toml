@@ -4,7 +4,6 @@ log-level = "info"
 chunk-size = 10
 check-thread-count = 4
 sample-percent = 100
-use-rowid = false
 use-checksum = false
 fix-sql-file = "fix.sql"
 

@@ -34,6 +34,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	ticdcutil "github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
@@ -347,8 +348,10 @@ func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 	if o.disableGCSafePointCheck {
 		return nil
 	}
-
-	return ticdcutil.CheckSafetyOfStartTs(ctx, o.pdClient, o.changefeedID, o.startTs)
+	// Ensure the start ts is validate in the next 1 hour.
+	const ensureTTL = 60 * 60.
+	return gc.EnsureChangefeedStartTsSafety(
+		ctx, o.pdClient, o.changefeedID, ensureTTL, o.startTs)
 }
 
 // validateTargetTs checks if targetTs is a valid value.
