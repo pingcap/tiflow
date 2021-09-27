@@ -35,6 +35,8 @@ import (
 //go:generate mockery --name=Reader --inpackage
 // Reader is a reader abstraction for redo log storage layer
 type Reader interface {
+	io.Closer
+
 	// ResetReader setup the reader boundary
 	ResetReader(ctx context.Context, startTs, endTs uint64) error
 
