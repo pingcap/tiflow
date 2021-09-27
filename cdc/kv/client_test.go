@@ -1572,8 +1572,6 @@ func (s *etcdSuite) TestStreamRecvWithErrorNormal(c *check.C) {
 // and re-establish new request
 func (s *etcdSuite) TestStreamRecvWithErrorIOEOF(c *check.C) {
 	defer testleak.AfterTest(c)()
-
-	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 	s.testStreamRecvWithError(c, "1*return(\"EOF\")")
 }
 
