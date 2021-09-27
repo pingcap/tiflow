@@ -144,16 +144,9 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
 	}
-	// changefeed metadata already erased from etcd, so we have to delete those changefeed from memory.
-	if len(o.changefeeds) != len(state.Changefeeds) {
-		for changefeedID, cfReactor := range o.changefeeds {
-			if _, exist := state.Changefeeds[changefeedID]; exist {
-				continue
-			}
-			cfReactor.Close()
-			delete(o.changefeeds, changefeedID)
-		}
-	}
+
+	o.evictChangeFeeds(state)
+
 	if atomic.LoadInt32(&o.closed) != 0 {
 		for _, cfReactor := range o.changefeeds {
 			cfReactor.Close()
@@ -161,6 +154,21 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 	return state, nil
+}
+
+// changefeed metadata already erased from etcd, so we have to delete those changefeed from memory.
+func (o *Owner) evictChangeFeeds(state *orchestrator.GlobalReactorState) {
+	if len(o.changefeeds) == len(state.Changefeeds) {
+		return
+	}
+
+	for changefeedID, cfReactor := range o.changefeeds {
+		if _, exist := state.Changefeeds[changefeedID]; exist {
+			continue
+		}
+		cfReactor.Close()
+		delete(o.changefeeds, changefeedID)
+	}
 }
 
 // EnqueueJob enqueues an admin job into an internal queue, and the Owner will handle the job in the next tick

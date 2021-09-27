@@ -129,7 +129,6 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 		return errors.Trace(err)
 	}
-
 	return nil
 }
 
