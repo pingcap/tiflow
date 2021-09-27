@@ -133,18 +133,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-<<<<<<< HEAD
-	etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
-	s.etcdClient = &etcdClient
-	if err := s.initDataDir(ctx); err != nil {
-=======
 
 	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &cdcEtcdClient
 
 	err = s.initDataDir(ctx)
 	if err != nil {
->>>>>>> 4c94d7880 (*: clean useless code && improvement the code struct (#2835))
 		return errors.Trace(err)
 	}
 
@@ -307,7 +301,7 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		etcdClient := kv.NewCDCEtcdClient(ctx, client)
+		etcdClient := etcd.NewCDCEtcdClient(ctx, client)
 		cli = &etcdClient
 		defer cli.Close()
 	}

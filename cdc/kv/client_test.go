@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -81,24 +81,16 @@ func (s *clientSuite) TearDownTest(c *check.C) {
 
 func (s *clientSuite) TestNewClose(c *check.C) {
 	defer testleak.AfterTest(c)()
-<<<<<<< HEAD
-	store := mocktikv.MustNewMVCCStore()
-	defer store.Close() //nolint:errcheck
-	cluster := mocktikv.NewCluster(store)
-	pdCli := mocktikv.NewPDClient(cluster)
-	defer pdCli.Close() //nolint:errcheck
-=======
 	defer s.TearDownTest(c)
-	rpcClient, _, pdClient, err := testutils.NewMockTiKV("", nil)
+	rpcClient, _, pdClient, err := mocktikv.NewTiKVAndPDClient("", nil)
 	c.Assert(err, check.IsNil)
 	defer pdClient.Close()
 	defer rpcClient.Close()
->>>>>>> 4c94d7880 (*: clean useless code && improvement the code struct (#2835))
 
 	grpcPool := NewGrpcPoolImpl(context.Background(), &security.Credential{})
 	defer grpcPool.Close()
-	cli := NewCDCClient(context.Background(), pdCli, nil, grpcPool)
-	err := cli.Close()
+	cli := NewCDCClient(context.Background(), pdClient, nil, grpcPool)
+	err = cli.Close()
 	c.Assert(err, check.IsNil)
 }
 

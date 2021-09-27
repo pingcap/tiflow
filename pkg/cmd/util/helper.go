@@ -22,6 +22,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/pingcap/ticdc/pkg/version"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

@@ -22,11 +22,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
-<<<<<<< HEAD
 	"github.com/pingcap/ticdc/pkg/config"
-=======
 	"github.com/pingcap/ticdc/pkg/etcd"
->>>>>>> 4c94d7880 (*: clean useless code && improvement the code struct (#2835))
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -41,7 +38,6 @@ func init() {
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	sorter.InitMetrics(registry)
-<<<<<<< HEAD
 	if config.NewReplicaImpl {
 		processor.InitMetrics(registry)
 		tablepipeline.InitMetrics(registry)
@@ -50,11 +46,9 @@ func init() {
 		initProcessorMetrics(registry)
 		initOwnerMetrics(registry)
 	}
-=======
 	processor.InitMetrics(registry)
 	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	etcd.InitMetrics(registry)
->>>>>>> 4c94d7880 (*: clean useless code && improvement the code struct (#2835))
 	initServerMetrics(registry)
 }
