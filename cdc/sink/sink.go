@@ -119,7 +119,7 @@ func New(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 }
 
-// Validate the health of the sink
+// Validate sink if given valid parameters.
 func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string) error {
 	sinkFilter, err := filter.NewFilter(cfg)
 	if err != nil {
