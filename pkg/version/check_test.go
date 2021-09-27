@@ -69,7 +69,8 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		Client: nil,
 	}
 	pdURL, _ := url.Parse(tempurl.Alloc())
-	pdHTTP := fmt.Sprintf("http://%s", pdURL.Host)
+	pdAddr := fmt.Sprintf("http://%s", pdURL.Host)
+	pdAddrs := []string{pdAddr}
 	srv := http.Server{Addr: pdURL.Host, Handler: &mock}
 	go func() {
 		//nolint:errcheck
@@ -78,7 +79,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	defer srv.Close()
 	for i := 0; i < 20; i++ {
 		time.Sleep(100 * time.Millisecond)
-		_, err := http.Get(pdHTTP)
+		_, err := http.Get(pdAddr)
 		if err == nil {
 			break
 		}
@@ -95,7 +96,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		mock.getAllStores = func() []*metapb.Store {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
 		c.Assert(err, check.IsNil)
 	}
 
@@ -106,7 +107,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		mock.getAllStores = func() []*metapb.Store {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
 		c.Assert(err, check.ErrorMatches, ".*PD .* is not supported.*")
 	}
 
@@ -118,7 +119,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 		mock.getAllStores = func() []*metapb.Store {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
 		c.Assert(err, check.ErrorMatches, ".*PD .* is not supported.*")
 	}
 
@@ -130,9 +131,9 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			// TiKV does not include 'v'.
 			return []*metapb.Store{{Version: `1.0.0-alpha-271-g824ae7fd`}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
 		c.Assert(err, check.ErrorMatches, ".*TiKV .* is not supported.*")
-		err = CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
+		err = CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
 		c.Assert(err, check.IsNil)
 	}
 
@@ -145,7 +146,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			// TiKV does not include 'v'.
 			return []*metapb.Store{{Version: `10000.0.0`}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
 		c.Assert(err, check.ErrorMatches, ".*TiKV .* is not supported.*")
 	}
 
@@ -154,7 +155,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return http.StatusBadRequest
 		}
 
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
 		c.Assert(err, check.ErrorMatches, ".*response status: .*")
 	}
 }

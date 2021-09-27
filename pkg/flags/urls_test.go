@@ -16,20 +16,12 @@ package flags
 import (
 	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func Test(t *testing.T) {
-	check.TestingT(t)
-}
+func TestNewURLsValue(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&testUrlsSuite{})
-
-type testUrlsSuite struct{}
-
-func (t *testUrlsSuite) TestNewURLsValue(c *check.C) {
-	defer testleak.AfterTest(c)()
 	cases := []struct {
 		url        string
 		hostString string
@@ -44,14 +36,15 @@ func (t *testUrlsSuite) TestNewURLsValue(c *check.C) {
 
 	for _, testCase := range cases {
 		urlsValue, err := NewURLsValue(testCase.url)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		hs := urlsValue.HostString()
-		c.Assert(hs, check.Equals, testCase.hostString)
+		require.Equal(t, testCase.hostString, hs)
 	}
 }
 
-func (t *testUrlsSuite) TestNewURLsValueError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestNewURLsValueError(t *testing.T) {
+	t.Parallel()
+
 	urls := []string{
 		"http:///192.168.199.111:2379",
 		"http://192.168.199.111",
@@ -60,6 +53,6 @@ func (t *testUrlsSuite) TestNewURLsValueError(c *check.C) {
 	}
 	for _, url := range urls {
 		_, err := NewURLsValue(url)
-		c.Assert(err, check.NotNil)
+		require.NotNil(t, err)
 	}
 }

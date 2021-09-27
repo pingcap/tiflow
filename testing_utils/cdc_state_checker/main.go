@@ -18,9 +18,8 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/security"
-
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
