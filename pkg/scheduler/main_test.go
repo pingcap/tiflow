@@ -11,22 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package scheduler
 
 import (
 	"testing"
 
-	"go.uber.org/goleak"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 )
 
-// SetUpLeakTest sets and ignores some functions that do not need to be tested.
-func SetUpLeakTest(m *testing.M, options ...goleak.Option) {
-	opts := []goleak.Option{
-		goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
-		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
-	}
-
-	opts = append(opts, options...)
-
-	goleak.VerifyTestMain(m, opts...)
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
