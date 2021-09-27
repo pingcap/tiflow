@@ -62,7 +62,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 				"/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -87,6 +87,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 						Sink:             &config.SinkConfig{Protocol: "default"},
 						Cyclic:           &config.CyclicConfig{},
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
+						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -118,7 +119,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 				"/tidb/cdc/capture/666777888",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -147,6 +148,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 						Sink:             &config.SinkConfig{Protocol: "default"},
 						Cyclic:           &config.CyclicConfig{},
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
+						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -184,7 +186,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 				"/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-fake",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -214,6 +216,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 						Sink:             &config.SinkConfig{Protocol: "default"},
 						Cyclic:           &config.CyclicConfig{},
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
+						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -252,7 +255,7 @@ func (s *stateSuite) TestChangefeedStateUpdate(c *check.C) {
 				"/tidb/cdc/task/status/666777888/test1",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -336,11 +339,12 @@ func (s *stateSuite) TestPatchInfo(c *check.C) {
 		SinkURI: "123",
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:    defaultConfig.Filter,
-			Mounter:   defaultConfig.Mounter,
-			Sink:      defaultConfig.Sink,
-			Cyclic:    defaultConfig.Cyclic,
-			Scheduler: defaultConfig.Scheduler,
+			Filter:     defaultConfig.Filter,
+			Mounter:    defaultConfig.Mounter,
+			Sink:       defaultConfig.Sink,
+			Cyclic:     defaultConfig.Cyclic,
+			Scheduler:  defaultConfig.Scheduler,
+			Consistent: defaultConfig.Consistent,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -353,11 +357,12 @@ func (s *stateSuite) TestPatchInfo(c *check.C) {
 		StartTs: 6,
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:    defaultConfig.Filter,
-			Mounter:   defaultConfig.Mounter,
-			Sink:      defaultConfig.Sink,
-			Cyclic:    defaultConfig.Cyclic,
-			Scheduler: defaultConfig.Scheduler,
+			Filter:     defaultConfig.Filter,
+			Mounter:    defaultConfig.Mounter,
+			Sink:       defaultConfig.Sink,
+			Cyclic:     defaultConfig.Cyclic,
+			Scheduler:  defaultConfig.Scheduler,
+			Consistent: defaultConfig.Consistent,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
