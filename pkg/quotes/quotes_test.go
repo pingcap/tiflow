@@ -69,6 +69,6 @@ func TestEscapeName(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		escaped := EscapeName(testCase.name)
-		require.Equal(t, escaped, testCase.expected)
+		require.Equal(t, testCase.expected, escaped)
 	}
 }
