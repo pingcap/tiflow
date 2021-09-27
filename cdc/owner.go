@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/scheduler"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pd "github.com/tikv/pd/client"
@@ -300,7 +301,9 @@ func (o *Owner) newChangeFeed(
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("changefeed", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
-		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, id, checkpointTs)
+		ensureTTL := int64(10 * 60)
+		err := gc.EnsureChangefeedStartTsSafety(
+			ctx, o.pdClient, id, ensureTTL, checkpointTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
