@@ -25,9 +25,11 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/kv"
 	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/logutil"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
@@ -146,8 +148,6 @@ func JSONPrint(cmd *cobra.Command, v interface{}) error {
 	cmd.Printf("%s\n", data)
 	return nil
 }
-<<<<<<< HEAD
-=======
 
 // VerifyAndGetTiCDCClusterVersion verifies and gets the version of ticdc.
 // If it is an incompatible version, an error is returned.
@@ -176,4 +176,3 @@ func VerifyAndGetTiCDCClusterVersion(
 
 	return cdcClusterVer, nil
 }
->>>>>>> 4c94d7880 (*: clean useless code && improvement the code struct (#2835))
