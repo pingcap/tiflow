@@ -100,12 +100,12 @@ func testMySQLWithCheckingOldvValue() {
 	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
 	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
 	testCases := []framework.Task{
+		tests.NewAlterCase(task),
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
 		tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task),
 	}
 
 	runTests(testCases, env)
