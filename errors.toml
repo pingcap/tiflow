@@ -171,6 +171,16 @@ error = '''
 codec decode error
 '''
 
+["CDC:ErrConsistentLevel"]
+error = '''
+consistent level (%s) not support
+'''
+
+["CDC:ErrConsistentStorage"]
+error = '''
+consistent storage (%s) not support
+'''
+
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data
@@ -354,6 +364,11 @@ invalid key: %s
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q
+'''
+
+["CDC:ErrInvalidS3URI"]
+error = '''
+invalid s3 uri: %s
 '''
 
 ["CDC:ErrInvalidServerOption"]
