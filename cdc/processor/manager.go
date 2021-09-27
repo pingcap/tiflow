@@ -120,14 +120,22 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		}
 	}
 	// check if the processors in memory is leaked
-	if len(globalState.Changefeeds)-inactiveChangefeedCount != len(m.processors) {
-		for changefeedID := range m.processors {
-			if _, exist := globalState.Changefeeds[changefeedID]; !exist {
-				m.closeProcessor(changefeedID)
-			}
+	m.evictProcessor(globalState, inactiveChangefeedCount)
+
+	return state, nil
+}
+
+// evict Processor maintained in memory, if it's not in etcd anymore.
+func (m *Manager) evictProcessor(state *orchestrator.GlobalReactorState, inActive int) {
+	if len(m.processors)+inActive == len(state.Changefeeds) {
+		return
+	}
+
+	for changefeedID := range m.processors {
+		if _, exist := state.Changefeeds[changefeedID]; !exist {
+			m.closeProcessor(changefeedID)
 		}
 	}
-	return state, nil
 }
 
 func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
