@@ -240,11 +240,9 @@ func newBufferSink(
 ) Sink {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	advertiseAddr := util.CaptureAddrFromCtx(ctx)
-
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
-		// for 60k table, this may cause frequent memory reallocation.
 		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
 		checkpointTs: checkpointTs,
 		flushTsChan:  make(chan uint64, 128),
