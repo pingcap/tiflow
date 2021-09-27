@@ -16,6 +16,12 @@ function get_safepoint() {
 	echo $safe_point
 }
 
+function clear_gc_worker_safepoint() {
+	pd_addr=$1
+	pd_cluster_id=$2
+	ETCDCTL_API=3 etcdctl --endpoints=$pd_addr del /pd/$pd_cluster_id/gc/safe_point/service/ticdc
+}
+
 function check_safepoint_cleared() {
 	pd_addr=$1
 	pd_cluster_id=$2
@@ -67,6 +73,7 @@ export -f check_safepoint_forward
 export -f check_safepoint_cleared
 export -f check_safepoint_equal
 export -f check_changefeed_state
+export -f clear_gc_worker_safepoint
 
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -79,11 +86,14 @@ function run() {
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
 	esac
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/pkg/txnutil/gc/InjectGcSafepointUpdateInterval=return(500)'
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
+	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
 	fi
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
-	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
+
+	clear_gc_worker_safepoint $pd_addr $pd_cluster_id
 
 	run_sql "CREATE DATABASE gc_safepoint;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table gc_safepoint.simple(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -115,14 +125,11 @@ function run() {
 
 	# remove paused changefeed, the safe_point forward will recover
 	cdc cli changefeed remove --changefeed-id=$changefeed_id --pd=$pd_addr
-	# remove this line when new owner is enabled, because `removed` state is deprecated
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "removed"
 	start_safepoint=$(get_safepoint $pd_addr $pd_cluster_id)
 	ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id $start_safepoint
 
 	# remove all changefeeds, the safe_point will be cleared
 	cdc cli changefeed remove --changefeed-id=$changefeed_id2 --pd=$pd_addr
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "removed"
 	ensure $MAX_RETRIES check_safepoint_cleared $pd_addr $pd_cluster_id
 
 	cleanup_process $CDC_BINARY

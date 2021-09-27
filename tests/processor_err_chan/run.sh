@@ -8,15 +8,15 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-function check_changefeed_mark_stopped() {
+function check_changefeed_mark_normal() {
 	endpoints=$1
 	changefeedid=$2
 	error_msg=$3
 	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
 	echo "$info"
 	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "stopped" ]]; then
-		echo "changefeed state $state does not equal to stopped"
+	if [[ ! "$state" == "normal" ]]; then
+		echo "changefeed state $state does not equal to normal"
 		exit 1
 	fi
 	message=$(echo $info | jq -r '.error.message')
@@ -26,7 +26,7 @@ function check_changefeed_mark_stopped() {
 	fi
 }
 
-export -f check_changefeed_mark_stopped
+export -f check_changefeed_mark_normal
 
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -39,9 +39,6 @@ function run() {
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
 	esac
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
-	fi
 
 	run_sql "CREATE DATABASE processor_err_chan;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE DATABASE processor_err_chan;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -50,15 +47,17 @@ function run() {
 		run_sql "CREATE table processor_err_chan.t$i (id int primary key auto_increment)" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorAddTableError=1*return(true)' # new processor
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorAddTableError=1*return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
 
 	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
+	fi
 
 	retry_time=10
-	ensure $retry_time check_changefeed_mark_stopped $pd_addr $changefeed_id "processor add table injected error"
+	ensure $retry_time check_changefeed_mark_normal $pd_addr $changefeed_id "processor add table injected error"
 
-	cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI"
 	for i in $(seq 1 10); do
 		run_sql "INSERT INTO processor_err_chan.t$i values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	done
