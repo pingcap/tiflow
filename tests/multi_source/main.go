@@ -21,15 +21,15 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/tests/util"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -76,7 +76,7 @@ func runDDLTest(srcs []*sql.DB) {
 	}()
 
 	for i, ddlFunc := range []func(context.Context, *sql.DB){
-		createDropSchemaDDL, truncateDDL, addDropColumnDDL,
+		createDropSchemaDDL, truncateDDL, addDropColumnDDL, addDropColumnDDL2,
 		modifyColumnDDL, addDropIndexDDL,
 	} {
 		testName := getFunctionName(ddlFunc)
@@ -255,6 +255,49 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 			defaultValue = value
 		}
 		sql = fmt.Sprintf("alter table test.`%s` add column v1 int default ? %s", testName, notNULL)
+		util.MustExec(db, sql, defaultValue)
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// addDropColumnDDL2 tests the following scenario:
+// 1. Create a table, executing DML of this table in background
+// 2. alter table add column v1 varchar(20) default "xxx" not null
+// 3. Some rows could have no data for column v1, however when we decode them,
+//    we could use the new table schema (which has the column of v1, caused by
+//    online DDL). Since the column data doesn't exist, the tidb library will
+//    fill in a default value, which is a string type. That's why we can get
+//    either []byte or a string of a column.Value
+func addDropColumnDDL2(ctx context.Context, db *sql.DB) {
+	testName := getFunctionName(addDropColumnDDL2)
+	mustCreateTable(db, testName)
+
+	for value := 1; ; value++ {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		sql := fmt.Sprintf("alter table test.`%s` drop column v1", testName)
+		util.MustExec(db, sql)
+		time.Sleep(100 * time.Millisecond)
+
+		var notNULL string
+		var defaultValue interface{}
+
+		strValue := strconv.Itoa(value)
+		if value%5 == 0 {
+			// use default <value>
+			defaultValue = strValue
+		} else if value%5 == 1 {
+			// use default null
+			defaultValue = nil
+		} else {
+			// use default <value> not null
+			notNULL = "not null"
+			defaultValue = strValue
+		}
+		sql = fmt.Sprintf("alter table test.`%s` add column v1 varchar(20) default ? %s", testName, notNULL)
 		util.MustExec(db, sql, defaultValue)
 		time.Sleep(100 * time.Millisecond)
 	}
