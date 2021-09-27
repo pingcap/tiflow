@@ -50,7 +50,7 @@ func TestQuoteName(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		escaped := QuoteName(testCase.name)
-		require.Equal(t, escaped, testCase.expected)
+		require.Equal(t, testCase.expected, escaped)
 	}
 }
 
