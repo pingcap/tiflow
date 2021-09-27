@@ -49,9 +49,10 @@ function run() {
 		run_sql "CREATE table processor_err_chan.t$i (id int primary key auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 		run_sql "CREATE table processor_err_chan.t$i (id int primary key auto_increment)" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorAddTableError=5*return(true)'
+
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorAddTableError=1*return(true)' # new processor
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
-	export GO_FAILPOINTS=''
+
 	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 
 	retry_time=10
