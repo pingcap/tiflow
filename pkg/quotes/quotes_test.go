@@ -32,7 +32,7 @@ func TestQuoteSchema(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		name := QuoteSchema(testCase.schema, testCase.table)
-		require.Equal(t, name, testCase.expected)
+		require.Equal(t, testCase.expected, name)
 	}
 }
 
