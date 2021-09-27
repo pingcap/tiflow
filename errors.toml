@@ -146,6 +146,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrClusterIDMismatch"]
+error = '''
+cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
@@ -839,11 +844,6 @@ updating service safepoint failed
 ["CDC:ErrVersionIncompatible"]
 error = '''
 version is incompatible: %s
-'''
-
-["CDC:ErrClusterIDMismatch"]
-error = '''
-cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
 '''
 
 ["CDC:ErrWaitHandleOperationTimeout"]
