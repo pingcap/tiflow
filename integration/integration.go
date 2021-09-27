@@ -36,13 +36,13 @@ func testAvro() {
 	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=America/Los_Angeles"}
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
+		tests.NewAlterCase(task), // this case is slow, so put it last
 		tests.NewDateTimeCase(task),
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
 		tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
-		tests.NewAlterCase(task), // this case is slow, so put it last
 	}
 
 	runTests(testCases, env)
@@ -100,12 +100,12 @@ func testMySQLWithCheckingOldvValue() {
 	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
 	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
 	testCases := []framework.Task{
-		tests.NewAlterCase(task),
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
 		tests.NewManyTypesCase(task),
 		tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
 	}
 
 	runTests(testCases, env)
