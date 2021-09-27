@@ -47,7 +47,7 @@ func TestNotifyHub(t *testing.T) {
 
 	r2.Stop()
 	r3.Stop()
-	require.Equal(t, len(notifier.receivers), 0)
+	require.Equal(t, 0, len(notifier.receivers))
 	r4, err := notifier.NewReceiver(-1)
 	require.Nil(t, err)
 	<-r4.C
