@@ -19,10 +19,7 @@ function prepare() {
 	start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 1 --addr 127.0.0.1:8300 --restart true \
-		--failpoint 'github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedPreEmit=return(true)' # old processor
-
-	# run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 1 --addr 127.0.0.1:8300 --restart true \
-	#                --failpoint 'github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorSyncResolvedPreEmit=return(true)' # new processor
+		--failpoint 'github.com/pingcap/ticdc/cdc/processor/pipeline/ProcessorSyncResolvedPreEmit=return(true)'
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 2 --addr 127.0.0.1:8301
 
