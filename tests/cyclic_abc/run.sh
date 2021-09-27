@@ -102,24 +102,16 @@ function run() {
 		--pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
 		--cyclic-replica-id 1 \
 		--cyclic-filter-replica-ids 2 \
-<<<<<<< HEAD
-		--cyclic-sync-ddl true
-=======
 		--cyclic-sync-ddl=true \
 		--config $CUR/conf/changefeed.toml
->>>>>>> 57b287641 (Add NoArgs to all commands  (#2742))
 
 	run_cdc_cli changefeed create --start-ts=$start_ts \
 		--sink-uri="mysql://root@${TLS_TIDB_HOST}:${TLS_TIDB_PORT}/?safe-mode=false&ssl-ca=${TLS_DIR}/ca.pem&ssl-cert=${TLS_DIR}/server.pem?ssl-key=${TLS_DIR}/server-key.pem" \
 		--pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
 		--cyclic-replica-id 2 \
 		--cyclic-filter-replica-ids 3 \
-<<<<<<< HEAD
-		--cyclic-sync-ddl true
-=======
 		--cyclic-sync-ddl=true \
 		--config $CUR/conf/changefeed.toml
->>>>>>> 57b287641 (Add NoArgs to all commands  (#2742))
 
 	run_cdc_cli changefeed create --start-ts=$start_ts \
 		--sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/?safe-mode=false" \
@@ -130,12 +122,8 @@ function run() {
 		--key=$TLS_DIR/client-key.pem \
 		--cyclic-replica-id 3 \
 		--cyclic-filter-replica-ids 1 \
-<<<<<<< HEAD
-		--cyclic-sync-ddl false
-=======
 		--cyclic-sync-ddl=false \
 		--config $CUR/conf/changefeed.toml
->>>>>>> 57b287641 (Add NoArgs to all commands  (#2742))
 
 	for i in $(seq 6 15); do {
 		sqlup="START TRANSACTION;"
