@@ -22,6 +22,7 @@ function check_position_removed() {
 }
 
 function check_changefeed_state() {
+  sleep 1
 	pd_addr=$1
 	changefeed_id=$2
 	expected=$3
