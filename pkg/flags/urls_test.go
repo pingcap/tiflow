@@ -38,7 +38,7 @@ func TestNewURLsValue(t *testing.T) {
 		urlsValue, err := NewURLsValue(testCase.url)
 		require.Nil(t, err)
 		hs := urlsValue.HostString()
-		require.Equal(t, hs, testCase.hostString)
+		require.Equal(t, testCase.hostString, hs)
 	}
 }
 
