@@ -362,7 +362,7 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 		}
 	}
 	if !haveMeta {
-		return 0, 0, errors.Errorf("no redo meta file found in dir:%s", l.cfg.Dir)
+		return 0, 0, cerror.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
 	}
 
 	l.meta = metaList[maxCheckPointTs]

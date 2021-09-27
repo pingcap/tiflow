@@ -141,8 +141,8 @@ func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, 
 	return files, nil
 }
 
-func downLoadToLocal(ctx context.Context, dir string, s3storage storage.ExternalStorage, fixedName string) error {
-	files, err := selectDownLoadFile(ctx, s3storage, fixedName)
+func downLoadToLocal(ctx context.Context, dir string, s3storage storage.ExternalStorage, fixedType string) error {
+	files, err := selectDownLoadFile(ctx, s3storage, fixedType)
 	if err != nil {
 		return err
 	}

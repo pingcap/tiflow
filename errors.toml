@@ -636,6 +636,11 @@ error = '''
 redo file operation
 '''
 
+["CDC:ErrRedoMetaFileNotFound"]
+error = '''
+no redo meta file found in dir: %s
+'''
+
 ["CDC:ErrRedoWriterStopped"]
 error = '''
 redo log writer stopped
