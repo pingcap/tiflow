@@ -35,7 +35,7 @@ func TestURLs(t *testing.T) {
 
 	urls, err := NewURLs(urlstrs)
 	require.Nil(t, err)
-	require.Equal(t, urls.String(), strings.Join(sorted, ","))
+	require.Equal(t, strings.Join(sorted, ","), urls.String())
 }
 
 func TestBadURLs(t *testing.T) {
