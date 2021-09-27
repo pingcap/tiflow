@@ -142,7 +142,7 @@ func execInController(controller, shellCmd string) ([]byte, error) {
 func (d *DockerComposeOperator) DumpStdout() error {
 	log.Info("Dumping container logs")
 	cmd := exec.Command("docker-compose", "-f", d.FileName, "logs", "-t")
-	f, err := os.Create("../docker/logs/stdout.log")
+	f, err := os.Create("dump_stdout.log")
 	if err != nil {
 		return errors.AddStack(err)
 	}
