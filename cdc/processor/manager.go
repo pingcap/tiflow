@@ -30,16 +30,16 @@ import (
 	"go.uber.org/zap"
 )
 
-type commandTp int
+type commandType int
 
 const (
-	commandTpUnknown commandTp = iota //nolint:varcheck,deadcode
-	commandTpClose
-	commandTpWriteDebugInfo
+	commandTypeUnknown commandType = iota //nolint:varcheck,deadcode
+	commandTypeClose
+	commandTypeWriteDebugInfo
 )
 
 type command struct {
-	tp      commandTp
+	tp      commandType
 	payload io.Writer
 	done    chan struct{}
 }
@@ -142,13 +142,13 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 
 // AsyncClose sends a close signal to Manager and closing all processors
 func (m *Manager) AsyncClose() {
-	m.sendCommand(commandTpClose, nil)
+	m.sendCommand(commandTypeClose, nil)
 }
 
 // WriteDebugInfo write the debug info to Writer
 func (m *Manager) WriteDebugInfo(w io.Writer) {
 	timeout := time.Second * 3
-	done := m.sendCommand(commandTpWriteDebugInfo, w)
+	done := m.sendCommand(commandTypeWriteDebugInfo, w)
 	// wait the debug info printed
 	select {
 	case <-done:
@@ -157,7 +157,7 @@ func (m *Manager) WriteDebugInfo(w io.Writer) {
 	}
 }
 
-func (m *Manager) sendCommand(tp commandTp, payload io.Writer) chan struct{} {
+func (m *Manager) sendCommand(tp commandType, payload io.Writer) chan struct{} {
 	timeout := time.Second * 3
 	cmd := &command{tp: tp, payload: payload, done: make(chan struct{})}
 	select {
@@ -178,12 +178,12 @@ func (m *Manager) handleCommand() error {
 	}
 	defer close(cmd.done)
 	switch cmd.tp {
-	case commandTpClose:
+	case commandTypeClose:
 		for changefeedID := range m.processors {
 			m.closeProcessor(changefeedID)
 		}
 		return cerrors.ErrReactorFinished
-	case commandTpWriteDebugInfo:
+	case commandTypeWriteDebugInfo:
 		m.writeDebugInfo(cmd.payload)
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
