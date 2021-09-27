@@ -24,27 +24,22 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+
 	"github.com/pingcap/tidb-tools/pkg/utils"
 )
 
-func Test(t *testing.T) { check.TestingT(t) }
-
-type httputilSuite struct{}
-
-var _ = check.Suite(&httputilSuite{})
-
 var httputilServerMsg = "this is httputil test server"
 
-func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestHttputilNewClient(t *testing.T) {
+	t.Parallel()
+
 	port := 8303
 	_, cancel := context.WithCancel(context.Background())
 
 	dir, err := os.Getwd()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	certDir := "_certificates"
 	serverTLS, err := utils.ToTLSConfigWithVerify(
 		filepath.Join(dir, certDir, "ca.pem"),
@@ -52,8 +47,8 @@ func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
 		filepath.Join(dir, certDir, "server-key.pem"),
 		[]string{},
 	)
-	c.Assert(err, check.IsNil)
-	server := runServer(serverTLS, port, c)
+	require.Nil(t, err)
+	server := runServer(serverTLS, port, t)
 	defer func() {
 		cancel()
 		server.Close()
@@ -65,14 +60,14 @@ func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
 		CertAllowedCN: []string{},
 	}
 	cli, err := NewClient(credential)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	url := fmt.Sprintf("https://127.0.0.1:%d/", port)
 	resp, err := cli.Get(url)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
-	c.Assert(string(body), check.Equals, httputilServerMsg)
+	require.Nil(t, err)
+	require.Equal(t, httputilServerMsg, string(body))
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
@@ -81,13 +76,13 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(httputilServerMsg))
 }
 
-func runServer(tlsCfg *tls.Config, port int, c *check.C) *http.Server {
+func runServer(tlsCfg *tls.Config, port int, t *testing.T) *http.Server {
 	http.HandleFunc("/", handler)
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: nil}
 
 	conn, err := net.Listen("tcp", server.Addr)
 	if err != nil {
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	tlsListener := tls.NewListener(conn, tlsCfg)
