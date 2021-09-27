@@ -64,6 +64,7 @@ var (
 	ErrAdminStopProcessor = errors.Normalize("stop processor by admin command", errors.RFCCodeText("CDC:ErrAdminStopProcessor"))
 	// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
 	ErrVersionIncompatible   = errors.Normalize("version is incompatible: %s", errors.RFCCodeText("CDC:ErrVersionIncompatible"))
+	ErrClusterIDMismatch     = errors.Normalize("cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d", errors.RFCCodeText("CDC:ErrClusterIDMismatch"))
 	ErrCreateMarkTableFailed = errors.Normalize("create mark table failed", errors.RFCCodeText("CDC:ErrCreateMarkTableFailed"))
 
 	// sink related errors

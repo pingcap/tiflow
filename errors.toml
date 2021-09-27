@@ -841,6 +841,11 @@ error = '''
 version is incompatible: %s
 '''
 
+["CDC:ErrClusterIDMismatch"]
+error = '''
+cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
+'''
+
 ["CDC:ErrWaitHandleOperationTimeout"]
 error = '''
 waiting processor to handle the operation finished timeout
