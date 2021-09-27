@@ -211,6 +211,7 @@ func (t *tableSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
+// drawbackMsg can be used to remove a table from the buffer
 type drawbackMsg struct {
 	tableID  model.TableID
 	callback chan struct{}
@@ -235,6 +236,7 @@ func newBufferSink(
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
+		// for 60k table, this may cause frequent memory reallocation.
 		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
 		checkpointTs: checkpointTs,
 		flushTsChan:  make(chan uint64, 128),
@@ -242,6 +244,12 @@ func newBufferSink(
 	}
 	go sink.run(ctx, errCh)
 	return sink
+}
+
+func (b *bufferSink) dropTable(tableID model.TableID) {
+	b.bufferMu.Lock()
+	delete(b.buffer, tableID)
+	b.bufferMu.Unlock()
 }
 
 func (b *bufferSink) run(ctx context.Context, errCh chan error) {
@@ -266,9 +274,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			}
 			return
 		case drawback := <-b.drawbackChan:
-			b.bufferMu.Lock()
-			delete(b.buffer, drawback.tableID)
-			b.bufferMu.Unlock()
+			b.dropTable(drawback.tableID)
 			close(drawback.callback)
 		case resolvedTs := <-b.flushTsChan:
 			b.bufferMu.Lock()
@@ -327,6 +333,7 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 		if len(rows) == 0 {
 			return nil
 		}
+		// todo: how to make sure that all rows belong to the same table ?
 		tableID := rows[0].Table.TableID
 		b.bufferMu.Lock()
 		b.buffer[tableID] = append(b.buffer[tableID], rows...)
