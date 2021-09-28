@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,6 +50,11 @@ type column struct {
 	WhereHandle *bool                `json:"h,omitempty"`
 	Flag        model.ColumnFlagType `json:"f"`
 	Value       interface{}          `json:"v"`
+}
+
+type messageMeta struct {
+	tables           []string
+	rowChangeLengths []int
 }
 
 func (c *column) FromSinkColumn(col *model.Column) {
@@ -450,6 +456,14 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Ts = e.CommitTs
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
+
+		if message.Metadata == nil {
+			message.Metadata = &messageMeta{}
+		}
+
+		messageMeta := message.Metadata.(*messageMeta)
+		messageMeta.tables = append(messageMeta.tables, fmt.Sprintf("`%s`.`%s`", e.Table.Schema, e.Table.Table))
+		messageMeta.rowChangeLengths = append(messageMeta.rowChangeLengths, message.Length())
 
 		if message.Length() > d.maxKafkaMessageSize {
 			// `len(d.messageBuf) == 1` is implied

@@ -93,6 +93,8 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
+		// We pass in the MQMessage, which contains useful info such as table name when reporting an error
+		Metadata: message.Metadata,
 	}
 	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
 
@@ -130,6 +132,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 			Key:       sarama.ByteEncoder(message.Key),
 			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
+			Metadata:  message.Metadata,
 		}
 	}
 	select {
@@ -139,6 +142,20 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 		return nil
 	default:
 		err := k.syncClient.SendMessages(msgs)
+		if err == nil {
+			return nil
+		}
+
+		if errs, ok := err.(sarama.ProducerErrors); ok {
+			for _, err := range errs {
+				if err.Msg == nil {
+					continue
+				}
+				log.Warn("Kafka client failed to deliver message",
+					zap.Error(err),
+					zap.Reflect("metadata", err.Msg.Metadata))
+			}
+		}
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -252,12 +269,17 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
 		case err := <-k.asyncClient.Errors():
-			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
-			// because Go would store the type info and the resulted `error` variable would not be nil,
-			// which will cause the pkg/error library to malfunction.
 			if err == nil {
 				return nil
 			}
+			if err.Msg != nil && err.Msg.Metadata != nil {
+				log.Warn("Kafka client failed to deliver message",
+					zap.Error(err),
+					zap.Reflect("metadata", err.Msg.Metadata))
+			}
+			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
+			// because Go would store the type info and the resulted `error` variable would not be nil,
+			// which will cause the pkg/error library to malfunction.
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
 	}
