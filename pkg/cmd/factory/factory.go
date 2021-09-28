@@ -17,8 +17,8 @@ import (
 	"crypto/tls"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
@@ -28,7 +28,7 @@ import (
 // Factory defines the client-side construction factory.
 type Factory interface {
 	ClientGetter
-	EtcdClient() (*kv.CDCEtcdClient, error)
+	EtcdClient() (*etcd.CDCEtcdClient, error)
 	PdClient() (pd.Client, error)
 }
 

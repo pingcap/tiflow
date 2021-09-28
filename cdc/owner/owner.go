@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,7 +29,9 @@ import (
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/version"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -65,7 +68,7 @@ type ownerJob struct {
 type Owner struct {
 	changefeeds map[model.ChangeFeedID]*changefeed
 
-	gcManager GcManager
+	gcManager gc.Manager
 
 	ownerJobQueueMu sync.Mutex
 	ownerJobQueue   []*ownerJob
@@ -74,14 +77,14 @@ type Owner struct {
 
 	closed int32
 
-	newChangefeed func(id model.ChangeFeedID, gcManager GcManager) *changefeed
+	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
 
 // NewOwner creates a new Owner
-func NewOwner() *Owner {
+func NewOwner(pdClient pd.Client) *Owner {
 	return &Owner{
 		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
-		gcManager:     newGCManager(),
+		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
 	}
@@ -90,9 +93,11 @@ func NewOwner() *Owner {
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context) (AsyncSink, error)) *Owner {
-	o := NewOwner()
-	o.newChangefeed = func(id model.ChangeFeedID, gcManager GcManager) *changefeed {
+	newSink func(ctx cdcContext.Context) (AsyncSink, error),
+	pdClient pd.Client,
+) *Owner {
+	o := NewOwner(pdClient)
+	o.newChangefeed = func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
 	return o
@@ -105,17 +110,23 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	})
 	failpoint.Inject("sleep-in-owner-tick", nil)
 	ctx := stdCtx.(cdcContext.Context)
-	state := rawState.(*model.GlobalReactorState)
+	state := rawState.(*orchestrator.GlobalReactorState)
 	o.updateMetrics(state)
 	if !o.clusterVersionConsistent(state.Captures) {
 		// sleep one second to avoid printing too much log
 		time.Sleep(1 * time.Second)
 		return state, nil
 	}
-	err = o.gcManager.updateGCSafePoint(ctx, state)
-	if err != nil {
+
+	// Owner should update GC safepoint before initializing changefeed, so
+	// changefeed can remove its "ticdc-creating" service GC safepoint during
+	// initializing.
+	//
+	// See more gc doc.
+	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
@@ -203,7 +214,7 @@ func (o *Owner) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
 }
 
-func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
+func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, info != nil, nil
 	})
@@ -227,7 +238,7 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 	}
 }
 
-func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
+func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
@@ -298,4 +309,36 @@ func (o *Owner) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueueMu.Lock()
 	defer o.ownerJobQueueMu.Unlock()
 	o.ownerJobQueue = append(o.ownerJobQueue, job)
+}
+
+func (o *Owner) updateGCSafepoint(
+	ctx context.Context, state *orchestrator.GlobalReactorState,
+) error {
+	forceUpdate := false
+	minCheckpointTs := uint64(math.MaxUint64)
+	for changefeedID, changefeefState := range state.Changefeeds {
+		if changefeefState.Info == nil {
+			continue
+		}
+		switch changefeefState.Info.State {
+		case model.StateNormal, model.StateStopped, model.StateError:
+		default:
+			continue
+		}
+		checkpointTs := changefeefState.Info.GetCheckpointTs(changefeefState.Status)
+		if minCheckpointTs > checkpointTs {
+			minCheckpointTs = checkpointTs
+		}
+		// Force update when adding a new changefeed.
+		_, exist := o.changefeeds[changefeedID]
+		if !exist {
+			forceUpdate = true
+		}
+	}
+	// When the changefeed starts up, CDC will do a snapshot read at
+	// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
+	// bound for the GC safepoint.
+	gcSafepointUpperBound := minCheckpointTs - 1
+	err := o.gcManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
+	return errors.Trace(err)
 }

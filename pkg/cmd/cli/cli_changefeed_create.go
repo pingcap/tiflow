@@ -23,7 +23,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
@@ -32,8 +31,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	ticdcutil "github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
@@ -57,7 +58,6 @@ type changefeedCommonOptions struct {
 	opts                   []string
 	sortEngine             string
 	sortDir                string
-	timezone               string
 	cyclicReplicaID        uint64
 	cyclicFilterReplicaIDs []uint
 	cyclicSyncDDL          bool
@@ -84,7 +84,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringSliceVar(&o.opts, "opts", nil, "Extra options, in the `key=value` format")
 	cmd.PersistentFlags().StringVar(&o.sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	cmd.PersistentFlags().StringVar(&o.sortDir, "sort-dir", "", "directory used for data sort")
-	cmd.PersistentFlags().StringVar(&o.timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	cmd.PersistentFlags().Uint64Var(&o.cyclicReplicaID, "cyclic-replica-id", 0, "(Experimental) Cyclic replication replica ID of changefeed")
 	cmd.PersistentFlags().UintSliceVar(&o.cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Experimental) Cyclic replication filter replica ID of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
@@ -109,7 +108,7 @@ func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *conf
 type createChangefeedOptions struct {
 	commonChangefeedOptions *changefeedCommonOptions
 
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 	pdClient   pd.Client
 
 	pdAddr     string
@@ -118,6 +117,7 @@ type createChangefeedOptions struct {
 	changefeedID            string
 	disableGCSafePointCheck bool
 	startTs                 uint64
+	timezone                string
 
 	cfg *config.ReplicaConfig
 }
@@ -140,6 +140,7 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
+	cmd.PersistentFlags().StringVar(&o.timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 }
 
 // complete adapts from the command line args to the data and client required.
@@ -347,8 +348,10 @@ func (o *createChangefeedOptions) validateStartTs(ctx context.Context) error {
 	if o.disableGCSafePointCheck {
 		return nil
 	}
-
-	return ticdcutil.CheckSafetyOfStartTs(ctx, o.pdClient, o.changefeedID, o.startTs)
+	// Ensure the start ts is validate in the next 1 hour.
+	const ensureTTL = 60 * 60.
+	return gc.EnsureChangefeedStartTsSafety(
+		ctx, o.pdClient, o.changefeedID, ensureTTL, o.startTs)
 }
 
 // validateTargetTs checks if targetTs is a valid value.
@@ -435,7 +438,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 
 	info := o.getInfo(cmd)
 
-	tz, err := ticdcutil.GetTimezone(o.commonChangefeedOptions.timezone)
+	tz, err := ticdcutil.GetTimezone(o.timezone)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
