@@ -98,6 +98,7 @@ func NewBaseScheduleDispatcher(
 		logger:          logger,
 		callbacks:       callbacks,
 		checkpointTs:    checkpointTs,
+		lastTickCaptureCount: -1, // -1 indicates initialized
 	}
 }
 
@@ -157,6 +158,8 @@ func (s *BaseScheduleDispatcher) Tick(
 		}
 		if ok {
 			s.needRebalance = false
+		} else {
+			return CheckpointCannotProceed, CheckpointCannotProceed, nil
 		}
 	}
 
@@ -237,7 +240,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
 	}
 
-	if !s.needRebalance && s.lastTickCaptureCount != len(captures) {
+	if s.lastTickCaptureCount != -1 && s.lastTickCaptureCount != len(captures) {
 		s.needRebalance = true
 	}
 
