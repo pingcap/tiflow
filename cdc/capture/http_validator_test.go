@@ -49,22 +49,3 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, newInfo)
 }
-
-func TestVerifySink(t *testing.T) {
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	replicateConfig := config.GetDefaultReplicaConfig()
-	opts := make(map[string]string)
-
-	// test sink uri error
-	sinkURI := "mysql://root:111@127.0.0.1:3306/"
-	err := verifySink(ctx, sinkURI, replicateConfig, opts)
-	require.NotNil(t, err)
-	require.Regexp(t, "fail to open MySQL connection.*ErrMySQLConnectionError.*", err)
-
-	// test sink uri right
-	sinkURI = "blackhole://"
-	err = verifySink(ctx, sinkURI, replicateConfig, opts)
-	require.Nil(t, err)
-}
