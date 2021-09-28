@@ -39,15 +39,21 @@ func NewStatistics(ctx context.Context, name string, opts map[string]string) *St
 		statistics.captureAddr = cid
 	}
 	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
+	captureAddr, changefeedID := statistics.captureAddr, statistics.changefeedID
 	ticker := time.NewTicker(flushMetricsInterval)
-	metricTotalRows := totalRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	go func() {
 		defer ticker.Stop()
+		metricTotalRows := totalRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+		metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+		defer func() {
+			totalRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+			totalFlushedRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+		}()
 		for {
 			select {
 			case <-ctx.Done():
@@ -69,11 +75,13 @@ type Statistics struct {
 	changefeedID     string
 	totalRows        uint64
 	totalFlushedRows uint64
+	totalDDLCount    uint64
 
 	lastPrintStatusTotalRows uint64
 	lastPrintStatusTime      time.Time
 
 	metricExecTxnHis   prometheus.Observer
+	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
 }
@@ -93,10 +101,15 @@ func (b *Statistics) TotalRowsCount() uint64 {
 	return atomic.LoadUint64(&b.totalRows)
 }
 
+// AddDDLCount records total number of ddl needs to flush
+func (b *Statistics) AddDDLCount() {
+	atomic.AddUint64(&b.totalDDLCount, 1)
+}
+
 // RecordBatchExecution records the cost time of batch execution and batch size
-func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
+func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
 	startTime := time.Now()
-	batchSize, err := executer()
+	batchSize, err := executor()
 	if err != nil {
 		b.metricExecErrCnt.Inc()
 		return err
@@ -105,6 +118,17 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	b.metricExecTxnHis.Observe(castTime)
 	b.metricExecBatchHis.Observe(float64(batchSize))
 	atomic.AddUint64(&b.totalFlushedRows, uint64(batchSize))
+	return nil
+}
+
+// RecordDDLExecution record the time cost of execute ddl
+func (b *Statistics) RecordDDLExecution(executor func() error) error {
+	start := time.Now()
+	if err := executor(); err != nil {
+		return err
+	}
+
+	b.metricExecDDLHis.Observe(time.Since(start).Seconds())
 	return nil
 }
 
@@ -123,10 +147,15 @@ func (b *Statistics) PrintStatus(ctx context.Context) {
 	}
 	b.lastPrintStatusTime = time.Now()
 	b.lastPrintStatusTotalRows = totalRows
+
+	totalDDLCount := atomic.LoadUint64(&b.totalDDLCount)
+	atomic.StoreUint64(&b.totalDDLCount, 0)
+
 	log.Info("sink replication status",
 		zap.String("name", b.name),
 		zap.String("changefeed", b.changefeedID),
 		util.ZapFieldCapture(ctx),
 		zap.Uint64("count", count),
-		zap.Uint64("qps", qps))
+		zap.Uint64("qps", qps),
+		zap.Uint64("ddl", totalDDLCount))
 }

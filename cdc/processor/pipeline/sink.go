@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	defaultSyncResolvedBatch = 1024
+	defaultSyncResolvedBatch = 64
 )
 
 // TableStatus is status of the table pipeline
@@ -104,7 +104,8 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 // In this method, the builtin table sink will be closed by calling `Close`, and
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
-	n.status.Store(TableStatusStopped)
+	// table stopped status must be set after underlying sink is closed
+	defer n.status.Store(TableStatusStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
 		return
@@ -132,7 +133,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 	if resolvedTs <= n.checkpointTs {
 		return nil
 	}
-	if err := n.flushRow2Sink(ctx); err != nil {
+	if err := n.emitRow2Sink(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, resolvedTs)
@@ -150,6 +151,7 @@ func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err
 
 func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicEvent) error {
 	if event == nil || event.Row == nil {
+		log.Warn("skip emit empty rows", zap.Any("event", event))
 		return nil
 	}
 
@@ -178,7 +180,7 @@ func (n *sinkNode) emitEvent(ctx pipeline.NodeContext, event *model.PolymorphicE
 	}
 
 	if len(n.eventBuffer) >= defaultSyncResolvedBatch {
-		if err := n.flushRow2Sink(ctx); err != nil {
+		if err := n.emitRow2Sink(ctx); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -249,16 +251,31 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 	return &deleteEvent, &insertEvent, nil
 }
 
-func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
+// clear event buffer and row buffer.
+// Also, it unrefs data that are holded by buffers.
+func (n *sinkNode) clearBuffers() {
+	// Do not hog memory.
+	if cap(n.rowBuffer) > defaultSyncResolvedBatch {
+		n.rowBuffer = make([]*model.RowChangedEvent, 0, defaultSyncResolvedBatch)
+	} else {
+		for i := range n.rowBuffer {
+			n.rowBuffer[i] = nil
+		}
+		n.rowBuffer = n.rowBuffer[:0]
+	}
+
+	if cap(n.eventBuffer) > defaultSyncResolvedBatch {
+		n.eventBuffer = make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
+	} else {
+		for i := range n.eventBuffer {
+			n.eventBuffer[i] = nil
+		}
+		n.eventBuffer = n.eventBuffer[:0]
+	}
+}
+
+func (n *sinkNode) emitRow2Sink(ctx pipeline.NodeContext) error {
 	for _, ev := range n.eventBuffer {
-		err := ev.WaitPrepare(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if ev.Row == nil {
-			continue
-		}
-		ev.Row.ReplicaID = ev.ReplicaID
 		n.rowBuffer = append(n.rowBuffer, ev.Row)
 	}
 	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
@@ -270,8 +287,7 @@ func (n *sinkNode) flushRow2Sink(ctx pipeline.NodeContext) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	n.rowBuffer = n.rowBuffer[:0]
-	n.eventBuffer = n.eventBuffer[:0]
+	n.clearBuffers()
 	return nil
 }
 
@@ -305,12 +321,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 			return errors.Trace(err)
 		}
 	case pipeline.MessageTypeCommand:
-		if msg.Command.Tp == pipeline.CommandTypeStopAtTs {
-			if msg.Command.StoppedTs < n.checkpointTs {
-				log.Warn("the stopped ts is less than the checkpoint ts, "+
-					"the table pipeline can't be stopped accurately, will be stopped soon",
-					zap.Uint64("stoppedTs", msg.Command.StoppedTs), zap.Uint64("checkpointTs", n.checkpointTs))
-			}
+		if msg.Command.Tp == pipeline.CommandTypeStop {
 			return n.stop(ctx)
 		}
 	case pipeline.MessageTypeBarrier:

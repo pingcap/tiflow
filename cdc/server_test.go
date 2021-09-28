@@ -20,15 +20,18 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
 
 type serverSuite struct {
+	server    *Server
 	e         *embed.Etcd
 	clientURL *url.URL
 	ctx       context.Context
@@ -37,15 +40,35 @@ type serverSuite struct {
 }
 
 func (s *serverSuite) SetUpTest(c *check.C) {
-	dir := c.MkDir()
 	var err error
+	dir := c.MkDir()
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
+
+	pdEndpoints := []string{
+		"http://" + s.clientURL.Host,
+		"http://invalid-pd-host:2379",
+	}
+	server, err := NewServer(pdEndpoints)
+	c.Assert(err, check.IsNil)
+	c.Assert(server, check.NotNil)
+	s.server = server
+
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   s.server.pdEndpoints,
+		Context:     s.ctx,
+		DialTimeout: 5 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	etcdClient := etcd.NewCDCEtcdClient(s.ctx, client)
+	s.server.etcdClient = &etcdClient
+
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *serverSuite) TearDownTest(c *check.C) {
+	s.server.Close()
 	s.e.Close()
 	s.cancel()
 	err := s.errg.Wait()
@@ -60,52 +83,49 @@ func (s *serverSuite) TestEtcdHealthChecker(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	pdEndpoints := []string{
-		"http://" + s.clientURL.Host,
-		"http://invalid-pd-host:2379",
-	}
-	server, err := NewServer(pdEndpoints)
-	c.Assert(err, check.IsNil)
-	c.Assert(server, check.NotNil)
-
 	s.errg.Go(func() error {
-		err := server.etcdHealthChecker(ctx)
+		err := s.server.etcdHealthChecker(s.ctx)
 		c.Assert(err, check.Equals, context.Canceled)
 		return nil
 	})
 	// longer than one check tick 3s
 	time.Sleep(time.Second * 4)
-	cancel()
+	s.cancel()
 }
 
-func (s *serverSuite) TestInitDataDir(c *check.C) {
+func (s *serverSuite) TestSetUpDataDir(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	pdEndpoints := []string{
-		"http://" + s.clientURL.Host,
-		"http://invalid-pd-host:2379",
-	}
-	server, err := NewServer(pdEndpoints)
-	c.Assert(err, check.IsNil)
-	c.Assert(server, check.NotNil)
-
 	conf := config.GetGlobalServerConfig()
-	conf.DataDir = c.MkDir()
-
-	err = server.initDataDir(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(conf.DataDir, check.Not(check.Equals), "")
-	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, "/tmp/sorter"))
-	config.StoreGlobalServerConfig(conf)
-
-	server.etcdClient = nil
+	// DataDir is not set, and no changefeed exist, use the default
 	conf.DataDir = ""
-	err = server.initDataDir(ctx)
+	err := s.server.setUpDataDir(s.ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(conf.DataDir, check.Equals, defaultDataDir)
+	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(defaultDataDir, config.DefaultSortDir))
+
+	// DataDir is not set, but has existed changefeed, use the one with the largest available space
+	conf.DataDir = ""
+	dir := c.MkDir()
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{SortDir: dir}, "a")
+	c.Assert(err, check.IsNil)
+
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, "b")
+	c.Assert(err, check.IsNil)
+
+	err = s.server.setUpDataDir(s.ctx)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(conf.DataDir, check.Equals, dir)
+	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(dir, config.DefaultSortDir))
+
+	conf.DataDir = c.MkDir()
+	// DataDir has been set, just use it
+	err = s.server.setUpDataDir(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(conf.DataDir, check.Not(check.Equals), "")
+	c.Assert(conf.Sorter.SortDir, check.Equals, filepath.Join(conf.DataDir, config.DefaultSortDir))
 
-	cancel()
+	s.cancel()
 }

@@ -15,6 +15,8 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -35,7 +37,7 @@ type EtcdWorker struct {
 	reactor Reactor
 	state   ReactorState
 	// rawState is the local cache of the latest Etcd state.
-	rawState map[util.EtcdKey][]byte
+	rawState map[util.EtcdKey]rawStateEntry
 	// pendingUpdates stores Etcd updates that the Reactor has not been notified of.
 	pendingUpdates []*etcdUpdate
 	// revision is the Etcd revision of the latest event received from Etcd
@@ -45,6 +47,16 @@ type EtcdWorker struct {
 	barrierRev int64
 	// prefix is the scope of Etcd watch
 	prefix util.EtcdPrefix
+	// deleteCounter maintains a local copy of a value stored in Etcd used to
+	// keep track of how many deletes have been committed by an EtcdWorker
+	// watching this key prefix.
+	// This mechanism is necessary as a workaround to correctly detect
+	// write-write conflicts when at least a transaction commits a delete,
+	// because deletes in Etcd reset the mod-revision of keys, making it
+	// difficult to use it as a unique version identifier to implement
+	// a `compare-and-swap` semantics, which is essential for implementing
+	// snapshot isolation for Reactor ticks.
+	deleteCounter int64
 }
 
 type etcdUpdate struct {
@@ -53,19 +65,29 @@ type etcdUpdate struct {
 	revision int64
 }
 
+// rawStateEntry stores the latest version of a key as seen by the EtcdWorker.
+// modRevision is stored to implement `compare-and-swap` semantics more reliably.
+type rawStateEntry struct {
+	value       []byte
+	modRevision int64
+}
+
 // NewEtcdWorker returns a new EtcdWorker
 func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		client:     client,
 		reactor:    reactor,
 		state:      initState,
-		rawState:   make(map[util.EtcdKey][]byte),
+		rawState:   make(map[util.EtcdKey]rawStateEntry),
 		prefix:     util.NormalizePrefix(prefix),
 		barrierRev: -1, // -1 indicates no barrier
 	}, nil
 }
 
-const etcdRequestProgressDuration = 2 * time.Second
+const (
+	etcdRequestProgressDuration = 2 * time.Second
+	deletionCounterKey          = "/meta/ticdc-delete-etcd-key-count"
+)
 
 // Run starts the EtcdWorker event loop.
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
@@ -177,6 +199,19 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
+	if worker.isDeleteCounterKey(event.Kv.Key) {
+		switch event.Type {
+		case mvccpb.PUT:
+			worker.handleDeleteCounter(event.Kv.Value)
+		case mvccpb.DELETE:
+			log.Warn("deletion counter key deleted", zap.Reflect("event", event))
+			worker.handleDeleteCounter(nil)
+		}
+		// We return here because the delete-counter is not used for business logic,
+		// and it should not be exposed further to the Reactor.
+		return
+	}
+
 	worker.pendingUpdates = append(worker.pendingUpdates, &etcdUpdate{
 		key:      util.NewEtcdKeyFromBytes(event.Kv.Key),
 		value:    event.Kv.Value,
@@ -189,7 +224,10 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 		if value == nil {
 			value = []byte{}
 		}
-		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = value
+		worker.rawState[util.NewEtcdKeyFromBytes(event.Kv.Key)] = rawStateEntry{
+			value:       value,
+			modRevision: event.Kv.ModRevision,
+		}
 	case mvccpb.DELETE:
 		delete(worker.rawState, util.NewEtcdKeyFromBytes(event.Kv.Key))
 	}
@@ -201,10 +239,17 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	worker.rawState = make(map[util.EtcdKey][]byte)
+	worker.rawState = make(map[util.EtcdKey]rawStateEntry)
 	for _, kv := range resp.Kvs {
+		if worker.isDeleteCounterKey(kv.Key) {
+			worker.handleDeleteCounter(kv.Value)
+			continue
+		}
 		key := util.NewEtcdKeyFromBytes(kv.Key)
-		worker.rawState[key] = kv.Value
+		worker.rawState[key] = rawStateEntry{
+			value:       kv.Value,
+			modRevision: kv.ModRevision,
+		}
 		err := worker.state.Update(key, kv.Value, true)
 		if err != nil {
 			return errors.Trace(err)
@@ -218,9 +263,9 @@ func (worker *EtcdWorker) syncRawState(ctx context.Context) error {
 func (worker *EtcdWorker) cloneRawState() map[util.EtcdKey][]byte {
 	ret := make(map[util.EtcdKey][]byte)
 	for k, v := range worker.rawState {
-		cloneV := make([]byte, len(v))
-		copy(cloneV, v)
-		ret[util.NewEtcdKey(k.String())] = cloneV
+		vCloned := make([]byte, len(v.value))
+		copy(vCloned, v.value)
+		ret[util.NewEtcdKey(k.String())] = vCloned
 	}
 	return ret
 }
@@ -251,11 +296,12 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 	}
 	cmps := make([]clientv3.Cmp, 0, len(changedSet))
 	ops := make([]clientv3.Op, 0, len(changedSet))
+	hasDelete := false
 	for key := range changedSet {
 		// make sure someone else has not updated the key after the last snapshot
 		var cmp clientv3.Cmp
-		if _, ok := worker.rawState[key]; ok {
-			cmp = clientv3.Compare(clientv3.ModRevision(key.String()), "<", worker.revision+1)
+		if entry, ok := worker.rawState[key]; ok {
+			cmp = clientv3.Compare(clientv3.ModRevision(key.String()), "=", entry.modRevision)
 		} else {
 			// if ok is false, it means that the key of this patch is not exist in a committed state
 			// this compare is equivalent to `patch.Key` is not exist
@@ -269,8 +315,20 @@ func (worker *EtcdWorker) applyPatches(ctx context.Context, patches []DataPatch)
 			op = clientv3.OpPut(key.String(), string(value))
 		} else {
 			op = clientv3.OpDelete(key.String())
+			hasDelete = true
 		}
 		ops = append(ops, op)
+	}
+
+	if hasDelete {
+		ops = append(ops, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
+	}
+	if worker.deleteCounter > 0 {
+		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+deletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
+	} else if worker.deleteCounter == 0 {
+		cmps = append(cmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+deletionCounterKey), "=", 0))
+	} else {
+		panic("unreachable")
 	}
 
 	resp, err := worker.client.Txn(ctx).If(cmps...).Then(ops...).Commit()
@@ -318,4 +376,26 @@ func (worker *EtcdWorker) cleanUp() {
 	worker.rawState = nil
 	worker.revision = 0
 	worker.pendingUpdates = worker.pendingUpdates[:0]
+}
+
+func (worker *EtcdWorker) isDeleteCounterKey(key []byte) bool {
+	return string(key) == worker.prefix.String()+deletionCounterKey
+}
+
+func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
+	if len(value) == 0 {
+		// The delete counter key has been deleted, resetting the internal counter
+		worker.deleteCounter = 0
+		return
+	}
+
+	var err error
+	worker.deleteCounter, err = strconv.ParseInt(string(value), 10, 64)
+	if err != nil {
+		// This should never happen unless Etcd server has been tampered with.
+		log.Panic("strconv failed. Unexpected Etcd state.", zap.Error(err))
+	}
+	if worker.deleteCounter <= 0 {
+		log.Panic("unexpected delete counter", zap.Int64("value", worker.deleteCounter))
+	}
 }

@@ -17,16 +17,15 @@ import (
 	"context"
 )
 
-// PolymorphicEvent describes a event can be in multiple states
+// PolymorphicEvent describes an event can be in multiple states
 type PolymorphicEvent struct {
 	StartTs uint64
 	// Commit or resolved TS
 	CRTs uint64
 
-	RawKV     *RawKVEntry
-	Row       *RowChangedEvent
-	ReplicaID uint64
-	finished  chan struct{}
+	RawKV    *RawKVEntry
+	Row      *RowChangedEvent
+	finished chan struct{}
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV

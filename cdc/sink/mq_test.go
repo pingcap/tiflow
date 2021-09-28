@@ -79,6 +79,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		},
 		StartTs:  100,
 		CommitTs: 120,
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	c.Assert(err, check.IsNil)

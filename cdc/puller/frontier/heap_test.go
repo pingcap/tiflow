@@ -16,6 +16,7 @@ package frontier
 import (
 	"math"
 	"math/rand"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -40,50 +41,66 @@ func (s *tsHeapSuite) TestInsert(c *check.C) {
 
 func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
 	defer testleak.AfterTest(c)()
-	rand.Seed(0xdeadbeaf)
+	seed := time.Now().Unix()
+	rand.Seed(seed)
 	var heap fibonacciHeap
-	nodes := make([]*fibonacciHeapNode, 50000)
+	nodes := make([]*fibonacciHeapNode, 2000)
+	expectedMin := uint64(math.MaxUint64)
 	for i := range nodes {
-		nodes[i] = heap.Insert(10000 + uint64(rand.Intn(len(nodes)/2)))
+		key := 10000 + uint64(rand.Intn(len(nodes)/2))
+		nodes[i] = heap.Insert(key)
+		if expectedMin > key {
+			expectedMin = key
+		}
 	}
+
+	var key uint64
 	for i := range nodes {
 		min := heap.GetMinKey()
-		expectedMin := uint64(math.MaxUint64)
-		for _, n := range nodes {
-			if expectedMin > n.key {
-				expectedMin = n.key
-			}
-		}
-		c.Assert(min, check.Equals, expectedMin)
+		c.Assert(min, check.Equals, expectedMin, check.Commentf("seed:%d", seed))
 		if rand.Intn(2) == 0 {
-			heap.UpdateKey(nodes[i], nodes[i].key+uint64(10000))
+			key = nodes[i].key + uint64(10000)
+			heap.UpdateKey(nodes[i], key)
 		} else {
-			heap.UpdateKey(nodes[i], nodes[i].key-uint64(10000))
+			key = nodes[i].key - uint64(10000)
+			heap.UpdateKey(nodes[i], key)
+		}
+		if expectedMin > key {
+			expectedMin = key
 		}
 	}
 }
 
 func (s *tsHeapSuite) TestRemoveNode(c *check.C) {
 	defer testleak.AfterTest(c)()
-	rand.Seed(0xdeadbeaf)
+	seed := time.Now().Unix()
+	rand.Seed(seed)
 	var heap fibonacciHeap
-	nodes := make([]*fibonacciHeapNode, 50000)
+	nodes := make([]*fibonacciHeapNode, 2000)
+	expectedMin := uint64(math.MaxUint64)
 	for i := range nodes {
 		nodes[i] = heap.Insert(10000 + uint64(rand.Intn(len(nodes)/2)))
+		if nodes[i].key < expectedMin {
+			expectedMin = nodes[i].key
+		}
 	}
 
+	preKey := expectedMin + 1
 	for i := range nodes {
 		min := heap.GetMinKey()
-		expectedMin := uint64(math.MaxUint64)
-		for _, n := range nodes {
-			if isRemoved(n) {
-				continue
-			}
-			if expectedMin > n.key {
-				expectedMin = n.key
+		if preKey == expectedMin {
+			expectedMin = uint64(math.MaxUint64)
+			for _, n := range nodes {
+				if isRemoved(n) {
+					continue
+				}
+				if expectedMin > n.key {
+					expectedMin = n.key
+				}
 			}
 		}
-		c.Assert(min, check.Equals, expectedMin)
+		c.Assert(min, check.Equals, expectedMin, check.Commentf("seed:%d", seed))
+		preKey = nodes[i].key
 		heap.Remove(nodes[i])
 	}
 	for _, n := range nodes {

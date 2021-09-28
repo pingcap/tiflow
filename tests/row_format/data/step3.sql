@@ -51,6 +51,25 @@ create table tp_text
         primary key (id)
 );
 
+create table tp_text2
+(
+    id           int auto_increment,
+    c_tinytext   tinytext      null,
+    c_text       text          null,
+    c_mediumtext mediumtext    null,
+    c_longtext   longtext      null,
+    c_varchar    varchar(16)   default "a",
+    c_char       char(16)      default "a",
+    c_tinyblob   tinyblob      null,
+    c_blob       blob          null,
+    c_mediumblob mediumblob    null,
+    c_longblob   longblob      null,
+    c_binary     binary(16)    default '0xa',
+    c_varbinary  varbinary(16) default '0xa',
+    constraint pk
+        primary key (id)
+);
+
 create table tp_time
 (
     id          int auto_increment,
@@ -105,7 +124,13 @@ insert into tp_text(c_tinytext, c_text, c_mediumtext, c_longtext, c_varchar, c_c
                     c_longblob, c_binary, c_varbinary)
 values ('89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A',
         '89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A'
-           , x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A');
+           , x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A'),
+('', '', '', '', '', '', x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A',
+ x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A'),
+('89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', x'', x'', x'',
+ x'', x'', x'');
+
+insert into tp_text2() values();
 
 insert into tp_time()
 values ();

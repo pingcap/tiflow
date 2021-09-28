@@ -168,12 +168,13 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			continue
 		}
 
-		if !config.NewReplicaImpl && s.cyclic != nil {
-			// Filter rows if it is origined from downstream.
+		if s.cyclic != nil {
+			// Filter rows if it is origin from downstream.
 			skippedRowCount := cyclic.FilterAndReduceTxns(
 				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
+
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		for _, worker := range s.workers {
 			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
@@ -197,6 +198,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
+	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
 }
@@ -231,30 +233,32 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 		failpoint.Return(nil)
 	})
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-
-	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+	err := s.statistics.RecordDDLExecution(func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.Error(err))
+			return err
+		}
+
+		if shouldSwitchDB {
+			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
+			if err != nil {
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Error("Failed to rollback", zap.Error(err))
+				}
+				return err
 			}
-			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 		}
-	}
 
-	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
+		if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
+			}
+			return err
 		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
 
-	if err = tx.Commit(); err != nil {
+		return tx.Commit()
+	})
+	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 

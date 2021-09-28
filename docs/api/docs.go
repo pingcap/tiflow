@@ -217,12 +217,54 @@ var doc = `{
                         "required": true
                     },
                     {
-                        "description": "update changefeed",
-                        "name": "changefeed",
+                        "description": "changefeed target ts",
+                        "name": "target_ts",
                         "in": "body",
-                        "required": true,
                         "schema": {
-                            "$ref": "#/definitions/model.ChangefeedConfig"
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "description": "sink uri",
+                        "name": "sink_uri",
+                        "in": "body",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "filter rules",
+                        "name": "filter_rules",
+                        "in": "body",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    {
+                        "description": "ignore transaction start ts",
+                        "name": "ignore_txn_start_ts",
+                        "in": "body",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "description": "mounter worker nums",
+                        "name": "mounter_worker_num",
+                        "in": "body",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "description": "sink config",
+                        "name": "sink_config",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/config.SinkConfig"
                         }
                     }
                 ],
@@ -397,7 +439,7 @@ var doc = `{
                         }
                     },
                     {
-                        "description": "target capture_id",
+                        "description": "capture_id",
                         "name": "capture_id",
                         "in": "body",
                         "required": true,
@@ -485,6 +527,43 @@ var doc = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/log": {
+            "post": {
+                "description": "change TiCDC log level dynamically",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "Change TiCDC log level",
+                "parameters": [
+                    {
+                        "description": "log level",
+                        "name": "log_level",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }

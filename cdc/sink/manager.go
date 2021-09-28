@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -39,19 +40,30 @@ type Manager struct {
 	tableSinks   map[model.TableID]*tableSink
 	tableSinksMu sync.Mutex
 
-	flushMu sync.Mutex
+	flushMu  sync.Mutex
+	flushing int64
 
 	drawbackChan chan drawbackMsg
+
+	captureAddr               string
+	changefeedID              model.ChangeFeedID
+	metricsTableSinkTotalRows prometheus.Counter
 }
 
 // NewManager creates a new Sink manager
-func NewManager(ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts) *Manager {
+func NewManager(
+	ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts,
+	captureAddr string, changefeedID model.ChangeFeedID,
+) *Manager {
 	drawbackChan := make(chan drawbackMsg, 16)
 	return &Manager{
-		backendSink:  newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
-		checkpointTs: checkpointTs,
-		tableSinks:   make(map[model.TableID]*tableSink),
-		drawbackChan: drawbackChan,
+		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
+		checkpointTs:              checkpointTs,
+		tableSinks:                make(map[model.TableID]*tableSink),
+		drawbackChan:              drawbackChan,
+		captureAddr:               captureAddr,
+		changefeedID:              changefeedID,
+		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
 	}
 }
 
@@ -74,6 +86,7 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
+	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	return m.backendSink.Close(ctx)
 }
 
@@ -94,8 +107,17 @@ func (m *Manager) getMinEmittedTs() model.Ts {
 }
 
 func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
+	// NOTICE: Because all table sinks will try to flush backend sink,
+	// which will cause a lot of lock contention and blocking in high concurrency cases.
+	// So here we use flushing as a lightweight lock to improve the lock competition problem.
+	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
+		return m.getCheckpointTs(), nil
+	}
 	m.flushMu.Lock()
-	defer m.flushMu.Unlock()
+	defer func() {
+		m.flushMu.Unlock()
+		atomic.StoreInt64(&m.flushing, 0)
+	}()
 	minEmittedTs := m.getMinEmittedTs()
 	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
 	if err != nil {
@@ -142,6 +164,7 @@ func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
+	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	return nil
 }
 
@@ -227,6 +250,13 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush")
 	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
 	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
+	metricTotalRows := bufferSinkTotalRowsCountCounter.WithLabelValues(advertiseAddr, changefeedID)
+	defer func() {
+		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "Flush")
+		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "EmitRow")
+		bufferChanSizeGauge.DeleteLabelValues(advertiseAddr, changefeedID)
+		bufferSinkTotalRowsCountCounter.DeleteLabelValues(advertiseAddr, changefeedID)
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -247,6 +277,7 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				i := sort.Search(len(rows), func(i int) bool {
 					return rows[i].CommitTs > resolvedTs
 				})
+				metricTotalRows.Add(float64(i))
 
 				start := time.Now()
 				err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)

@@ -18,11 +18,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/version"
-
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -36,7 +36,8 @@ type GlobalVars struct {
 	PDClient    pd.Client
 	KVStorage   tidbkv.Storage
 	CaptureInfo *model.CaptureInfo
-	EtcdClient  *kv.CDCEtcdClient
+	EtcdClient  *etcd.CDCEtcdClient
+	GrpcPool    kv.GrpcPool
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline

@@ -304,6 +304,28 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	c.Check(sum, check.Equals, 10000)
 }
 
+func (s *batchSuite) TestEmptyMessage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
+	c.Check(err, check.IsNil)
+
+	emptyEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{},
+	}
+
+	for i := 0; i < 10000; i++ {
+		r, err := encoder.AppendRowChangedEvent(emptyEvent)
+		c.Check(r, check.Equals, EncoderNoOperation)
+		c.Check(err, check.IsNil)
+	}
+
+	messages := encoder.Build()
+	c.Assert(messages, check.HasLen, 0)
+}
+
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
 	s.testBatchCodec(c, func() EventBatchEncoder {
@@ -339,6 +361,28 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	err = row2.Decode(rowEncode)
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
+}
+
+func (s *columnSuite) TestNonBinaryStringCol(c *check.C) {
+	defer testleak.AfterTest(c)()
+	col := &model.Column{
+		Name:  "test",
+		Type:  mysql.TypeString,
+		Value: "value",
+	}
+	jsonCol := column{}
+	jsonCol.FromSinkColumn(col)
+	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+	jsonCol2 := row2.Update["test"]
+	col2 := jsonCol2.ToSinkColumn("test")
+	col2.Value = string(col2.Value.([]byte))
+	c.Assert(col2, check.DeepEquals, col)
 }
 
 func (s *columnSuite) TestVarBinaryCol(c *check.C) {

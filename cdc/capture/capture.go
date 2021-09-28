@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -56,16 +57,17 @@ type Capture struct {
 
 	pdClient   pd.Client
 	kvStorage  tidbkv.Storage
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
+	grpcPool   kv.GrpcPool
 
 	cancel context.CancelFunc
 
 	newProcessorManager func() *processor.Manager
-	newOwner            func() *owner.Owner
+	newOwner            func(pd.Client) *owner.Owner
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient) *Capture {
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient) *Capture {
 	return &Capture{
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
@@ -77,7 +79,7 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDC
 	}
 }
 
-func (c *Capture) reset() error {
+func (c *Capture) reset(ctx context.Context) error {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	conf := config.GetGlobalServerConfig()
@@ -88,7 +90,8 @@ func (c *Capture) reset() error {
 	}
 	c.processorManager = c.newProcessorManager()
 	if c.session != nil {
-		c.session.Close() //nolint:errcheck
+		// It can't be handled even after it fails, so we ignore it.
+		_ = c.session.Close()
 	}
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
@@ -96,7 +99,11 @@ func (c *Capture) reset() error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	c.session = sess
-	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
+	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
+	}
+	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
 	log.Info("init capture", zap.String("capture-id", c.info.ID), zap.String("capture-addr", c.info.AdvertiseAddr))
 	return nil
 }
@@ -121,7 +128,7 @@ func (c *Capture) Run(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		err = c.reset()
+		err = c.reset(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -145,6 +152,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		KVStorage:   c.kvStorage,
 		CaptureInfo: c.info,
 		EtcdClient:  c.etcdClient,
+		GrpcPool:    c.grpcPool,
 	})
 	err := c.register(ctx)
 	if err != nil {
@@ -158,14 +166,14 @@ func (c *Capture) run(stdCtx context.Context) error {
 		cancel()
 	}()
 	wg := new(sync.WaitGroup)
-	wg.Add(2)
+	wg.Add(3)
 	var ownerErr, processorErr error
 	go func() {
 		defer wg.Done()
 		defer c.AsyncClose()
-		// when the campaignOwner returns an error, it means that the the owner throws an unrecoverable serious errors
+		// when the campaignOwner returns an error, it means that the owner throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the owner tick)
-		// so we should also stop the processor and let capture restart or exit
+		// so we should also stop the owner and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
 		log.Info("the owner routine has exited", zap.Error(ownerErr))
 	}()
@@ -174,11 +182,15 @@ func (c *Capture) run(stdCtx context.Context) error {
 		defer c.AsyncClose()
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
-		// when the etcd worker of processor returns an error, it means that the the processor throws an unrecoverable serious errors
+		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
-		// so we should also stop the owner and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
+		// so we should also stop the processor and let capture restart or exit
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, orchestrator.NewGlobalState(), processorFlushInterval)
 		log.Info("the processor routine has exited", zap.Error(processorErr))
+	}()
+	go func() {
+		defer wg.Done()
+		c.grpcPool.RecycleConn(ctx)
 	}()
 	wg.Wait()
 	if ownerErr != nil {
@@ -235,9 +247,9 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		}
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
-		owner := c.newOwner()
+		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ctx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -254,7 +266,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 }
 
 func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, kv.EtcdKeyBase, reactor, reactorState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -299,7 +311,7 @@ func (c *Capture) OperateOwnerUnderLock(fn func(*owner.Owner) error) error {
 	return fn(c.owner)
 }
 
-// Campaign to be an owner
+// campaign to be an owner.
 func (c *Capture) campaign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
@@ -307,7 +319,7 @@ func (c *Capture) campaign(ctx cdcContext.Context) error {
 	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(ctx, c.info.ID))
 }
 
-// Resign lets a owner start a new election.
+// resign lets an owner start a new election.
 func (c *Capture) resign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
@@ -327,7 +339,9 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 // AsyncClose closes the capture by unregistering it from etcd
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
+	// Safety: Here we mainly want to stop the owner
+	// and ignore it if the owner does not exist or is not set.
+	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		o.AsyncStop()
 		return nil
 	})
@@ -336,11 +350,16 @@ func (c *Capture) AsyncClose() {
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
+	if c.grpcPool != nil {
+		c.grpcPool.Close()
+	}
 }
 
 // WriteDebugInfo writes the debug info into writer.
 func (c *Capture) WriteDebugInfo(w io.Writer) {
-	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck
+	// Safety: Because we are mainly outputting information about the owner here,
+	// if the owner does not exist or is not set, the information will not be output.
+	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
 		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w)
 		return nil
@@ -355,9 +374,9 @@ func (c *Capture) WriteDebugInfo(w io.Writer) {
 
 // IsOwner returns whether the capture is an owner
 func (c *Capture) IsOwner() bool {
-	return c.OperateOwnerUnderLock(func(o *owner.Owner) error {
-		return nil
-	}) == nil
+	c.ownerMu.Lock()
+	defer c.ownerMu.Unlock()
+	return c.owner != nil
 }
 
 // GetOwner return the owner of current TiCDC cluster
@@ -367,7 +386,7 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 		return nil, err
 	}
 
-	ownerID, err := c.etcdClient.GetOwnerID(ctx, kv.CaptureOwnerKey)
+	ownerID, err := c.etcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
 	if err != nil {
 		return nil, err
 	}

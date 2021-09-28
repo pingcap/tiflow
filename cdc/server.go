@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -45,8 +46,7 @@ import (
 )
 
 const (
-	ownerRunInterval = time.Millisecond * 500
-	defaultDataDir   = "/tmp/cdc_data"
+	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
 )
@@ -56,7 +56,7 @@ type Server struct {
 	capture      *capture.Capture
 	statusServer *http.Server
 	pdClient     pd.Client
-	etcdClient   *kv.CDCEtcdClient
+	etcdClient   *etcd.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
@@ -83,6 +83,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	pdClient, err := pd.NewClientWithContext(
 		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
@@ -107,8 +108,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   s.pdEndpoints,
 		TLS:         tlsConfig,
@@ -132,21 +135,19 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-	etcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
-	s.etcdClient = &etcdClient
-	if err := s.initDataDir(ctx); err != nil {
+
+	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
+	s.etcdClient = &cdcEtcdClient
+
+	err = s.initDataDir(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	for _, pdEndpoint := range s.pdEndpoints {
-		err = version.CheckClusterVersion(ctx, s.pdClient, pdEndpoint, conf.Security, errorTiKVIncompatible)
-		if err == nil {
-			break
-		}
-	}
+	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}
@@ -285,35 +286,14 @@ func (s *Server) setUpDataDir(ctx context.Context) error {
 		return nil
 	}
 
-	// s.etcdClient maybe nil if NewReplicaImpl is not set to true
-	// todo: remove this after NewReplicaImpl set to true in a specific branch, and use server.etcdClient instead.
-	cli := s.etcdClient
-	if cli == nil {
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			Context:     ctx,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
-		etcdClient := kv.NewCDCEtcdClient(ctx, client)
-		cli = &etcdClient
-		defer cli.Close()
-	}
-
-	// data-dir will be decide by exist changefeed for backward compatibility
-	allStatus, err := cli.GetAllChangeFeedStatus(ctx)
+	// data-dir will be decided by exist changefeed for backward compatibility
+	allInfo, err := s.etcdClient.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	candidates := make([]string, 0, len(allStatus))
-	for id := range allStatus {
-		info, err := cli.GetChangeFeedInfo(ctx, id)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	candidates := make([]string, 0, len(allInfo))
+	for _, info := range allInfo {
 		if info.SortDir != "" {
 			candidates = append(candidates, info.SortDir)
 		}

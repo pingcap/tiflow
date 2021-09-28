@@ -78,12 +78,11 @@ type CommandType int
 const (
 	// CommandTypeUnknown is unknown message type
 	CommandTypeUnknown CommandType = iota
-	// CommandTypeStopAtTs means the table pipeline should stop at the specified Ts
-	CommandTypeStopAtTs
+	// CommandTypeStop means the table pipeline should stop at once
+	CommandTypeStop
 )
 
 // Command is the command about table pipeline
 type Command struct {
-	Tp        CommandType
-	StoppedTs model.Ts
+	Tp CommandType
 }

@@ -23,6 +23,7 @@ import (
 	tikverr "github.com/tikv/client-go/v2/error"
 	"github.com/tikv/client-go/v2/tikv"
 	"github.com/tikv/client-go/v2/tikvrpc"
+	"github.com/tikv/client-go/v2/txnkv"
 	"go.uber.org/zap"
 )
 
@@ -100,9 +101,9 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 			return errors.Errorf("unexpected scanlock error: %s", locksResp)
 		}
 		locksInfo := locksResp.GetLocks()
-		locks := make([]*tikv.Lock, len(locksInfo))
+		locks := make([]*txnkv.Lock, len(locksInfo))
 		for i := range locksInfo {
-			locks[i] = tikv.NewLock(locksInfo[i])
+			locks[i] = txnkv.NewLock(locksInfo[i])
 		}
 
 		_, _, err1 := r.kvStorage.GetLockResolver().ResolveLocks(bo, 0, locks)

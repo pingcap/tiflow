@@ -28,6 +28,8 @@ import (
 const (
 	dockerComposeFilePath   = "/docker-compose-canal.yml"
 	controllerContainerName = "ticdc_controller_1"
+	// The upstream PD endpoint in docker-compose network.
+	upstreamPD = "http://upstream-pd:2379"
 )
 
 // KafkaDockerEnv represents the docker-compose service defined in docker-compose-canal.yml
@@ -44,7 +46,11 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		if err := checkDbConn(framework.UpstreamDSN); err != nil {
 			return err
 		}
-		return checkDbConn(framework.DownstreamDSN)
+		if err := checkDbConn(framework.DownstreamDSN); err != nil {
+			return err
+		}
+		// Also check cdc cluster.
+		return framework.CdcHealthCheck(controllerContainerName, upstreamPD)
 	}
 	var file string
 	if dockerComposeFile == "" {

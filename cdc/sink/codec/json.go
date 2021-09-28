@@ -64,7 +64,15 @@ func (c *column) FromSinkColumn(col *model.Column) {
 	}
 	switch col.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		str := string(col.Value.([]byte))
+		var str string
+		switch col.Value.(type) {
+		case []byte:
+			str = string(col.Value.([]byte))
+		case string:
+			str = col.Value.(string)
+		default:
+			log.Panic("invalid column value, please report a bug", zap.Any("col", col))
+		}
 		if c.Flag.IsBinary() {
 			str = strconv.Quote(str)
 			str = str[1 : len(str)-1]
@@ -395,6 +403,12 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+	// Some transactions could generate empty row change event, such as
+	// begin; insert into t (id) values (1); delete from t where id=1; commit;
+	// Just ignore these row changed events
+	if len(e.Columns) == 0 && len(e.PreColumns) == 0 {
+		return EncoderNoOperation, nil
+	}
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {

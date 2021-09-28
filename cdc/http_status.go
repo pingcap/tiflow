@@ -26,9 +26,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
@@ -47,7 +47,7 @@ func (s *Server) startStatusHTTP() error {
 	router.POST("/capture/owner/rebalance_trigger", gin.WrapF(s.handleRebalanceTrigger))
 	router.POST("/capture/owner/move_table", gin.WrapF(s.handleMoveTable))
 	router.POST("/capture/owner/changefeed/query", gin.WrapF(s.handleChangefeedQuery))
-	router.Any("/admin/log", gin.WrapF(handleAdminLogLevel))
+	router.POST("/admin/log", gin.WrapF(handleAdminLogLevel))
 
 	if util.FailpointBuild {
 		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
@@ -93,8 +93,8 @@ type status struct {
 	IsOwner bool   `json:"is_owner"`
 }
 
-func (s *Server) writeEtcdInfo(ctx context.Context, cli *kv.CDCEtcdClient, w io.Writer) {
-	resp, err := cli.Client.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
+func (s *Server) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, w io.Writer) {
+	resp, err := cli.Client.Get(ctx, etcd.EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return

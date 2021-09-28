@@ -16,40 +16,33 @@ package cyclic
 import (
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type cyclicSuite struct{}
-
-var _ = check.Suite(&cyclicSuite{})
-
-func Test(t *testing.T) { check.TestingT(t) }
-
-func (s *cyclicSuite) TestCyclicConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCyclicConfig(t *testing.T) {
+	t.Parallel()
 	cfg := &config.CyclicConfig{
 		Enable:          true,
 		ReplicaID:       1,
 		FilterReplicaID: []uint64{2, 3},
 	}
 	cyc := NewCyclic(cfg)
-	c.Assert(cyc, check.NotNil)
-	c.Assert(cyc.Enabled(), check.IsTrue)
-	c.Assert(cyc.ReplicaID(), check.Equals, uint64(1))
-	c.Assert(cyc.FilterReplicaID(), check.DeepEquals, []uint64{2, 3})
+	require.NotNil(t, cyc)
+	require.True(t, cyc.Enabled())
+	require.Equal(t, cyc.ReplicaID(), uint64(1))
+	require.Equal(t, cyc.FilterReplicaID(), []uint64{2, 3})
 
 	cyc = NewCyclic(nil)
-	c.Assert(cyc, check.IsNil)
+	require.Nil(t, cyc)
 	cyc = NewCyclic(&config.CyclicConfig{ReplicaID: 0})
-	c.Assert(cyc, check.IsNil)
+	require.Nil(t, cyc)
 }
 
-func (s *cyclicSuite) TestRelaxSQLMode(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRelaxSQLMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		oldMode string
 		newMode string
@@ -62,12 +55,12 @@ func (s *cyclicSuite) TestRelaxSQLMode(c *check.C) {
 
 	for _, test := range tests {
 		getNew := RelaxSQLMode(test.oldMode)
-		c.Assert(getNew, check.Equals, test.newMode)
+		require.Equal(t, getNew, test.newMode)
 	}
 }
 
-func (s *cyclicSuite) TestIsTablePaired(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestIsTablePaired(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		tables   []model.TableName
 		isParied bool
@@ -100,7 +93,7 @@ func (s *cyclicSuite) TestIsTablePaired(c *check.C) {
 	}
 
 	for _, test := range tests {
-		c.Assert(IsTablesPaired(test.tables), check.Equals, test.isParied,
-			check.Commentf("%v", test))
+		require.Equal(t, IsTablesPaired(test.tables), test.isParied,
+			"%v", test)
 	}
 }

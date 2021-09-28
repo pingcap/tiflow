@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/actor"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -38,14 +38,10 @@ func init() {
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	sorter.InitMetrics(registry)
-	if config.NewReplicaImpl {
-		processor.InitMetrics(registry)
-		tablepipeline.InitMetrics(registry)
-		owner.InitMetrics(registry)
-	} else {
-		initProcessorMetrics(registry)
-		initOwnerMetrics(registry)
-	}
+	processor.InitMetrics(registry)
+	tablepipeline.InitMetrics(registry)
+	owner.InitMetrics(registry)
+	etcd.InitMetrics(registry)
 	initServerMetrics(registry)
 	actor.InitMetrics(registry)
 }
