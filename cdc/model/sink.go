@@ -185,10 +185,10 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema      string `toml:"db-name" json:"db-name" msg:"db-name"`
-	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tbl-name"`
-	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tbl-id"`
-	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"is-partition"`
+	Schema      string `toml:"db-name" json:"db-name" msg:"dbName"`
+	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tblName"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tblID"`
+	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"isPartition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -229,6 +229,9 @@ const (
 )
 
 // RedoLog defines the persistent structure of redo log
+// since MsgPack do not support types that are defined in another package,
+// more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
+// so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
 type RedoLog struct {
 	Row  *RedoRowChangedEvent `msg:"row"`
 	DDL  *RedoDDLEvent        `msg:"ddl"`
