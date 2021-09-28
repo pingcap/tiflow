@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -55,7 +56,7 @@ type Server struct {
 	capture      *capture.Capture
 	statusServer *http.Server
 	pdClient     pd.Client
-	etcdClient   *kv.CDCEtcdClient
+	etcdClient   *etcd.CDCEtcdClient
 	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
@@ -135,7 +136,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 
-	cdcEtcdClient := kv.NewCDCEtcdClient(ctx, etcdCli)
+	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &cdcEtcdClient
 
 	err = s.initDataDir(ctx)
@@ -146,12 +147,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	for _, pdEndpoint := range s.pdEndpoints {
-		err = version.CheckClusterVersion(ctx, s.pdClient, pdEndpoint, conf.Security, errorTiKVIncompatible)
-		if err == nil {
-			break
-		}
-	}
+	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}

@@ -17,9 +17,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pingcap/ticdc/pkg/etcd"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
@@ -33,7 +34,7 @@ import (
 
 // updateChangefeedOptions defines common flags for the `cli changefeed update` command.
 type updateChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 
 	credential *security.Credential
 
@@ -188,12 +189,17 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
-		case "tz", "changefeed-id", "no-confirm", "sort-dir":
-			// Do nothing, these are some flags from the changefeed command that we don't use.
+		case "sort-dir":
+			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
+		case "changefeed-id", "no-confirm", "cyclic-filter-replica-ids":
+			// Do nothing, these are some flags from the changefeed command,
+			// we don't use it to update, but we do use these flags.
 		case "interact":
-			// Do nothing, this is a flags from the cli command, which we don't use.
+			// Do nothing, this is a flags from the cli command
+			// we don't use it to update.
 		case "pd", "log-level", "key", "cert", "ca":
-			// Do nothing, these are some global flags from the cdc command that we don't use.
+			// Do nothing, this is a flags from the cli command
+			// we don't use it to update, but we do use these flags.
 		default:
 			// use this default branch to prevent new added parameter is not added
 			log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))

@@ -17,20 +17,13 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type markSuite struct{}
-
-var _ = check.Suite(&markSuite{})
-
-func TestCyclic(t *testing.T) { check.TestingT(t) }
-
-func (s *markSuite) TestFilterAndReduceTxns(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFilterAndReduceTxns(t *testing.T) {
+	t.Parallel()
 	rID := mark.CyclicReplicaIDCol
 	testCases := []struct {
 		input     map[model.TableID][]*model.SingleTableTxn
@@ -212,6 +205,6 @@ func (s *markSuite) TestFilterAndReduceTxns(c *check.C) {
 
 	for i, tc := range testCases {
 		FilterAndReduceTxns(tc.input, tc.filterID, tc.replicaID)
-		c.Assert(tc.input, check.DeepEquals, tc.output, check.Commentf("case %d %s\n", i, spew.Sdump(tc)))
+		require.Equal(t, tc.input, tc.output, "case %d %s\n", i, spew.Sdump(tc))
 	}
 }
