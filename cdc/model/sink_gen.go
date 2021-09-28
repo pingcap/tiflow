@@ -1956,12 +1956,6 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					}
 				}
 			}
-		case "approximateSize":
-			z.ApproximateSize, err = dc.ReadInt64()
-			if err != nil {
-				err = msgp.WrapError(err, "ApproximateSize")
-				return
-			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -1975,9 +1969,9 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 7
+	// map header, size 6
 	// write "startTs"
-	err = en.Append(0x87, 0xa7, 0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x73)
+	err = en.Append(0x86, 0xa7, 0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x73)
 	if err != nil {
 		return
 	}
@@ -2057,25 +2051,15 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			}
 		}
 	}
-	// write "approximateSize"
-	err = en.Append(0xaf, 0x61, 0x70, 0x70, 0x72, 0x6f, 0x78, 0x69, 0x6d, 0x61, 0x74, 0x65, 0x53, 0x69, 0x7a, 0x65)
-	if err != nil {
-		return
-	}
-	err = en.WriteInt64(z.ApproximateSize)
-	if err != nil {
-		err = msgp.WrapError(err, "ApproximateSize")
-		return
-	}
 	return
 }
 
 // MarshalMsg implements msgp.Marshaler
 func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 7
+	// map header, size 6
 	// string "startTs"
-	o = append(o, 0x87, 0xa7, 0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x73)
+	o = append(o, 0x86, 0xa7, 0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x73)
 	o = msgp.AppendUint64(o, z.StartTs)
 	// string "commitTs"
 	o = append(o, 0xa8, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x54, 0x73)
@@ -2106,9 +2090,6 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 			o = msgp.AppendInt(o, z.IndexColumns[za0001][za0002])
 		}
 	}
-	// string "approximateSize"
-	o = append(o, 0xaf, 0x61, 0x70, 0x70, 0x72, 0x6f, 0x78, 0x69, 0x6d, 0x61, 0x74, 0x65, 0x53, 0x69, 0x7a, 0x65)
-	o = msgp.AppendInt64(o, z.ApproximateSize)
 	return
 }
 
@@ -2203,12 +2184,6 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					}
 				}
 			}
-		case "approximateSize":
-			z.ApproximateSize, bts, err = msgp.ReadInt64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "ApproximateSize")
-				return
-			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
@@ -2233,7 +2208,6 @@ func (z *RowChangedEvent) Msgsize() (s int) {
 	for za0001 := range z.IndexColumns {
 		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0001]) * (msgp.IntSize))
 	}
-	s += 16 + msgp.Int64Size
 	return
 }
 

@@ -262,7 +262,7 @@ type RowChangedEvent struct {
 	IndexColumns [][]int   `json:"-" msg:"indexColumns"`
 
 	// approximate size of this event, calculate by tikv proto bytes size
-	ApproximateSize int64 `json:"-" msg:"approximateSize"`
+	ApproximateSize int64 `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
