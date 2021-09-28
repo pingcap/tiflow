@@ -143,7 +143,7 @@ type forwardActor struct {
 	ch chan<- pipeline.Message
 }
 
-func (f *forwardActor) Receive(ctx context.Context, msgs []pipeline.Message) bool {
+func (f *forwardActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
 	for _, msg := range msgs {
 		if f.contextAware {
 			select {
@@ -329,7 +329,7 @@ type flipflopActor struct {
 	acc       int64
 }
 
-func (f *flipflopActor) Receive(ctx context.Context, msgs []pipeline.Message) bool {
+func (f *flipflopActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
 	for range msgs {
 		level := atomic.LoadInt64(&f.level)
 		newLevel := 0
@@ -391,7 +391,7 @@ type closedActor struct {
 	ch  chan int
 }
 
-func (c *closedActor) Receive(ctx context.Context, msgs []pipeline.Message) bool {
+func (c *closedActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
 	c.acc += len(msgs)
 	c.ch <- c.acc
 	// closed
@@ -464,7 +464,7 @@ type reopenedActor struct {
 	trigger bool
 }
 
-func (r *reopenedActor) Receive(ctx context.Context, msgs []pipeline.Message) bool {
+func (r *reopenedActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
 	r.trigger = !r.trigger
 	return r.trigger
 }

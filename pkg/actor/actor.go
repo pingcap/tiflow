@@ -18,7 +18,7 @@ import (
 // Actor is a universal primitive of concurrent computation.
 // See more https://en.wikipedia.org/wiki/Actor_model
 type Actor interface {
-	// Receive handles messages that are sent to actor's mailbox.
+	// Poll handles messages that are sent to actor's mailbox.
 	//
 	// The ctx is only for cancellation, and an actor must be aware of
 	// the cancellation.
@@ -30,7 +30,7 @@ type Actor interface {
 	//
 	// We choose message to have a concrete type instead of an interface to save
 	// memory allocation.
-	Receive(ctx context.Context, msgs []pipeline.Message) (closed bool)
+	Poll(ctx context.Context, msgs []pipeline.Message) (closed bool)
 }
 
 // ID is ID of actors.
@@ -324,6 +324,7 @@ func (b *SystemBuilder) handleFatal(
 func (b *SystemBuilder) Build() (*System, *Router) {
 	router := newRouter()
 	return &System{
+		name:                 b.name,
 		numWorker:            b.numWorker,
 		actorBatchSize:       b.actorBatchSize,
 		msgBatchSizePerActor: b.msgBatchSizePerActor,
@@ -333,14 +334,18 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 
 		fatalHandler: b.fatalHandler,
 
-		totalWorkers:    totalWorkers.WithLabelValues(b.name),
-		workingWorkers:  workingWorkers.WithLabelValues(b.name),
-		workingDuration: workingDuration.WithLabelValues(b.name),
+		metricTotalWorkers:    totalWorkers.WithLabelValues(b.name),
+		metricWorkingWorkers:  workingWorkers.WithLabelValues(b.name),
+		metricWorkingDuration: workingDuration.WithLabelValues(b.name),
+		metricPollDuration:    pollMsgDuration.WithLabelValues(b.name),
+		metricProcBatch:       batchSizeHistogram.WithLabelValues(b.name, "proc"),
+		metricMsgBatch:        batchSizeHistogram.WithLabelValues(b.name, "msg"),
 	}, router
 }
 
 // System is the runtime of Actors.
 type System struct {
+	name                 string
 	numWorker            int
 	actorBatchSize       int
 	msgBatchSizePerActor int
@@ -353,9 +358,12 @@ type System struct {
 	fatalHandler func(string, ID)
 
 	// Metrics
-	totalWorkers    prometheus.Gauge
-	workingWorkers  prometheus.Gauge
-	workingDuration prometheus.Counter
+	metricTotalWorkers    prometheus.Gauge
+	metricWorkingWorkers  prometheus.Gauge
+	metricWorkingDuration prometheus.Counter
+	metricPollDuration    prometheus.Observer
+	metricProcBatch       prometheus.Observer
+	metricMsgBatch        prometheus.Observer
 }
 
 // Start the system. Cancelling the context to stop the system.
@@ -364,7 +372,7 @@ func (s *System) Start(ctx context.Context) {
 	s.wg, ctx = errgroup.WithContext(ctx)
 	ctx, s.cancel = context.WithCancel(ctx)
 
-	s.totalWorkers.Add(float64(s.numWorker))
+	s.metricTotalWorkers.Add(float64(s.numWorker))
 	for i := 0; i < s.numWorker; i++ {
 		s.wg.Go(func() error {
 			s.poll(ctx)
@@ -376,7 +384,7 @@ func (s *System) Start(ctx context.Context) {
 // Stop the system, cancels all actors. It should be called after Start.
 // Stop is not threadsafe.
 func (s *System) Stop() error {
-	s.totalWorkers.Add(-float64(s.numWorker))
+	s.metricTotalWorkers.Add(-float64(s.numWorker))
 	if s.cancel != nil {
 		s.cancel()
 	}
@@ -394,16 +402,16 @@ func (s *System) Spawn(mb Mailbox, actor Actor) error {
 
 const slowReceiveThreshold = time.Second
 
-// The main poll of a system.
+// The main poll of actor system.
 func (s *System) poll(ctx context.Context) {
-	// TODO add metrics of batch size
 	batchP := make([]*proc, 0, s.actorBatchSize)
 	batchMsg := make([]pipeline.Message, 0, s.msgBatchSizePerActor)
+	s.metricProcBatch.Observe(float64(len(batchP)))
 	rd := s.rd
 	rd.Lock()
 
 	startTime := time.Now()
-	s.workingWorkers.Add(1)
+	s.metricWorkingWorkers.Add(1)
 	for {
 		batchP = batchP[:0]
 		for {
@@ -424,11 +432,11 @@ func (s *System) poll(ctx context.Context) {
 				break
 			}
 			// Recording metrics.
-			s.workingDuration.Add(time.Since(startTime).Seconds())
-			s.workingWorkers.Add(-1)
+			s.metricWorkingDuration.Add(time.Since(startTime).Seconds())
+			s.metricWorkingWorkers.Add(-1)
 			rd.cond.Wait()
 			startTime = time.Now()
-			s.workingWorkers.Add(1)
+			s.metricWorkingWorkers.Add(1)
 		}
 		rd.Unlock()
 
@@ -444,9 +452,10 @@ func (s *System) poll(ctx context.Context) {
 			if len(batchMsg) == 0 {
 				continue
 			}
+			s.metricMsgBatch.Observe(float64(len(batchMsg)))
 
-			receiveStart := time.Now()
-			close := !p.actor.Receive(ctx, batchMsg)
+			pollStartTime := time.Now()
+			close := !p.actor.Poll(ctx, batchMsg)
 			if close {
 				if !p.closed {
 					p.closed = true
@@ -462,12 +471,14 @@ func (s *System) poll(ctx context.Context) {
 					"closed actor can never receive new messages again",
 					p.mb.ID())
 			}
-			receiveDuration := time.Since(receiveStart)
+			receiveDuration := time.Since(pollStartTime)
 			if receiveDuration > slowReceiveThreshold {
 				log.Warn("actor handle received messages too slow",
 					zap.Duration("duration", receiveDuration),
-					zap.Uint64("id", uint64(p.mb.ID())))
+					zap.Uint64("id", uint64(p.mb.ID())),
+					zap.String("name", s.name))
 			}
+			s.metricPollDuration.Observe(receiveDuration.Seconds())
 		}
 
 		rd.Lock()

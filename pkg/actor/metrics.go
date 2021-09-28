@@ -29,8 +29,8 @@ var (
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "actor",
-			Name:      "number_of_workring_workers",
-			Help:      "The number of workring workers in an actor system.",
+			Name:      "number_of_working_workers",
+			Help:      "The number of working workers in an actor system.",
 		}, []string{"name"})
 	workingDuration = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -39,6 +39,22 @@ var (
 			Name:      "workers_cpu_seconds_total",
 			Help:      "Total working time spent in seconds.",
 		}, []string{"name"})
+	batchSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "actor",
+			Name:      "batch",
+			Help:      "Bucketed histogram of batch size of actor system.",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 10),
+		}, []string{"name", "type"})
+	pollMsgDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "actor",
+			Name:      "poll_duration_seconds",
+			Help:      "Bucketed histogram of actor poll time (s).",
+			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 16),
+		}, []string{"name"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -46,4 +62,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(totalWorkers)
 	registry.MustRegister(workingWorkers)
 	registry.MustRegister(workingDuration)
+	registry.MustRegister(batchSizeHistogram)
+	registry.MustRegister(pollMsgDuration)
 }
