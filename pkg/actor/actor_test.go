@@ -86,8 +86,9 @@ func TestRouterSendAndSendB(t *testing.T) {
 	id := ID(0)
 	mb := NewMailbox(id, 1)
 	router := newRouter()
-	router.insert(id, &proc{mb: mb})
-	err := router.Send(id, pipeline.TickMessage())
+	err := router.insert(id, &proc{mb: mb})
+	require.Nil(t, err)
+	err = router.Send(id, pipeline.TickMessage())
 	require.Nil(t, err)
 
 	err = router.Send(id, pipeline.TickMessage())
@@ -120,7 +121,7 @@ func wait(t *testing.T, timeout time.Duration, f func()) {
 	}()
 	select {
 	case <-wait:
-	case <-time.After(time.Second):
+	case <-time.After(timeout):
 		t.Fatal("Timed out")
 	}
 }
@@ -144,7 +145,7 @@ func TestSystemSpawnDuplicateActor(t *testing.T) {
 	require.Nil(t, sys.Spawn(mb, fa))
 	require.NotNil(t, sys.Spawn(mb, fa))
 
-	wait(t, time.Second, func() {
+	wait(t, 2*time.Second, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})

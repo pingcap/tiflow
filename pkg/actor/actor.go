@@ -248,7 +248,6 @@ func (r *Router) Broadcast(msg pipeline.Message) {
 	if len(ps) != 0 {
 		r.rd.scheduleN(ps)
 	}
-	return
 }
 
 func (r *Router) insert(id ID, p *proc) error {
