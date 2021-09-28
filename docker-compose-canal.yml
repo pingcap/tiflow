@@ -40,7 +40,7 @@ services:
       - --log-file=/logs/capturer0.log
       - --advertise-addr=capturer0:8300
       - --data-dir=/data
-      - --log-level=info
+      - --log-level=debug
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
@@ -64,7 +64,7 @@ services:
       - --log-file=/logs/capturer1.log
       - --advertise-addr=capturer1:8300
       - --data-dir=/data
-      - --log-level=info
+      - --log-level=debug
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"
@@ -88,7 +88,7 @@ services:
       - --log-file=/logs/capturer2.log
       - --advertise-addr=capturer2:8300
       - --data-dir=/data
-      - --log-level=info
+      - --log-level=debug
     depends_on:
       - "upstream-tidb"
       - "downstream-tidb"

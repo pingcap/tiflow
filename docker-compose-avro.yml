@@ -44,7 +44,7 @@ services:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer0.log
-      - --log-level=info
+      - --log-level=debug
       - --advertise-addr=capturer0:8300
       - --tz=${CDC_TIME_ZONE:-SYSTEM}
       - --data-dir=/data
@@ -69,7 +69,7 @@ services:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer1.log
-      - --log-level=info
+      - --log-level=debug
       - --advertise-addr=capturer1:8300
       - --tz=${CDC_TIME_ZONE:-SYSTEM}
       - --data-dir=/data
@@ -94,7 +94,7 @@ services:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer2.log
-      - --log-level=info
+      - --log-level=debug
       - --advertise-addr=capturer2:8300
       - --tz=${CDC_TIME_ZONE:-SYSTEM}
       - --data-dir=/data
