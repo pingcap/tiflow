@@ -35,10 +35,10 @@ type spanFrontier struct {
 	minTsHeap fibonacciHeap
 }
 
-// NewFrontier creates Froniter from the given spans.
+// NewFrontier creates Frontier from the given spans.
 func NewFrontier(checkpointTs uint64, spans ...regionspan.ComparableSpan) Frontier {
 	// spanFrontier don't support use Nil as the maximum key of End range
-	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have a
+	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
 	// End key bigger than util.UpperBoundKey
 	for i, span := range spans {
 		spans[i] = span.Hack()
@@ -61,7 +61,7 @@ func NewFrontier(checkpointTs uint64, spans ...regionspan.ComparableSpan) Fronti
 	return s
 }
 
-// Frontier return the minimum tiemstamp.
+// Frontier return the minimum timestamp.
 func (s *spanFrontier) Frontier() uint64 {
 	return s.minTsHeap.GetMinKey()
 }

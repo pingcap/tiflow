@@ -18,10 +18,10 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
@@ -29,7 +29,7 @@ import (
 
 // resumeChangefeedOptions defines flags for the `cli changefeed resume` command.
 type resumeChangefeedOptions struct {
-	etcdClient *kv.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClient
 	pdClient   pd.Client
 
 	credential *security.Credential

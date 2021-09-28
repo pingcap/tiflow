@@ -33,10 +33,18 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of unmarshal and mount in mounter.",
 			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
 		}, []string{"capture", "changefeed"})
+	totalRowsCountGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "mounter",
+			Name:      "total_rows_count",
+			Help:      "The total count of rows that are processed by mounter",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(mounterInputChanSizeGauge)
 	registry.MustRegister(mountDuration)
+	registry.MustRegister(totalRowsCountGauge)
 }
