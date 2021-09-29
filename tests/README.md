@@ -43,7 +43,7 @@
 
     > There exists some environment variables that you can set by yourself, variable details can be found in [test_prepare](_utils/test_prepare).
 
-    > `MySQL sink` will be used by default, if you want to test `Kafka sink`, please run with `make integration_test CASE=simple kafka`
+    > `MySQL sink` will be used by default, if you want to test `Kafka sink`, please run with `make integration_test_kafka CASE=simple kafka`
 
 3. After executing the tests, run `make coverage` to get a coverage report at `/tmp/tidb_cdc_test/all_cov.html`.
 
