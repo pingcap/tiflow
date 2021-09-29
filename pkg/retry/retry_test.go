@@ -19,19 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func Test(t *testing.T) { check.TestingT(t) }
+func TestDoShouldRetryAtMostSpecifiedTimes(t *testing.T) {
+	t.Parallel()
 
-type runSuite struct{}
-
-var _ = check.Suite(&runSuite{})
-
-func (s *runSuite) TestDoShouldRetryAtMostSpecifiedTimes(c *check.C) {
-	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
 		callCount++
@@ -39,12 +33,13 @@ func (s *runSuite) TestDoShouldRetryAtMostSpecifiedTimes(c *check.C) {
 	}
 
 	err := Do(context.Background(), f, WithMaxTries(3))
-	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
-	c.Assert(callCount, check.Equals, 3)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.Equal(t, callCount, 3)
 }
 
-func (s *runSuite) TestDoShouldStopOnSuccess(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDoShouldStopOnSuccess(t *testing.T) {
+	t.Parallel()
+
 	var callCount int
 	f := func() error {
 		callCount++
@@ -55,12 +50,13 @@ func (s *runSuite) TestDoShouldStopOnSuccess(c *check.C) {
 	}
 
 	err := Do(context.Background(), f, WithMaxTries(3))
-	c.Assert(err, check.IsNil)
-	c.Assert(callCount, check.Equals, 2)
+	require.Nil(t, err)
+	require.Equal(t, callCount, 2)
 }
 
-func (s *runSuite) TestIsRetryable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestIsRetryable(t *testing.T) {
+	t.Parallel()
+
 	var callCount int
 	f := func() error {
 		callCount++
@@ -75,18 +71,19 @@ func (s *runSuite) TestIsRetryable(c *check.C) {
 		return true
 	}))
 
-	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-	c.Assert(callCount, check.Equals, 1)
+	require.Equal(t, errors.Cause(err), context.Canceled)
+	require.Equal(t, callCount, 1)
 
 	callCount = 0
 	err = Do(context.Background(), f, WithMaxTries(3))
 
-	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-	c.Assert(callCount, check.Equals, 3)
+	require.Equal(t, errors.Cause(err), context.Canceled)
+	require.Equal(t, callCount, 3)
 }
 
-func (s *runSuite) TestDoCancelInfiniteRetry(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDoCancelInfiniteRetry(t *testing.T) {
+	t.Parallel()
+
 	callCount := 0
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*20)
 	defer cancel()
@@ -101,13 +98,14 @@ func (s *runSuite) TestDoCancelInfiniteRetry(c *check.C) {
 	}
 
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
-	c.Assert(errors.Cause(err), check.Equals, context.DeadlineExceeded)
-	c.Assert(callCount, check.GreaterEqual, 1, check.Commentf("tries: %d", callCount))
-	c.Assert(callCount, check.Less, math.MaxInt64)
+	require.Equal(t, errors.Cause(err), context.DeadlineExceeded)
+	require.GreaterOrEqual(t, callCount, 1, "tries: %d", callCount)
+	require.Less(t, callCount, math.MaxInt64)
 }
 
-func (s *runSuite) TestDoCancelAtBeginning(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDoCancelAtBeginning(t *testing.T) {
+	t.Parallel()
+
 	callCount := 0
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -117,12 +115,13 @@ func (s *runSuite) TestDoCancelAtBeginning(c *check.C) {
 	}
 
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
-	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-	c.Assert(callCount, check.Equals, 0, check.Commentf("tries:%d", callCount))
+	require.Equal(t, errors.Cause(err), context.Canceled)
+	require.Equal(t, callCount, 0, "tries:%d", callCount)
 }
 
-func (s *runSuite) TestDoCornerCases(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDoCornerCases(t *testing.T) {
+	t.Parallel()
+
 	var callCount int
 	f := func() error {
 		callCount++
@@ -130,34 +129,34 @@ func (s *runSuite) TestDoCornerCases(c *check.C) {
 	}
 
 	err := Do(context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithBackoffMaxDelay(math.MaxInt64), WithMaxTries(2))
-	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
-	c.Assert(callCount, check.Equals, 2)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.Equal(t, callCount, 2)
 
 	callCount = 0
 	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MaxInt64), WithBackoffMaxDelay(math.MinInt64), WithMaxTries(2))
-	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
-	c.Assert(callCount, check.Equals, 2)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.Equal(t, callCount, 2)
 
 	callCount = 0
 	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithBackoffMaxDelay(math.MinInt64), WithMaxTries(2))
-	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
-	c.Assert(callCount, check.Equals, 2)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.Equal(t, callCount, 2)
 
 	callCount = 0
 	err = Do(context.Background(), f, WithBackoffBaseDelay(math.MaxInt64), WithBackoffMaxDelay(math.MaxInt64), WithMaxTries(2))
-	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
-	c.Assert(callCount, check.Equals, 2)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.Equal(t, callCount, 2)
 
 	var i int64
 	for i = -10; i < 10; i++ {
 		callCount = 0
 		err = Do(context.Background(), f, WithBackoffBaseDelay(i), WithBackoffMaxDelay(i), WithMaxTries(i))
-		c.Assert(errors.Cause(err), check.ErrorMatches, "test")
-		c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
+		require.Regexp(t, "test", errors.Cause(err))
+		require.Regexp(t, ".*CDC:ErrReachMaxTry.*", err)
 		if i > 0 {
-			c.Assert(int64(callCount), check.Equals, i)
+			require.Equal(t, int64(callCount), i)
 		} else {
-			c.Assert(callCount, check.Equals, defaultMaxTries)
+			require.Equal(t, callCount, defaultMaxTries)
 		}
 	}
 }

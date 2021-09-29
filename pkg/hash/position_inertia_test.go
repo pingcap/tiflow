@@ -16,50 +16,44 @@ package hash
 import (
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func Test(t *testing.T) {
-	TestingT(t)
-}
+func TestPositionInertia(t *testing.T) {
+	t.Parallel()
 
-var _ = Suite(&testPositionInertia{})
-
-type testPositionInertia struct{}
-
-func (s *testPositionInertia) TestPositionInertia(c *C) {
 	hash := NewPositionInertia()
 	hash.Write([]byte("hello"), []byte("hash"))
 	hash.Write([]byte("hello"), []byte("pingcap"))
 	hash.Write([]byte("hello"), []byte("ticdc"))
 	hash.Write([]byte("hello"), []byte("tools"))
-	c.Assert(hash.Sum32(), Equals, uint32(0x914505a7))
+	require.Equal(t, uint32(0x914505a7), hash.Sum32())
 
 	hash.Reset()
 	hash.Write([]byte("hello"), []byte("pingcap"))
 	hash.Write([]byte("hello"), []byte("hash"))
 	hash.Write([]byte("hello"), []byte("tools"))
 	hash.Write([]byte("hello"), []byte("ticdc"))
-	c.Assert(hash.Sum32(), Equals, uint32(0x914505a7))
+	require.Equal(t, uint32(0x914505a7), hash.Sum32())
 
 	hash.Reset()
 	hash.Write([]byte("hello"), []byte("ticdc"))
 	hash.Write([]byte("hello"), []byte("hash"))
 	hash.Write([]byte("hello"), []byte("tools"))
 	hash.Write([]byte("hello"), []byte("pingcap"))
-	c.Assert(hash.Sum32(), Equals, uint32(0x914505a7))
+	require.Equal(t, uint32(0x914505a7), hash.Sum32())
 
 	hash.Reset()
 	hash.Write([]byte("ticdc"), []byte("hello"))
 	hash.Write([]byte("hello"), []byte("hash"))
 	hash.Write([]byte("hello"), []byte("tools"))
 	hash.Write([]byte("hello"), []byte("pingcap"))
-	c.Assert(hash.Sum32(), Equals, uint32(0xf21b4f40))
+	require.Equal(t, uint32(0xf21b4f40), hash.Sum32())
 
 	hash.Reset()
 	hash.Write([]byte("ticdc"), []byte("hello"))
 	hash.Write([]byte("hello"), []byte("hash"))
 	hash.Write([]byte("tools"), []byte("hello"))
 	hash.Write([]byte("hello"), []byte("pingcap"))
-	c.Assert(hash.Sum32(), Equals, uint32(0x7cd6194a))
+	require.Equal(t, uint32(0x7cd6194a), hash.Sum32())
 }

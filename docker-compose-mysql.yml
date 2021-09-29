@@ -38,6 +38,7 @@
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer0.log
           - --log-level=debug
+          - --data-dir=/data
           - --advertise-addr=capturer0:8300
         depends_on:
           - "upstream-tidb"
@@ -62,6 +63,7 @@
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer1.log
           - --log-level=debug
+          - --data-dir=/data
           - --advertise-addr=capturer1:8300
         depends_on:
           - "upstream-tidb"
@@ -86,6 +88,7 @@
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer2.log
           - --log-level=debug
+          - --data-dir=/data
           - --advertise-addr=capturer2:8300
         depends_on:
           - "upstream-tidb"
