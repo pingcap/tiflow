@@ -15,7 +15,7 @@ package cdc
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/pprof"
 	"time"
@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/capture"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+
 	// use for OpenAPI online docs
 	_ "github.com/pingcap/ticdc/docs/api"
 )
@@ -31,7 +32,7 @@ import (
 // newRouter create a router for OpenAPI
 func newRouter(capture2 *capture.Capture) *gin.Engine {
 	// discard gin log output
-	gin.DefaultWriter = ioutil.Discard
+	gin.DefaultWriter = io.Discard
 
 	router := gin.New()
 
