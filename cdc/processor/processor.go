@@ -645,7 +645,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 		table.Wait()
 		delete(p.tables, tableID)
 	}
-	
+
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	if replicaInfo.StartTs < globalCheckpointTs {
