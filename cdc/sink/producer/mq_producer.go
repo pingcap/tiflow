@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
-// Producer is a interface of mq producer
+// Producer is an interface of mq producer
 type Producer interface {
 	SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error
 	SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error
