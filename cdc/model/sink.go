@@ -185,10 +185,10 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema      string `toml:"db-name" json:"db-name" msg:"dbName"`
-	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tblName"`
-	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tblID"`
-	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"isPartition"`
+	Schema      string `toml:"db-name" json:"db-name" msg:"db-name"`
+	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tbl-id"`
+	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -247,16 +247,16 @@ type RedoRowChangedEvent struct {
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	StartTs  uint64 `json:"start-ts" msg:"startTs"`
-	CommitTs uint64 `json:"commit-ts" msg:"commitTs"`
+	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
+	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
 	Table *TableName `json:"table" msg:"table"`
 
-	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"tableInfoVersion"`
+	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
 
-	ReplicaID    uint64    `json:"replica-id" msg:"replicaID"`
+	ReplicaID    uint64    `json:"replica-id" msg:"replica-id"`
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
 	IndexColumns [][]int   `json:"-" msg:"indexColumns"`

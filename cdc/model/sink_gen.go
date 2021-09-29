@@ -1882,13 +1882,13 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "startTs":
+		case "start-ts":
 			z.StartTs, err = dc.ReadUint64()
 			if err != nil {
 				err = msgp.WrapError(err, "StartTs")
 				return
 			}
-		case "commitTs":
+		case "commit-ts":
 			z.CommitTs, err = dc.ReadUint64()
 			if err != nil {
 				err = msgp.WrapError(err, "CommitTs")
@@ -1912,13 +1912,13 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					return
 				}
 			}
-		case "tableInfoVersion":
+		case "table-info-version":
 			z.TableInfoVersion, err = dc.ReadUint64()
 			if err != nil {
 				err = msgp.WrapError(err, "TableInfoVersion")
 				return
 			}
-		case "replicaID":
+		case "replica-id":
 			z.ReplicaID, err = dc.ReadUint64()
 			if err != nil {
 				err = msgp.WrapError(err, "ReplicaID")
@@ -1970,8 +1970,8 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 	// map header, size 6
-	// write "startTs"
-	err = en.Append(0x86, 0xa7, 0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x73)
+	// write "start-ts"
+	err = en.Append(0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	if err != nil {
 		return
 	}
@@ -1980,8 +1980,8 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "StartTs")
 		return
 	}
-	// write "commitTs"
-	err = en.Append(0xa8, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x54, 0x73)
+	// write "commit-ts"
+	err = en.Append(0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
 	if err != nil {
 		return
 	}
@@ -2007,8 +2007,8 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "tableInfoVersion"
-	err = en.Append(0xb0, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
+	// write "table-info-version"
+	err = en.Append(0xb2, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x69, 0x6e, 0x66, 0x6f, 0x2d, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
 	if err != nil {
 		return
 	}
@@ -2017,8 +2017,8 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "TableInfoVersion")
 		return
 	}
-	// write "replicaID"
-	err = en.Append(0xa9, 0x72, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x49, 0x44)
+	// write "replica-id"
+	err = en.Append(0xaa, 0x72, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x2d, 0x69, 0x64)
 	if err != nil {
 		return
 	}
@@ -2058,11 +2058,11 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
 	// map header, size 6
-	// string "startTs"
-	o = append(o, 0x86, 0xa7, 0x73, 0x74, 0x61, 0x72, 0x74, 0x54, 0x73)
+	// string "start-ts"
+	o = append(o, 0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.StartTs)
-	// string "commitTs"
-	o = append(o, 0xa8, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x54, 0x73)
+	// string "commit-ts"
+	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.CommitTs)
 	// string "table"
 	o = append(o, 0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
@@ -2075,11 +2075,11 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 			return
 		}
 	}
-	// string "tableInfoVersion"
-	o = append(o, 0xb0, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
+	// string "table-info-version"
+	o = append(o, 0xb2, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x69, 0x6e, 0x66, 0x6f, 0x2d, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
 	o = msgp.AppendUint64(o, z.TableInfoVersion)
-	// string "replicaID"
-	o = append(o, 0xa9, 0x72, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x49, 0x44)
+	// string "replica-id"
+	o = append(o, 0xaa, 0x72, 0x65, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x2d, 0x69, 0x64)
 	o = msgp.AppendUint64(o, z.ReplicaID)
 	// string "indexColumns"
 	o = append(o, 0xac, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
@@ -2111,13 +2111,13 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "startTs":
+		case "start-ts":
 			z.StartTs, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "StartTs")
 				return
 			}
-		case "commitTs":
+		case "commit-ts":
 			z.CommitTs, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "CommitTs")
@@ -2140,13 +2140,13 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					return
 				}
 			}
-		case "tableInfoVersion":
+		case "table-info-version":
 			z.TableInfoVersion, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "TableInfoVersion")
 				return
 			}
-		case "replicaID":
+		case "replica-id":
 			z.ReplicaID, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "ReplicaID")
@@ -2198,13 +2198,13 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *RowChangedEvent) Msgsize() (s int) {
-	s = 1 + 8 + msgp.Uint64Size + 9 + msgp.Uint64Size + 6
+	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 6
 	if z.Table == nil {
 		s += msgp.NilSize
 	} else {
 		s += z.Table.Msgsize()
 	}
-	s += 17 + msgp.Uint64Size + 10 + msgp.Uint64Size + 13 + msgp.ArrayHeaderSize
+	s += 19 + msgp.Uint64Size + 11 + msgp.Uint64Size + 13 + msgp.ArrayHeaderSize
 	for za0001 := range z.IndexColumns {
 		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0001]) * (msgp.IntSize))
 	}
@@ -2564,25 +2564,25 @@ func (z *TableName) DecodeMsg(dc *msgp.Reader) (err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "dbName":
+		case "db-name":
 			z.Schema, err = dc.ReadString()
 			if err != nil {
 				err = msgp.WrapError(err, "Schema")
 				return
 			}
-		case "tblName":
+		case "tbl-name":
 			z.Table, err = dc.ReadString()
 			if err != nil {
 				err = msgp.WrapError(err, "Table")
 				return
 			}
-		case "tblID":
+		case "tbl-id":
 			z.TableID, err = dc.ReadInt64()
 			if err != nil {
 				err = msgp.WrapError(err, "TableID")
 				return
 			}
-		case "isPartition":
+		case "is-partition":
 			z.IsPartition, err = dc.ReadBool()
 			if err != nil {
 				err = msgp.WrapError(err, "IsPartition")
@@ -2602,8 +2602,8 @@ func (z *TableName) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *TableName) EncodeMsg(en *msgp.Writer) (err error) {
 	// map header, size 4
-	// write "dbName"
-	err = en.Append(0x84, 0xa6, 0x64, 0x62, 0x4e, 0x61, 0x6d, 0x65)
+	// write "db-name"
+	err = en.Append(0x84, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -2612,8 +2612,8 @@ func (z *TableName) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Schema")
 		return
 	}
-	// write "tblName"
-	err = en.Append(0xa7, 0x74, 0x62, 0x6c, 0x4e, 0x61, 0x6d, 0x65)
+	// write "tbl-name"
+	err = en.Append(0xa8, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -2622,8 +2622,8 @@ func (z *TableName) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Table")
 		return
 	}
-	// write "tblID"
-	err = en.Append(0xa5, 0x74, 0x62, 0x6c, 0x49, 0x44)
+	// write "tbl-id"
+	err = en.Append(0xa6, 0x74, 0x62, 0x6c, 0x2d, 0x69, 0x64)
 	if err != nil {
 		return
 	}
@@ -2632,8 +2632,8 @@ func (z *TableName) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "TableID")
 		return
 	}
-	// write "isPartition"
-	err = en.Append(0xab, 0x69, 0x73, 0x50, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
+	// write "is-partition"
+	err = en.Append(0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
 	if err != nil {
 		return
 	}
@@ -2649,17 +2649,17 @@ func (z *TableName) EncodeMsg(en *msgp.Writer) (err error) {
 func (z *TableName) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
 	// map header, size 4
-	// string "dbName"
-	o = append(o, 0x84, 0xa6, 0x64, 0x62, 0x4e, 0x61, 0x6d, 0x65)
+	// string "db-name"
+	o = append(o, 0x84, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Schema)
-	// string "tblName"
-	o = append(o, 0xa7, 0x74, 0x62, 0x6c, 0x4e, 0x61, 0x6d, 0x65)
+	// string "tbl-name"
+	o = append(o, 0xa8, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Table)
-	// string "tblID"
-	o = append(o, 0xa5, 0x74, 0x62, 0x6c, 0x49, 0x44)
+	// string "tbl-id"
+	o = append(o, 0xa6, 0x74, 0x62, 0x6c, 0x2d, 0x69, 0x64)
 	o = msgp.AppendInt64(o, z.TableID)
-	// string "isPartition"
-	o = append(o, 0xab, 0x69, 0x73, 0x50, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
+	// string "is-partition"
+	o = append(o, 0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
 	o = msgp.AppendBool(o, z.IsPartition)
 	return
 }
@@ -2682,25 +2682,25 @@ func (z *TableName) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "dbName":
+		case "db-name":
 			z.Schema, bts, err = msgp.ReadStringBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Schema")
 				return
 			}
-		case "tblName":
+		case "tbl-name":
 			z.Table, bts, err = msgp.ReadStringBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Table")
 				return
 			}
-		case "tblID":
+		case "tbl-id":
 			z.TableID, bts, err = msgp.ReadInt64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "TableID")
 				return
 			}
-		case "isPartition":
+		case "is-partition":
 			z.IsPartition, bts, err = msgp.ReadBoolBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "IsPartition")
@@ -2720,6 +2720,6 @@ func (z *TableName) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *TableName) Msgsize() (s int) {
-	s = 1 + 7 + msgp.StringPrefixSize + len(z.Schema) + 8 + msgp.StringPrefixSize + len(z.Table) + 6 + msgp.Int64Size + 12 + msgp.BoolSize
+	s = 1 + 8 + msgp.StringPrefixSize + len(z.Schema) + 9 + msgp.StringPrefixSize + len(z.Table) + 7 + msgp.Int64Size + 13 + msgp.BoolSize
 	return
 }
