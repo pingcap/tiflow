@@ -89,18 +89,18 @@ def pause_changefeed():
         resp = rq.post(url)
         if resp.status_code == rq.codes.accepted:
             break
+        time.sleep(1)
     assert resp.status_code == rq.codes.accepted
     # check if pause changefeed success
     url = BASE_URL+"/changefeeds/changefeed-test2"
     for i in range(RETRY_TIME):
-        time.sleep(1)
         resp = rq.get(url)
         assert resp.status_code == rq.codes.ok
         data = resp.json()
         if data["state"] == "stopped":
             break
+        time.sleep(1)
     assert data["state"] == "stopped"
-
     # test pause changefeed failed
     url = BASE_URL+"/changefeeds/changefeed-not-exists/pause"
     resp = rq.post(url)
@@ -146,12 +146,12 @@ def resume_changefeed():
     # check if resume changefeed success
     url = BASE_URL+"/changefeeds/changefeed-test2"
     for i in range(RETRY_TIME):
-        time.sleep(1)
         resp = rq.get(url)
         assert resp.status_code == rq.codes.ok
         data = resp.json()
         if data["state"] == "normal":
             break
+        time.sleep(1)
     assert data["state"] == "normal"
 
     # test resume changefeed failed
@@ -173,11 +173,10 @@ def remove_changefeed():
     # check if remove changefeed success
     url = BASE_URL+"/changefeeds/changefeed-test3"
     for i in range(RETRY_TIME):
-        time.sleep(1)
         resp = rq.get(url)
         if resp.status_code == rq.codes.bad_request:
             break
-
+        time.sleep(1)
     assert resp.status_code == rq.codes.bad_request
     assert resp.json()["error_code"] == "CDC:ErrChangeFeedNotExists"
 
@@ -258,10 +257,10 @@ def get_processor():
 def check_health():
     url = BASE_URL + "/health"
     for i in range(RETRY_TIME):
-        time.sleep(1)
         resp = rq.get(url)
         if resp.status_code == rq.codes.ok:
             break
+        time.sleep(1)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: check health")
