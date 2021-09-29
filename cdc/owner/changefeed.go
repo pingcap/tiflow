@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -200,6 +201,14 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 			}
 			return status, changed, nil
 		})
+	}
+
+	if c.state.Status != nil {
+		phyTs := oracle.ExtractPhysical(c.state.Status.CheckpointTs)
+		c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
+		// It is more accurate to get tso from PD, but in most cases since we have
+		// deployed NTP service, a little bias is acceptable here.
+		c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 	}
 	return nil
 }
