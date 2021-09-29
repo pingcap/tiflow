@@ -100,8 +100,9 @@ func newMqSink(
 				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
 				"Could not create Avro schema manager for message values")
 		}
+		newEncoder1 := newEncoder
 		newEncoder = func() codec.EventBatchEncoder {
-			avroEncoder := newEncoder().(*codec.AvroEventBatchEncoder)
+			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
 			avroEncoder.SetKeySchemaManager(keySchemaManager)
 			avroEncoder.SetValueSchemaManager(valueSchemaManager)
 			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
@@ -117,8 +118,9 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	newEncoder1 := newEncoder
 	newEncoder = func() codec.EventBatchEncoder {
-		ret := newEncoder()
+		ret := newEncoder1()
 		err := ret.SetParams(opts)
 		if err != nil {
 			log.Panic("MQ Encoder could not parse parameters", zap.Error(err))
