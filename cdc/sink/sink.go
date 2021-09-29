@@ -106,8 +106,8 @@ func init() {
 	}
 }
 
-// NewSink creates a new sink with the sink-uri
-func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+// New creates a new sink with the sink-uri
+func New(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
@@ -117,4 +117,30 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 		return newSink(ctx, changefeedID, sinkURI, filter, config, opts, errCh)
 	}
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
+}
+
+// Validate sink if given valid parameters.
+func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string) error {
+	sinkFilter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return err
+	}
+	errCh := make(chan error)
+	// TODO: find a better way to verify a sinkURI is valid
+	s, err := New(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
+	if err != nil {
+		return err
+	}
+	err = s.Close(ctx)
+	if err != nil {
+		return err
+	}
+	select {
+	case err = <-errCh:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+	return nil
 }
