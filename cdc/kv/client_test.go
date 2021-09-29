@@ -2259,12 +2259,13 @@ func (s *clientSuite) testEventAfterFeedStop(c *check.C) {
 		wg.Wait()
 	}()
 
-	err = retry.Run(time.Millisecond*500, 10, func() error {
+	err = retry.Do(context.Background(), func() error {
 		if atomic.LoadUint64(&requestID) > 0 {
 			return nil
 		}
 		return errors.New("waiting for kv client requests received by server")
-	})
+	}, retry.WithMaxTries(10), retry.WithBackoffBaseDelay(500), retry.WithBackoffMaxDelay(60*1000))
+
 	log.Info("retry check request id", zap.Error(err))
 	c.Assert(err, check.IsNil)
 
