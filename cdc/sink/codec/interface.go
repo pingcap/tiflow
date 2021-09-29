@@ -167,7 +167,7 @@ func (p *Protocol) FromString(protocol string) {
 	}
 }
 
-// NewEventBatchEncoder returns a function of creating an EventBatchEncoder
+// NewEventBatchEncoder returns a function of creating an EventBatchEncoder by protocol.
 func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 	switch p {
 	case ProtocolDefault:
