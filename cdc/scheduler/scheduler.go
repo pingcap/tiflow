@@ -154,18 +154,6 @@ func (s *BaseScheduleDispatcher) Tick(
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
-	if s.needRebalance {
-		ok, err := s.rebalance(ctx)
-		if err != nil {
-			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
-		}
-		if ok {
-			s.needRebalance = false
-		} else {
-			return CheckpointCannotProceed, CheckpointCannotProceed, nil
-		}
-	}
-
 	for _, captureID := range s.tables.GetDistinctCaptures() {
 		if _, ok := s.captures[captureID]; !ok {
 			s.logger.Info("capture down, removing tables",
@@ -239,30 +227,39 @@ func (s *BaseScheduleDispatcher) Tick(
 		record.Status = removingTable
 	}
 
+	checkAllTasksNormal := func() bool {
+		return s.tables.CountTableByStatus(runningTable) == len(currentTables) &&
+			s.tables.CountTableByStatus(addingTable) == 0 &&
+			s.tables.CountTableByStatus(removingTable) == 0
+	}
+	if !checkAllTasksNormal() {
+		return CheckpointCannotProceed, CheckpointCannotProceed,  nil
+	}
+
 	if err := s.handleMoveTableJobs(ctx); err != nil {
 		return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
+	}
+	if !checkAllTasksNormal() {
+		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
 	if s.lastTickCaptureCount != -1 && s.lastTickCaptureCount != len(captures) {
 		s.needRebalance = true
 	}
-
-	allTables := s.tables.GetAllTables()
-	allCount := len(allTables)
-	runningCount := 0
-	for _, record := range s.tables.GetAllTables() {
-		if record.Status == runningTable {
-			runningCount++
-		}
-	}
-
-	allTasksNormal := runningCount == len(currentTables) && runningCount == allCount
 	s.lastTickCaptureCount = len(captures)
 
-	if !allTasksNormal {
-		// TODO add detailed log
-		s.logger.Info("scheduler has pending jobs")
-		s.tables.PrintStatus(s.logger.Debug)
+	if s.needRebalance {
+		ok, err := s.rebalance(ctx)
+		if err != nil {
+			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
+		}
+		if ok {
+			s.needRebalance = false
+		} else {
+			return CheckpointCannotProceed, CheckpointCannotProceed, nil
+		}
+	}
+	if !checkAllTasksNormal() {
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
@@ -271,7 +268,6 @@ func (s *BaseScheduleDispatcher) Tick(
 		zap.Uint64("checkpoint-ts", newCheckpointTs),
 		zap.Uint64("resolved-ts", resolvedTs),
 		zap.Any("capture-status", s.captureStatus))
-	s.tables.PrintStatus(s.logger.Debug)
 	return
 }
 

@@ -107,6 +107,15 @@ func (s *TableSet) GetAllTablesGroupedByCaptures() map[model.CaptureID]map[model
 	return s.captureIndex
 }
 
+func (s *TableSet) CountTableByStatus(status TableStatus) (count int){
+	for _, record := range s.tableIDMap {
+		if record.Status == status {
+			count++
+		}
+	}
+	return
+}
+
 func (s *TableSet) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 	logger("[table record starts] ======================")
 	for _, record := range s.tableIDMap {
