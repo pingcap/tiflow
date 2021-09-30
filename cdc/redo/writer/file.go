@@ -129,10 +129,9 @@ type Writer struct {
 }
 
 // NewWriter ... TODO: extract to a common rotate Writer
-func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) *Writer {
+func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Writer, error) {
 	if cfg == nil {
-		log.Panic("FileWriterConfig can not be nil")
-		return nil
+		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("FileWriterConfig can not be nil"))
 	}
 
 	if cfg.FlushIntervalInMs == 0 {
@@ -144,8 +143,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) *Writ
 	}
 	if cfg.S3Storage {
 		if cfg.S3URI == nil {
-			log.Panic("S3URI can not be nil",
-				zap.String("change feed", cfg.ChangeFeedID))
+			return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("S3URI can not be nil"))
 		}
 	}
 
@@ -162,9 +160,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) *Writ
 	if cfg.S3Storage {
 		s3storage, err := common.InitS3storage(ctx, *cfg.S3URI)
 		if err != nil {
-			log.Panic("initS3storage fail",
-				zap.Error(err),
-				zap.String("change feed", cfg.ChangeFeedID))
+			return nil, err
 		}
 		w.storage = s3storage
 	}
@@ -172,7 +168,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) *Writ
 	w.state.Store(started)
 	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
 
-	return w
+	return w, nil
 }
 
 func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {

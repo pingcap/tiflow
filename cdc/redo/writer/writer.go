@@ -94,12 +94,13 @@ type LogWriter struct {
 
 // NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
 // TODO: delete log files when changefeed removed, metric
-func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
+func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error) {
+	var errInit error
 	// currently, caller do not have the ability of self-healing, like try to fix if on some error,
 	// so initOnce just literary init once, do not support re-init if fail on some condition
 	initOnce.Do(func() {
 		if cfg == nil {
-			log.Panic("LogWriterConfig can not be nil")
+			errInit = cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogWriterConfig can not be nil"))
 			return
 		}
 
@@ -126,10 +127,18 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 			S3URI:             cfg.S3URI,
 		}
 		logWriter = &LogWriter{
-			cfg:       cfg,
-			rowWriter: NewWriter(ctx, rowCfg),
-			ddlWriter: NewWriter(ctx, ddlCfg),
+			cfg: cfg,
 		}
+		logWriter.rowWriter, errInit = NewWriter(ctx, rowCfg)
+		if errInit != nil {
+			return
+		}
+		logWriter.ddlWriter, errInit = NewWriter(ctx, ddlCfg)
+		if errInit != nil {
+			return
+		}
+
+		// since the error will not block write log, so keep go to the next init process
 		err := logWriter.initMeta(ctx)
 		if err != nil {
 			log.Warn("init redo meta fail",
@@ -137,19 +146,20 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) *LogWriter {
 				zap.Error(err))
 		}
 		if cfg.S3Storage {
-			s3storage, err := common.InitS3storage(ctx, *cfg.S3URI)
-			if err != nil {
-				log.Panic("initS3storage fail",
-					zap.Error(err),
-					zap.String("change feed", cfg.ChangeFeedID))
+			var s3storage storage.ExternalStorage
+			s3storage, errInit = common.InitS3storage(ctx, *cfg.S3URI)
+			if errInit != nil {
+				return
 			}
 			logWriter.storage = s3storage
 		}
 
 		go logWriter.runGC(ctx)
 	})
-
-	return logWriter
+	if errInit != nil {
+		return nil, errInit
+	}
+	return logWriter, nil
 }
 
 func (l *LogWriter) initMeta(ctx context.Context) error {
@@ -165,7 +175,7 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
+		return cerror.WrapError(cerror.ErrRedoMetaInitialize, errors.Annotate(err, "can't read log file directory"))
 	}
 
 	for _, file := range files {
@@ -173,13 +183,13 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 			path := filepath.Join(l.cfg.Dir, file.Name())
 			fileData, err := os.ReadFile(path)
 			if err != nil {
-				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+				return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
 			}
 
 			_, err = l.meta.UnmarshalMsg(fileData)
 			if err != nil {
 				l.meta = &common.LogMeta{ResolvedTsList: map[int64]uint64{}}
-				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+				return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
 			}
 			break
 		}

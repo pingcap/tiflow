@@ -598,7 +598,8 @@ func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
 }
 
 func TestNewLogWriter(t *testing.T) {
-	require.Panics(t, func() { NewLogWriter(context.Background(), nil) })
+	_, err := NewLogWriter(context.Background(), nil)
+	require.NotNil(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -612,12 +613,14 @@ func TestNewLogWriter(t *testing.T) {
 	}
 	var ll *LogWriter
 	initOnce = sync.Once{}
-	require.NotPanics(t, func() { ll = NewLogWriter(ctx, cfg) })
+	ll, err = NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
 	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
 
 	cfg.Dir += "ttt"
-	ll1 := NewLogWriter(ctx, cfg)
+	ll1, err := NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
 	require.Same(t, ll, ll1)
 
 	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
@@ -639,7 +642,8 @@ func TestNewLogWriter(t *testing.T) {
 
 	cfg.Dir = dir
 	initOnce = sync.Once{}
-	l := NewLogWriter(ctx, cfg)
+	l, err := NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
 	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)

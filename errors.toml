@@ -636,9 +636,19 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRedoConfigInvalid"]
+error = '''
+redo log config invalid
+'''
+
 ["CDC:ErrRedoFileOp"]
 error = '''
 redo file operation
+'''
+
+["CDC:ErrRedoMetaInitialize"]
+error = '''
+initialize meta for redo log
 '''
 
 ["CDC:ErrRedoWriterStopped"]

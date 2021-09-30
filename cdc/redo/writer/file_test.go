@@ -26,17 +26,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/redo/common"
+	"github.com/pingcap/ticdc/pkg/util"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
-	"go.uber.org/goleak"
 )
-
-// LeakOptions is used to filter the goroutines.
-var LeakOptions = []goleak.Option{
-	goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
-	goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
-}
 
 func TestMain(m *testing.M) {
 	originValue := defaultGCIntervalInMs
@@ -45,7 +39,7 @@ func TestMain(m *testing.M) {
 		defaultGCIntervalInMs = originValue
 	}()
 
-	goleak.VerifyTestMain(m, LeakOptions...)
+	util.SetUpLeakTest(m)
 }
 
 func TestWriterWrite(t *testing.T) {
@@ -182,9 +176,8 @@ func TestAdvanceTs(t *testing.T) {
 }
 
 func TestNewWriter(t *testing.T) {
-	require.Panics(t, func() {
-		NewWriter(context.Background(), nil)
-	})
+	_, err := NewWriter(context.Background(), nil)
+	require.NotNil(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -195,13 +188,12 @@ func TestNewWriter(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	require.NotPanics(t, func() {
-		NewWriter(ctx, &FileWriterConfig{
-			Dir:       "sdfsf",
-			S3Storage: true,
-			S3URI:     s3URI,
-		})
+	_, err = NewWriter(ctx, &FileWriterConfig{
+		Dir:       "sdfsf",
+		S3Storage: true,
+		S3URI:     s3URI,
 	})
+	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1000) * time.Millisecond)
 
 	controller := gomock.NewController(t)
