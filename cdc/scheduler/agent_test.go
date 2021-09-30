@@ -44,13 +44,11 @@ func (e *mockTableExecutor) IsRemoveTableFinished(ctx cdcContext.Context, tableI
 }
 
 func (e *mockTableExecutor) GetAllCurrentTables() []model.TableID {
-	 args := e.Called()
-	 return args.Get(0).([]model.TableID)
+	args := e.Called()
+	return args.Get(0).([]model.TableID)
 }
 
 func (e *mockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	args := e.Called()
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
-
-

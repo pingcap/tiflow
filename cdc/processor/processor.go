@@ -520,9 +520,13 @@ func (p *processor) handlePosition(ctx cdcContext.Context) {
 	}
 
 	minCheckpointTs := minResolvedTs
-	for _, table := range p.tables {
+	for tableID, table := range p.tables {
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
+			// TODO remove this
+			log.Info("min checkpoint table",
+				zap.Int64("table-id", tableID),
+				zap.Uint64("checkpoint-ts", minCheckpointTs))
 			minCheckpointTs = ts
 		}
 	}

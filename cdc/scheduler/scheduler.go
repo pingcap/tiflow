@@ -91,13 +91,13 @@ func NewBaseScheduleDispatcher(
 ) *BaseScheduleDispatcher {
 	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
 	return &BaseScheduleDispatcher{
-		tables:          util.NewTableSet(),
-		captureStatus:   map[model.CaptureID]*captureStatus{},
-		moveTableTarget: map[model.TableID]model.CaptureID{},
-		changeFeedID:    changeFeedID,
-		logger:          logger,
-		callbacks:       callbacks,
-		checkpointTs:    checkpointTs,
+		tables:               util.NewTableSet(),
+		captureStatus:        map[model.CaptureID]*captureStatus{},
+		moveTableTarget:      map[model.TableID]model.CaptureID{},
+		changeFeedID:         changeFeedID,
+		logger:               logger,
+		callbacks:            callbacks,
+		checkpointTs:         checkpointTs,
 		lastTickCaptureCount: -1, // -1 indicates initialized
 	}
 }

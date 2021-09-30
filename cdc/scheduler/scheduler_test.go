@@ -34,9 +34,9 @@ type mockScheduleDispatcherCommunicator struct {
 
 func NewMockScheduleDispatcherCommunicator() *mockScheduleDispatcherCommunicator {
 	return &mockScheduleDispatcherCommunicator{
-		addTableRecords: map[model.CaptureID][]model.TableID{},
+		addTableRecords:    map[model.CaptureID][]model.TableID{},
 		removeTableRecords: map[model.CaptureID][]model.TableID{},
-}
+	}
 }
 
 func (m *mockScheduleDispatcherCommunicator) Reset() {
@@ -183,14 +183,14 @@ func TestRemoveTable(t *testing.T) {
 	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1500,
+			ResolvedTs:   1500,
 		},
 		"capture-2": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1500,
+			ResolvedTs:   1500,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -251,14 +251,14 @@ func TestCaptureGone(t *testing.T) {
 	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1500,
+			ResolvedTs:   1500,
 		},
 		"capture-2": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1500,
+			ResolvedTs:   1500,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -276,7 +276,6 @@ func TestCaptureGone(t *testing.T) {
 		CaptureID: "capture-1",
 		Status:    runningTable,
 	})
-
 
 	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), "capture-1", model.Ts(1500), false).
 		Return(true, nil)
@@ -307,14 +306,14 @@ func TestCaptureRestarts(t *testing.T) {
 	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1500,
+			ResolvedTs:   1500,
 		},
 		"capture-2": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1500,
+			ResolvedTs:   1500,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -332,7 +331,6 @@ func TestCaptureRestarts(t *testing.T) {
 		CaptureID: "capture-1",
 		Status:    runningTable,
 	})
-
 
 	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID{}, []model.TableID{}, []model.TableID{})
 	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), "capture-2", model.Ts(1500), false).
@@ -364,14 +362,14 @@ func TestManualMoveTable(t *testing.T) {
 	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
-			ResolvedTs: 1600,
+			ResolvedTs:   1600,
 		},
 		"capture-2": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1550,
+			ResolvedTs:   1550,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -440,14 +438,14 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
-			ResolvedTs: 1600,
+			ResolvedTs:   1600,
 		},
 		"capture-2": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1550,
+			ResolvedTs:   1550,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -490,7 +488,6 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 }
 
-
 func TestManualRebalance(t *testing.T) {
 	defer testleak.AfterTestT(t)()
 
@@ -514,19 +511,19 @@ func TestManualRebalance(t *testing.T) {
 	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
-			ResolvedTs: 1600,
+			ResolvedTs:   1600,
 		},
 		"capture-2": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1550,
+			ResolvedTs:   1550,
 		},
 		"capture-3": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1400,
-			ResolvedTs: 1650,
+			ResolvedTs:   1650,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -560,7 +557,6 @@ func TestManualRebalance(t *testing.T) {
 		Status:    runningTable,
 	})
 
-
 	dispatcher.Rebalance()
 	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, "capture-1", model.Ts(1300), true).
 		Return(true, nil)
@@ -577,7 +573,7 @@ func TestManualRebalance(t *testing.T) {
 	for captureID, tables := range communicator.removeTableRecords {
 		for _, tableID := range tables {
 			dispatcher.OnAgentFinishedTableOperation(captureID, tableID)
-			communicator.On("DispatchTable", mock.Anything, "cf-1", tableID, "capture-3",  model.Ts(1300), false).
+			communicator.On("DispatchTable", mock.Anything, "cf-1", tableID, "capture-3", model.Ts(1300), false).
 				Return(true, nil)
 		}
 	}
@@ -612,19 +608,19 @@ func TestRebalanceReentrant(t *testing.T) {
 	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
-			ResolvedTs: 1600,
+			ResolvedTs:   1600,
 		},
 		"capture-2": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
-			ResolvedTs: 1550,
+			ResolvedTs:   1550,
 		},
 		"capture-3": {
-			SyncStatus: captureSyncFinished,
+			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1400,
-			ResolvedTs: 1650,
+			ResolvedTs:   1650,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -657,7 +653,6 @@ func TestRebalanceReentrant(t *testing.T) {
 		CaptureID: "capture-2",
 		Status:    runningTable,
 	})
-
 
 	dispatcher.Rebalance()
 	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, model.Ts(1300), true).

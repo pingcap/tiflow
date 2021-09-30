@@ -233,6 +233,7 @@ func (a *BaseAgent) LastSentCheckpointTs() model.Ts {
 func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
 	if a.onRouteCheckpointTs != 0 {
 		if !a.communicator.Barrier(ctx) {
+			a.logger.Debug("not sending checkpoint due to pending barrier")
 			return nil
 		}
 		a.lastSentCheckpoint = a.onRouteCheckpointTs
