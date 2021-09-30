@@ -302,7 +302,7 @@ func TestLogWriter_FlushLog(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("Flush", mock.Anything).Return(tt.flushErr)
@@ -391,7 +391,7 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 
 		mockWriter := &mockFileWriter{}
@@ -481,7 +481,7 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(context.Background(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("IsRunning").Return(tt.isRunning)

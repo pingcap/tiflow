@@ -111,20 +111,20 @@ func TestWriterGC(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
 
 	megabyte = 1
 	cfg := &FileWriterConfig{
@@ -206,9 +206,9 @@ func TestNewWriter(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
-	mockStorage.EXPECT().WriteFile(context.Background(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(context.Background(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
 
 	w := &Writer{
 		cfg: &FileWriterConfig{
