@@ -328,6 +328,9 @@ func (a *BaseAgent) checkOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int6
 		atomic.StoreInt32(&a.needResetCommunicator, 1)
 		a.logger.Info("owner updated",
 			zap.Any("new-owner-info", a.ownerInfo))
+		// resets the deque so that pending operations from the previous owner
+		// will not be processed.
+		a.pendingOps = deque.NewDeque()
 		return true
 	}
 	if a.ownerInfo.OwnerRev > ownerRev {
