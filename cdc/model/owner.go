@@ -413,6 +413,11 @@ type ChangeFeedStatus struct {
 	AdminJobType AdminJobType `json:"admin-job-type"`
 }
 
+func (status *ChangeFeedStatus) String() string {
+	data, _ := status.Marshal()
+	return data
+}
+
 // Marshal returns json encoded string of ChangeFeedStatus, only contains necessary fields stored in storage
 func (status *ChangeFeedStatus) Marshal() (string, error) {
 	data, err := json.Marshal(status)

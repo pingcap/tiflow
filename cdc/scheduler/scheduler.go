@@ -323,7 +323,7 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (bool, error)
 			}
 			if done {
 				s.captureStatus[captureID].SyncStatus = captureSyncSent
-				s.logger.Debug("syncCaptures: sent sync request",
+				s.logger.Info("syncCaptures: sent sync request",
 					zap.String("capture-id", captureID))
 			}
 		case captureSyncFinished:
@@ -521,7 +521,7 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.logger.Debug("scheduler received sync",
+	s.logger.Info("scheduler received sync",
 		zap.String("capture-id", captureID),
 		zap.Any("running", running),
 		zap.Any("adding", adding),
