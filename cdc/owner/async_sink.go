@@ -77,7 +77,7 @@ func newAsyncSink(ctx cdcContext.Context) (AsyncSink, error) {
 		return nil, errors.Trace(err)
 	}
 	errCh := make(chan error, defaultErrChSize)
-	s, err := sink.NewSink(ctx, changefeedID, changefeedInfo.SinkURI, filter, changefeedInfo.Config, changefeedInfo.Opts, errCh)
+	s, err := sink.New(ctx, changefeedID, changefeedInfo.SinkURI, filter, changefeedInfo.Config, changefeedInfo.Opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
