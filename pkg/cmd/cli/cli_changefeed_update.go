@@ -220,6 +220,7 @@ func newCmdUpdateChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "update",
 		Short: "Update config of an existing replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {
