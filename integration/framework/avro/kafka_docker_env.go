@@ -15,7 +15,7 @@ package avro
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 
@@ -52,7 +52,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		bytes, err := ioutil.ReadAll(resp.Body)
+		bytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
@@ -125,7 +125,7 @@ func (d *KafkaDockerEnv) resetSchemaRegistry() error {
 	}
 	defer resp.Body.Close()
 
-	bytes, err := ioutil.ReadAll(resp.Body)
+	bytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}

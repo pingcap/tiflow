@@ -15,7 +15,7 @@ package canal
 
 import (
 	"database/sql"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/integralist/go-findroot/find"
@@ -101,7 +101,7 @@ func checkCanalAdapterState() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		str, err := ioutil.ReadAll(resp.Body)
+		str, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
