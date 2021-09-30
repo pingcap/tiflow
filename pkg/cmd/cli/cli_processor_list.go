@@ -61,6 +61,7 @@ func newCmdListProcessor(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List all processors in TiCDC cluster",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

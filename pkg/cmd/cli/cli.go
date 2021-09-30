@@ -61,6 +61,7 @@ func NewCmdCli() *cobra.Command {
 			util.LogHTTPProxies()
 			return nil
 		},
+		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Whether to run interactively or not.
 			if o.interact {

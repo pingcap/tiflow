@@ -450,6 +450,7 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
 
