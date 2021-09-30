@@ -17,7 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -65,7 +65,7 @@ func TestHttputilNewClient(t *testing.T) {
 	resp, err := cli.Get(url)
 	require.Nil(t, err)
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	require.Nil(t, err)
 	require.Equal(t, httputilServerMsg, string(body))
 }
