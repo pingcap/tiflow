@@ -139,6 +139,7 @@ func newCmdStatisticsChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "statistics",
 		Short: "Periodically check and output the status of a replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

@@ -142,8 +142,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, errors.Annotate(err, "invalid timezone:"+changefeedConfig.TimeZone)
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
-	err = verifySink(ctx, info.SinkURI, info.Config, info.Opts)
-	if err != nil {
+	if err := sink.Validate(ctx, info.SinkURI, info.Config, info.Opts); err != nil {
 		return nil, err
 	}
 
@@ -188,8 +187,7 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	// verify sink_uri
 	if changefeedConfig.SinkURI != "" {
 		newInfo.SinkURI = changefeedConfig.SinkURI
-		err = verifySink(ctx, changefeedConfig.SinkURI, newInfo.Config, newInfo.Opts)
-		if err != nil {
+		if err := sink.Validate(ctx, changefeedConfig.SinkURI, newInfo.Config, newInfo.Opts); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
@@ -199,31 +197,6 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	}
 
 	return newInfo, nil
-}
-
-func verifySink(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string) error {
-	sinkFilter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return err
-	}
-	errCh := make(chan error)
-	// TODO: find a better way to verify a sinkURI is valid
-	s, err := sink.NewSink(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
-	if err != nil {
-		return err
-	}
-	err = s.Close(ctx)
-	if err != nil {
-		return err
-	}
-	select {
-	case err = <-errCh:
-		if err != nil {
-			return err
-		}
-	default:
-	}
-	return nil
 }
 
 func verifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
