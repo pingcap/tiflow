@@ -49,5 +49,5 @@ const (
 type LogMeta struct {
 	CheckPointTs   uint64           `msg:"checkPointTs"`
 	ResolvedTs     uint64           `msg:"resolvedTs"`
-	ResolvedTsList map[int64]uint64 `msg:"resolvedTsList"`
+	ResolvedTsList map[int64]uint64 `msg:"-"`
 }

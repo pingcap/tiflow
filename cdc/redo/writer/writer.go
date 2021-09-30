@@ -211,10 +211,10 @@ func (l *LogWriter) runGC(ctx context.Context) {
 
 func (l *LogWriter) gc() error {
 	l.metaLock.RLock()
-	defer l.metaLock.RUnlock()
+	ts := l.meta.CheckPointTs
+	l.metaLock.RUnlock()
 
 	var err error
-	ts := l.meta.CheckPointTs
 	err = multierr.Append(err, l.rowWriter.GC(ts))
 	err = multierr.Append(err, l.ddlWriter.GC(ts))
 	return err
@@ -229,7 +229,7 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 	}
 
 	if l.isStopped() {
-		return 0, cerror.ErrRedoWriterStopped
+		return 0, cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	if len(rows) == 0 {
 		return 0, nil
@@ -272,7 +272,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	if ddl == nil || ddl.DDL == nil {
 		return nil
@@ -303,7 +303,7 @@ func (l *LogWriter) FlushLog(ctx context.Context, tableID int64, ts uint64) erro
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
 	if err := l.flush(); err != nil {
@@ -322,7 +322,7 @@ func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	return l.flushLogMeta(ts, 0)
 }
@@ -336,7 +336,7 @@ func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
 	return l.flushLogMeta(0, ts)
@@ -451,7 +451,6 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	log.Debug("tmp file synced", zap.String("tmp file name", tmpFile.Name()))
 	err = os.Rename(tmpFileName, l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -460,7 +459,10 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	if !l.cfg.S3Storage {
 		return nil
 	}
-	return l.writeMetaToS3(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
+	defer cancel()
+	return l.writeMetaToS3(ctx)
 }
 
 func (l *LogWriter) writeMetaToS3(ctx context.Context) error {

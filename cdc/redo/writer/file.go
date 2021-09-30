@@ -45,6 +45,7 @@ const (
 
 const (
 	defaultFlushIntervalInMs = 1000
+	defaultS3Timeout         = 3 * time.Second
 )
 
 const (
@@ -204,7 +205,7 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 
 	writeLen := int64(len(rawData))
 	if writeLen > w.cfg.MaxLogSize {
-		return 0, errors.Errorf("rawData %d exceeds maximum file size %d", writeLen, w.cfg.MaxLogSize)
+		return 0, cerror.ErrFileSizeExceed.GenWithStackByArgs(writeLen, w.cfg.MaxLogSize)
 	}
 
 	if w.file == nil {
@@ -300,7 +301,10 @@ func (w *Writer) close() error {
 	}
 
 	if w.cfg.S3Storage {
-		err = w.renameInS3(context.Background(), w.file.Name(), w.filePath())
+		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
+		defer cancel()
+
+		err = w.renameInS3(ctx, w.file.Name(), w.filePath())
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 		}
@@ -373,8 +377,10 @@ func (w *Writer) openOrNew(writeLen int) error {
 
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, common.DefaultFileMode)
 	if err != nil {
-		return w.openNew()
+		// return err let the caller decide next move
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
+
 	w.file = file
 	w.size = info.Size()
 	err = w.newPageWriter()
@@ -489,19 +495,19 @@ func (w *Writer) flushAll() error {
 	if err != nil {
 		return err
 	}
-	log.Debug("s3 enable", zap.Bool("s3 enabled", w.cfg.S3Storage))
 	if !w.cfg.S3Storage {
 		return nil
 	}
-	return w.writeToS3(context.Background(), w.file.Name())
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
+	defer cancel()
+	return w.writeToS3(ctx, w.file.Name())
 }
 
 // Flush ...
 func (w *Writer) Flush() error {
 	w.Lock()
 	defer w.Unlock()
-
-	log.Debug("flushAll")
 
 	return w.flushAll()
 }
@@ -528,6 +534,6 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 
 	log.Debug("storage.WriteFile", zap.String("name", filepath.Base(name)), zap.Int("data size", len(fileData)))
 
-	//	Key: aws.String(rs.options.Prefix + name), prefix should be changefeed name
+	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))
 }

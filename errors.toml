@@ -241,6 +241,11 @@ error = '''
 file sink meta file already exists
 '''
 
+["CDC:ErrFileSizeExceed"]
+error = '''
+rawData size %d exceeds maximum file size %d
+'''
+
 ["CDC:ErrFilterRuleInvalid"]
 error = '''
 filter rule is invalid
