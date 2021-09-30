@@ -147,7 +147,8 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 			}
 		}
 		for _, tableID := range a.executor.GetAllCurrentTables() {
-			if _, ok := a.tableOperations[tableID]; !ok {
+			if _, ok := a.tableOperations[tableID]; ok {
+				// Tables with a pending operation is not in the Running state.
 				continue
 			}
 			running = append(running, tableID)
