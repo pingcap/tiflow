@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -116,7 +116,7 @@ func createConnector() error {
 
 	// not in [200, 300)
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		str, err := ioutil.ReadAll(resp.Body)
+		str, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return err
 		}
