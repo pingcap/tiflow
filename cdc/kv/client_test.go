@@ -787,7 +787,7 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 
 	// wait request id allocated with: new session, new request
 	waitRequestID(c, baseAllocatedID+1)
-	incompatibility := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+	clusterIDMismatchEvent := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
 		{
 			RegionId:  3,
 			RequestId: currentRequestID(),
@@ -802,7 +802,7 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 		},
 	}}
 
-	changeDataCh <- incompatibility
+	changeDataCh <- clusterIDMismatchEvent
 
 	wg2.Wait()
 	cancel()
