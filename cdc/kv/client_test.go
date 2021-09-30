@@ -657,7 +657,7 @@ consumePreResolvedTs:
 	}
 	// fallback resolved ts event from TiKV
 	ch2 <- makeEvent(90)
-	// normal resolved ts evnet
+	// normal resolved ts event
 	ch2 <- makeEvent(120)
 	select {
 	case event = <-eventCh:
@@ -700,7 +700,7 @@ func (s *clientSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -710,7 +710,7 @@ func (s *clientSuite) TestCompatibilityWithSameConn(c *check.C) {
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
 		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
 		cdcClient.Close() //nolint:errcheck
 	}()
@@ -731,6 +731,79 @@ func (s *clientSuite) TestCompatibilityWithSameConn(c *check.C) {
 		},
 	}}
 	ch1 <- incompatibility
+	wg2.Wait()
+	cancel()
+}
+
+// TestClusterIDMismatch tests kv client returns an error when TiKV returns
+// the cluster ID mismatch error.
+func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	changeDataCh := make(chan *cdcpb.ChangeDataEvent, 10)
+	changeDataService := newMockChangeDataService(c, changeDataCh)
+	mockService, addr := newMockService(ctx, c, changeDataService, wg)
+	defer func() {
+		close(changeDataCh)
+		mockService.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	c.Assert(err, check.IsNil)
+
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+
+	kvStorage := newStorageWithCurVersionCache(tiStore, addr)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(1, addr)
+	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
+
+	baseAllocatedID := currentRequestID()
+	lockResolver := txnutil.NewLockerResolver(kvStorage)
+	isPullInit := &mockPullerInit{}
+
+	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+	eventCh := make(chan model.RegionFeedEvent, 10)
+
+	var wg2 sync.WaitGroup
+	wg2.Add(1)
+	go func() {
+		defer wg2.Done()
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
+		c.Assert(cerror.ErrClusterIDMismatch.Equal(err), check.IsTrue)
+		cdcClient.Close() //nolint:errcheck
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(c, baseAllocatedID+1)
+	incompatibility := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Error{
+				Error: &cdcpb.Error{
+					ClusterIdMismatch: &cdcpb.ClusterIDMismatch{
+						Current: 0,
+						Request: 1,
+					},
+				},
+			},
+		},
+	}}
+
+	changeDataCh <- incompatibility
+
 	wg2.Wait()
 	cancel()
 }
