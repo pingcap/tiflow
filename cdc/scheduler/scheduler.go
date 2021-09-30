@@ -133,6 +133,9 @@ func (s *BaseScheduleDispatcher) Tick(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, resolvedTs model.Ts, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.captures = captures
 	if s.checkpointTs > checkpointTs {
 		s.logger.Panic("checkpointTs regressed",
@@ -482,6 +485,7 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 		s.logger.Warn("stale message from dead processor, ignore",
 			zap.String("capture-id", captureID),
 			zap.Int64("tableID", tableID))
+		return
 	}
 
 	record, ok := s.tables.GetTableRecord(tableID)
@@ -489,6 +493,11 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 		s.logger.Warn("response about a stale table, ignore",
 			zap.String("source", captureID),
 			zap.Int64("table-id", tableID))
+	}
+	if record == nil {
+		// unreachable, unless code is buggy.
+		log.Panic("unexpected nil table record", zap.Int64("table-id", tableID))
+		return
 	}
 
 	if record.CaptureID != captureID {
