@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/leakutil"
-	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,23 +57,23 @@ func TestSystemBuilder(t *testing.T) {
 
 func TestMailboxSendAndSendB(t *testing.T) {
 	mb := NewMailbox(ID(0), 1)
-	err := mb.Send(pipeline.TickMessage())
+	err := mb.Send(message.TickMessage())
 	require.Nil(t, err)
 
-	err = mb.Send(pipeline.TickMessage())
+	err = mb.Send(message.TickMessage())
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
 	msg, ok := mb.tryReceive()
 	require.Equal(t, ok, true)
-	require.Equal(t, msg, pipeline.TickMessage())
+	require.Equal(t, msg, message.TickMessage())
 
 	// Test SendB can be canceled by context.
 	ch := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := mb.Send(pipeline.TickMessage())
+		err := mb.Send(message.TickMessage())
 		ch <- err
-		err = mb.SendB(ctx, pipeline.TickMessage())
+		err = mb.SendB(ctx, message.TickMessage())
 		ch <- err
 	}()
 
@@ -88,23 +88,23 @@ func TestRouterSendAndSendB(t *testing.T) {
 	router := newRouter()
 	err := router.insert(id, &proc{mb: mb})
 	require.Nil(t, err)
-	err = router.Send(id, pipeline.TickMessage())
+	err = router.Send(id, message.TickMessage())
 	require.Nil(t, err)
 
-	err = router.Send(id, pipeline.TickMessage())
+	err = router.Send(id, message.TickMessage())
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
 	msg, ok := mb.tryReceive()
 	require.Equal(t, ok, true)
-	require.Equal(t, msg, pipeline.TickMessage())
+	require.Equal(t, msg, message.TickMessage())
 
 	// Test SendB can be canceled by context.
 	ch := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := router.Send(id, pipeline.TickMessage())
+		err := router.Send(id, message.TickMessage())
 		ch <- err
-		err = router.SendB(ctx, id, pipeline.TickMessage())
+		err = router.SendB(ctx, id, message.TickMessage())
 		ch <- err
 	}()
 
@@ -154,10 +154,10 @@ func TestSystemSpawnDuplicateActor(t *testing.T) {
 type forwardActor struct {
 	contextAware bool
 
-	ch chan<- pipeline.Message
+	ch chan<- message.Message
 }
 
-func (f *forwardActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
+func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	for _, msg := range msgs {
 		if f.contextAware {
 			select {
@@ -178,26 +178,26 @@ func TestActorSendReceive(t *testing.T) {
 
 	// Send to a non-existing actor.
 	id := ID(777)
-	err := router.Send(id, pipeline.BarrierMessage(0))
+	err := router.Send(id, message.BarrierMessage(0))
 	require.Equal(t, err, errActorNotFound)
 
-	ch := make(chan pipeline.Message, 1)
+	ch := make(chan message.Message, 1)
 	fa := &forwardActor{
 		ch: ch,
 	}
 	mb := NewMailbox(id, 1)
 
 	// The actor is not in router yet.
-	err = router.Send(id, pipeline.BarrierMessage(1))
+	err = router.Send(id, message.BarrierMessage(1))
 	require.Equal(t, err, errActorNotFound)
 
 	// Spawn adds the actor to the router.
 	require.Nil(t, sys.Spawn(mb, fa))
-	err = router.Send(id, pipeline.BarrierMessage(2))
+	err = router.Send(id, message.BarrierMessage(2))
 	require.Nil(t, err)
 	select {
 	case msg := <-ch:
-		require.Equal(t, msg, pipeline.BarrierMessage(2))
+		require.Equal(t, msg, message.BarrierMessage(2))
 	case <-time.After(time.Second):
 		t.Fatal("Timed out")
 	}
@@ -213,7 +213,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	sys, router := NewSystemBuilder("test").WorkerNumber(workerNum).Build()
 	sys.Start(ctx)
 
-	ch := make(chan pipeline.Message, 1)
+	ch := make(chan message.Message, 1)
 
 	for id := 0; id < actorNum; id++ {
 		fa := &forwardActor{
@@ -224,11 +224,11 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	}
 
 	// Broadcase tick to actors.
-	router.Broadcast(pipeline.TickMessage())
+	router.Broadcast(message.TickMessage())
 	for i := 0; i < actorNum; i++ {
 		select {
 		case msg := <-ch:
-			require.Equal(t, msg, pipeline.TickMessage())
+			require.Equal(t, msg, message.TickMessage())
 		case <-time.After(time.Second):
 			t.Fatal("Timed out")
 		}
@@ -259,14 +259,14 @@ func TestSystemStopCancelActors(t *testing.T) {
 	sys.Start(ctx)
 
 	id := ID(777)
-	ch := make(chan pipeline.Message, 1)
+	ch := make(chan message.Message, 1)
 	fa := &forwardActor{
 		ch:           ch,
 		contextAware: true,
 	}
 	mb := NewMailbox(id, 1)
 	require.Nil(t, sys.Spawn(mb, fa))
-	err := router.Send(id, pipeline.TickMessage())
+	err := router.Send(id, message.TickMessage())
 	require.Nil(t, err)
 
 	id = ID(778)
@@ -276,7 +276,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 	}
 	mb = NewMailbox(id, 1)
 	require.Nil(t, sys.Spawn(mb, fa))
-	err = router.Send(id, pipeline.TickMessage())
+	err = router.Send(id, message.TickMessage())
 	require.Nil(t, err)
 
 	// Do not receive ch.
@@ -296,7 +296,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 	id := ID(777)
 	// To avoid blocking, use a large buffer.
 	size := defaultMsgBatchSizePerActor * 4
-	ch := make(chan pipeline.Message, size)
+	ch := make(chan message.Message, size)
 	fa := &forwardActor{
 		ch: ch,
 	}
@@ -305,7 +305,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 
 	for total := 1; total < size; total *= 2 {
 		for j := 0; j < total-1; j++ {
-			require.Nil(t, mb.Send(pipeline.TickMessage()))
+			require.Nil(t, mb.Send(message.TickMessage()))
 		}
 
 		// Sending to mailbox does not trigger scheduling.
@@ -315,7 +315,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 		}
 
-		require.Nil(t, router.Send(id, pipeline.TickMessage()))
+		require.Nil(t, router.Send(id, message.TickMessage()))
 
 		acc := 0
 		for i := 0; i < total; i++ {
@@ -343,7 +343,7 @@ type flipflopActor struct {
 	acc       int64
 }
 
-func (f *flipflopActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
+func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	for range msgs {
 		level := atomic.LoadInt64(&f.level)
 		newLevel := 0
@@ -384,7 +384,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 	for {
 		total := int64(0)
 		for i := 0; i < syncCount; i++ {
-			_ = router.Send(id, pipeline.TickMessage())
+			_ = router.Send(id, message.TickMessage())
 		}
 		total += int64(syncCount)
 		select {
@@ -405,7 +405,7 @@ type closedActor struct {
 	ch  chan int
 }
 
-func (c *closedActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
+func (c *closedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	c.acc += len(msgs)
 	c.ch <- c.acc
 	// closed
@@ -425,10 +425,10 @@ func TestPollStoppedActor(t *testing.T) {
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
 
 	for i := 0; i < (cap - 1); i++ {
-		require.Nil(t, mb.Send(pipeline.TickMessage()))
+		require.Nil(t, mb.Send(message.TickMessage()))
 	}
 	// Trigger scheduling
-	require.Nil(t, router.Send(id, pipeline.TickMessage()))
+	require.Nil(t, router.Send(id, message.TickMessage()))
 
 	timeout := time.After(5 * time.Second)
 	for {
@@ -459,14 +459,14 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
 
 	// Trigger scheduling
-	require.Nil(t, router.Send(id, pipeline.TickMessage()))
+	require.Nil(t, router.Send(id, message.TickMessage()))
 	timeout := time.After(5 * time.Second)
 	select {
 	case <-timeout:
 		t.Fatal("timeout")
 	case <-ch:
 	}
-	err := router.Send(id, pipeline.TickMessage())
+	err := router.Send(id, message.TickMessage())
 	require.True(t, strings.Contains(err.Error(), "actor not found"))
 
 	wait(t, time.Second, func() {
@@ -479,7 +479,7 @@ type reopenedActor struct {
 	trigger bool
 }
 
-func (r *reopenedActor) Poll(ctx context.Context, msgs []pipeline.Message) bool {
+func (r *reopenedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	r.trigger = !r.trigger
 	return r.trigger
 }
@@ -503,10 +503,10 @@ func TestMustNotReopenActor(t *testing.T) {
 	require.Nil(t, sys.Spawn(mb, &reopenedActor{}))
 
 	for i := 0; i < (cap - 1); i++ {
-		require.Nil(t, mb.Send(pipeline.TickMessage()))
+		require.Nil(t, mb.Send(message.TickMessage()))
 	}
 	// Trigger scheduling
-	require.Nil(t, router.Send(id, pipeline.TickMessage()))
+	require.Nil(t, router.Send(id, message.TickMessage()))
 
 	timeout := time.After(5 * time.Second)
 	select {
@@ -531,7 +531,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 
 	id := ID(777)
 	size := defaultMsgBatchSizePerActor * 4
-	ch := make(chan pipeline.Message, size)
+	ch := make(chan message.Message, size)
 	fa := &forwardActor{
 		ch: ch,
 	}
@@ -546,7 +546,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 			b.Run(fmt.Sprintf("%d message(s)", total), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					for j := 0; j < total; j++ {
-						err = router.Send(id, pipeline.TickMessage())
+						err = router.Send(id, message.TickMessage())
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -573,7 +573,7 @@ func BenchmarkPollActor(b *testing.B) {
 
 	actorCount := int(math.Exp2(15))
 	// To avoid blocking, use a large buffer.
-	ch := make(chan pipeline.Message, actorCount)
+	ch := make(chan message.Message, actorCount)
 
 	b.Run("BenchmarkPollActor", func(b *testing.B) {
 		id := 1
@@ -593,7 +593,7 @@ func BenchmarkPollActor(b *testing.B) {
 			b.Run(fmt.Sprintf("%d actor(s)", total), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					for j := 1; j <= total; j++ {
-						err := router.Send(ID(j), pipeline.TickMessage())
+						err := router.Send(ID(j), message.TickMessage())
 						if err != nil {
 							b.Fatal(err)
 						}

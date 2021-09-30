@@ -21,11 +21,25 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/actor/message"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/pipeline"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+)
+
+const (
+	// The max number of workers of a system.
+	maxWorkerNum = 64
+	// The default size of polled actor batch.
+	defaultActorBatchSize = 1
+	// The default size of receive message batch.
+	defaultMsgBatchSizePerActor = 64
+)
+
+var (
+	errActorNotFound = cerrors.ErrActorNotFound.FastGenByArgs()
+	errMailboxFull   = cerrors.ErrMailboxFull.FastGenByArgs()
 )
 
 // Actor is a universal primitive of concurrent computation.
@@ -43,10 +57,10 @@ type Actor interface {
 	//
 	// We choose message to have a concrete type instead of an interface to save
 	// memory allocation.
-	Poll(ctx context.Context, msgs []pipeline.Message) (closed bool)
+	Poll(ctx context.Context, msgs []message.Message) (running bool)
 }
 
-// ID is ID of actors.
+// ID is ID for actors.
 type ID int
 
 // Mailbox sends messages to an actor.
@@ -55,14 +69,14 @@ type Mailbox interface {
 	ID() ID
 	// Send a message to its actor.
 	// It's a non-blocking send, returns ErrMailboxFull when it's full.
-	Send(msg pipeline.Message) error
+	Send(msg message.Message) error
 	// SendB sends a message to its actor, blocks when it's full.
 	// It may return context.Canceled or context.DeadlineExceeded.
-	SendB(ctx context.Context, msg pipeline.Message) error
+	SendB(ctx context.Context, msg message.Message) error
 
 	// Try to receive a message.
-	// It is must not block and should only be called by System.
-	tryReceive() (pipeline.Message, bool)
+	// It must be nonblocking and should only be called by System.
+	tryReceive() (message.Message, bool)
 	// Return the length of a mailbox.
 	// It should only be called by System.
 	len() int
@@ -72,7 +86,7 @@ type Mailbox interface {
 func NewMailbox(id ID, cap int) Mailbox {
 	return &mailbox{
 		id: id,
-		ch: make(chan pipeline.Message, cap),
+		ch: make(chan message.Message, cap),
 	}
 }
 
@@ -80,16 +94,14 @@ var _ Mailbox = (*mailbox)(nil)
 
 type mailbox struct {
 	id ID
-	ch chan pipeline.Message
+	ch chan message.Message
 }
 
 func (m *mailbox) ID() ID {
 	return m.id
 }
 
-var errMailboxFull = cerrors.ErrMailboxFull.FastGenByArgs()
-
-func (m *mailbox) Send(msg pipeline.Message) error {
+func (m *mailbox) Send(msg message.Message) error {
 	select {
 	case m.ch <- msg:
 		return nil
@@ -98,7 +110,7 @@ func (m *mailbox) Send(msg pipeline.Message) error {
 	}
 }
 
-func (m *mailbox) SendB(ctx context.Context, msg pipeline.Message) error {
+func (m *mailbox) SendB(ctx context.Context, msg message.Message) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -107,13 +119,13 @@ func (m *mailbox) SendB(ctx context.Context, msg pipeline.Message) error {
 	}
 }
 
-func (m *mailbox) tryReceive() (msg pipeline.Message, ok bool) {
+func (m *mailbox) tryReceive() (message.Message, bool) {
 	select {
-	case msg, ok = <-m.ch:
-		return
+	case msg, ok := <-m.ch:
+		return msg, ok
 	default:
 	}
-	return
+	return message.Message{}, false
 }
 
 func (m *mailbox) len() int {
@@ -127,6 +139,19 @@ type proc struct {
 	closed bool
 }
 
+// batchReceiveMsgs receives messages into batchMsg.
+func (p *proc) batchReceiveMsgs(batchMsg []message.Message, batchSize int) []message.Message {
+	for i := 0; i < batchSize; i++ {
+		msg, ok := p.mb.tryReceive()
+		if !ok {
+			// Stop receive if there is no more messages.
+			break
+		}
+		batchMsg = append(batchMsg, msg)
+	}
+	return batchMsg
+}
+
 // ready is a centralize notification struct, shared by a router and a system.
 // It schedules notification and actors.
 type ready struct {
@@ -135,7 +160,9 @@ type ready struct {
 
 	// TODO: replace with a memory efficient queue,
 	// e.g., an array based queue to save allocation.
-	queue   list.List
+	queue list.List
+	// In the set, an actor is either polling by system
+	// or is pending to be polled.
 	procs   map[ID]struct{}
 	stopped bool
 }
@@ -147,6 +174,10 @@ func (rd *ready) stop() {
 	rd.cond.Broadcast()
 }
 
+// enqueueLocked enqueues ready proc.
+// If the proc is already enqueued, it ignores.
+// Set force to true to force enqueue. It is useful to force the proc to be
+// polled again.
 func (rd *ready) enqueueLocked(p *proc, force bool) {
 	id := p.mb.ID()
 	if _, ok := rd.procs[id]; !ok || force {
@@ -155,10 +186,12 @@ func (rd *ready) enqueueLocked(p *proc, force bool) {
 	}
 }
 
+// schedule schedules the proc to system.
 func (rd *ready) schedule(p *proc) {
 	rd.Lock()
 	rd.enqueueLocked(p, false)
 	rd.Unlock()
+	// Notify system to poll the proc.
 	rd.cond.Signal()
 }
 
@@ -169,6 +202,21 @@ func (rd *ready) scheduleN(procs []*proc) {
 	}
 	rd.Unlock()
 	rd.cond.Broadcast()
+}
+
+// batchReceiveProcs receives ready procs into batchP.
+func (rd *ready) batchReceiveProcs(batchP []*proc, batchSize int) []*proc {
+	for i := 0; i < batchSize; i++ {
+		if rd.queue.Len() == 0 {
+			// Stop receive if there is no more ready procs.
+			break
+		}
+		element := rd.queue.Front()
+		rd.queue.Remove(element)
+		p := element.Value.(*proc)
+		batchP = append(batchP, p)
+	}
+	return batchP
 }
 
 // Router send messages to actors.
@@ -189,12 +237,10 @@ func newRouter() *Router {
 	return r
 }
 
-var errActorNotFound = cerrors.ErrActorNotFound.FastGenByArgs()
-
 // Send a message to an actor. It's a non-blocking send.
 // ErrMailboxFull when the actor full.
 // ErrActorNotFound when the actor not found.
-func (r *Router) Send(id ID, msg pipeline.Message) error {
+func (r *Router) Send(id ID, msg message.Message) error {
 	value, ok := r.procs.Load(id)
 	if !ok {
 		return errActorNotFound
@@ -211,7 +257,7 @@ func (r *Router) Send(id ID, msg pipeline.Message) error {
 // SendB sends a message to an actor, blocks when it's full.
 // ErrActorNotFound when the actor not found.
 // Canceled or DeadlineExceeded when the context is canceled or done.
-func (r *Router) SendB(ctx context.Context, id ID, msg pipeline.Message) error {
+func (r *Router) SendB(ctx context.Context, id ID, msg message.Message) error {
 	value, ok := r.procs.Load(id)
 	if !ok {
 		return errActorNotFound
@@ -227,7 +273,7 @@ func (r *Router) SendB(ctx context.Context, id ID, msg pipeline.Message) error {
 
 // Broadcast a message to all actors in the router.
 // The message may be dropped when a actor is full.
-func (r *Router) Broadcast(msg pipeline.Message) {
+func (r *Router) Broadcast(msg message.Message) {
 	batchSize := 128
 	ps := make([]*proc, 0, batchSize)
 	r.procs.Range(func(key, value interface{}) bool {
@@ -236,6 +282,8 @@ func (r *Router) Broadcast(msg pipeline.Message) {
 			log.Warn("failed to send to message",
 				zap.Error(err), zap.Uint64("id", uint64(p.mb.ID())),
 				zap.Reflect("msg", msg))
+			// Skip schedule the proc.
+			return true
 		}
 		ps = append(ps, p)
 		if len(ps) == batchSize {
@@ -273,15 +321,6 @@ type SystemBuilder struct {
 	fatalHandler func(string, ID)
 }
 
-// The max number of workers of a system.
-const maxWorkerNum = 64
-
-// The default size of polled actor batch.
-const defaultActorBatchSize = 1
-
-// The default size of receive message batch.
-const defaultMsgBatchSizePerActor = 64
-
 // NewSystemBuilder returns a new system builder.
 func NewSystemBuilder(name string) *SystemBuilder {
 	defaultWorkerNum := maxWorkerNum
@@ -291,6 +330,7 @@ func NewSystemBuilder(name string) *SystemBuilder {
 	}
 
 	return &SystemBuilder{
+		name:                 name,
 		numWorker:            defaultWorkerNum,
 		actorBatchSize:       defaultActorBatchSize,
 		msgBatchSizePerActor: defaultMsgBatchSizePerActor,
@@ -417,13 +457,13 @@ const slowReceiveThreshold = time.Second
 // The main poll of actor system.
 func (s *System) poll(ctx context.Context) {
 	batchP := make([]*proc, 0, s.actorBatchSize)
-	batchMsg := make([]pipeline.Message, 0, s.msgBatchSizePerActor)
+	batchMsg := make([]message.Message, 0, s.msgBatchSizePerActor)
 	s.metricProcBatch.Observe(float64(len(batchP)))
 	rd := s.rd
 	rd.Lock()
 
 	startTime := time.Now()
-	s.metricWorkingWorkers.Add(1)
+	s.metricWorkingWorkers.Inc()
 	for {
 		batchP = batchP[:0]
 		for {
@@ -431,44 +471,34 @@ func (s *System) poll(ctx context.Context) {
 				rd.Unlock()
 				return
 			}
-			for i := 0; i < s.actorBatchSize; i++ {
-				if rd.queue.Len() == 0 {
-					break
-				}
-				element := rd.queue.Front()
-				rd.queue.Remove(element)
-				p := element.Value.(*proc)
-				batchP = append(batchP, p)
-			}
+			// Batch receive ready procs.
+			batchP = rd.batchReceiveProcs(batchP, s.actorBatchSize)
 			if len(batchP) != 0 {
 				break
 			}
 			// Recording metrics.
 			s.metricWorkingDuration.Add(time.Since(startTime).Seconds())
-			s.metricWorkingWorkers.Add(-1)
+			s.metricWorkingWorkers.Dec()
+			// Park the poll until it is awakened.
 			rd.cond.Wait()
 			startTime = time.Now()
-			s.metricWorkingWorkers.Add(1)
+			s.metricWorkingWorkers.Inc()
 		}
 		rd.Unlock()
 
 		for _, p := range batchP {
 			batchMsg = batchMsg[:0]
-			for i := 0; i < s.msgBatchSizePerActor; i++ {
-				msg, ok := p.mb.tryReceive()
-				if !ok {
-					break
-				}
-				batchMsg = append(batchMsg, msg)
-			}
+			// Batch receive actor's messages.
+			batchMsg = p.batchReceiveMsgs(batchMsg, s.msgBatchSizePerActor)
 			if len(batchMsg) == 0 {
 				continue
 			}
 			s.metricMsgBatch.Observe(float64(len(batchMsg)))
 
+			// Poll actor.
 			pollStartTime := time.Now()
-			close := !p.actor.Poll(ctx, batchMsg)
-			if close {
+			running := p.actor.Poll(ctx, batchMsg)
+			if !running {
 				if !p.closed {
 					p.closed = true
 					present := s.router.remove(p.mb.ID())
@@ -478,7 +508,7 @@ func (s *System) poll(ctx context.Context) {
 					}
 				}
 			}
-			if p.closed && !close {
+			if p.closed && running {
 				s.handleFatal(
 					"closed actor can never receive new messages again",
 					p.mb.ID())
@@ -496,6 +526,8 @@ func (s *System) poll(ctx context.Context) {
 		rd.Lock()
 		for _, p := range batchP {
 			if p.mb.len() == 0 {
+				// At this point, there is no more message needs to be polled
+				// by the actor. Delete the actor from ready set.
 				delete(rd.procs, p.mb.ID())
 			} else {
 				// Force enqueue to poll remaining messages.
@@ -506,13 +538,13 @@ func (s *System) poll(ctx context.Context) {
 }
 
 func (s *System) handleFatal(msg string, id ID) {
-	handler := defautlFatalhandler
+	handler := defaultFatalhandler
 	if s.fatalHandler != nil {
 		handler = s.fatalHandler
 	}
 	handler(msg, id)
 }
 
-func defautlFatalhandler(msg string, id ID) {
+func defaultFatalhandler(msg string, id ID) {
 	log.Panic(msg, zap.Uint64("id", uint64(id)))
 }
