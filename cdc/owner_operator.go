@@ -45,11 +45,7 @@ type ddlHandler struct {
 func newDDLHandler(pdCli pd.Client, grpcPool kv.GrpcPool, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
 	// TODO: context should be passed from outter caller
 	ctx, cancel := context.WithCancel(context.Background())
-<<<<<<< HEAD
-	plr := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
-=======
-	plr := puller.NewPuller(ctx, pdCli, grpcPool, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
->>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
+	plr := puller.NewPuller(ctx, pdCli, grpcPool, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, nil, false)
 	h := &ddlHandler{
 		puller: plr,
 		cancel: cancel,

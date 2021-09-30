@@ -64,14 +64,9 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
-<<<<<<< HEAD
-		plr = puller.NewPuller(ctx, pdCli, conf.Security, kvStorage, startTs,
+		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().GrpcPool, kvStorage, startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
 			nil, false)
-=======
-		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().GrpcPool, kvStorage, startTs,
-			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
->>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	}
 
 	return &ddlPullerImpl{

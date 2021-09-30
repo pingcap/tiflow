@@ -169,11 +169,7 @@ func newProcessor(
 		zap.Uint64("startts", checkpointTs), util.ZapFieldChangefeed(ctx))
 	kvStorage := util.KVStorageFromCtx(ctx)
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-<<<<<<< HEAD
-	ddlPuller := puller.NewPuller(ctx, pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
-=======
-	ddlPuller := puller.NewPuller(ctx, pdCli, grpcPool, kvStorage, checkpointTs, ddlspans, false)
->>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
+	ddlPuller := puller.NewPuller(ctx, pdCli, grpcPool, kvStorage, checkpointTs, ddlspans, limitter, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -826,14 +822,10 @@ func (p *oldProcessor) addTable(ctx context.Context, tableID int64, replicaInfo 
 		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
 		kvStorage := util.KVStorageFromCtx(ctx)
-<<<<<<< HEAD
-		plr := puller.NewPuller(ctx, p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
-=======
 		// NOTICE: always pull the old value internally
 		// See also: TODO(hi-rustin): add issue link here.
 		plr := puller.NewPuller(ctx, p.pdCli, p.grpcPool, kvStorage,
-			replicaInfo.StartTs, []regionspan.Span{span}, true)
->>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
+			replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, true)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {

@@ -145,14 +145,7 @@ func (*mockPullerInit) IsInitialized() bool {
 // TestSplit try split on every region, and test can get value event from
 // every region after split.
 func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-<<<<<<< HEAD
-	cli := NewCDCClient(context.Background(), pdCli, storage.(tikv.Storage), &security.Credential{})
-	defer cli.Close()
-
 	eventCh := make(chan *model.RegionFeedEvent, 1<<20)
-=======
-	eventCh := make(chan model.RegionFeedEvent, 1<<20)
->>>>>>> a70d7792... kv/client: add global grpc connection pool (#2511) (#2531)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
