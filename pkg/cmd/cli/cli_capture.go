@@ -66,6 +66,7 @@ func newCmdCapture(f factory.Factory) *cobra.Command {
 	cmds := &cobra.Command{
 		Use:   "capture",
 		Short: "Manage capture (capture is a CDC server instance)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return o.run(f)
 		},
