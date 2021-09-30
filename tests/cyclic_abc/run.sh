@@ -96,14 +96,14 @@ function run() {
 		--cyclic-upstream-ssl-key=$TLS_DIR/server-key.pem
 
 	# record tso after we create tables to not block on waiting mark tables DDLs.
-	start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
 	run_cdc_cli changefeed create --start-ts=$start_ts \
 		--sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?safe-mode=true" \
 		--pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
 		--cyclic-replica-id 1 \
 		--cyclic-filter-replica-ids 2 \
-		--cyclic-sync-ddl true \
+		--cyclic-sync-ddl=true \
 		--config $CUR/conf/changefeed.toml
 
 	run_cdc_cli changefeed create --start-ts=$start_ts \
@@ -111,7 +111,7 @@ function run() {
 		--pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
 		--cyclic-replica-id 2 \
 		--cyclic-filter-replica-ids 3 \
-		--cyclic-sync-ddl true \
+		--cyclic-sync-ddl=true \
 		--config $CUR/conf/changefeed.toml
 
 	run_cdc_cli changefeed create --start-ts=$start_ts \
@@ -123,7 +123,7 @@ function run() {
 		--key=$TLS_DIR/client-key.pem \
 		--cyclic-replica-id 3 \
 		--cyclic-filter-replica-ids 1 \
-		--cyclic-sync-ddl false \
+		--cyclic-sync-ddl=false \
 		--config $CUR/conf/changefeed.toml
 
 	for i in $(seq 6 15); do {

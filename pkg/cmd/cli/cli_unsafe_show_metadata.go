@@ -68,6 +68,7 @@ func newCmdShowMetadata(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "show-metadata",
 		Short: "Show metadata stored in PD",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {
