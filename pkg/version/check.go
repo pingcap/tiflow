@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -124,7 +124,7 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
 	}
 
-	content, err := ioutil.ReadAll(resp.Body)
+	content, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
