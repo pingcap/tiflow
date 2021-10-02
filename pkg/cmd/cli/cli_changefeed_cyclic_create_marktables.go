@@ -123,6 +123,7 @@ func newCmdCyclicCreateMarktables(f factory.Factory) *cobra.Command {
 		&cobra.Command{
 			Use:   "create-marktables",
 			Short: "Create cyclic replication mark tables",
+			Args:  cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				err := o.complete(f)
 				if err != nil {
