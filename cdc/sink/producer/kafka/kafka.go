@@ -34,6 +34,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultPartitionNum = 4
+
 // Config stores the Kafka configuration
 type Config struct {
 	PartitionNum      int32
@@ -64,7 +66,7 @@ func NewKafkaConfig() Config {
 
 type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncClient and syncClient.
-	// Since we don't close these two clients (which have a input chan) from the
+	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
 	clientLock   sync.RWMutex
 	asyncClient  sarama.AsyncProducer
@@ -206,7 +208,7 @@ func (k *kafkaSaramaProducer) stop() {
 	}
 }
 
-// Close implements the Producer interface
+// Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
 	k.stop()
 	k.clientLock.Lock()
@@ -294,7 +296,7 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 		}
 	} else {
 		if partitionNum == 0 {
-			partitionNum = 4
+			partitionNum = defaultPartitionNum
 			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
 		}
 		log.Info("create a topic", zap.String("topic", topic),
@@ -380,8 +382,8 @@ func init() {
 }
 
 var (
-	validClientID     *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
-	commonInvalidChar *regexp.Regexp = regexp.MustCompile(`[\?:,"]`)
+	validClientID     = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
 )
 
 func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (clientID string, err error) {

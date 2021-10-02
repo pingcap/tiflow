@@ -366,30 +366,7 @@ func (o *createChangefeedOptions) validateTargetTs() error {
 func (o *createChangefeedOptions) validateSink(
 	ctx context.Context, cfg *config.ReplicaConfig, opts map[string]string,
 ) error {
-	filter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return err
-	}
-
-	errCh := make(chan error)
-	s, err := sink.NewSink(ctx, "cli-verify", o.commonChangefeedOptions.sinkURI, filter, cfg, opts, errCh)
-	if err != nil {
-		return err
-	}
-	err = s.Close(ctx)
-	if err != nil {
-		return err
-	}
-
-	select {
-	case err = <-errCh:
-		if err != nil {
-			return err
-		}
-	default:
-	}
-
-	return nil
+	return sink.Validate(ctx, o.commonChangefeedOptions.sinkURI, cfg, opts)
 }
 
 // run the `cli changefeed create` command.
@@ -473,6 +450,7 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new replication task (changefeed)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
 
