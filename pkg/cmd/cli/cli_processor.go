@@ -66,6 +66,7 @@ func newCmdProcessor(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "processor",
 		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return o.run(f)
 		},

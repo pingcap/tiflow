@@ -14,7 +14,7 @@
 package cli
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -66,7 +66,7 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 	newInfo, err = o.applyChanges(oldInfo, cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(newInfo.SortDir, check.Equals, ".")
-	file, err := ioutil.ReadFile(filename)
+	file, err := os.ReadFile(filename)
 	c.Assert(err, check.IsNil)
 	c.Assert(strings.Contains(string(file), "this flag cannot be updated and will be ignored"), check.IsTrue)
 }

@@ -15,7 +15,7 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -222,7 +222,7 @@ num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 `, dataDir)
-	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 
 	cmd := new(cobra.Command)
@@ -310,7 +310,7 @@ cert-path = "bb"
 key-path = "cc"
 cert-allowed-cn = ["dd","ee"]
 `, dataDir)
-	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 
 	cmd := new(cobra.Command)

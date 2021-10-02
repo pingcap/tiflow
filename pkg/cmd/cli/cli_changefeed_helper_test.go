@@ -14,7 +14,6 @@
 package cli
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -37,7 +36,7 @@ func (s *changefeedHelperSuite) TestConfirmLargeDataGap(c *check.C) {
 	// check start ts more than 1 day before current ts, and type N when confirming
 	dir := c.MkDir()
 	path := filepath.Join(dir, "confirm.txt")
-	err := ioutil.WriteFile(path, []byte("n"), 0o644)
+	err := os.WriteFile(path, []byte("n"), 0o644)
 	c.Assert(err, check.IsNil)
 	f, err := os.Open(path)
 	c.Assert(err, check.IsNil)
@@ -51,7 +50,7 @@ func (s *changefeedHelperSuite) TestConfirmLargeDataGap(c *check.C) {
 	c.Assert(err, check.ErrorMatches, "abort changefeed create or resume")
 
 	// check start ts more than 1 day before current ts, and type Y when confirming
-	err = ioutil.WriteFile(path, []byte("Y"), 0o644)
+	err = os.WriteFile(path, []byte("Y"), 0o644)
 	c.Assert(err, check.IsNil)
 	f, err = os.Open(path)
 	c.Assert(err, check.IsNil)
@@ -68,7 +67,7 @@ func (s *changefeedHelperSuite) TestConfirmIgnoreIneligibleTables(c *check.C) {
 	// check start ts more than 1 day before current ts, and type N when confirming
 	dir := c.MkDir()
 	path := filepath.Join(dir, "confirm.txt")
-	err := ioutil.WriteFile(path, []byte("n"), 0o644)
+	err := os.WriteFile(path, []byte("n"), 0o644)
 	c.Assert(err, check.IsNil)
 	f, err := os.Open(path)
 	c.Assert(err, check.IsNil)
@@ -82,7 +81,7 @@ func (s *changefeedHelperSuite) TestConfirmIgnoreIneligibleTables(c *check.C) {
 	c.Assert(err, check.ErrorMatches, "abort changefeed create or resume")
 
 	// check start ts more than 1 day before current ts, and type Y when confirming
-	err = ioutil.WriteFile(path, []byte("Y"), 0o644)
+	err = os.WriteFile(path, []byte("Y"), 0o644)
 	c.Assert(err, check.IsNil)
 	f, err = os.Open(path)
 	c.Assert(err, check.IsNil)
