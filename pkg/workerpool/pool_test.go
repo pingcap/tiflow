@@ -20,23 +20,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-func TestSuite(t *testing.T) { check.TestingT(t) }
-
-type workerPoolSuite struct{}
-
-var _ = check.Suite(&workerPoolSuite{})
-
-func (s *workerPoolSuite) TestTaskError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTaskError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
@@ -51,7 +44,7 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 		}
 		return nil
 	}).OnExit(func(err error) {
-		c.Assert(err, check.ErrorMatches, "test error")
+		require.Regexp(t, "test error", err)
 	})
 
 	var wg sync.WaitGroup
@@ -61,16 +54,16 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
-				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err)
 			}
 		}
 	}()
 
 	select {
 	case <-ctx.Done():
-		c.FailNow()
+		require.FailNow(t, "fail")
 	case err := <-handle.ErrCh():
-		c.Assert(err, check.ErrorMatches, "test error")
+		require.Regexp(t, "test error", err)
 	}
 	// Only cancel the context after all events have been sent,
 	// otherwise the event delivery may fail due to context cancellation.
@@ -78,11 +71,10 @@ func (s *workerPoolSuite) TestTaskError(c *check.C) {
 	cancel()
 
 	err := errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
-func (s *workerPoolSuite) TestTimerError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTimerError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -105,18 +97,17 @@ func (s *workerPoolSuite) TestTimerError(c *check.C) {
 
 	select {
 	case <-ctx.Done():
-		c.FailNow()
+		require.FailNow(t, "fail")
 	case err := <-handle.ErrCh():
-		c.Assert(err, check.ErrorMatches, "timer error")
+		require.Regexp(t, "timer error", err)
 	}
 	cancel()
 
 	err := errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
-func (s *workerPoolSuite) TestMultiError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMultiError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
@@ -139,16 +130,16 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 		for i := 0; i < 10; i++ {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
-				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err)
 			}
 		}
 	}()
 
 	select {
 	case <-ctx.Done():
-		c.FailNow()
+		require.FailNow(t, "fail")
 	case err := <-handle.ErrCh():
-		c.Assert(err, check.ErrorMatches, "test error")
+		require.Regexp(t, "test error", err)
 	}
 	// Only cancel the context after all events have been sent,
 	// otherwise the event delivery may fail due to context cancellation.
@@ -156,11 +147,10 @@ func (s *workerPoolSuite) TestMultiError(c *check.C) {
 	cancel()
 
 	err := errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
-func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCancelHandle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -186,8 +176,8 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 			}
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
-				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
-				c.Assert(i, check.GreaterEqual, 5000)
+				require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err)
+				require.GreaterOrEqual(t, i, 5000)
 				return nil
 			}
 			i++
@@ -197,7 +187,7 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 	for {
 		select {
 		case <-ctx.Done():
-			c.FailNow()
+			require.FailNow(t, "fail")
 		default:
 		}
 		if atomic.LoadInt32(&num) > 5000 {
@@ -206,7 +196,7 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 	}
 
 	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint", "1*sleep(500)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint")
 	}()
@@ -217,18 +207,17 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 
 	lastNum := atomic.LoadInt32(&num)
 	for i := 0; i <= 1000; i++ {
-		c.Assert(atomic.LoadInt32(&num), check.Equals, lastNum)
+		require.Equal(t, atomic.LoadInt32(&num), lastNum)
 	}
 
 	time.Sleep(1 * time.Second)
 	cancel()
 
 	err = errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
-func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCancelTimer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -239,7 +228,7 @@ func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
 	})
 
 	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint", "sleep(5000)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint")
 	}()
@@ -255,7 +244,7 @@ func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
 		for {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
-				c.Assert(err, check.ErrorMatches, ".*ErrWorkerPoolHandleCancelled.*")
+				require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err)
 				return nil
 			}
 			i++
@@ -266,11 +255,10 @@ func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
 
 	cancel()
 	err = errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
-func (s *workerPoolSuite) TestTimer(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTimer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -293,8 +281,8 @@ func (s *workerPoolSuite) TestTimer(c *check.C) {
 	count := 0
 	handle.SetTimer(ctx, time.Second*1, func(ctx context.Context) error {
 		if !lastTime.IsZero() {
-			c.Assert(time.Since(lastTime), check.GreaterEqual, 900*time.Millisecond)
-			c.Assert(time.Since(lastTime), check.LessEqual, 1200*time.Millisecond)
+			require.GreaterOrEqual(t, time.Since(lastTime), 900*time.Millisecond)
+			require.LessOrEqual(t, time.Since(lastTime), 1200*time.Millisecond)
 		}
 		if count == 3 {
 			cancel()
@@ -307,12 +295,10 @@ func (s *workerPoolSuite) TestTimer(c *check.C) {
 	})
 
 	err := errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
-func (s *workerPoolSuite) TestBasics(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestBasics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
@@ -359,7 +345,7 @@ func (s *workerPoolSuite) TestBasics(c *check.C) {
 				default:
 				}
 				log.Debug("result received", zap.Int("id", finalI), zap.Int("result", n))
-				c.Assert(n, check.Equals, nextExpected)
+				require.Equal(t, n, nextExpected)
 				nextExpected++
 				if nextExpected == 256 {
 					break
@@ -373,20 +359,18 @@ func (s *workerPoolSuite) TestBasics(c *check.C) {
 	cancel()
 
 	err := errg.Wait()
-	c.Assert(err, check.ErrorMatches, "context canceled")
+	require.Regexp(t, "context canceled", err)
 }
 
 // TestCancelByAddEventContext makes sure that the event handle can be cancelled by the context used
 // to call `AddEvent`.
-func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestCancelByAddEventContext(t *testing.T) {
 	poolCtx, poolCancel := context.WithCancel(context.Background())
 	defer poolCancel()
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	go func() {
 		err := pool.Run(poolCtx)
-		c.Assert(err, check.ErrorMatches, ".*context canceled.*")
+		require.Regexp(t, ".*context canceled.*", err)
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
@@ -422,7 +406,7 @@ func (s *workerPoolSuite) TestCancelByAddEventContext(c *check.C) {
 	cancel()
 
 	err := errg.Wait()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 }
 
 // Benchmark workerpool with ping-pong workflow.

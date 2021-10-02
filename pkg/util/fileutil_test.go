@@ -14,7 +14,6 @@
 package util
 
 import (
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -56,7 +55,7 @@ func (s *fileUtilSuite) TestIsDirAndWritable(c *check.C) {
 	err := IsDirAndWritable(path)
 	c.Assert(err, check.ErrorMatches, ".*no such file or directory")
 
-	err = ioutil.WriteFile(path, nil, 0o600)
+	err = os.WriteFile(path, nil, 0o600)
 	c.Assert(err, check.IsNil)
 	err = IsDirAndWritable(path)
 	c.Assert(err, check.ErrorMatches, ".*is not a directory")

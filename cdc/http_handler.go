@@ -16,7 +16,7 @@ package cdc
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -239,7 +239,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 
 func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	var level string
-	data, err := ioutil.ReadAll(r.Body)
+	data, err := io.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
 		writeInternalServerError(w, err)

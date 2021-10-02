@@ -66,6 +66,7 @@ func newCmdChangefeed(f factory.Factory) *cobra.Command {
 	cmds := &cobra.Command{
 		Use:   "changefeed",
 		Short: "Manage changefeed (changefeed is a replication task)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return o.run(f)
 		},
