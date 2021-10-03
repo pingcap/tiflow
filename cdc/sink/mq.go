@@ -398,7 +398,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	return nil
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newKafkaConfig(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) (*kafka.Config, error) {
 	config := kafka.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -494,9 +494,19 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		config.TopicPreProcess = autoCreate
 	}
 
+	return config, nil
+}
+
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
+
+	config, err := newKafkaConfig(sinkURI, replicaConfig, opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -527,7 +537,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if s != "" {
 		opts["max-batch-size"] = s
 	}
-	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
+	// For now, it's a placeholder. Avro format have to make connection to Schema Registery,
 	// and it may needs credential.
 	credential := &security.Credential{}
 	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)

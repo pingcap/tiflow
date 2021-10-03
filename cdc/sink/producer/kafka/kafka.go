@@ -52,8 +52,8 @@ type Config struct {
 }
 
 // NewKafkaConfig returns a default Kafka configuration
-func NewKafkaConfig() Config {
-	return Config{
+func NewKafkaConfig() *Config {
+	return &Config{
 		Version:           "2.4.0",
 		MaxMessageBytes:   512 * 1024 * 1024, // 512M
 		ReplicationFactor: 1,
@@ -267,7 +267,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 
 // kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't
 // exit, creates it automatically.
-func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Config) (int32, error) {
+func kafkaTopicPreProcess(topic, address string, config *Config, cfg *sarama.Config) (int32, error) {
 	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -318,7 +318,7 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
@@ -400,7 +400,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
+func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
