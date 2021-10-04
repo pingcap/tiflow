@@ -754,3 +754,173 @@ func TestIgnoreEmptyCapture(t *testing.T) {
 	communicator.AssertNotCalled(t, "DispatchTable")
 	communicator.AssertNotCalled(t, "Announce")
 }
+
+func TestRebalanceWhileAddingTable(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+
+	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
+		"capture-1": {
+			ID:            "capture-1",
+			AdvertiseAddr: "fakeip:1",
+		},
+		"capture-2": {
+			ID:            "capture-2",
+			AdvertiseAddr: "fakeip:2",
+		},
+	}
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+		},
+	}
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   1,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   2,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   3,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   4,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   5,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   6,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+
+	communicator.On("DispatchTable", mock.Anything, "cf-1",  model.TableID(7), "capture-2", model.Ts(1300), false).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, mockCaptureInfos)
+	communicator.AssertExpectations(t)
+	communicator.AssertNotCalled(t, "Announce")
+
+	dispatcher.Rebalance()
+	communicator.Reset()
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, mockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+	communicator.AssertNotCalled(t, "Announce")
+	communicator.AssertNotCalled(t, "DispatchTable")
+
+	dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(7))
+	communicator.Reset()
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, model.Ts(1300), true).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, mockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertNumberOfCalls(t, "DispatchTable", 2)
+	communicator.AssertExpectations(t)
+	communicator.AssertNotCalled(t, "Announce")
+}
+
+func TestManualMoveTableWhileAddingTable(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+
+	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
+		"capture-1": {
+			ID:            "capture-1",
+			AdvertiseAddr: "fakeip:1",
+		},
+		"capture-2": {
+			ID:            "capture-2",
+			AdvertiseAddr: "fakeip:2",
+		},
+	}
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+		},
+	}
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   1,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   2,
+		CaptureID: "capture-2",
+		Status:    runningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   3,
+		CaptureID: "capture-1",
+		Status:    runningTable,
+	})
+
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", model.Ts(1300), true).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
+
+
+	dispatcher.MoveTable(1, "capture-2")
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-1", model.Ts(1300), true).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+	communicator.AssertNotCalled(t, "Announce")
+
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 1)
+	communicator.Reset()
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", model.Ts(1300), false).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	dispatcher.OnAgentFinishedTableOperation("capture-2", 1)
+	communicator.Reset()
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, model.Ts(1300), checkpointTs)
+	require.Equal(t, model.Ts(1550), resolvedTs)
+	communicator.AssertExpectations(t)
+	communicator.AssertNotCalled(t, "Announce")
+	communicator.AssertNotCalled(t, "DispatchTable")
+}
