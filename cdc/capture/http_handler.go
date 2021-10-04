@@ -124,6 +124,15 @@ func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [get]
 func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
+	// Since we are using peer-to-peer messages for scheduling,
+	// the most convenient way to obtain a snapshot of all tables statuses
+	// is to query the Owner. So we perform a forward to Owner.
+	// This is different from what we did when we used Etcd to dispatch tables.
+	if !h.capture.IsOwner() {
+		h.forwardToOwner(c)
+		return
+	}
+
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
@@ -151,23 +160,9 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		return
 	}
 
-	processorInfos, err := h.capture.etcdClient.GetAllTaskStatus(c, changefeedID)
+	taskStatus, err := h.capture.owner.GetTaskStatuses(c, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
-		return
-	}
-
-	taskStatus := make([]model.CaptureTaskStatus, 0, len(processorInfos))
-	for captureID, status := range processorInfos {
-		tables := make([]int64, 0)
-		for tableID := range status.Tables {
-			tables = append(tables, tableID)
-		}
-		taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{

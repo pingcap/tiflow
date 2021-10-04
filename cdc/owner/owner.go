@@ -43,6 +43,7 @@ const (
 	ownerJobTypeManualSchedule
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
+	ownerJobTypeTaskStatus
 )
 
 type ownerJob struct {
@@ -59,6 +60,9 @@ type ownerJob struct {
 
 	// for debug info only
 	debugInfoWriter io.Writer
+
+	// for task status job only
+	TaskStatuses []model.CaptureTaskStatus
 
 	done chan struct{}
 }
@@ -211,6 +215,28 @@ func (o *Owner) WriteDebugInfo(w io.Writer) {
 	}
 }
 
+// GetTaskStatuses returns current task statuses
+func (o *Owner) GetTaskStatuses(ctx context.Context, cfID model.ChangeFeedID) ([]model.CaptureTaskStatus, error) {
+	subCtx, cancel := context.WithTimeout(ctx, time.Second * 3)
+	defer cancel()
+
+	done := make(chan struct{})
+	job := &ownerJob{
+		Tp:              ownerJobTypeTaskStatus,
+		ChangefeedID:    cfID,
+		done:            done,
+	}
+	o.pushOwnerJob(job)
+
+	select {
+	case <-subCtx.Done():
+		return nil, errors.Trace(subCtx.Err())
+	case <-done:
+	}
+
+	return job.TaskStatuses, nil
+}
+
 // AsyncStop stops the owner asynchronously
 func (o *Owner) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
@@ -288,6 +314,8 @@ func (o *Owner) handleJobs() {
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
+		case ownerJobTypeTaskStatus:
+			job.TaskStatuses = cfReactor.scheduler.GetTaskStatusCompat()
 		}
 		close(job.done)
 	}
