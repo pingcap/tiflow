@@ -233,7 +233,7 @@ func (s *BaseScheduleDispatcher) Tick(
 			s.tables.CountTableByStatus(removingTable) == 0
 	}
 	if !checkAllTasksNormal() {
-		return CheckpointCannotProceed, CheckpointCannotProceed,  nil
+		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
 	if err := s.handleMoveTableJobs(ctx); err != nil {

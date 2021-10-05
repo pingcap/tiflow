@@ -120,14 +120,26 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		count += pinfo.Count
 	}
 
+	rawTaskStatus, err := sendOwnerTaskStatusQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+	if err != nil {
+		return err
+	}
+
 	processorInfos, err := o.etcdClient.GetAllTaskStatus(ctx, o.changefeedID)
 	if err != nil {
 		return err
 	}
 
-	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
-	for captureID, status := range processorInfos {
-		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
+	taskStatus := make([]captureTaskStatus, 0, len(rawTaskStatus))
+	for _, status := range rawTaskStatus {
+		coreTaskStatus := status.ToCoreTaskStatus()
+		if etcdTaskStatus, ok := processorInfos[status.CaptureID]; ok {
+			coreTaskStatus.AdminJobType = etcdTaskStatus.AdminJobType
+		}
+		taskStatus = append(taskStatus, captureTaskStatus{
+			CaptureID:  status.CaptureID,
+			TaskStatus: status.ToCoreTaskStatus(),
+		})
 	}
 
 	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}

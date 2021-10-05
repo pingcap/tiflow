@@ -251,4 +251,8 @@ var (
 	ErrPeerMessageInjectedServerRestart = errors.Normalize("peer-to-peer message server restarted for the purpose of testing", errors.RFCCodeText("CDC:ErrPeerMessageServerClosed"))
 	ErrPeerMessageClientClosed          = errors.Normalize("peer-to-peer message client has been closed", errors.RFCCodeText("CDC:ErrPeerMessageClientClosed"))
 	ErrPeerMessageClientPermanentFail   = errors.Normalize("peer-to-peer message client has failed permanently, no need to reconnect: %s", errors.RFCCodeText("CDC:ErrPeerMessageClientPermanentFail"))
+
+	// cli commands related errors
+	ErrCliHttpError            = errors.Normalize("TiCDC cli encounterd error when sending an http request", errors.RFCCodeText("CDC:ErrCliHttpError"))
+	ErrCliUnexpectedHttpStatus = errors.Normalize("TiCDC cli encountered an unexpected http status when sending a request. URL: %s, status: %d", errors.RFCCodeText("CDC:ErrCliHttpErrorStatus"))
 )

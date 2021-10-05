@@ -123,6 +123,31 @@ type CaptureTaskStatus struct {
 	Operation map[TableID]*TableOperation `json:"table_operations"`
 }
 
+func (s *CaptureTaskStatus) ToCoreTaskStatus() *TaskStatus {
+	ret := &TaskStatus{
+		Tables:    map[TableID]*TableReplicaInfo{},
+		Operation: map[TableID]*TableOperation{},
+		// AdminJobType cannot be filled in here due to lack of information
+		AdminJobType: 0,
+	}
+
+	for _, tableID := range s.Tables {
+		ret.Tables[tableID] = &TableReplicaInfo{
+			StartTs:     0,
+			MarkTableID: 0,
+		}
+	}
+	for tableID, op := range s.Operation {
+		ret.Operation[tableID] = &TableOperation{
+			Delete:     op.Delete,
+			Flag:       op.Flag,
+			BoundaryTs: op.BoundaryTs,
+			Status:     op.Status,
+		}
+	}
+	return ret
+}
+
 // Capture holds common information of a capture in cdc
 type Capture struct {
 	ID            string `json:"id"`

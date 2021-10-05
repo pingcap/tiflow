@@ -15,10 +15,16 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/urlesc"
+	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
@@ -151,6 +157,55 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *kv.CDCEtcdClient,
 	}
 
 	return string(body), nil
+}
+
+func sendOwnerTaskStatusQuery(
+	ctx context.Context,
+	etcdClient *kv.CDCEtcdClient,
+	cfID model.ChangeFeedID,
+	credential *security.Credential) ([]model.CaptureTaskStatus, error) {
+	owner, err := getOwnerCapture(ctx, etcdClient)
+	if err != nil {
+		return nil, err
+	}
+
+	scheme := util.HTTP
+	if credential.IsTLSEnabled() {
+		scheme = util.HTTPS
+	}
+
+	url := fmt.Sprintf("%s://%s/api/v1/changefeeds/%s",
+		scheme,
+		owner.AdvertiseAddr,
+		urlesc.QueryEscape(cfID))
+	httpClient, err := httputil.NewClient(credential)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if err != nil {
+			return nil, cerrors.ErrCliHttpError.Wrap(err)
+		}
+		log.Warn("CDC server returned error when handing a query about changefeed status",
+			zap.ByteString("body", body))
+		return nil, cerrors.ErrCliUnexpectedHttpStatus.GenWithStackByArgs(url, resp.StatusCode)
+	}
+
+	var changeFeedDetail model.ChangefeedDetail
+	if err := json.Unmarshal(body, &changeFeedDetail); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return changeFeedDetail.TaskStatus, nil
 }
 
 // sendOwnerAdminChangeQuery sends owner admin query request.

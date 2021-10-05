@@ -217,14 +217,14 @@ func (o *Owner) WriteDebugInfo(w io.Writer) {
 
 // GetTaskStatuses returns current task statuses
 func (o *Owner) GetTaskStatuses(ctx context.Context, cfID model.ChangeFeedID) ([]model.CaptureTaskStatus, error) {
-	subCtx, cancel := context.WithTimeout(ctx, time.Second * 3)
+	subCtx, cancel := context.WithTimeout(ctx, time.Second*3)
 	defer cancel()
 
 	done := make(chan struct{})
 	job := &ownerJob{
-		Tp:              ownerJobTypeTaskStatus,
-		ChangefeedID:    cfID,
-		done:            done,
+		Tp:           ownerJobTypeTaskStatus,
+		ChangefeedID: cfID,
+		done:         done,
 	}
 	o.pushOwnerJob(job)
 

@@ -45,7 +45,7 @@ func (s *BaseScheduleDispatcher) GetTaskStatusCompat() (ret []model.CaptureTaskS
 					// Status is fixed to OperProcessed because the new scheduler does not
 					// maintain enough information to determine whether the
 					// operation has been processed or not.
-					Status:     model.OperProcessed,
+					Status: model.OperProcessed,
 					// BoundaryTs is not useful anymore.
 					BoundaryTs: 0,
 					Delete:     record.Status == removingTable,

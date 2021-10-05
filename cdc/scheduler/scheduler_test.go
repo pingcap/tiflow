@@ -815,7 +815,7 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 		Status:    runningTable,
 	})
 
-	communicator.On("DispatchTable", mock.Anything, "cf-1",  model.TableID(7), "capture-2", model.Ts(1300), false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(7), "capture-2", model.Ts(1300), false).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, mockCaptureInfos)
 	communicator.AssertExpectations(t)
@@ -892,7 +892,6 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", model.Ts(1300), true).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
-
 
 	dispatcher.MoveTable(1, "capture-2")
 	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-1", model.Ts(1300), true).
