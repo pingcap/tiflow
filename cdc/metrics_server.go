@@ -43,7 +43,7 @@ func init() {
 	// The default GOGC value is 100. See debug.SetGCPercent.
 	gogcValue := 100
 	if val, err := strconv.Atoi(os.Getenv("GOGC")); err == nil {
-		gogcValue = int(val)
+		gogcValue = val
 	}
 	goGC.Set(float64(gogcValue))
 }
