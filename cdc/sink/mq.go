@@ -78,6 +78,11 @@ func newMqSink(
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
 
+	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
+		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
+	}
+
 	newEncoder := codec.NewEventBatchEncoder(protocol)
 	if protocol == codec.ProtocolAvro {
 		registryURI, ok := opts["registry"]
@@ -104,9 +109,6 @@ func newMqSink(
 			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
-	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
-		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
 
 	// pre-flight verification of encoder parameters
