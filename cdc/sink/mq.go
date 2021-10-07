@@ -74,10 +74,9 @@ func newMqSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	notifier := new(notify.Notifier)
+
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
-
 	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
 		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
@@ -126,6 +125,7 @@ func newMqSink(
 		return ret
 	}
 
+	notifier := new(notify.Notifier)
 	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
 	if err != nil {
 		return nil, err
