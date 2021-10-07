@@ -387,12 +387,61 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := kafka.NewKafkaConfig()
-
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" && scheme != "kafka+ssl" {
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
 	}
+
+	config, err := initKafkaConfig(sinkURI, replicaConfig, opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
+		return r == '/'
+	})
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, *config, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	producer, err := pulsar.NewProducer(sinkURI, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	s := sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
+	}
+	// These two options are not used by Pulsar producer itself, but the encoders
+	s = sinkURI.Query().Get("max-message-bytes")
+	if s != "" {
+		opts["max-message-bytes"] = s
+	}
+
+	s = sinkURI.Query().Get("max-batch-size")
+	if s != "" {
+		opts["max-batch-size"] = s
+	}
+	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
+	// and it may need credential.
+	credential := &security.Credential{}
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
+func initKafkaConfig(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) (*kafka.Config, error) {
+	config := kafka.NewKafkaConfig()
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
 		c, err := strconv.Atoi(s)
@@ -482,45 +531,5 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		config.TopicPreProcess = autoCreate
 	}
 
-	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return sink, nil
-}
-
-func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	producer, err := pulsar.NewProducer(sinkURI, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	s := sinkURI.Query().Get("protocol")
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-	// These two options are not used by Pulsar producer itself, but the encoders
-	s = sinkURI.Query().Get("max-message-bytes")
-	if s != "" {
-		opts["max-message-bytes"] = s
-	}
-
-	s = sinkURI.Query().Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
-	}
-	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
-	// and it may need credential.
-	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return sink, nil
+	return &config, nil
 }
