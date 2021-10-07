@@ -317,10 +317,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		})
 	}
 	for {
-		var e struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}
+		var e mqEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
