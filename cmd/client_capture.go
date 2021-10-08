@@ -21,6 +21,7 @@ import (
 func newCaptureCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "capture",
+		Args:  cobra.NoArgs,
 		Short: "Manage capture (capture is a CDC server instance)",
 	}
 	command.AddCommand(
@@ -33,6 +34,7 @@ func newCaptureCommand() *cobra.Command {
 func newListCaptureCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list",
+		Args:  cobra.NoArgs,
 		Short: "List all captures in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
