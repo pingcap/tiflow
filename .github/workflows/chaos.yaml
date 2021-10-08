@@ -1,7 +1,6 @@
 name: chaos
 
 on:
-
   schedule:
     - cron: '40 16-23 * * *' # run at minute 0 and 40 every hour from 00:00 ~ 07:00 UTC+8
 
@@ -64,6 +63,7 @@ jobs:
       - name: Wait for coredns
         run: |
           kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
+          kubectl get all -n kube-system
         shell: bash
         env:
           KUBECONFIG: /etc/rancher/k3s/k3s.yaml
