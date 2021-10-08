@@ -398,7 +398,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	return nil
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func initKafkaConfig(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) (*kafka.Config, error) {
 	config := kafka.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -494,10 +494,18 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		config.TopicPreProcess = autoCreate
 	}
 
+	return &config, nil
+}
+
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	config, err := initKafkaConfig(sinkURI, replicaConfig, opts)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, *config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
