@@ -46,11 +46,8 @@ type mqSink struct {
 	filter     *filter.Filter
 	protocol   codec.Protocol
 
-	partitionNum   int32
-	partitionInput []chan struct {
-		row        *model.RowChangedEvent
-		resolvedTs uint64
-	}
+	partitionNum        int32
+	partitionInput      []chan mqEvent
 	partitionResolvedTs []uint64
 	checkpointTs        uint64
 	resolvedNotifier    *notify.Notifier
@@ -59,28 +56,31 @@ type mqSink struct {
 	statistics *Statistics
 }
 
+type mqEvent struct {
+	row        *model.RowChangedEvent
+	resolvedTs uint64
+}
+
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
 	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
 	partitionNum := mqProducer.GetPartitionNum()
-	partitionInput := make([]chan struct {
-		row        *model.RowChangedEvent
-		resolvedTs uint64
-	}, partitionNum)
+	partitionInput := make([]chan mqEvent, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
-		partitionInput[i] = make(chan struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}, 12800)
+		partitionInput[i] = make(chan mqEvent, 12800)
 	}
 	d, err := dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	notifier := new(notify.Notifier)
+
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
+	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
+		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
+	}
 
 	newEncoder := codec.NewEventBatchEncoder(protocol)
 	if protocol == codec.ProtocolAvro {
@@ -108,9 +108,6 @@ func newMqSink(
 			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
-	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
-		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
 
 	// pre-flight verification of encoder parameters
@@ -128,6 +125,7 @@ func newMqSink(
 		return ret
 	}
 
+	notifier := new(notify.Notifier)
 	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
 	if err != nil {
 		return nil, err
@@ -173,10 +171,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case k.partitionInput[partition] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{row: row}:
+		case k.partitionInput[partition] <- mqEvent{row: row}:
 		}
 		rowsCount++
 	}
@@ -193,10 +188,7 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (
 		select {
 		case <-ctx.Done():
 			return 0, ctx.Err()
-		case k.partitionInput[i] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{resolvedTs: resolvedTs}:
+		case k.partitionInput[i] <- mqEvent{resolvedTs: resolvedTs}:
 		}
 	}
 
@@ -275,8 +267,7 @@ func (k *mqSink) Close(ctx context.Context) error {
 }
 
 func (k *mqSink) Barrier(cxt context.Context) error {
-	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
-	// all buffered events forcedlly.
+	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed all buffered events.
 	return nil
 }
 
@@ -326,10 +317,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		})
 	}
 	for {
-		var e struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}
+		var e mqEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -399,12 +387,61 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := kafka.NewKafkaConfig()
-
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" && scheme != "kafka+ssl" {
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
 	}
+
+	config, err := initKafkaConfig(sinkURI, replicaConfig, opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
+		return r == '/'
+	})
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, *config, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	producer, err := pulsar.NewProducer(sinkURI, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	s := sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
+	}
+	// These two options are not used by Pulsar producer itself, but the encoders
+	s = sinkURI.Query().Get("max-message-bytes")
+	if s != "" {
+		opts["max-message-bytes"] = s
+	}
+
+	s = sinkURI.Query().Get("max-batch-size")
+	if s != "" {
+		opts["max-batch-size"] = s
+	}
+	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
+	// and it may need credential.
+	credential := &security.Credential{}
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
+func initKafkaConfig(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) (*kafka.Config, error) {
+	config := kafka.NewKafkaConfig()
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
 		c, err := strconv.Atoi(s)
@@ -494,45 +531,5 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		config.TopicPreProcess = autoCreate
 	}
 
-	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return sink, nil
-}
-
-func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	producer, err := pulsar.NewProducer(sinkURI, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	s := sinkURI.Query().Get("protocol")
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-	// These two options are not used by Pulsar producer itself, but the encoders
-	s = sinkURI.Query().Get("max-message-bytes")
-	if s != "" {
-		opts["max-message-bytes"] = s
-	}
-
-	s = sinkURI.Query().Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
-	}
-	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
-	// and it may needs credential.
-	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return sink, nil
+	return &config, nil
 }
