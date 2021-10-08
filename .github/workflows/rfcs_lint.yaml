@@ -13,13 +13,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  rfcs-lint:
     strategy:
       matrix:
         node-version: [12.x]
         os: [ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: ./docs/rfcs
 
     steps:
       - name: Set git to use LF
