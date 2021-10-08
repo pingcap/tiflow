@@ -56,6 +56,11 @@ error = '''
 unknown type for Avro: %v
 '''
 
+["CDC:ErrBufferLogTimeout"]
+error = '''
+send row changed events to log buffer timeout
+'''
+
 ["CDC:ErrBufferReachLimit"]
 error = '''
 puller mem buffer reach size limit

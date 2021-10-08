@@ -220,6 +220,7 @@ var (
 	ErrConsistentLevel   = errors.Normalize("consistent level (%s) not support", errors.RFCCodeText("CDC:ErrConsistentLevel"))
 	ErrConsistentStorage = errors.Normalize("consistent storage (%s) not support", errors.RFCCodeText("CDC:ErrConsistentStorage"))
 	ErrInvalidS3URI      = errors.Normalize("invalid s3 uri: %s", errors.RFCCodeText("CDC:ErrInvalidS3URI"))
+	ErrBufferLogTimeout  = errors.Normalize("send row changed events to log buffer timeout", errors.RFCCodeText("CDC:ErrBufferLogTimeout"))
 
 	// unified sorter errors
 	ErrUnifiedSorterBackendTerminating = errors.Normalize("unified sorter backend is terminating", errors.RFCCodeText("CDC:ErrUnifiedSorterBackendTerminating"))

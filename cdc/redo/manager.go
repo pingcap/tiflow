@@ -49,6 +49,12 @@ const (
 	consistentStorageBlackhole consistentStorage = "blackhole"
 )
 
+const (
+	// supposing to replicate 10k tables, each table has one cached changce averagely.
+	logBufferChanSize = 10000
+	logBufferTimeout  = time.Minute * 10
+)
+
 // IsValidConsistentLevel checks whether a give consistent level is valid
 func IsValidConsistentLevel(level string) bool {
 	switch consistentLevelType(level) {
@@ -98,17 +104,28 @@ type ManagerOptions struct {
 	ErrCh          chan<- error
 }
 
+type cacheRows struct {
+	tableID model.TableID
+	rows    []*model.RowChangedEvent
+}
+
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
-	enabled       bool
-	level         consistentLevelType
-	storage       consistentStorage
-	writer        writer.RedoLogWriter
+	enabled bool
+	level   consistentLevelType
+	storage consistentStorage
+
+	logBuffer chan cacheRows
+	writer    writer.RedoLogWriter
+
 	minResolvedTs uint64
 	tableIDs      []model.TableID
 	rtsMap        map[model.TableID]uint64
 	rtsMapMu      sync.RWMutex
+
+	// record whether there exists a table being flushing resolved ts
+	flushing int64
 }
 
 // NewManager creates a new Manager
@@ -118,10 +135,11 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		return &ManagerImpl{enabled: false}, nil
 	}
 	m := &ManagerImpl{
-		enabled: true,
-		level:   consistentLevelType(cfg.Level),
-		storage: consistentStorage(cfg.Storage),
-		rtsMap:  make(map[model.TableID]uint64),
+		enabled:   true,
+		level:     consistentLevelType(cfg.Level),
+		storage:   consistentStorage(cfg.Storage),
+		rtsMap:    make(map[model.TableID]uint64),
+		logBuffer: make(chan cacheRows, logBufferChanSize),
 	}
 	switch m.storage {
 	case consistentStorageBlackhole:
@@ -151,7 +169,8 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storage)
 	}
 	if opts.EnableBgRunner {
-		go m.run(ctx, opts.ErrCh)
+		go m.bgUpdateResolvedTs(ctx, opts.ErrCh)
+		go m.bgWriteLog(ctx, opts.ErrCh)
 	}
 	return m, nil
 }
@@ -166,18 +185,29 @@ func (m *ManagerImpl) Enabled() bool {
 	return m.enabled
 }
 
-// EmitRowChangedEvents converts RowChangedEvents to RedoLogs, and sends to redo log writer
+// EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
+// will be consumed by a background goroutine, which convers row chagned events
+// to redo logs and sends to log writer. aNote this function is non-blocking if
+// the channel is not full, otherwise if the channel is always full after timeout,
+// error ErrBufferLogTimeout will be returned.
+// TODO: if the API is truly non-blocking, we should return an error immediatel
+// when the log buffer channel is full.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
 	tableID model.TableID,
 	rows ...*model.RowChangedEvent,
 ) error {
-	logs := make([]*model.RedoRowChangedEvent, 0, len(rows))
-	for _, row := range rows {
-		logs = append(logs, RowToRedo(row))
+	select {
+	case m.logBuffer <- cacheRows{
+		tableID: tableID,
+		// the rows slice passed from parameter will be cleared after EmitRowChangedEvents
+		// is called, so we copy the pointer of row changed events into a new slice.
+		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
+	}:
+	case <-time.After(logBufferTimeout):
+		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	}
-	_, err := m.writer.WriteLog(ctx, tableID, logs)
-	return err
+	return nil
 }
 
 // FlushLog emits resolved ts of a single table
@@ -186,6 +216,11 @@ func (m *ManagerImpl) FlushLog(
 	tableID model.TableID,
 	resolvedTs uint64,
 ) error {
+	// Use flushing as a lightweight lock to reduce log contention in log writer.
+	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
+		return nil
+	}
+	defer atomic.StoreInt64(&m.flushing, 0)
 	return m.writer.FlushLog(ctx, tableID, resolvedTs)
 }
 
@@ -266,7 +301,7 @@ func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 	return nil
 }
 
-func (m *ManagerImpl) run(ctx context.Context, errCh chan<- error) {
+func (m *ManagerImpl) bgUpdateResolvedTs(ctx context.Context, errCh chan<- error) {
 	ticker := time.NewTicker(updateRtsInterval)
 	defer ticker.Stop()
 	for {
@@ -276,7 +311,34 @@ func (m *ManagerImpl) run(ctx context.Context, errCh chan<- error) {
 		case <-ticker.C:
 			err := m.updateTableResolvedTs(ctx)
 			if err != nil {
-				errCh <- err
+				select {
+				case errCh <- err:
+				default:
+					log.Error("err channel is full", zap.Error(err))
+				}
+				return
+			}
+		}
+	}
+}
+
+func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case cache := <-m.logBuffer:
+			logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
+			for _, row := range cache.rows {
+				logs = append(logs, RowToRedo(row))
+			}
+			_, err := m.writer.WriteLog(ctx, cache.tableID, logs)
+			if err != nil {
+				select {
+				case errCh <- err:
+				default:
+					log.Error("err channel is full", zap.Error(err))
+				}
 				return
 			}
 		}
