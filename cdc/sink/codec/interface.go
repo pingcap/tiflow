@@ -46,7 +46,7 @@ type EventBatchEncoder interface {
 	// Size returns the size of the batch(bytes)
 	// Deprecated: Size is deprecated
 	Size() int
-	// Reset reset the kv buffer
+	// Reset resets the kv buffer
 	Reset()
 	// SetParams provides the encoder with more info on the sink
 	SetParams(params map[string]string) error
