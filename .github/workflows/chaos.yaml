@@ -65,8 +65,9 @@ jobs:
     # so, simply wait for a long time.
       - name: Wait for coredns
         run: |
-          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
-          kubectl get all -n kube-system
+          kubectl rollout status --watch --timeout 900s deployment/coredns -n kube-system
+          kubectl get pod -n kube-system
+
         shell: bash
         env:
           KUBECONFIG: /etc/rancher/k3s/k3s.yaml
