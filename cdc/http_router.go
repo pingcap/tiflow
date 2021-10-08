@@ -18,7 +18,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"time"
+
+	"github.com/pingcap/log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/ticdc/cdc/capture"
@@ -30,13 +33,20 @@ import (
 
 // newRouter create a router for OpenAPI
 func newRouter(capture2 *capture.Capture) *gin.Engine {
+	httpLogFile, err := os.OpenFile("./http.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		log.Warn("failed to open http log file")
+		gin.DefaultWriter = ioutil.Discard
+	}
 	// discard gin log output
-	gin.DefaultWriter = ioutil.Discard
+	gin.DefaultWriter = httpLogFile
 
 	router := gin.New()
 
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
+	router.Use(gin.Recovery())
+	router.Use(gin.Logger())
 
 	captureHandler := capture.NewHTTPHandler(capture2)
 
