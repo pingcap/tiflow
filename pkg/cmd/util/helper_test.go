@@ -16,7 +16,6 @@ package util
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -141,7 +140,7 @@ cert-path = "bb"
 key-path = "cc"
 cert-allowed-cn = ["dd","ee"]
 `, dataDir)
-	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetDefaultServerConfig()
@@ -163,7 +162,7 @@ max-size = 200
 max-days = 1
 max-backups = 1
 `, dataDir)
-	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
 
 	conf := config.GetDefaultServerConfig()

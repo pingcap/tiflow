@@ -16,7 +16,7 @@ package cdc
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -56,6 +56,20 @@ type ChangefeedResp struct {
 	TSO          uint64              `json:"tso"`
 	Checkpoint   string              `json:"checkpoint"`
 	RunningError *model.RunningError `json:"error"`
+}
+
+// MarshalJSON use to marshal ChangefeedResp
+func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
+	type Alias ChangefeedResp
+	if c.FeedState == string(model.StateNormal) {
+		c.RunningError = nil
+	}
+	return json.Marshal(struct {
+		Alias
+	}{
+		Alias: Alias(c),
+	})
 }
 
 func handleOwnerResp(w http.ResponseWriter, err error) {
@@ -239,7 +253,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 
 func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	var level string
-	data, err := ioutil.ReadAll(r.Body)
+	data, err := io.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
 		writeInternalServerError(w, err)

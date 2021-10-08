@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -92,7 +92,7 @@ func NewAvroSchemaManager(
 	}
 	defer resp.Body.Close()
 
-	text, err := ioutil.ReadAll(resp.Body)
+	text, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Annotate(
 			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Reading response from Schema Registry failed")
@@ -142,7 +142,7 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, errors.Annotate(err, "Failed to read response from Registry")
 	}
@@ -214,7 +214,7 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, 0, errors.Annotate(
 			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Failed to read response from Registry")
@@ -364,7 +364,7 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 	httpCli, err := httputil.NewClient(credential)
 
 	if r.Body != nil {
-		data, err = ioutil.ReadAll(r.Body)
+		data, err = io.ReadAll(r.Body)
 		_ = r.Body.Close()
 	}
 
@@ -373,7 +373,7 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 	}
 	for {
 		if data != nil {
-			r.Body = ioutil.NopCloser(bytes.NewReader(data))
+			r.Body = io.NopCloser(bytes.NewReader(data))
 		}
 		resp, err = httpCli.Do(r)
 
