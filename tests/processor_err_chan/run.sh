@@ -56,7 +56,7 @@ function run() {
 	fi
 
 	retry_time=10
-	ensure $retry_time check_changefeed_mark_normal $pd_addr $changefeed_id "processor add table injected error"
+	ensure $retry_time check_changefeed_mark_normal $pd_addr $changefeed_id "null"
 
 	for i in $(seq 1 10); do
 		run_sql "INSERT INTO processor_err_chan.t$i values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -68,4 +68,5 @@ function run() {
 
 trap stop_tidb_cluster EXIT
 run $*
+check_logs_contains $WORK_DIR "processor add table injected error"
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
