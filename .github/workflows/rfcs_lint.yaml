@@ -1,9 +1,11 @@
-name: Lint
+name: RFCs Lint
 
 on:
   pull_request:
     branches:
       - master
+    paths:
+      - 'docs/rfcs/**'
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
