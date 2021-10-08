@@ -18,26 +18,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/urlesc"
-	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 )
 
 const (
@@ -177,7 +176,7 @@ func sendOwnerTaskStatusQuery(
 	url := fmt.Sprintf("%s://%s/api/v1/changefeeds/%s",
 		scheme,
 		owner.AdvertiseAddr,
-		urlesc.QueryEscape(cfID))
+		url.QueryEscape(cfID))
 	httpClient, err := httputil.NewClient(credential)
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -14,7 +14,9 @@
 package model
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/pingcap/errors"
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/config"
@@ -25,9 +27,21 @@ import (
 type JSONTime time.Time
 
 // MarshalJSON use to specify the time format
-func (t JSONTime) MarshalJSON() ([]byte, error) {
-	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02 15:04:05.000"))
+func (t *JSONTime) MarshalJSON() ([]byte, error) {
+	stamp := fmt.Sprintf("\"%s\"", time.Time(*t).Format("2006-01-02 15:04:05.000"))
 	return []byte(stamp), nil
+}
+
+func (t *JSONTime) UnmarshalJSON(data []byte) error {
+	// We need to trim the quotation marks before passing the data to `time.Parse`.
+	data = bytes.TrimLeft(data, "\"")
+	data = bytes.TrimRight(data, "\"")
+	time, err := time.Parse("2006-01-02 15:04:05.000", string(data))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	*t = JSONTime(time)
+	return nil
 }
 
 // HTTPError of cdc http api
