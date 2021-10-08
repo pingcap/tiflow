@@ -9,7 +9,7 @@ on:
 
 jobs:
   pre_job:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     timeout-minutes: 40
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -30,7 +30,7 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
