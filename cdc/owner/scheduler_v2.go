@@ -122,13 +122,18 @@ func (s *schedulerV2) Announce(
 
 func (s *schedulerV2) GetClient(ctx context.Context, target model.CaptureID) (*p2p.MessageClient, bool) {
 	messageRouter := ctx.GlobalVars().MessageRouter
-	client := messageRouter.GetClient(p2p.SenderID(target))
+	client := messageRouter.GetClient(target)
 	if client == nil {
 		log.Warn("scheduler: no message client found, retry later",
 			zap.String("target", target))
 		return nil, false
 	}
 	return client, true
+}
+
+func (s *schedulerV2) Close(ctx context.Context) {
+	log.Debug("scheduler closed", zap.String("changefeed-id", s.changeFeedID))
+	s.deregisterPeerMessageHandlers(ctx)
 }
 
 func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret error) {

@@ -122,7 +122,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 			Code:    code,
 			Message: err.Error(),
 		})
-		c.releaseResources()
+		c.releaseResources(ctx)
 	}
 	return nil
 }
@@ -141,7 +141,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	c.state = state
 	c.feedStateManager.Tick(state)
 	if !c.feedStateManager.ShouldRunning() {
-		c.releaseResources()
+		c.releaseResources(ctx)
 		return nil
 	}
 
@@ -301,7 +301,7 @@ LOOP:
 	return nil
 }
 
-func (c *changefeed) releaseResources() {
+func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if !c.initialized {
 		return
 	}
@@ -311,10 +311,13 @@ func (c *changefeed) releaseResources() {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	ctx, cancel := context.WithCancel(context.Background())
+	c.scheduler.Close(ctx)
+	c.scheduler = nil
+
+	ctx1, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.Close(ctx); err != nil {
+	if err := c.sink.Close(ctx1); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
@@ -460,6 +463,6 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) Close() {
-	c.releaseResources()
+func (c *changefeed) Close(ctx cdcContext.Context) {
+	c.releaseResources(ctx)
 }
