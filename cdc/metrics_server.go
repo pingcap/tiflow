@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"os"
+	"runtime"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,18 +35,30 @@ var (
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "server",
-			Name:      "gogc",
+			Name:      "go_gc",
 			Help:      "The value of GOGC",
+		})
+
+	goMaxProcs = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "server",
+			Name:      "go_max_procs",
+			Help:      "The value of GOMAXPROCS",
 		})
 )
 
-func init() {
+// RecordGoRuntimeSettings records GOGC settings.
+func RecordGoRuntimeSettings() {
 	// The default GOGC value is 100. See debug.SetGCPercent.
 	gogcValue := 100
 	if val, err := strconv.Atoi(os.Getenv("GOGC")); err == nil {
 		gogcValue = val
 	}
 	goGC.Set(float64(gogcValue))
+
+	maxProcs := runtime.GOMAXPROCS(0)
+	goMaxProcs.Set(float64(maxProcs))
 }
 
 // initServerMetrics registers all metrics used in processor
