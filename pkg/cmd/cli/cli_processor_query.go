@@ -14,13 +14,23 @@
 package cli
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/url"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cmd/context"
 	"github.com/pingcap/ticdc/pkg/cmd/factory"
 	"github.com/pingcap/ticdc/pkg/cmd/util"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 type processorMeta struct {
@@ -31,6 +41,8 @@ type processorMeta struct {
 // queryProcessorOptions defines flags for the `cli processor query` command.
 type queryProcessorOptions struct {
 	etcdClient *kv.CDCEtcdClient
+
+	credential *security.Credential
 
 	changefeedID string
 	captureID    string
@@ -49,6 +61,7 @@ func (o *queryProcessorOptions) complete(f factory.Factory) error {
 	}
 
 	o.etcdClient = etcdClient
+	o.credential = f.GetCredential()
 
 	return nil
 }
@@ -65,18 +78,71 @@ func (o *queryProcessorOptions) addFlags(cmd *cobra.Command) {
 // run runs the `cli processor query` command.
 func (o *queryProcessorOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
-
-	_, status, err := o.etcdClient.GetTaskStatus(ctx, o.changefeedID, o.captureID)
-	if err != nil && cerror.ErrTaskStatusNotExists.Equal(err) {
-		return err
+	owner, err := getOwnerCapture(ctx, o.etcdClient)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
-	_, position, err := o.etcdClient.GetTaskPosition(ctx, o.changefeedID, o.captureID)
-	if err != nil && cerror.ErrTaskPositionNotExists.Equal(err) {
-		return err
+	scheme := util.HTTP
+	if o.credential.IsTLSEnabled() {
+		scheme = util.HTTPS
 	}
 
-	meta := &processorMeta{Status: status, Position: position}
+	uri := fmt.Sprintf("%s://%s/api/v1/processors/%s/%s",
+		scheme,
+		owner.AdvertiseAddr,
+		url.QueryEscape(o.changefeedID),
+		url.QueryEscape(o.captureID))
+	httpClient, err := httputil.NewClient(o.credential)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	resp, err := httpClient.Get(uri)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if err != nil {
+			return cerror.ErrCliHttpError.Wrap(err)
+		}
+		log.Warn("CDC server returned error when handing a query about changefeed status",
+			zap.ByteString("body", body))
+		return cerror.ErrCliUnexpectedHttpStatus.GenWithStackByArgs(uri, resp.StatusCode)
+	}
+
+	var processorDetail model.ProcessorDetail
+	if err := json.Unmarshal(body, &processorDetail); err != nil {
+		return errors.Trace(err)
+	}
+
+	taskStatuses, err := sendOwnerTaskStatusQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var taskStatus *model.TaskStatus
+	for _, status := range taskStatuses {
+		if status.CaptureID == o.captureID {
+			taskStatus = status.ToCoreTaskStatus()
+			break
+		}
+	}
+
+	if taskStatus == nil {
+		// TODO better error handling
+		return cerror.ErrTaskStatusNotExists.GenWithStackByArgs(o.captureID)
+	}
+
+	meta := &processorMeta{Status: taskStatus, Position: &model.TaskPosition{
+		CheckPointTs: processorDetail.CheckPointTs,
+		ResolvedTs:   processorDetail.ResolvedTs,
+		Error:        processorDetail.Error,
+	}}
 
 	return util.JSONPrint(cmd, meta)
 }
