@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"encoding/hex"
 	"reflect"
 	"runtime"
 	"sync"
@@ -704,7 +705,10 @@ func (w *regionWorker) handleEventEntry(
 					state.matcher.cacheCommitRow(entry)
 					continue
 				}
-				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
+				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(
+					hex.EncodeToString(entry.GetKey()),
+					entry.GetStartTs(), entry.GetCommitTs(),
+					entry.GetType(), entry.GetOpType())
 			}
 
 			revent, err := assembleRowEvent(regionID, entry, w.enableOldValue)
