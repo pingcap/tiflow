@@ -44,6 +44,7 @@ const (
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
 	ownerJobTypeTaskStatus
+	ownerJobTypeTaskPosition
 )
 
 type ownerJob struct {
@@ -61,8 +62,8 @@ type ownerJob struct {
 	// for debug info only
 	debugInfoWriter io.Writer
 
-	// for task status job only
-	TaskStatuses []model.CaptureTaskStatus
+	// for task status job and task position job
+	data interface{}
 
 	done chan struct{}
 }
@@ -234,7 +235,29 @@ func (o *Owner) GetTaskStatuses(ctx context.Context, cfID model.ChangeFeedID) ([
 	case <-done:
 	}
 
-	return job.TaskStatuses, nil
+	return job.data.([]model.CaptureTaskStatus), nil
+}
+
+// GetTaskPositions returns current task positions
+func (o *Owner) GetTaskPositions(ctx context.Context, cfID model.ChangeFeedID) (map[model.CaptureID]model.TaskPosition, error) {
+	subCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
+
+	done := make(chan struct{})
+	job := &ownerJob{
+		Tp:           ownerJobTypeTaskPosition,
+		ChangefeedID: cfID,
+		done:         done,
+	}
+	o.pushOwnerJob(job)
+
+	select {
+	case <-subCtx.Done():
+		return nil, errors.Trace(subCtx.Err())
+	case <-done:
+	}
+
+	return job.data.(map[model.CaptureID]model.TaskPosition), nil
 }
 
 // AsyncStop stops the owner asynchronously
@@ -315,7 +338,9 @@ func (o *Owner) handleJobs() {
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
 		case ownerJobTypeTaskStatus:
-			job.TaskStatuses = cfReactor.scheduler.GetTaskStatusCompat()
+			job.data = cfReactor.scheduler.GetTaskStatusCompat()
+		case ownerJobTypeTaskPosition:
+			job.data = cfReactor.scheduler.GetTaskPositionCompat()
 		}
 		close(job.done)
 	}

@@ -20,10 +20,15 @@ import "github.com/pingcap/ticdc/cdc/model"
 // tables currently being replicated.
 type StatusProvider interface {
 	// GetTaskStatusCompat returns a data structure compatible with
-	// the legacy Etcd data model. For now we need this to implement
+	// the `TaskStatus` keys in legacy Etcd data model.
+	// For now we need this to implement
 	// API compatibility with older versions of TiCDC.
 	// TODO deprecate this
 	GetTaskStatusCompat() []model.CaptureTaskStatus
+
+	// GetTaskPositionCompat returns a data structure compatible with
+	// the `TaskPosition` keys in legacy Etcd data model.
+	GetTaskPositionCompat() map[model.CaptureID]model.TaskPosition
 }
 
 // GetTaskStatusCompat implements interface StatusProvider.
@@ -35,6 +40,7 @@ func (s *BaseScheduleDispatcher) GetTaskStatusCompat() (ret []model.CaptureTaskS
 	for captureID, captureTables := range s.tables.GetAllTablesGroupedByCaptures() {
 		taskStatus := model.CaptureTaskStatus{}
 		taskStatus.CaptureID = captureID
+		taskStatus.Operation = map[model.TableID]*model.TableOperation{}
 		for tableID, record := range captureTables {
 			taskStatus.Tables = append(taskStatus.Tables, tableID)
 			switch record.Status {
@@ -56,4 +62,23 @@ func (s *BaseScheduleDispatcher) GetTaskStatusCompat() (ret []model.CaptureTaskS
 	}
 
 	return
+}
+
+// GetTaskPositionCompat implements interface StatusProvider.
+// For more see comments in the interface definition.
+func (s *BaseScheduleDispatcher) GetTaskPositionCompat() map[model.CaptureID]model.TaskPosition {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ret := make(map[model.CaptureID]model.TaskPosition, len(s.captureStatus))
+	for captureID, status := range s.captureStatus {
+		if status.SyncStatus != captureSyncFinished {
+			continue
+		}
+		ret[captureID] = model.TaskPosition{
+			CheckPointTs: status.CheckpointTs,
+			ResolvedTs:   status.ResolvedTs,
+		}
+	}
+	return ret
 }

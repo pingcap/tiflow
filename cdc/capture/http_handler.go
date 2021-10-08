@@ -562,6 +562,11 @@ func (h *HTTPHandler) ResignOwner(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors/{changefeed_id}/{capture_id} [get]
 func (h *HTTPHandler) GetProcessor(c *gin.Context) {
+	if !h.capture.IsOwner() {
+		h.forwardToOwner(c)
+		return
+	}
+
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		c.IndentedJSON(http.StatusBadRequest,
@@ -576,27 +581,58 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		return
 	}
 
-	_, status, err := h.capture.etcdClient.GetTaskStatus(c, changefeedID, captureID)
-	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
-		return
-	}
-
+	// We still need to read Etcd for runtime errors.
+	// TODO refactor processors' error reporting mechanism
 	_, position, err := h.capture.etcdClient.GetTaskPosition(c, changefeedID, captureID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+		if cerror.ErrTaskPositionNotExists.NotEqual(err) {
+			c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+			return
 		}
+	}
+
+	schedulerStatuses, err := h.capture.owner.GetTaskStatuses(c, changefeedID)
+	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
+	var schedulerStatus *model.CaptureTaskStatus
+	for _, status := range schedulerStatuses {
+		if status.CaptureID == captureID {
+			schedulerStatus = &status
+			break
+		}
+	}
+	if schedulerStatus == nil {
+		c.IndentedJSON(http.StatusInternalServerError,
+			model.NewHTTPError(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID)))
+		return
+	}
 
-	processorDetail := &model.ProcessorDetail{CheckPointTs: position.CheckPointTs, ResolvedTs: position.ResolvedTs, Error: position.Error}
+	schedulerPositions, err := h.capture.owner.GetTaskPositions(c, changefeedID)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+	schedulerPosition, ok := schedulerPositions[captureID]
+	if !ok {
+		c.IndentedJSON(http.StatusInternalServerError,
+			model.NewHTTPError(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID)))
+		return
+	}
+
+	var runtimeErr *model.RunningError
+	if position != nil {
+		runtimeErr = position.Error
+	}
+
+	processorDetail := &model.ProcessorDetail{
+		CheckPointTs: schedulerPosition.CheckPointTs,
+		ResolvedTs:   schedulerPosition.ResolvedTs,
+		Error:        runtimeErr,
+	}
 	tables := make([]int64, 0)
-	for tableID := range status.Tables {
+	for _, tableID := range schedulerStatus.Tables {
 		tables = append(tables, tableID)
 	}
 	processorDetail.Tables = tables

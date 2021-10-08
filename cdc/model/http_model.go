@@ -16,8 +16,9 @@ package model
 import (
 	"bytes"
 	"fmt"
-	"github.com/pingcap/errors"
 	"time"
+
+	"github.com/pingcap/errors"
 
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
