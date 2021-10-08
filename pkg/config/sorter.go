@@ -31,6 +31,7 @@ type SorterConfig struct {
 	SortDir string `toml:"sort-dir" json:"sort-dir"`
 }
 
+// ValidateAndAdjust validates and adjusts the sorter configuration
 func (c *SorterConfig) ValidateAndAdjust() error {
 	if c.ChunkSizeLimit < 1*1024*1024 {
 		return cerror.ErrIllegalUnifiedSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
