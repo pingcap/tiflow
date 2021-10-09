@@ -37,7 +37,7 @@ GC safepoint 以 PD 为准是因为，
 2. PD 非常适合存储集群元数据
 3. txn kv 在没有 TiDB 情况也能使用
 
- PD 提供接口设置对 GC safepoint 的限制是因为，
+PD 提供接口设置对 GC safepoint 的限制是因为，
 
 1. 提供一种手段让外部服务按需设置 GC safepoint 的限制
 
@@ -62,7 +62,7 @@ message SetGCSafePointLimitResponse {
 - UUID 是为了 1. 能让多个服务同时对 GC safepoint 做限制，2. 外部服务可以不断前进自己的 limit。
 - TTL 是为了确保在外部异常退出的时不会过分阻塞 GC safepoint 的前进。
 - TTL 有最大值的限制，可在 PD 侧配置，如果请求 TTL 超过最大值则回复报错
-- PD 在 UpdateSafepoint 时，需要确保前进后的safepoint 满足所有的 limit 要求。
+- PD 在 UpdateSafepoint 时，需要确保前进后的 safepoint 满足所有的 limit 要求。
 - 如果 SetGCSafePointLimit 请求中的 safe_point 已经小于当前 PD 的 safepoint 则回复报错
 
 新设计完整 GC 的 safepoint 更新的机制：
