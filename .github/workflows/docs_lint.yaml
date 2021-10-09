@@ -1,11 +1,11 @@
-name: RFCs Lint
+name: Design Docs Lint
 
 on:
   pull_request:
     branches:
       - master
     paths:
-      - 'docs/rfcs/**'
+      - 'docs/design/**'
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  rfcs-lint:
+  design-docs-lint:
     strategy:
       matrix:
         node-version: [12.x]
@@ -23,7 +23,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: ./docs/rfcs
+        working-directory: ./docs/design
 
     steps:
       - uses: actions/checkout@v2
