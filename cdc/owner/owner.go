@@ -162,7 +162,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	return state, nil
 }
 
-// EnqueueJob enqueues a admin job into a internal queue, and the Owner will handle the job in the next tick
+// EnqueueJob enqueues an admin job into an internal queue, and the Owner will handle the job in the next tick
 func (o *Owner) EnqueueJob(adminJob model.AdminJob) {
 	o.pushOwnerJob(&ownerJob{
 		tp:           ownerJobTypeAdminJob,

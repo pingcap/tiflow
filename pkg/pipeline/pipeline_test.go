@@ -35,8 +35,7 @@ type pipelineSuite struct{}
 
 var _ = check.Suite(&pipelineSuite{})
 
-type echoNode struct {
-}
+type echoNode struct{}
 
 func (e echoNode) Init(ctx NodeContext) error {
 	ctx.SendToNextNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -435,8 +434,7 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 	p.Wait()
 }
 
-type panicNode struct {
-}
+type panicNode struct{}
 
 func (e panicNode) Init(ctx NodeContext) error {
 	panic("panic in panicNode")

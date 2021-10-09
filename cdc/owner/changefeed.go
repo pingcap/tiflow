@@ -111,7 +111,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
-		c.feedStateManager.HandleError(&model.RunningError{
+		c.feedStateManager.handleError(&model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    code,
 			Message: err.Error(),
@@ -160,6 +160,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if barrierTs < checkpointTs {
+		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
+		// which implies that it would be premature to schedule tables or to update status.
+		// So we return here.
+		return nil
 	}
 	shouldUpdateState, err := c.scheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
 	if err != nil {
@@ -217,10 +223,17 @@ LOOP:
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
-	c.barriers.Update(ddlJobBarrier, checkpointTs)
+	// Since we are starting DDL puller from (checkpointTs-1) to make
+	// the DDL committed at checkpointTs executable by CDC, we need to set
+	// the DDL barrier to the correct start point.
+	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
-	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, checkpointTs, c.state.Info.Config)
+	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
+	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
+	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
+	// the schema cache.
+	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, checkpointTs-1, c.state.Info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -234,9 +247,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Since we wait for checkpoint == ddlJob.FinishTs before executing the DDL,
-	// when there is a recovery, there is no guarantee that the DDL at the checkpoint
-	// has been executed. So we need to start the DDL puller from (checkpoint-1).
+	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
