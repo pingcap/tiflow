@@ -33,6 +33,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestSystemBuilder(t *testing.T) {
+	t.Parallel()
 	b := NewSystemBuilder("test")
 	require.LessOrEqual(t, b.numWorker, maxWorkerNum)
 	require.Greater(t, b.numWorker, 0)
@@ -56,6 +57,7 @@ func TestSystemBuilder(t *testing.T) {
 }
 
 func TestMailboxSendAndSendB(t *testing.T) {
+	t.Parallel()
 	mb := NewMailbox(ID(0), 1)
 	err := mb.Send(message.TickMessage())
 	require.Nil(t, err)
@@ -83,6 +85,7 @@ func TestMailboxSendAndSendB(t *testing.T) {
 }
 
 func TestRouterSendAndSendB(t *testing.T) {
+	t.Parallel()
 	id := ID(0)
 	mb := NewMailbox(id, 1)
 	router := newRouter()
@@ -127,6 +130,7 @@ func wait(t *testing.T, timeout time.Duration, f func()) {
 }
 
 func TestSystemStartStop(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sys, _ := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
@@ -135,6 +139,7 @@ func TestSystemStartStop(t *testing.T) {
 }
 
 func TestSystemSpawnDuplicateActor(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sys, _ := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
@@ -172,6 +177,7 @@ func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
 }
 
 func TestActorSendReceive(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
@@ -246,6 +252,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 }
 
 func TestBroadcast(t *testing.T) {
+	t.Parallel()
 	for _, workerNum := range []int{1, 2, 16, 32, 64} {
 		for _, actorNum := range []int{0, 1, 64, 128, 195, 1024} {
 			testBroadcast(t, actorNum, workerNum)
@@ -254,6 +261,7 @@ func TestBroadcast(t *testing.T) {
 }
 
 func TestSystemStopCancelActors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
@@ -289,6 +297,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 }
 
 func TestActorManyMessageOneSchedule(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
@@ -325,6 +334,11 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("Timed out, get ", acc, " expect ", total)
 			}
+		}
+		select {
+		case msg := <-ch:
+			t.Fatal("Unexpected message", msg, total, acc)
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 
@@ -364,6 +378,7 @@ func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message) bool {
 
 // An actor can only be polled by one goroutine at the same time.
 func TestConcurrentPollSameActor(t *testing.T) {
+	t.Parallel()
 	concurrency := 4
 	sys, router := NewSystemBuilder("test").WorkerNumber(concurrency).Build()
 	sys.Start(context.Background())
@@ -413,6 +428,7 @@ func (c *closedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 }
 
 func TestPollStoppedActor(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
@@ -449,6 +465,7 @@ func TestPollStoppedActor(t *testing.T) {
 }
 
 func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
 	sys.Start(ctx)
@@ -485,6 +502,7 @@ func (r *reopenedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 }
 
 func TestMustNotReopenActor(t *testing.T) {
+	t.Parallel()
 	idCh := make(chan ID)
 	handler := func(msg string, id ID) {
 		select {
