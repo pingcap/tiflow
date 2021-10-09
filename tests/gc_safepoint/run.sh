@@ -94,7 +94,7 @@ function run() {
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
 	fi
-  
+
 	clear_gc_worker_safepoint $pd_addr $pd_cluster_id
 
 	run_sql "CREATE DATABASE gc_safepoint;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
