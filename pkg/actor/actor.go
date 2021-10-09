@@ -23,7 +23,7 @@ import (
 var errMailboxFull = cerrors.ErrMailboxFull.FastGenByArgs()
 
 // ID is ID for actors.
-type ID int
+type ID uint64
 
 // Actor is a universal primitive of concurrent computation.
 // See more https://en.wikipedia.org/wiki/Actor_model

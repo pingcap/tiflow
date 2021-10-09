@@ -34,10 +34,10 @@ func TestJSONPrint(t *testing.T) {
 
 func TestTickMessage(t *testing.T) {
 	msg := TickMessage()
-	require.Equal(t, msg.Tp, TypeTick)
+	require.Equal(t, TypeTick, msg.Tp)
 }
 
 func TestBarrierMessage(t *testing.T) {
 	msg := BarrierMessage(1)
-	require.Equal(t, msg.Tp, TypeBarrier)
+	require.Equal(t, TypeBarrier, msg.Tp)
 }

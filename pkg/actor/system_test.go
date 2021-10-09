@@ -51,21 +51,21 @@ func TestSystemBuilder(t *testing.T) {
 	require.Greater(t, b.numWorker, 0)
 
 	b.WorkerNumber(0)
-	require.Equal(t, b.numWorker, 1)
+	require.Equal(t, 1, b.numWorker)
 
 	b.WorkerNumber(2)
-	require.Equal(t, b.numWorker, 2)
+	require.Equal(t, 2, b.numWorker)
 
-	require.Greater(t, b.actorBatchSize, 0)
-	require.Greater(t, b.msgBatchSizePerActor, 0)
+	require.Greater(t, 0, b.actorBatchSize)
+	require.Greater(t, 0, b.msgBatchSizePerActor)
 
 	b.Throughput(0, 0)
-	require.Greater(t, b.actorBatchSize, 0)
-	require.Greater(t, b.msgBatchSizePerActor, 0)
+	require.Greater(t, 0, b.actorBatchSize)
+	require.Greater(t, 0, b.msgBatchSizePerActor)
 
 	b.Throughput(7, 8)
-	require.Equal(t, b.actorBatchSize, 7)
-	require.Equal(t, b.msgBatchSizePerActor, 8)
+	require.Equal(t, 7, b.actorBatchSize)
+	require.Equal(t, 8, b.msgBatchSizePerActor)
 }
 
 func TestMailboxSendAndSendB(t *testing.T) {
@@ -78,8 +78,8 @@ func TestMailboxSendAndSendB(t *testing.T) {
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
 	msg, ok := mb.tryReceive()
-	require.Equal(t, ok, true)
-	require.Equal(t, msg, message.TickMessage())
+	require.Equal(t, true, ok)
+	require.Equal(t, message.TickMessage(), msg)
 
 	// Test SendB can be canceled by context.
 	ch := make(chan error)
@@ -93,7 +93,7 @@ func TestMailboxSendAndSendB(t *testing.T) {
 
 	require.Nil(t, <-ch)
 	cancel()
-	require.Equal(t, <-ch, context.Canceled)
+	require.Equal(t, context.Canceled, <-ch)
 }
 
 func TestRouterSendAndSendB(t *testing.T) {
@@ -110,8 +110,8 @@ func TestRouterSendAndSendB(t *testing.T) {
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
 	msg, ok := mb.tryReceive()
-	require.Equal(t, ok, true)
-	require.Equal(t, msg, message.TickMessage())
+	require.Equal(t, true, ok)
+	require.Equal(t, message.TickMessage(), msg)
 
 	// Test SendB can be canceled by context.
 	ch := make(chan error)
@@ -125,7 +125,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 
 	require.Nil(t, <-ch)
 	cancel()
-	require.Equal(t, <-ch, context.Canceled)
+	require.Equal(t, context.Canceled, <-ch)
 }
 
 func wait(t *testing.T, timeout time.Duration, f func()) {
@@ -197,7 +197,7 @@ func TestActorSendReceive(t *testing.T) {
 	// Send to a non-existing actor.
 	id := ID(777)
 	err := router.Send(id, message.BarrierMessage(0))
-	require.Equal(t, err, errActorNotFound)
+	require.Equal(t, errActorNotFound, err)
 
 	ch := make(chan message.Message, 1)
 	fa := &forwardActor{
@@ -207,7 +207,7 @@ func TestActorSendReceive(t *testing.T) {
 
 	// The actor is not in router yet.
 	err = router.Send(id, message.BarrierMessage(1))
-	require.Equal(t, err, errActorNotFound)
+	require.Equal(t, errActorNotFound, err)
 
 	// Spawn adds the actor to the router.
 	require.Nil(t, sys.Spawn(mb, fa))
@@ -215,7 +215,7 @@ func TestActorSendReceive(t *testing.T) {
 	require.Nil(t, err)
 	select {
 	case msg := <-ch:
-		require.Equal(t, msg, message.BarrierMessage(2))
+		require.Equal(t, message.BarrierMessage(2), msg)
 	case <-time.After(time.Second):
 		t.Fatal("Timed out")
 	}
@@ -246,7 +246,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	for i := 0; i < actorNum; i++ {
 		select {
 		case msg := <-ch:
-			require.Equal(t, msg, message.TickMessage())
+			require.Equal(t, message.TickMessage(), msg)
 		case <-time.After(time.Second):
 			t.Fatal("Timed out")
 		}
@@ -416,7 +416,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		total += int64(syncCount)
 		select {
 		case acc := <-ch:
-			require.Equal(t, acc, total)
+			require.Equal(t, total, acc)
 		case <-timer:
 			wait(t, time.Second, func() {
 				err := sys.Stop()
