@@ -25,11 +25,23 @@ import (
 
 	"github.com/pingcap/ticdc/pkg/actor/message"
 	"github.com/pingcap/ticdc/pkg/leakutil"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
+}
+
+func makeTestSystem(name string, t interface {
+	Fatalf(format string, args ...interface{})
+}) (*System, *Router) {
+	return NewSystemBuilder(name).
+		WorkerNumber(2).
+		handleFatal(func(s string, i ID) {
+			t.Fatalf("%s actorID: %d", s, i)
+		}).
+		Build()
 }
 
 func TestSystemBuilder(t *testing.T) {
@@ -88,7 +100,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 	t.Parallel()
 	id := ID(0)
 	mb := NewMailbox(id, 1)
-	router := newRouter()
+	router := newRouter(t.Name())
 	err := router.insert(id, &proc{mb: mb})
 	require.Nil(t, err)
 	err = router.Send(id, message.TickMessage())
@@ -132,7 +144,7 @@ func wait(t *testing.T, timeout time.Duration, f func()) {
 func TestSystemStartStop(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, _ := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 	err := sys.Stop()
 	require.Nil(t, err)
@@ -141,7 +153,7 @@ func TestSystemStartStop(t *testing.T) {
 func TestSystemSpawnDuplicateActor(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, _ := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 
 	id := 1
@@ -179,7 +191,7 @@ func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
 func TestActorSendReceive(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, router := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 
 	// Send to a non-existing actor.
@@ -263,7 +275,7 @@ func TestBroadcast(t *testing.T) {
 func TestSystemStopCancelActors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, router := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -299,7 +311,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 func TestActorManyMessageOneSchedule(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, router := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -428,9 +440,8 @@ func (c *closedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 }
 
 func TestPollStoppedActor(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, router := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -446,28 +457,22 @@ func TestPollStoppedActor(t *testing.T) {
 	// Trigger scheduling
 	require.Nil(t, router.Send(id, message.TickMessage()))
 
-	timeout := time.After(5 * time.Second)
-	for {
-		select {
-		case <-timeout:
-			t.Fatal("timeout")
-		case acc := <-ch:
-			if acc == cap {
-				// To complete the test, acc must be cap.
-				wait(t, time.Second, func() {
-					err := sys.Stop()
-					require.Nil(t, err)
-				})
-				return
-			}
-		}
+	<-ch
+	select {
+	case <-time.After(500 * time.Millisecond):
+	case <-ch:
+		t.Fatal("must timeout")
 	}
+	wait(t, time.Second, func() {
+		err := sys.Stop()
+		require.Nil(t, err)
+	})
 }
 
 func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, router := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -492,47 +497,136 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	})
 }
 
-type reopenedActor struct {
-	trigger bool
+type slowActor struct {
+	ch chan struct{}
 }
 
-func (r *reopenedActor) Poll(ctx context.Context, msgs []message.Message) bool {
-	r.trigger = !r.trigger
-	return r.trigger
+func (c *slowActor) Poll(ctx context.Context, msgs []message.Message) bool {
+	c.ch <- struct{}{}
+	<-c.ch
+	// closed
+	return false
 }
 
-func TestMustNotReopenActor(t *testing.T) {
+// Test router send during actor poll and before close.
+//
+//  ----------------------> time
+//     '-----------' Poll
+//        ' Send
+//                 ' Close
+func TestSendBeforeClose(t *testing.T) {
 	t.Parallel()
-	idCh := make(chan ID)
-	handler := func(msg string, id ID) {
-		select {
-		case idCh <- id:
-		default:
-		}
-	}
-	sys, router := NewSystemBuilder("test").WorkerNumber(1).handleFatal(handler).Build()
 	ctx := context.Background()
+	sys, router := makeTestSystem(t.Name(), t)
 	sys.Start(ctx)
 
 	id := ID(777)
-	// To avoid blocking, use a large buffer.
-	cap := defaultMsgBatchSizePerActor * 4
-	mb := NewMailbox(id, cap)
-	require.Nil(t, sys.Spawn(mb, &reopenedActor{}))
+	mb := NewMailbox(id, defaultMsgBatchSizePerActor)
+	ch := make(chan struct{})
+	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
 
-	for i := 0; i < (cap - 1); i++ {
+	// Trigger scheduling
+	require.Nil(t, router.Send(id, message.TickMessage()))
+
+	// Wait for actor to be polled.
+	a := <-ch
+
+	// Send message before close.
+	err := router.Send(id, message.TickMessage())
+	require.Nil(t, err)
+
+	// Unblock poll.
+	ch <- a
+
+	// Wait for actor to be removed.
+	for {
+		time.Sleep(100 * time.Millisecond)
+		_, ok := router.procs.Load(id)
+		if !ok {
+			break
+		}
+	}
+	// Must drop 1 message.
+	m := &dto.Metric{}
+	sys.rd.metricDropMessage.Write(m)
+	dropped := int(*m.Counter.Value)
+	require.Equal(t, 1, dropped)
+
+	// Let send and close race
+	// sys.rd.Lock()
+
+	wait(t, time.Second, func() {
+		err := sys.Stop()
+		require.Nil(t, err)
+	})
+}
+
+// Test router send after close and before enqueue.
+//
+//  ----------------------> time
+//   '-----' Poll
+//         ' Close
+//            ' Send
+//                'Enqueue
+func TestSendAfterClose(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	sys, router := makeTestSystem(t.Name(), t)
+	sys.Start(ctx)
+
+	id := ID(777)
+	dropCount := 1
+	cap := defaultMsgBatchSizePerActor + dropCount
+	mb := NewMailbox(id, cap)
+	ch := make(chan struct{})
+	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
+	pi, ok := router.procs.Load(id)
+	require.True(t, ok)
+	p := pi.(*proc)
+
+	for i := 0; i < cap-1; i++ {
 		require.Nil(t, mb.Send(message.TickMessage()))
 	}
 	// Trigger scheduling
 	require.Nil(t, router.Send(id, message.TickMessage()))
 
-	timeout := time.After(5 * time.Second)
-	select {
-	case <-timeout:
-		t.Fatal("timeout")
-	case fatalID := <-idCh:
-		require.Equal(t, fatalID, id)
+	// Wait for actor to be polled.
+	a := <-ch
+
+	// Block enqueue.
+	sys.rd.Lock()
+
+	// Unblock poll.
+	ch <- a
+
+	// Wait for actor to be closed.
+	for {
+		time.Sleep(100 * time.Millisecond)
+		if p.isClosed() {
+			break
+		}
 	}
+
+	// enqueue must return actor stopped error.
+	err := router.rd.enqueueLocked(p, false)
+	require.Equal(t, errActorStopped, err)
+
+	// Unblock enqueue.
+	sys.rd.Unlock()
+	// Wait for actor to be removed.
+	for {
+		time.Sleep(100 * time.Millisecond)
+		_, ok := router.procs.Load(id)
+		if !ok {
+			break
+		}
+	}
+
+	// Must drop 1 message.
+	m := &dto.Metric{}
+	sys.rd.metricDropMessage.Write(m)
+	dropped := int(*m.Counter.Value)
+	require.Equal(t, dropCount, dropped)
 
 	wait(t, time.Second, func() {
 		err := sys.Stop()
@@ -544,7 +638,7 @@ func TestMustNotReopenActor(t *testing.T) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/ticdc/pkg/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, router := makeTestSystem(b.Name(), b)
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -586,7 +680,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/ticdc/pkg/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(2).Build()
+	sys, router := makeTestSystem(b.Name(), b)
 	sys.Start(ctx)
 
 	actorCount := int(math.Exp2(15))

@@ -44,16 +44,23 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "actor",
 			Name:      "batch",
-			Help:      "Bucketed histogram of batch size of actor system.",
+			Help:      "Bucketed histogram of batch size of an actor system.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 10),
 		}, []string{"name", "type"})
-	pollMsgDuration = prometheus.NewHistogramVec(
+	pollActorDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "actor",
 			Name:      "poll_duration_seconds",
 			Help:      "Bucketed histogram of actor poll time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 16),
+		}, []string{"name"})
+	dropMsgCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "actor",
+			Name:      "drop_message_total",
+			Help:      "The total number of dropped messages in an actor system.",
 		}, []string{"name"})
 )
 
@@ -63,5 +70,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(workingWorkers)
 	registry.MustRegister(workingDuration)
 	registry.MustRegister(batchSizeHistogram)
-	registry.MustRegister(pollMsgDuration)
+	registry.MustRegister(pollActorDuration)
+	registry.MustRegister(dropMsgCount)
 }

@@ -18,6 +18,7 @@ import (
 	"context"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
@@ -37,13 +38,16 @@ const (
 	defaultMsgBatchSizePerActor = 64
 )
 
-var errActorNotFound = cerrors.ErrActorNotFound.FastGenByArgs()
+var (
+	errActorStopped  = cerrors.ErrActorStopped.FastGenByArgs()
+	errActorNotFound = cerrors.ErrActorNotFound.FastGenByArgs()
+)
 
 // proc is wrapper of a running actor.
 type proc struct {
 	mb     Mailbox
 	actor  Actor
-	closed bool
+	closed uint64
 }
 
 // batchReceiveMsgs receives messages into batchMsg.
@@ -59,6 +63,18 @@ func (p *proc) batchReceiveMsgs(batchMsg []message.Message, batchSize int) []mes
 	return batchMsg
 }
 
+// close its actor.
+// close is threadsafe.
+func (p *proc) close() {
+	atomic.StoreUint64(&p.closed, 1)
+}
+
+// isClosed returns ture, means its actor is closed.
+// isClosed is threadsafe.
+func (p *proc) isClosed() bool {
+	return atomic.LoadUint64(&p.closed) == 1
+}
+
 // ready is a centralize notification struct, shared by a router and a system.
 // It schedules notification and actors.
 type ready struct {
@@ -72,6 +88,8 @@ type ready struct {
 	// or is pending to be polled.
 	procs   map[ID]struct{}
 	stopped bool
+
+	metricDropMessage prometheus.Counter
 }
 
 func (rd *ready) stop() {
@@ -83,29 +101,48 @@ func (rd *ready) stop() {
 
 // enqueueLocked enqueues ready proc.
 // If the proc is already enqueued, it ignores.
+// If the proc is closed, it ignores, drop messages in mailbox and return error.
 // Set force to true to force enqueue. It is useful to force the proc to be
 // polled again.
-func (rd *ready) enqueueLocked(p *proc, force bool) {
+func (rd *ready) enqueueLocked(p *proc, force bool) error {
+	if p.isClosed() {
+		// Drop all remaining messages.
+		counter := 0
+		_, ok := p.mb.tryReceive()
+		for ; ok; _, ok = p.mb.tryReceive() {
+			counter++
+		}
+		rd.metricDropMessage.Add(float64(counter))
+		return errActorStopped
+	}
 	id := p.mb.ID()
 	if _, ok := rd.procs[id]; !ok || force {
 		rd.queue.PushBack(p)
 		rd.procs[id] = struct{}{}
 	}
+
+	return nil
 }
 
 // schedule schedules the proc to system.
-func (rd *ready) schedule(p *proc) {
+func (rd *ready) schedule(p *proc) error {
 	rd.Lock()
-	rd.enqueueLocked(p, false)
+	err := rd.enqueueLocked(p, false)
 	rd.Unlock()
+	if err != nil {
+		return err
+	}
 	// Notify system to poll the proc.
 	rd.cond.Signal()
+	return nil
 }
 
+// scheduleN schedules a slice of procs to system.
+// It ignores stopped procs.
 func (rd *ready) scheduleN(procs []*proc) {
 	rd.Lock()
 	for _, p := range procs {
-		rd.enqueueLocked(p, false)
+		_ = rd.enqueueLocked(p, false)
 	}
 	rd.Unlock()
 	rd.cond.Broadcast()
@@ -134,13 +171,14 @@ type Router struct {
 	procs sync.Map
 }
 
-func newRouter() *Router {
+func newRouter(name string) *Router {
 	r := &Router{
 		rd: &ready{},
 	}
 	r.rd.cond = sync.NewCond(&r.rd.Mutex)
 	r.rd.procs = make(map[ID]struct{})
 	r.rd.queue.Init()
+	r.rd.metricDropMessage = dropMsgCount.WithLabelValues(name)
 	return r
 }
 
@@ -157,8 +195,7 @@ func (r *Router) Send(id ID, msg message.Message) error {
 	if err != nil {
 		return err
 	}
-	r.rd.schedule(p)
-	return nil
+	return r.rd.schedule(p)
 }
 
 // SendB sends a message to an actor, blocks when it's full.
@@ -174,8 +211,7 @@ func (r *Router) SendB(ctx context.Context, id ID, msg message.Message) error {
 	if err != nil {
 		return err
 	}
-	r.rd.schedule(p)
-	return nil
+	return r.rd.schedule(p)
 }
 
 // Broadcast a message to all actors in the router.
@@ -281,7 +317,7 @@ func (b *SystemBuilder) handleFatal(
 
 // Build builds a system and a router.
 func (b *SystemBuilder) Build() (*System, *Router) {
-	router := newRouter()
+	router := newRouter(b.name)
 	return &System{
 		name:                 b.name,
 		numWorker:            b.numWorker,
@@ -296,7 +332,7 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 		metricTotalWorkers:    totalWorkers.WithLabelValues(b.name),
 		metricWorkingWorkers:  workingWorkers.WithLabelValues(b.name),
 		metricWorkingDuration: workingDuration.WithLabelValues(b.name),
-		metricPollDuration:    pollMsgDuration.WithLabelValues(b.name),
+		metricPollDuration:    pollActorDuration.WithLabelValues(b.name),
 		metricProcBatch:       batchSizeHistogram.WithLabelValues(b.name, "proc"),
 		metricMsgBatch:        batchSizeHistogram.WithLabelValues(b.name, "msg"),
 	}, router
@@ -394,6 +430,13 @@ func (s *System) poll(ctx context.Context) {
 		rd.Unlock()
 
 		for _, p := range batchP {
+			closed := p.isClosed()
+			if closed {
+				s.handleFatal(
+					"closed actor can never receive new messages again",
+					p.mb.ID())
+			}
+
 			batchMsg = batchMsg[:0]
 			// Batch receive actor's messages.
 			batchMsg = p.batchReceiveMsgs(batchMsg, s.msgBatchSizePerActor)
@@ -406,19 +449,8 @@ func (s *System) poll(ctx context.Context) {
 			pollStartTime := time.Now()
 			running := p.actor.Poll(ctx, batchMsg)
 			if !running {
-				if !p.closed {
-					p.closed = true
-					present := s.router.remove(p.mb.ID())
-					if !present {
-						s.handleFatal(
-							"try to remove non-existent actor", p.mb.ID())
-					}
-				}
-			}
-			if p.closed && running {
-				s.handleFatal(
-					"closed actor can never receive new messages again",
-					p.mb.ID())
+				// Close the actor.
+				p.close()
 			}
 			receiveDuration := time.Since(pollStartTime)
 			if receiveDuration > slowReceiveThreshold {
@@ -438,7 +470,16 @@ func (s *System) poll(ctx context.Context) {
 				delete(rd.procs, p.mb.ID())
 			} else {
 				// Force enqueue to poll remaining messages.
-				rd.enqueueLocked(p, true)
+				// Also it drops remaining messages if proc is stopped.
+				_ = rd.enqueueLocked(p, true)
+			}
+			if p.isClosed() {
+				// Remove closed actor from router.
+				present := s.router.remove(p.mb.ID())
+				if !present {
+					s.handleFatal(
+						"try to remove non-existent actor", p.mb.ID())
+				}
 			}
 		}
 	}
