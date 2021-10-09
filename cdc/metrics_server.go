@@ -65,4 +65,5 @@ func RecordGoRuntimeSettings() {
 func initServerMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(etcdHealthCheckDuration)
 	registry.MustRegister(goGC)
+	registry.MustRegister(goMaxProcs)
 }

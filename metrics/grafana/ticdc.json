@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1631019842531,
+  "iteration": 1633763775536,
   "links": [],
   "panels": [
     {
@@ -558,7 +558,14 @@
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
-          "seriesOverrides": [],
+          "seriesOverrides": [
+            {
+              "alias": "/.*MaxProcs/",
+              "fill": 0,
+              "linewidth": 2,
+              "yaxis": 2
+            }
+          ],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
@@ -569,6 +576,13 @@
               "intervalFactor": 1,
               "legendFormat": "{{instance}}",
               "refId": "A"
+            },
+            {
+              "expr": "ticdc_server_go_max_procs{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}-MaxProcs",
+              "refId": "B"
             }
           ],
           "thresholds": [],
