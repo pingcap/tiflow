@@ -45,22 +45,28 @@ type LimitRegionRouter interface {
 	Run(ctx context.Context) error
 }
 
+// srrMetrics keeps metrics of a Sized Region Router
 type srrMetrics struct {
 	capture    string
 	changefeed string
-	tokens     map[string]prometheus.Gauge
+	// mapping from id(TiKV store address) to token used
+	tokens map[string]prometheus.Gauge
+	// mapping from id(TiKV store address) to cached regions
+	cachedRegions map[string]prometheus.Gauge
 }
 
 func newSrrMetrics(ctx context.Context) *srrMetrics {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeed := util.ChangefeedIDFromCtx(ctx)
 	return &srrMetrics{
-		capture:    captureAddr,
-		changefeed: changefeed,
-		tokens:     make(map[string]prometheus.Gauge),
+		capture:       captureAddr,
+		changefeed:    changefeed,
+		tokens:        make(map[string]prometheus.Gauge),
+		cachedRegions: make(map[string]prometheus.Gauge),
 	}
 }
 
+// each changefeed on a capture maintains a sizedRegionRouter
 type sizedRegionRouter struct {
 	buffer    map[string][]singleRegionInfo
 	output    chan singleRegionInfo
@@ -96,10 +102,16 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 		r.output <- sri
 	} else {
 		r.buffer[id] = append(r.buffer[id], sri)
+		if _, ok := r.metrics.cachedRegions[id]; !ok {
+			r.metrics.cachedRegions[id] = cachedRegionSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
+		}
+		r.metrics.cachedRegions[id].Inc()
 	}
 	r.lock.Unlock()
 }
 
+// Acquire implements LimitRegionRouter.Acquire
+// param: id is TiKV store address
 func (r *sizedRegionRouter) Acquire(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -110,6 +122,8 @@ func (r *sizedRegionRouter) Acquire(id string) {
 	r.metrics.tokens[id].Inc()
 }
 
+// Release implements LimitRegionRouter.Release
+// param: id is TiKV store address
 func (r *sizedRegionRouter) Release(id string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -156,6 +170,7 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 					}
 				}
 				r.buffer[id] = r.buffer[id][available:]
+				r.metrics.cachedRegions[id].Sub(float64(available))
 			}
 			r.lock.Unlock()
 		}

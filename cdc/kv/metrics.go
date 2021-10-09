@@ -79,6 +79,13 @@ var (
 			Name:      "region_token",
 			Help:      "size of region token in kv client",
 		}, []string{"store", "changefeed", "capture"})
+	cachedRegionSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "cached_region",
+			Help:      "cached region that has not requested to TiKV in kv client",
+		}, []string{"store", "changefeed", "capture"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
