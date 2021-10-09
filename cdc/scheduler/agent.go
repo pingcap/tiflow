@@ -331,7 +331,9 @@ func (a *BaseAgent) checkOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int6
 			zap.Any("new-owner-info", a.ownerInfo))
 		// resets the deque so that pending operations from the previous owner
 		// will not be processed.
+		a.agentMu.Lock()
 		a.pendingOps = deque.NewDeque()
+		a.agentMu.Unlock()
 		return true
 	}
 	if a.ownerInfo.OwnerRev > ownerRev {
