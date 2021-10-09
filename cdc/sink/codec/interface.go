@@ -63,9 +63,13 @@ type MQMessage struct {
 	Protocol Protocol            // protocol
 }
 
+// producerMessageOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
+// reference: https://github.com/Shopify/sarama/blob/main/async_producer.go#L233
+const producerMessageOverhead = 26 // the metadata overhead of CRC, flags, etc.
+
 // Length returns the expected size of the Kafka message
 func (m *MQMessage) Length() int {
-	return len(m.Key) + len(m.Value)
+	return len(m.Key) + len(m.Value) + producerMessageOverhead
 }
 
 // PhysicalTime returns physical time part of Ts in time.Time
