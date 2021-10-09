@@ -19,21 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
-
-func TestSuite(t *testing.T) { check.TestingT(t) }
-
-type pipelineSuite struct{}
-
-var _ = check.Suite(&pipelineSuite{})
 
 type echoNode struct {
 }
@@ -76,7 +69,7 @@ func (e echoNode) Destroy(ctx NodeContext) error {
 }
 
 type checkNode struct {
-	c        *check.C
+	t        *testing.T
 	expected []Message
 	index    int
 }
@@ -90,29 +83,28 @@ func (n *checkNode) Receive(ctx NodeContext) error {
 	msg := ctx.Message()
 
 	log.Info("Receive message in check node", zap.Any("msg", msg))
-	n.c.Assert(msg, check.DeepEquals, n.expected[n.index], check.Commentf("index: %d", n.index))
+	require.Equal(n.t, n.expected[n.index], msg, "%d", n.index)
 	n.index++
 	return nil
 }
 
 func (n *checkNode) Destroy(ctx NodeContext) error {
-	n.c.Assert(n.index, check.Equals, len(n.expected))
+	require.Equal(n.t, len(n.expected), n.index)
 	return nil
 }
 
-func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPipelineUsage(t *testing.T) {
 	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
-		c.Fatal(err)
+		t.Fatal(err)
 		return err
 	})
 	runnersSize, outputChannelSize := 2, 64
 	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
-		c: c,
+		t: t,
 		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
@@ -171,7 +163,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 			},
 		},
 	}))
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -180,13 +172,13 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 			},
 		},
 	}))
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cancel()
 	p.Wait()
 }
 
 type errorNode struct {
-	c     *check.C
+	t     *testing.T
 	index int
 }
 
@@ -207,25 +199,24 @@ func (n *errorNode) Receive(ctx NodeContext) error {
 }
 
 func (n *errorNode) Destroy(ctx NodeContext) error {
-	n.c.Assert(n.index, check.Equals, 3)
+	require.Equal(n.t, 3, n.index)
 	return nil
 }
 
-func (s *pipelineSuite) TestPipelineError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPipelineError(t *testing.T) {
 	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
-		c.Assert(err.Error(), check.Equals, "error node throw an error, index: 3")
+		require.Equal(t, "error node throw an error, index: 3", err.Error())
 		return nil
 	})
 	runnersSize, outputChannelSize := 3, 64
 	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
-	p.AppendNode(ctx, "error node", &errorNode{c: c})
+	p.AppendNode(ctx, "error node", &errorNode{t: t})
 	p.AppendNode(ctx, "check node", &checkNode{
-		c: c,
+		t: t,
 		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
@@ -253,7 +244,7 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 			},
 		},
 	}))
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	// this line may be return an error because the pipeline maybe closed before this line was executed
 	//nolint:errcheck
 	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -268,7 +259,7 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 }
 
 type throwNode struct {
-	c     *check.C
+	t     *testing.T
 	index int
 }
 
@@ -290,12 +281,11 @@ func (n *throwNode) Receive(ctx NodeContext) error {
 }
 
 func (n *throwNode) Destroy(ctx NodeContext) error {
-	n.c.Assert(map[int]bool{4: true, 6: true}, check.HasKey, n.index)
+	require.Contains(n.t, map[int]bool{4: true, 6: true}, n.index)
 	return nil
 }
 
-func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPipelineThrow(t *testing.T) {
 	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -307,7 +297,7 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	runnersSize, outputChannelSize := 2, 64
 	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
-	p.AppendNode(ctx, "error node", &throwNode{c: c})
+	p.AppendNode(ctx, "error node", &throwNode{t: t})
 	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -316,7 +306,7 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 			},
 		},
 	}))
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	// whether err is nil is not determined
 	// If add some delay here, such as sleep 50ms, there will be more probability
 	// that the second message is not sent.
@@ -331,28 +321,27 @@ func (s *pipelineSuite) TestPipelineThrow(c *check.C) {
 	}))
 	if err != nil {
 		// pipeline closed before the second message was sent
-		c.Assert(cerror.ErrSendToClosedPipeline.Equal(err), check.IsTrue)
+		require.True(t, cerror.ErrSendToClosedPipeline.Equal(err))
 		p.Wait()
-		c.Assert(len(errs), check.Equals, 2)
-		c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
-		c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
+		require.Equal(t, 2, len(errs))
+		require.Equal(t, "error node throw an error, index: 3", errs[0].Error())
+		require.Equal(t, "error node throw an error, index: 4", errs[1].Error())
 	} else {
 		// the second message was sent before pipeline closed
 		p.Wait()
-		c.Assert(len(errs), check.Equals, 4)
-		c.Assert(errs[0].Error(), check.Equals, "error node throw an error, index: 3")
-		c.Assert(errs[1].Error(), check.Equals, "error node throw an error, index: 4")
-		c.Assert(errs[2].Error(), check.Equals, "error node throw an error, index: 5")
-		c.Assert(errs[3].Error(), check.Equals, "error node throw an error, index: 6")
+		require.Equal(t, 4, len(errs))
+		require.Equal(t, "error node throw an error, index: 3", errs[0].Error())
+		require.Equal(t, "error node throw an error, index: 4", errs[1].Error())
+		require.Equal(t, "error node throw an error, index: 5", errs[2].Error())
+		require.Equal(t, "error node throw an error, index: 6", errs[3].Error())
 	}
 }
 
-func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPipelineAppendNode(t *testing.T) {
 	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = context.WithErrorHandler(ctx, func(err error) error {
-		c.Fatal(err)
+		t.Fatal(err)
 		return err
 	})
 	runnersSize, outputChannelSize := 2, 64
@@ -365,7 +354,7 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 			},
 		},
 	}))
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -374,13 +363,13 @@ func (s *pipelineSuite) TestPipelineAppendNode(c *check.C) {
 			},
 		},
 	}))
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	// wait the echo node sent all messages to next node
 	time.Sleep(1 * time.Second)
 
 	p.AppendNode(ctx, "check node", &checkNode{
-		c: c,
+		t: t,
 		expected: []Message{
 			PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{

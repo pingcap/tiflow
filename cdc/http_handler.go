@@ -58,6 +58,20 @@ type ChangefeedResp struct {
 	RunningError *model.RunningError `json:"error"`
 }
 
+// MarshalJSON use to marshal ChangefeedResp
+func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
+	type Alias ChangefeedResp
+	if c.FeedState == string(model.StateNormal) {
+		c.RunningError = nil
+	}
+	return json.Marshal(struct {
+		Alias
+	}{
+		Alias: Alias(c),
+	})
+}
+
 func handleOwnerResp(w http.ResponseWriter, err error) {
 	if err != nil {
 		if errors.Cause(err) == concurrency.ErrElectionNotLeader {
