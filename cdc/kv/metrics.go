@@ -113,6 +113,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
 	registry.MustRegister(clientRegionTokenSize)
+	registry.MustRegister(cachedRegionSize)
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(grpcPoolStreamGauge)
 
