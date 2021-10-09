@@ -146,6 +146,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrClusterIDMismatch"]
+error = '''
+cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
