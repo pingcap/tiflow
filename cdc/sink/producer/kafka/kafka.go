@@ -215,7 +215,7 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 // stop closes the closeCh to signal other routines to exit
 // It SHOULD NOT be called under `clientLock`.
 func (k *kafkaSaramaProducer) stop() {
-	if atomic.SwapInt32(&k.closing, 1) == 1 {
+	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
 	close(k.closeCh)
@@ -378,6 +378,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
+		closing:         kafkaProducerRunning,
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
