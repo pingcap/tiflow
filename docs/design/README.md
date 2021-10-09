@@ -28,7 +28,7 @@ The most common preparations for writing and submitting a design document for no
 
 Please update the tracking issue according to the progress of succeeding implementation pull requests.
 
-## Style of an RFC
+## Style of Design Documents
 
 Run lints (you must have [Node.js](https://nodejs.org) installed):
 
