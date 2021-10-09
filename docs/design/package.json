@@ -1,7 +1,7 @@
 {
-  "name": "ticdc-rfcs",
+  "name": "ticdc-design-docs",
   "version": "0.0.0",
-  "description": "RFCs for changes to TiCDC",
+  "description": "Design documents for changes to TiCDC",
   "scripts": {
     "lint": "prettier --check \".\"",
     "lint:fix": "prettier --write \".\""
@@ -18,7 +18,7 @@
   "bugs": {
     "url": "https://github.com/pingcap/ticdc/issues"
   },
-  "homepage": "https://github.com/pingcap/ticdc#readme",
+  "homepage": "https://github.com/pingcap/ticdc/docs/design#readme",
   "devDependencies": {
     "husky": "^5.0.9",
     "prettier": "^2.2.1"

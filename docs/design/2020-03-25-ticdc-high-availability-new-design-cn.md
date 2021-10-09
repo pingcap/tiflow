@@ -77,7 +77,7 @@ Capture 创建了 ChangeFeedWatcher，然后在 160 行调用其 Watch 方法，
 
 上述 Callback 在执行一个 Processor 时调用，从而将 Processor 注册到 Capture。
 
-之所以有这样的问题，是 Watch 接口不够合理导致，Watch 没有将监控到的事件返回，而是在内部直接做了处理，这其实违背了上下层的封装原则。也就是说， Watch 只需要返回对应的事件，由 Capture 对事件作出处理，比如启动或关闭 Processor等。
+之所以有这样的问题，是 Watch 接口不够合理导致，Watch 没有将监控到的事件返回，而是在内部直接做了处理，这其实违背了上下层的封装原则。也就是说， Watch 只需要返回对应的事件，由 Capture 对事件作出处理，比如启动或关闭 Processor 等。
 
 #### Processor 的存活状态由 Owner 管理
 
@@ -137,23 +137,23 @@ Capture 在挂掉时的处理逻辑可以正常工作，但如果挂起 Capture 
 
 ### Capture 接口
 
-- New          创建 Capture 对象，并初始化
-- Serve         Capture 的核心处理流程
-- Stop          优雅退出
-- suicide        Session 失效后自杀（panic）
-- campaign      竞选 Owner，复用 Capture 自身的 Session
-- assignTask     为 Processor 分配 Task
+- New 创建 Capture 对象，并初始化
+- Serve Capture 的核心处理流程
+- Stop 优雅退出
+- suicide Session 失效后自杀（panic）
+- campaign 竞选 Owner，复用 Capture 自身的 Session
+- assignTask 为 Processor 分配 Task
 - watchProcessor 监控 Processor 的健康状况，也可以通过封装 ProcessorWatcher 来实现
-- watchTask      监控 Owner 分配的同步任务，也可以通过封装 TaskWacher 来实现
+- watchTask 监控 Owner 分配的同步任务，也可以通过封装 TaskWacher 来实现
 
 ### Owner 接口
 
-- Throne         当选 Owner 后的处理流程
-- Serve          Owner 核心逻辑
-- StepDown      退位后的处理流程
-- watchCapture   监控 Capture
-- watchJob       监控 ChangeFeed
-- assignTask      分配任务给 Capture，之后由 Capture 分配给 Processor。
+- Throne 当选 Owner 后的处理流程
+- Serve Owner 核心逻辑
+- StepDown 退位后的处理流程
+- watchCapture 监控 Capture
+- watchJob 监控 ChangeFeed
+- assignTask 分配任务给 Capture，之后由 Capture 分配给 Processor。
 
 ### ChangeFeed 定义
 
