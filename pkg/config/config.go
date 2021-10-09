@@ -192,6 +192,16 @@ var defaultServerConfig = &ServerConfig{
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
 		RegionScanLimit:  40,
 	},
+	SchedulerV2: &SchedulerV2Config{
+		Enabled:                      true,
+		ProcessorCheckpointInterval:  TomlDuration(time.Millisecond * 200),
+		ClientMaxBatchInterval:       TomlDuration(time.Millisecond * 100),
+		ClientMaxBatchSize:           8192,
+		ClientRetryRateLimit:         1.0,
+		ServerMaxPendingMessageCount: 102400,
+		ServerAckInterval:            TomlDuration(time.Millisecond * 100),
+		ServerWorkerPoolSize:         4,
+	},
 }
 
 // ServerConfig represents a config for server
@@ -213,10 +223,11 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter              *SorterConfig   `toml:"sorter" json:"sorter"`
-	Security            *SecurityConfig `toml:"security" json:"security"`
-	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
-	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
+	Sorter              *SorterConfig      `toml:"sorter" json:"sorter"`
+	Security            *SecurityConfig    `toml:"security" json:"security"`
+	PerTableMemoryQuota uint64             `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
+	KVClient            *KVClientConfig    `toml:"kv-client" json:"kv-client"`
+	SchedulerV2         *SchedulerV2Config `toml:"scheduler-v2" json:"scheduler-v2"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
