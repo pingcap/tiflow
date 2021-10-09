@@ -120,6 +120,7 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 
 	util.LogHTTPProxies()
+	cdc.RecordGoRuntimeSettings()
 	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
