@@ -64,3 +64,10 @@ func TestIsRetryableError(t *testing.T) {
 		require.Equal(t, ret, tt.want, "case:%s", tt.name)
 	}
 }
+
+func TestIsBadRequestError(t *testing.T) {
+	err := ErrAPIInvalidParam.GenWithStack("aa")
+	require.Equal(t, true, IsBadRequestError(err))
+	err = ErrPDEtcdAPIError.GenWithStack("aa")
+	require.Equal(t, false, IsBadRequestError(err))
+}

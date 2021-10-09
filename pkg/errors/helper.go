@@ -74,3 +74,21 @@ func IsRetryableError(err error) bool {
 	}
 	return true
 }
+
+var BadRequestError = []*errors.Error{
+	ErrAPIInvalidParam, ErrSinkURIInvalid, ErrStartTsBeforeGC,
+	ErrChangeFeedNotExists, ErrTargetTsBeforeStartTs, ErrTableIneligible,
+	ErrFilterRuleInvalid, ErrChangefeedUpdateRefused,
+}
+
+func IsBadRequestError(err error) bool {
+	if err == nil {
+		return false
+	}
+	for _, e := range BadRequestError {
+		if e.Equal(err) {
+			return true
+		}
+	}
+	return false
+}
