@@ -42,7 +42,7 @@ require (
 	github.com/pingcap/tidb v1.1.0-beta.0.20210915013841-0854595a6992
 	github.com/pingcap/tidb-tools v5.0.3+incompatible
 	github.com/prometheus/client_golang v1.7.1
-	github.com/prometheus/client_model v0.2.0 // indirect
+	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5

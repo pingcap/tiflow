@@ -548,7 +548,7 @@ func TestSendBeforeClose(t *testing.T) {
 	}
 	// Must drop 1 message.
 	m := &dto.Metric{}
-	sys.rd.metricDropMessage.Write(m)
+	require.Nil(t, sys.rd.metricDropMessage.Write(m))
 	dropped := int(*m.Counter.Value)
 	require.Equal(t, 1, dropped)
 
@@ -624,7 +624,7 @@ func TestSendAfterClose(t *testing.T) {
 
 	// Must drop 1 message.
 	m := &dto.Metric{}
-	sys.rd.metricDropMessage.Write(m)
+	require.Nil(t, sys.rd.metricDropMessage.Write(m))
 	dropped := int(*m.Counter.Value)
 	require.Equal(t, dropCount, dropped)
 
