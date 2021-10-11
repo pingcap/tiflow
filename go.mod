@@ -69,11 +69,10 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
-
 replace (
 	// Fix CVE-2020-26160.
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
 	// cloud.google.com/go/storage will upgrade grpc to v1.40.0
-    // we need keep the replacement until go.etcd.io supports the higher version of grpc.
+	// we need keep the replacement until go.etcd.io supports the higher version of grpc.
 	google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
 )
