@@ -23,10 +23,12 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	"github.com/pingcap/ticdc/pkg/orchestrator"
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -198,11 +200,33 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 
 func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close()
+
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
+	// Creates a table, which will be deleted at the start-ts of the changefeed.
+	// It is expected that the changefeed DOES NOT replicate this table.
+	helper.DDL2Job("create database test0")
+	job := helper.DDL2Job("create table test0.table0(id int primary key)")
+	startTs := job.BinlogInfo.FinishedTS + 1000
+
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{
+		KVStorage: helper.Storage(),
+		CaptureInfo: &model.CaptureInfo{
+			ID:            "capture-id-test",
+			AdvertiseAddr: "127.0.0.1:0000",
+			Version:       version.ReleaseVersion,
+		},
+	})
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: "changefeed-id-test",
+		Info: &model.ChangeFeedInfo{
+			StartTs: startTs,
+			Config:  config.GetDefaultReplicaConfig(),
+		},
+	})
+
+	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	defer cf.Close()
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
@@ -214,16 +238,31 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	// pre check and initialize
 	tickThreeTime()
 
+	c.Assert(cf.schema.AllPhysicalTables(), check.HasLen, 1)
+	c.Assert(state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, check.HasLen, 0)
+	c.Assert(state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, check.HasLen, 0)
+
+	job = helper.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow uo
 	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
-	mockDDLPuller.resolvedTs += 1000
+	mockDDLPuller.resolvedTs = startTs
 	mockAsyncSink := cf.sink.(*mockAsyncSink)
+	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
+	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	// three tick to make sure all barriers set in initialize is handled
+	tickThreeTime()
+	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	// The ephemeral table should have left no trace in the schema cache
+	c.Assert(cf.schema.AllPhysicalTables(), check.HasLen, 0)
+
+	// executing the ddl finished
+	mockAsyncSink.ddlDone = true
+	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
 
 	// handle create database
-	job := helper.DDL2Job("create database test1")
+	job = helper.DDL2Job("create database test1")
 	mockDDLPuller.resolvedTs += 1000
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
