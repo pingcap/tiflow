@@ -122,7 +122,7 @@ func (p *Producer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMe
 	return nil
 }
 
-// Flush flush all in memory msgs to server.
+// Flush flushes all in memory msgs to server.
 func (p *Producer) Flush(_ context.Context) error {
 	return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())
 }
@@ -132,7 +132,7 @@ func (p *Producer) GetPartitionNum() int32 {
 	return int32(p.partitions)
 }
 
-// Close close the producer.
+// Close closes the producer and client.
 func (p *Producer) Close() error {
 	err := p.producer.Flush()
 	if err != nil {
