@@ -51,16 +51,19 @@ type proc struct {
 }
 
 // batchReceiveMsgs receives messages into batchMsg.
-func (p *proc) batchReceiveMsgs(batchMsg []message.Message, batchSize int) []message.Message {
-	for i := 0; i < batchSize; i++ {
+func (p *proc) batchReceiveMsgs(batchMsg []message.Message) int {
+	n := 0
+	max := len(batchMsg)
+	for i := 0; i < max; i++ {
 		msg, ok := p.mb.tryReceive()
 		if !ok {
 			// Stop receive if there is no more messages.
 			break
 		}
-		batchMsg = append(batchMsg, msg)
+		batchMsg[i] = msg
+		n++
 	}
-	return batchMsg
+	return n
 }
 
 // close its actor.
@@ -149,8 +152,10 @@ func (rd *ready) scheduleN(procs []*proc) {
 }
 
 // batchReceiveProcs receives ready procs into batchP.
-func (rd *ready) batchReceiveProcs(batchP []*proc, batchSize int) []*proc {
-	for i := 0; i < batchSize; i++ {
+func (rd *ready) batchReceiveProcs(batchP []*proc) int {
+	n := 0
+	max := len(batchP)
+	for i := 0; i < max; i++ {
 		if rd.queue.Len() == 0 {
 			// Stop receive if there is no more ready procs.
 			break
@@ -158,9 +163,10 @@ func (rd *ready) batchReceiveProcs(batchP []*proc, batchSize int) []*proc {
 		element := rd.queue.Front()
 		rd.queue.Remove(element)
 		p := element.Value.(*proc)
-		batchP = append(batchP, p)
+		batchP[i] = p
+		n++
 	}
-	return batchP
+	return n
 }
 
 // Router send messages to actors.
@@ -399,24 +405,25 @@ const slowReceiveThreshold = time.Second
 
 // The main poll of actor system.
 func (s *System) poll(ctx context.Context) {
-	batchP := make([]*proc, 0, s.actorBatchSize)
-	batchMsg := make([]message.Message, 0, s.msgBatchSizePerActor)
-	s.metricProcBatch.Observe(float64(len(batchP)))
+	batchPBuf := make([]*proc, s.actorBatchSize)
+	batchMsgBuf := make([]message.Message, s.msgBatchSizePerActor)
 	rd := s.rd
 	rd.Lock()
 
 	startTime := time.Now()
 	s.metricWorkingWorkers.Inc()
 	for {
-		batchP = batchP[:0]
+		var batchP []*proc
 		for {
 			if rd.stopped {
 				rd.Unlock()
 				return
 			}
 			// Batch receive ready procs.
-			batchP = rd.batchReceiveProcs(batchP, s.actorBatchSize)
-			if len(batchP) != 0 {
+			n := rd.batchReceiveProcs(batchPBuf)
+			if n != 0 {
+				batchP = batchPBuf[:n]
+				s.metricProcBatch.Observe(float64(n))
 				break
 			}
 			// Recording metrics.
@@ -437,13 +444,13 @@ func (s *System) poll(ctx context.Context) {
 					p.mb.ID())
 			}
 
-			batchMsg = batchMsg[:0]
 			// Batch receive actor's messages.
-			batchMsg = p.batchReceiveMsgs(batchMsg, s.msgBatchSizePerActor)
-			if len(batchMsg) == 0 {
+			n := p.batchReceiveMsgs(batchMsgBuf)
+			if n == 0 {
 				continue
 			}
-			s.metricMsgBatch.Observe(float64(len(batchMsg)))
+			batchMsg := batchMsgBuf[:n]
+			s.metricMsgBatch.Observe(float64(n))
 
 			// Poll actor.
 			pollStartTime := time.Now()
