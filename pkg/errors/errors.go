@@ -36,10 +36,10 @@ var (
 	ErrGetTiKVRPCContext       = errors.Normalize("get tikv grpc context failed", errors.RFCCodeText("CDC:ErrGetTiKVRPCContext"))
 	ErrPendingRegionCancel     = errors.Normalize("pending region cancelled due to stream disconnecting", errors.RFCCodeText("CDC:ErrPendingRegionCancel"))
 	ErrEventFeedAborted        = errors.Normalize("single event feed aborted", errors.RFCCodeText("CDC:ErrEventFeedAborted"))
-	ErrUnknownKVEventType      = errors.Normalize("unknown kv event type: %v, entry: %v", errors.RFCCodeText("CDC:ErrUnknownKVEventType"))
+	ErrUnknownKVEventType      = errors.Normalize("unknown kv optype: %s, entry: %v", errors.RFCCodeText("CDC:ErrUnknownKVEventType"))
 	ErrNoPendingRegion         = errors.Normalize("received event regionID %v, requestID %v from %v,"+
 		" but neither pending region nor running region was found", errors.RFCCodeText("CDC:ErrNoPendingRegion"))
-	ErrPrewriteNotMatch       = errors.Normalize("prewrite not match, key: %b, start-ts: %d", errors.RFCCodeText("CDC:ErrPrewriteNotMatch"))
+	ErrPrewriteNotMatch       = errors.Normalize("prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s", errors.RFCCodeText("CDC:ErrPrewriteNotMatch"))
 	ErrGetRegionFailed        = errors.Normalize("get region failed", errors.RFCCodeText("CDC:ErrGetRegionFailed"))
 	ErrScanLockFailed         = errors.Normalize("scan lock failed", errors.RFCCodeText("CDC:ErrScanLockFailed"))
 	ErrResolveLocks           = errors.Normalize("resolve locks failed", errors.RFCCodeText("CDC:ErrResolveLocks"))
