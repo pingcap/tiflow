@@ -155,6 +155,15 @@ func (s *asyncSinkImpl) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 
 func (s *asyncSinkImpl) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
+	failpoint.Inject("InjectChangefeedDDLBlock", func() {
+		if ctx.ChangefeedVars().ID == "changefeed-ddl-block" {
+			log.Info("step into failpoint")
+			// make the func EmitDDLEvent always return false
+			// tests/ddl_async will fail if ddl block the owner
+			ddlFinishedTs = ddl.CommitTs - 10
+			ddl.CommitTs = s.ddlSentTs - 10
+		}
+	})
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
 		return true, nil
