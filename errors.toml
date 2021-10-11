@@ -588,7 +588,7 @@ prepare avro failed
 
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
-prewrite not match, key: %b, start-ts: %d
+prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -813,7 +813,7 @@ unified sorter IO error. Make sure your sort-dir is configured correctly by pass
 
 ["CDC:ErrUnknownKVEventType"]
 error = '''
-unknown kv event type: %v, entry: %v
+unknown kv optype: %s, entry: %v
 '''
 
 ["CDC:ErrUnknownMetaType"]
