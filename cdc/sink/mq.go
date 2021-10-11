@@ -430,11 +430,10 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 
 	s = sinkURI.Query().Get("max-message-bytes")
 	if s != "" {
-		c, err := strconv.Atoi(s)
+		_, err := strconv.Atoi(s)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-		config.MaxMessageBytes = c
 		opts["max-message-bytes"] = s
 	}
 
