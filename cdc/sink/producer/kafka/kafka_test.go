@@ -69,13 +69,11 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	defer testleak.AfterTest(c)
 	cfg := NewKafkaConfig()
 
-	leader := sarama.NewMockBroker(c, 1)
-	defer leader.Close()
-	uriTemplate := "kafka://%s/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
+	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
 		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
 	maxMessageSize := "4194304"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), maxMessageSize)
+	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
 
 	checker := func(uri string) {
 		sinkURI, err := url.Parse(uri)
@@ -105,7 +103,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	checker(uri)
 
 	maxMessageSize = "1000001"
-	uri = fmt.Sprintf(uriTemplate, leader.Addr(), maxMessageSize)
+	uri = fmt.Sprintf(uriTemplate, maxMessageSize)
 	checker(uri)
 }
 
