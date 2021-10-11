@@ -185,7 +185,7 @@ func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 			OpType:   cdcpb.Event_Row_UNKNOWN,
 		},
 		enableOldValue: false,
-		err:            "[CDC:ErrUnknownKVEventType]unknown kv event type: UNKNOWN, entry: start_ts:1 commit_ts:2 key:\"k2\" value:\"v2\" ",
+		err:            "[CDC:ErrUnknownKVEventType]unknown kv optype: UNKNOWN, entry: start_ts:1 commit_ts:2 key:\"k2\" value:\"v2\" ",
 	}}
 
 	for _, tc := range testCases {
