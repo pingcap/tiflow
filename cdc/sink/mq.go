@@ -411,7 +411,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, *config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
