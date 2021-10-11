@@ -257,10 +257,9 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 		c.Check(err, check.IsNil)
 	}
 
+	// one message per batch, and can be build, which means can be sent to producer.
 	messages := encoder.Build()
-	for _, msg := range messages {
-		c.Assert(msg.Length(), check.LessEqual, 1)
-	}
+	c.Assert(len(messages), check.Equals, 100)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "256"})
