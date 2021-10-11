@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tikv/client-go/v2/oracle"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -124,8 +126,14 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 	//
 	// See more gc doc.
 	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
-		return nil, errors.Trace(err)
+		return state, errors.Trace(err)
 	}
+
+	pdTime, err := o.gcManager.CurrentTimeFromPDCached(ctx)
+	if err != nil {
+		return state, errors.Trace(err)
+	}
+	ctx.GlobalVars().PDPhyTs = oracle.GetPhysical(pdTime)
 
 	o.handleJobs()
 	for changefeedID, changefeedState := range state.Changefeeds {

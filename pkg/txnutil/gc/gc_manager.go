@@ -31,7 +31,7 @@ import (
 const (
 	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
 	CDCServiceSafePointID = "ticdc"
-	pdTimeUpdateInterval  = 10 * time.Minute
+	pdTimeUpdateInterval  = 1 * time.Second
 )
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
@@ -115,11 +115,11 @@ func (m *gcManager) CurrentTimeFromPDCached(ctx context.Context) (time.Time, err
 	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
 		return m.pdPhysicalTimeCache, nil
 	}
-	physical, logical, err := m.pdClient.GetTS(ctx)
+	physical, _, err := m.pdClient.GetTS(ctx)
 	if err != nil {
 		return time.Now(), errors.Trace(err)
 	}
-	m.pdPhysicalTimeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, logical))
+	m.pdPhysicalTimeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
 	m.lastUpdatedPdTime = time.Now()
 	return m.pdPhysicalTimeCache, nil
 }

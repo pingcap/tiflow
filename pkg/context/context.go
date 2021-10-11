@@ -38,6 +38,7 @@ type GlobalVars struct {
 	CaptureInfo *model.CaptureInfo
 	EtcdClient  *etcd.CDCEtcdClient
 	GrpcPool    kv.GrpcPool
+	PDPhyTs     int64
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline

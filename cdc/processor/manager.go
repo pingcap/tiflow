@@ -51,6 +51,9 @@ type Manager struct {
 	commandQueue chan *command
 
 	newProcessor func(cdcContext.Context) *processor
+
+	pdPhysicalTimeCache int64
+	lastUpdatedPdTime   time.Time
 }
 
 // NewManager creates a new processor manager
@@ -82,6 +85,13 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
+
+	pdPhyTs, err := m.currentTimeFomPDCached(stdCtx)
+	if err != nil {
+		return state, errors.Trace(err)
+	}
+	ctx.GlobalVars().PDPhyTs = pdPhyTs
+
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
@@ -187,6 +197,22 @@ func (m *Manager) handleCommand() error {
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
 	}
 	return nil
+}
+
+const pdTimeUpdateInterval = 1 * time.Second
+
+func (m *Manager) currentTimeFomPDCached(ctx context.Context) (int64, error) {
+	cdcCtx := ctx.(cdcContext.Context)
+	if time.Since(m.lastUpdatedPdTime) <= pdTimeUpdateInterval {
+		return m.pdPhysicalTimeCache, nil
+	}
+	physical, _, err := cdcCtx.GlobalVars().PDClient.GetTS(ctx)
+	if err != nil {
+		return physical, errors.Trace(err)
+	}
+	m.pdPhysicalTimeCache = physical
+	m.lastUpdatedPdTime = time.Now()
+	return m.pdPhysicalTimeCache, nil
 }
 
 func (m *Manager) writeDebugInfo(w io.Writer) {

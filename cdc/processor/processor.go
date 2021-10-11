@@ -161,7 +161,8 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
-	if skip := p.checkPosition(); skip {
+	// we should skip this tick after create a task position
+	if p.createTaskPosition() {
 		return p.changefeed, nil
 	}
 	if err := p.handleErrorCh(ctx); err != nil {
@@ -176,7 +177,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.checkTablesNum(ctx); err != nil {
 		return nil, errors.Trace(err)
 	}
-	p.handlePosition()
+	p.handlePosition(ctx)
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
 	p.doGCSchemaStorage()
@@ -194,10 +195,10 @@ func (p *processor) checkChangefeedNormal() bool {
 	return true
 }
 
-// checkPosition create a new task position, and put it into the etcd state.
-// task position maybe be not exist only when the processor is running first time.
-func (p *processor) checkPosition() (skipThisTick bool) {
-	if p.changefeed.TaskPositions[p.captureInfo.ID] != nil {
+// createTaskPosition will create a new task position if a task position does not exist.
+// task position not exist only when the processor is running first in the first tick.
+func (p *processor) createTaskPosition() (skipThisTick bool) {
+	if _, exist := p.changefeed.TaskPositions[p.captureInfo.ID]; exist {
 		return false
 	}
 	if p.initialized {
@@ -552,7 +553,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 }
 
 // handlePosition calculates the local resolved ts and local checkpoint ts
-func (p *processor) handlePosition() {
+func (p *processor) handlePosition(ctx cdcContext.Context) {
 	minResolvedTs := uint64(math.MaxUint64)
 	if p.schemaStorage != nil {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
@@ -575,13 +576,13 @@ func (p *processor) handlePosition() {
 	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
 	// It is more accurate to get tso from PD, but in most cases we have
 	// deployed NTP service, a little bias is acceptable here.
-	p.metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-resolvedPhyTs) / 1e3)
+	p.metricResolvedTsLagGauge.Set(float64(ctx.GlobalVars().PDPhyTs-resolvedPhyTs) / 1e3)
 	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
 
 	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
 	// It is more accurate to get tso from PD, but in most cases we have
 	// deployed NTP service, a little bias is acceptable here.
-	p.metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-checkpointPhyTs) / 1e3)
+	p.metricCheckpointTsLagGauge.Set(float64(ctx.GlobalVars().PDPhyTs-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 
 	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
