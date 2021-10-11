@@ -97,6 +97,8 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 		if err != nil {
 			return err
 		}
+		// `MaxMessageBytes` is set to `512 mb` by default, but it's still possible that a larger value expected.
+		// TiCDC should send the message at best.
 		if a > c.MaxMessageBytes {
 			c.MaxMessageBytes = a
 		}
