@@ -1,0 +1,18 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "./proto";
+
+message Record {
+    bytes start_ts  = 1;
+    bytes payload = 2;
+    int32 tid = 3;
+}
+
+message Request {
+    int32 max_tid = 1;
+}
+
+service TmpService {
+    rpc EventFeed(Request) returns(stream Record);
+}
