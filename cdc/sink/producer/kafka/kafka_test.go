@@ -80,7 +80,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 		c.Assert(err, check.IsNil)
 
 		c.Assert(cfg.PartitionNum, check.Equals, int32(1))
-		c.Assert(cfg.ReplicationFactor, check.Equals, 3)
+		c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
 		c.Assert(cfg.Version, check.Equals, "2.6.0")
 		c.Assert(cfg.MaxMessageBytes, check.Equals, 512*1024*1024)
 
