@@ -65,7 +65,7 @@ function run() {
 
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/InjectChangefeedDDLBlock=1*return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/InjectChangefeedDDLBlock=1*return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	# normal changefeed
 	run_cdc_cli changefeed create -c="changefeed-ddl-normal" --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal_cf_config.toml"
