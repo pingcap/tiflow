@@ -210,6 +210,12 @@ var (
 	ErrSendToClosedPipeline = errors.Normalize("pipeline is closed, cannot send message", errors.RFCCodeText("CDC:ErrSendToClosedPipeline"))
 	ErrPipelineTryAgain     = errors.Normalize("pipeline is full, please try again. Internal use only, report a bug if seen externally", errors.RFCCodeText("CDC:ErrPipelineTryAgain"))
 
+	// actor errors
+	ErrActorDuplicate = errors.Normalize("duplicated actor, already in use", errors.RFCCodeText("CDC:ErrActorDuplicate"))
+	ErrActorNotFound  = errors.Normalize("actor not found", errors.RFCCodeText("CDC:ErrActorNotFound"))
+	ErrActorStopped   = errors.Normalize("actor stopped", errors.RFCCodeText("CDC:ErrActorStopped"))
+	ErrMailboxFull    = errors.Normalize("mailbox is full, please try again. Internal use only, report a bug if seen externally", errors.RFCCodeText("CDC:ErrMailboxFull"))
+
 	// workerpool errors
 	ErrWorkerPoolHandleCancelled = errors.Normalize("workerpool handle is cancelled", errors.RFCCodeText("CDC:ErrWorkerPoolHandleCancelled"))
 	ErrAsyncPoolExited           = errors.Normalize("asyncPool has exited. Report a bug if seen externally.", errors.RFCCodeText("CDC:ErrAsyncPoolExited"))
