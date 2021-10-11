@@ -1324,10 +1324,7 @@ func (m *Key) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCraftBenchmark
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCraftBenchmark
 			}
 			if (iNdEx + skippy) > l {
@@ -1482,10 +1479,7 @@ func (m *Column) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCraftBenchmark
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCraftBenchmark
 			}
 			if (iNdEx + skippy) > l {
@@ -1604,10 +1598,7 @@ func (m *RowChanged) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCraftBenchmark
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCraftBenchmark
 			}
 			if (iNdEx + skippy) > l {
@@ -2026,10 +2017,7 @@ func (m *KeysColumnar) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCraftBenchmark
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCraftBenchmark
 			}
 			if (iNdEx + skippy) > l {
@@ -2366,10 +2354,7 @@ func (m *ColumnsColumnar) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCraftBenchmark
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCraftBenchmark
 			}
 			if (iNdEx + skippy) > l {
@@ -2488,10 +2473,7 @@ func (m *RowChangedColumnar) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthCraftBenchmark
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthCraftBenchmark
 			}
 			if (iNdEx + skippy) > l {
