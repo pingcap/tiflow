@@ -59,7 +59,7 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}"
 	fi
 
-	ensure 10 check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" ${changefeedid} "normal" "processor sync resolved injected error"
+	ensure 10 check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" ${changefeedid} "normal" "null"
 
 	for i in $(seq $DB_COUNT); do
 		check_table_exists "changefeed_auto_stop_$i.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -73,4 +73,7 @@ function run() {
 trap stop_tidb_cluster EXIT
 run $*
 check_logs $WORK_DIR
+# the "2" below is the log suffix
+# only cdc2.log contain the error log "processor sync..."
+check_logs_contains $WORK_DIR "processor sync resolved injected error" "2"
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
