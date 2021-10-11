@@ -52,9 +52,9 @@ function run() {
 		"resign_owner"
 	)
 
-	for case in $sequential_cases; do {
+	for case in ${sequential_cases[@]}; do
 		python $CUR/util/test_case.py "$case"
-	}; done
+	done
 
 	cleanup_process $CDC_BINARY
 }
