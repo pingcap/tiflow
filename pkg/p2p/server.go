@@ -156,7 +156,6 @@ func (m *MessageServer) run(ctx context.Context) error {
 				if task.done != nil {
 					close(task.done)
 				}
-				log.Debug("handler deregistered", zap.String("topic", task.topic))
 			case taskOnMessageBackFill:
 				for _, entry := range task.entries {
 					if err := m.handleMessage(ctx, entry.SenderID, entry.Entry); err != nil {
@@ -353,6 +352,7 @@ func (m *MessageServer) RemoveHandler(ctx context.Context, topic string) (chan s
 func (m *MessageServer) doRemoveHandler(topic string) {
 	if handler, ok := m.handlers[topic]; ok {
 		handler.poolHandle.Unregister()
+		log.Debug("handler deregistered", zap.String("topic", topic))
 	}
 	delete(m.handlers, topic)
 }
