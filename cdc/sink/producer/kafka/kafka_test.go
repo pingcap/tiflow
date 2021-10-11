@@ -69,13 +69,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	defer testleak.AfterTest(c)
 	cfg := NewKafkaConfig()
 
-	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
-		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
-	maxMessageSize := "4194304"
-	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
-
-	checker := func(uri string) {
+	checker := func(uri, maxMessageSize string) {
 		sinkURI, err := url.Parse(uri)
 		c.Assert(err, check.IsNil)
 
@@ -85,7 +79,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 		err = cfg.Initialize(sinkURI, replicaConfig, opts)
 		c.Assert(err, check.IsNil)
 
-		c.Assert(cfg.PartitionNum, check.Equals, 1)
+		c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 		c.Assert(cfg.ReplicationFactor, check.Equals, 3)
 		c.Assert(cfg.Version, check.Equals, "2.6.0")
 		c.Assert(cfg.MaxMessageBytes, check.Equals, 512*1024*1024)
@@ -100,11 +94,17 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 		}
 	}
 
-	checker(uri)
+	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
+		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
+	maxMessageSize := "4194304"
+	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
+
+	checker(uri, maxMessageSize)
 
 	maxMessageSize = "1000001"
 	uri = fmt.Sprintf(uriTemplate, maxMessageSize)
-	checker(uri)
+	checker(uri, maxMessageSize)
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
