@@ -72,18 +72,41 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	leader := sarama.NewMockBroker(c, 1)
 	defer leader.Close()
 	uriTemplate := "kafka://%s/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
-		"&max-message-bytes=4194304&partition-num=1" +
+		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr())
+	maxMessageSize := "4194304"
+	uri := fmt.Sprintf(uriTemplate, leader.Addr(), maxMessageSize)
 
-	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	checker := func(uri string) {
+		sinkURI, err := url.Parse(uri)
+		c.Assert(err, check.IsNil)
 
-	replicaConfig := config.GetDefaultReplicaConfig()
+		replicaConfig := config.GetDefaultReplicaConfig()
 
-	opts := make(map[string]string)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
-	c.Assert(err, check.IsNil)
+		opts := make(map[string]string)
+		err = cfg.Initialize(sinkURI, replicaConfig, opts)
+		c.Assert(err, check.IsNil)
+
+		c.Assert(cfg.PartitionNum, check.Equals, 1)
+		c.Assert(cfg.ReplicationFactor, check.Equals, 3)
+		c.Assert(cfg.Version, check.Equals, "2.6.0")
+		c.Assert(cfg.MaxMessageBytes, check.Equals, 512*1024*1024)
+
+		expectedOpts := map[string]string{
+			"max-message-bytes": maxMessageSize,
+			"max-batch-size":    "5",
+		}
+
+		for k, v := range opts {
+			c.Assert(v, check.Equals, expectedOpts[k])
+		}
+	}
+
+	checker(uri)
+
+	maxMessageSize = "1000001"
+	uri = fmt.Sprintf(uriTemplate, leader.Addr(), maxMessageSize)
+	checker(uri)
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
