@@ -9,7 +9,8 @@ TiCDC 集群由多个无状态节点构成，通过 PD 内部的 etcd 实现高�
 ## 系统组件
 
 - TiKV：只输出 kv change logs
-  - 内部逻辑拼装  kv change log
+
+  - 内部逻辑拼装 kv change log
   - 提供输出 kv change logs 的接口，发送数据包括实时 change logs 和增量扫的 change logs
 
 - Capture：TiCDC 运行进程，多个 capture 组成一个 TiCDC 集群，负责 kv change log 的同步
@@ -21,6 +22,7 @@ TiCDC 集群由多个无状态节点构成，通过 PD 内部的 etcd 实现高�
 
 - KV change log：TiKV 提供的隐藏大部分内部实现细节的的 row changed event
 - TiCDC open protocol：通过 MQ 对外提供的开放 TiCDC 协议，协议输出的 cdc log 具备以下两种处理能力
+
   - 按照 row 顺序更新目标系统
   - 还原等价事务逻辑同步到目标系统
 
@@ -71,6 +73,7 @@ TiKV 建立 TiCDC 链接后的行为分为两个阶段：
 接口返回的 Event 包含 4 种类型，分别是：
 
 - Entries：通常的 KV log event，对应的 log 类型有以下 6 种：
+
   - UNKNOWN：未知的 log 类型
   - PREWRITE：TiKV 在 2PC prewrite 阶段写入的数据
   - COMMITT，TiKV 在 2PC commit 阶段最后 commit 的数据
@@ -80,6 +83,7 @@ TiKV 建立 TiCDC 链接后的行为分为两个阶段：
 
 - Admin：目前 TiCDC 中不需要处理这种类型的 event
 - Error：接口出现错误是返回该类型 event，包括以下 3 种错误
+
   - errorpb.NotLeader
   - errorpb.RegionNotFound
   - errorpb.EpochNotMatch，region 分裂后通常会在已经建立的 gRPC stream 中返回此错误，TiCDC 遇到该错误时会重新扫描 kv range 获取新的 region 信息，并重新建立新的同步数据流。
@@ -102,6 +106,7 @@ Capture 运行过程中各组件需要持久化的数据，包括同步任务的
 Owner 维护全局的同步状态，会对集群的同步进行监控和适当的调度，owner 运行有以下逻辑：
 
 - table 同步调度
+
   - 调度 table 的同步任务，分发到某个节点或从某个节点删除
   - 维护运行的 processor 状态信息，对于异常节点进行清理
 
@@ -113,6 +118,7 @@ Owner 维护全局的同步状态，会对集群的同步进行监控和适当�
 当 capture watch etcd 发现有新分配的 changefeed 同步任务到自己节点上时，会创建一个新的 processor 来进行数据同步 ，每个 processor 运行有以下逻辑：
 
 - 建立 EventFeed gRPC stream 拉取 kv change event
+
   - processor 负责同步哪些表由 owner 调度，表的调度信息储存在 etcd 中
   - processor 创建时会读取被分配了哪些表进行同步，将这些表的 table id 按照 TiDB 内部的 key 编码逻辑进行编码得到一些需要拉取 kv change log 的 key range，processor 会综合 key range 和 region 分布信息创建多个 EventFeed gRPC stream。
   - processor 运行过程中也会监控同步信息，对于增加或删除的表调整 EventFeed gRPC stream。

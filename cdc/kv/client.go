@@ -988,6 +988,11 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 				zap.String("rpcCtx", errInfo.rpcCtx.String()),
 				zap.Stringer("error", compatibility))
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(compatibility)
+		} else if mismatch := innerErr.GetClusterIdMismatch(); mismatch != nil {
+			log.Error("tikv reported the request cluster ID mismatch error, which is not expected",
+				zap.Uint64("tikvCurrentClusterID", mismatch.Current),
+				zap.Uint64("requestClusterID", mismatch.Request))
+			return cerror.ErrClusterIDMismatch.GenWithStackByArgs(mismatch.Current, mismatch.Request)
 		} else {
 			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))

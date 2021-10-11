@@ -48,7 +48,7 @@ TiDB 实际上在汇报 GC safepoint 之前，会调用 delete range 删除因 d
 这里，分三个层面解释
 
 1. 在上述情况中，TiDB 如果获取到的 `safepoint = 100`，则 100 ~ 150 之间的数据不能通过 delete range 删除掉，但在下一轮 GC 的时候，系统返回最小 `safepoint = 150`，这时 100 ~ 150 之间的数据自然会被清除掉。因此，这种情况只是推迟了数据清除的时间，不影响正确性。
-2. 稍微修改一下上述场景，假设TiCDC 设置 `safepoint = 100`， TiDB 设置 `safepoint = 150`，在 TiDB 更新下次 GC safepoint 时，从系统中获取到的 `safepoint = 100`，仍然无法 delete range 删除 100 ~ 150 之间的数据。因此， 1 只是 2 的特殊情况而已。
+2. 稍微修改一下上述场景，假设 TiCDC 设置 `safepoint = 100`， TiDB 设置 `safepoint = 150`，在 TiDB 更新下次 GC safepoint 时，从系统中获取到的 `safepoint = 100`，仍然无法 delete range 删除 100 ~ 150 之间的数据。因此， 1 只是 2 的特殊情况而已。
 3. TiDB 在汇报 GC safepoint 之前，调用 delete range 删除数据，这本身违反了 safepoint 的定义，使得大于等于 safepoint 的数据也可能被删除，是一种不严谨的实现，这个实现在只有 TiDB 的时候可能没有问题，但随着其他组件也依赖 safepoint，维护其语义的正确性也变得重要了起来。因此，强烈建议将 GC 的流程改为先更新 safepoint 再 delete range。
 
 ### 兼容中心化 GC

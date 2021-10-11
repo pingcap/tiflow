@@ -15,7 +15,6 @@ package util
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -47,7 +46,7 @@ func IsDirAndWritable(path string) error {
 // IsDirWritable checks if a dir is writable, return error nil means it is writable
 func IsDirWritable(dir string) error {
 	f := filepath.Join(dir, ".writable.test")
-	if err := ioutil.WriteFile(f, []byte(""), 0o600); err != nil {
+	if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
 		return cerror.WrapError(cerror.ErrCheckDirWritable, err)
 	}
 	return cerror.WrapError(cerror.ErrCheckDirWritable, os.Remove(f))
@@ -56,11 +55,11 @@ func IsDirWritable(dir string) error {
 // IsDirReadWritable check if the dir is writable and readable by cdc server
 func IsDirReadWritable(dir string) error {
 	f := filepath.Join(dir, "file.test")
-	if err := ioutil.WriteFile(f, []byte(""), 0o600); err != nil {
+	if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
 		return cerror.WrapError(cerror.ErrCheckDirValid, err)
 	}
 
-	if _, err := ioutil.ReadFile(f); err != nil {
+	if _, err := os.ReadFile(f); err != nil {
 		return cerror.WrapError(cerror.ErrCheckDirValid, err)
 	}
 
@@ -85,7 +84,7 @@ func (d *DiskInfo) String() string {
 // the caller should guarantee that dir exist
 func GetDiskInfo(dir string) (*DiskInfo, error) {
 	f := filepath.Join(dir, "file.test")
-	if err := ioutil.WriteFile(f, []byte(""), 0o600); err != nil {
+	if err := os.WriteFile(f, []byte(""), 0o600); err != nil {
 		return nil, cerror.WrapError(cerror.ErrGetDiskInfo, err)
 	}
 

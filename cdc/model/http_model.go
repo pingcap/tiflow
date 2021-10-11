@@ -14,6 +14,7 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -63,6 +64,20 @@ type ChangefeedCommonInfo struct {
 	RunningError   *RunningError `json:"error"`
 }
 
+// MarshalJSON use to marshal ChangefeedCommonInfo
+func (c ChangefeedCommonInfo) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
+	type Alias ChangefeedCommonInfo
+	if c.FeedState == StateNormal {
+		c.RunningError = nil
+	}
+	return json.Marshal(struct {
+		Alias
+	}{
+		Alias: Alias(c),
+	})
+}
+
 // ChangefeedDetail holds detail info of a changefeed
 type ChangefeedDetail struct {
 	ID             string              `json:"id"`
@@ -78,6 +93,20 @@ type ChangefeedDetail struct {
 	ErrorHis       []int64             `json:"error_history"`
 	CreatorVersion string              `json:"creator_version"`
 	TaskStatus     []CaptureTaskStatus `json:"task_status"`
+}
+
+// MarshalJSON use to marshal ChangefeedDetail
+func (c ChangefeedDetail) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
+	type Alias ChangefeedDetail
+	if c.FeedState == StateNormal {
+		c.RunningError = nil
+	}
+	return json.Marshal(struct {
+		Alias
+	}{
+		Alias: Alias(c),
+	})
 }
 
 // ChangefeedConfig use to create a changefeed

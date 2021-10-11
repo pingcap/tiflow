@@ -161,6 +161,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrClusterIDMismatch"]
+error = '''
+cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
@@ -608,7 +613,7 @@ prepare avro failed
 
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
-prewrite not match, key: %b, start-ts: %d
+prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -679,6 +684,11 @@ s3 sink storage api
 ["CDC:ErrS3SinkWriteStorage"]
 error = '''
 write to storage
+'''
+
+["CDC:ErrS3StorageInitialize"]
+error = '''
+new s3 storage for redo log
 '''
 
 ["CDC:ErrScanLockFailed"]
@@ -833,7 +843,7 @@ unified sorter IO error. Make sure your sort-dir is configured correctly by pass
 
 ["CDC:ErrUnknownKVEventType"]
 error = '''
-unknown kv event type: %v, entry: %v
+unknown kv optype: %s, entry: %v
 '''
 
 ["CDC:ErrUnknownMetaType"]

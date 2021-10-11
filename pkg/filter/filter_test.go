@@ -17,55 +17,48 @@ import (
 	"testing"
 
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
+	"github.com/stretchr/testify/require"
 )
 
-type filterSuite struct{}
+func TestShouldUseDefaultRules(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&filterSuite{})
-
-func Test(t *testing.T) { check.TestingT(t) }
-
-func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
-	defer testleak.AfterTest(c)()
 	filter, err := NewFilter(config.GetDefaultReplicaConfig())
-	c.Assert(err, check.IsNil)
-	c.Assert(filter.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
-	c.Assert(filter.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
-	c.Assert(filter.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
-	c.Assert(filter.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsFalse)
-	c.Assert(filter.ShouldIgnoreTable("sns", "user"), check.IsFalse)
-	c.Assert(filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"), check.IsFalse)
+	require.Nil(t, err)
+	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
+	require.True(t, filter.ShouldIgnoreTable("information_schema", "statistics"))
+	require.True(t, filter.ShouldIgnoreTable("performance_schema", ""))
+	require.False(t, filter.ShouldIgnoreTable("metric_schema", "query_duration"))
+	require.False(t, filter.ShouldIgnoreTable("sns", "user"))
+	require.False(t, filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"))
 }
 
-func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldUseCustomRules(t *testing.T) {
+	t.Parallel()
+
 	filter, err := NewFilter(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
 		Cyclic: &config.CyclicConfig{Enable: true},
 	})
-	c.Assert(err, check.IsNil)
-	assertIgnore := func(db, tbl string, boolCheck check.Checker) {
-		c.Assert(filter.ShouldIgnoreTable(db, tbl), boolCheck)
-	}
-	assertIgnore("other", "", check.IsTrue)
-	assertIgnore("other", "what", check.IsTrue)
-	assertIgnore("sns", "", check.IsFalse)
-	assertIgnore("ecom", "order", check.IsFalse)
-	assertIgnore("ecom", "order", check.IsFalse)
-	assertIgnore("ecom", "test", check.IsTrue)
-	assertIgnore("sns", "log", check.IsTrue)
-	assertIgnore("information_schema", "", check.IsTrue)
-	assertIgnore("tidb_cdc", "repl_mark_a_a", check.IsFalse)
+	require.Nil(t, err)
+	require.True(t, filter.ShouldIgnoreTable("other", ""))
+	require.True(t, filter.ShouldIgnoreTable("other", "what"))
+	require.False(t, filter.ShouldIgnoreTable("sns", ""))
+	require.False(t, filter.ShouldIgnoreTable("ecom", "order"))
+	require.False(t, filter.ShouldIgnoreTable("ecom", "order"))
+	require.True(t, filter.ShouldIgnoreTable("ecom", "test"))
+	require.True(t, filter.ShouldIgnoreTable("sns", "log"))
+	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
+	require.False(t, filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"))
 }
 
-func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldIgnoreTxn(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		cases []struct {
 			schema string
@@ -118,30 +111,32 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 				Rules:            ftc.rules,
 			},
 		})
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		for _, tc := range ftc.cases {
-			c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
-			c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, model.ActionCreateTable, tc.schema, tc.table), check.Equals, tc.ignore)
+			require.Equal(t, filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), tc.ignore)
+			require.Equal(t, filter.ShouldIgnoreDDLEvent(tc.ts, model.ActionCreateTable, tc.schema, tc.table), tc.ignore)
 		}
 	}
 }
 
-func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldDiscardDDL(t *testing.T) {
+	t.Parallel()
+
 	config := &config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			DDLAllowlist: []model.ActionType{model.ActionAddForeignKey},
 		},
 	}
 	filter, err := NewFilter(config)
-	c.Assert(err, check.IsNil)
-	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSchema), check.IsFalse)
-	c.Assert(filter.ShouldDiscardDDL(model.ActionAddForeignKey), check.IsFalse)
-	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
+	require.Nil(t, err)
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropSchema))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionAddForeignKey))
+	require.True(t, filter.ShouldDiscardDDL(model.ActionCreateSequence))
 }
 
-func (s *filterSuite) TestShouldIgnoreDDL(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldIgnoreDDL(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		cases []struct {
 			schema  string
@@ -189,9 +184,9 @@ func (s *filterSuite) TestShouldIgnoreDDL(c *check.C) {
 				Rules:            ftc.rules,
 			},
 		})
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		for _, tc := range ftc.cases {
-			c.Assert(filter.ShouldIgnoreDDLEvent(1, tc.ddlType, tc.schema, tc.table), check.Equals, tc.ignore, check.Commentf("%#v", tc))
+			require.Equal(t, filter.ShouldIgnoreDDLEvent(1, tc.ddlType, tc.schema, tc.table), tc.ignore, "%#v", tc)
 		}
 	}
 }
