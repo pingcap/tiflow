@@ -257,7 +257,7 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 		c.Check(err, check.IsNil)
 	}
 
-	// one message per batch, and can be build, which means can be sent to producer.
+	// one message per batch, and can be build, which means the producer will try to send it.
 	messages := encoder.Build()
 	c.Assert(len(messages), check.Equals, 100)
 
