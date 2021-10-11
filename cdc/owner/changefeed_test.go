@@ -103,8 +103,7 @@ func (m *mockAsyncSink) Barrier(ctx context.Context) error {
 
 var _ = check.Suite(&changefeedSuite{})
 
-type changefeedSuite struct {
-}
+type changefeedSuite struct{}
 
 func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *model.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester) {
