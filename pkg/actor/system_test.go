@@ -488,8 +488,18 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 		t.Fatal("timeout")
 	case <-ch:
 	}
-	err := router.Send(id, message.TickMessage())
-	require.True(t, strings.Contains(err.Error(), "actor not found"))
+
+	for i := 0; i < 50; i++ {
+		// Wait for actor to be removed.
+		time.Sleep(100 * time.Millisecond)
+		err := router.Send(id, message.TickMessage())
+		if strings.Contains(err.Error(), "actor not found") {
+			break
+		}
+		if i == 49 {
+			t.Fatal("actor is still in router")
+		}
+	}
 
 	wait(t, time.Second, func() {
 		err := sys.Stop()
