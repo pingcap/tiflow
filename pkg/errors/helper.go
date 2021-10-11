@@ -81,7 +81,7 @@ var BadRequestError = []*errors.Error{
 	ErrFilterRuleInvalid, ErrChangefeedUpdateRefused,
 }
 
-func IsBadRequestError(err error) bool {
+func IsHTTPBadRequestError(err error) bool {
 	if err == nil {
 		return false
 	}

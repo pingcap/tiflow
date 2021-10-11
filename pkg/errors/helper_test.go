@@ -67,7 +67,9 @@ func TestIsRetryableError(t *testing.T) {
 
 func TestIsBadRequestError(t *testing.T) {
 	err := ErrAPIInvalidParam.GenWithStack("aa")
-	require.Equal(t, true, IsBadRequestError(err))
+	require.Equal(t, true, IsHTTPBadRequestError(err))
 	err = ErrPDEtcdAPIError.GenWithStack("aa")
-	require.Equal(t, false, IsBadRequestError(err))
+	require.Equal(t, false, IsHTTPBadRequestError(err))
+	err = nil
+	require.Equal(t, false, IsHTTPBadRequestError(err))
 }

@@ -20,6 +20,10 @@ import (
 	"net/http/pprof"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/capture"
@@ -41,6 +45,7 @@ func newRouter(capture2 *capture.Capture) *gin.Engine {
 	router.Use(logMiddleware())
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
+	router.Use(errorHandleMiddleware())
 
 	captureHandler := capture.NewHTTPHandler(capture2)
 
@@ -139,8 +144,28 @@ func logMiddleware() gin.HandlerFunc {
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user-agent", c.Request.UserAgent()),
-			zap.String("errors", c.Errors.String()),
+			zap.String("errors", errors.Trace(c.Errors.Last().Err).Error()),
 			zap.Duration("cost", cost),
 		)
+	}
+}
+
+func errorHandleMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+		// because we will return immediately after an error occurs in http_handler
+		// there wil be only one error in c.Errors
+		lastError := c.Errors.Last()
+		if lastError != nil {
+			err := lastError.Err
+			// put the error into response
+			if cerror.IsHTTPBadRequestError(err) {
+				c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+			} else {
+				c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+			}
+			c.Abort()
+			return
+		}
 	}
 }
