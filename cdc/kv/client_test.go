@@ -58,8 +58,7 @@ func Test(t *testing.T) {
 	check.TestingT(t)
 }
 
-type clientSuite struct {
-}
+type clientSuite struct{}
 
 var _ = check.Suite(&clientSuite{})
 
