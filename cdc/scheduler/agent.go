@@ -29,7 +29,7 @@ import (
 
 const (
 	// TODO add a config
-	defaultSendCheckpointInterval = time.Second * 1
+	defaultSendCheckpointInterval = time.Millisecond * 200
 )
 
 type Agent interface {
