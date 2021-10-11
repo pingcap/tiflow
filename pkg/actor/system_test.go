@@ -56,12 +56,12 @@ func TestSystemBuilder(t *testing.T) {
 	b.WorkerNumber(2)
 	require.Equal(t, 2, b.numWorker)
 
-	require.Greater(t, 0, b.actorBatchSize)
-	require.Greater(t, 0, b.msgBatchSizePerActor)
+	require.Greater(t, b.actorBatchSize, 0)
+	require.Greater(t, b.msgBatchSizePerActor, 0)
 
 	b.Throughput(0, 0)
-	require.Greater(t, 0, b.actorBatchSize)
-	require.Greater(t, 0, b.msgBatchSizePerActor)
+	require.Greater(t, b.actorBatchSize, 0)
+	require.Greater(t, b.msgBatchSizePerActor, 0)
 
 	b.Throughput(7, 8)
 	require.Equal(t, 7, b.actorBatchSize)
