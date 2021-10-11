@@ -70,6 +70,8 @@ type MQMessage struct {
 const maximumRecordOverhead = 5*binary.MaxVarintLen32 + binary.MaxVarintLen64 + 1
 
 // Length returns the expected size of the Kafka message
+// We didn't append any `Headers` when send the message, so ignore the calculations related to it.
+// If `ProducerMessage` Headers fields used, this method should also adjust.
 func (m *MQMessage) Length() int {
 	return len(m.Key) + len(m.Value) + maximumRecordOverhead
 }
