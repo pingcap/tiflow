@@ -15,6 +15,8 @@ package kafka
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -60,6 +63,27 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 			c.Assert(id, check.Equals, tc.expected)
 		}
 	}
+}
+
+func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
+	defer testleak.AfterTest(c)
+	cfg := NewKafkaConfig()
+
+	leader := sarama.NewMockBroker(c, 1)
+	defer leader.Close()
+	uriTemplate := "kafka://%s/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
+		"&max-message-bytes=4194304&partition-num=1" +
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
+	uri := fmt.Sprintf(uriTemplate, leader.Addr())
+
+	sinkURI, err := url.Parse(uri)
+	c.Assert(err, check.IsNil)
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+
+	opts := make(map[string]string)
+	err = cfg.Initialize(sinkURI, replicaConfig, opts)
+	c.Assert(err, check.IsNil)
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
