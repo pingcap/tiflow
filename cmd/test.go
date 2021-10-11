@@ -32,8 +32,7 @@ func init() {
 	testKVCmd.Flags().StringVar(&testPdAddr, "pd", "http://127.0.0.1:2379", "address of PD")
 }
 
-type testingT struct {
-}
+type testingT struct{}
 
 // Errorf implements require.TestingT
 func (t *testingT) Errorf(format string, args ...interface{}) {

@@ -25,8 +25,7 @@ import (
 
 func Test(t *testing.T) { check.TestingT(t) }
 
-type codecSuite struct {
-}
+type codecSuite struct{}
 
 var _ = check.Suite(&codecSuite{})
 
@@ -43,8 +42,7 @@ func (s *codecSuite) TestDecodeRecordKey(c *check.C) {
 	c.Assert(len(key), check.Equals, 0)
 }
 
-type decodeMetaKeySuite struct {
-}
+type decodeMetaKeySuite struct{}
 
 var _ = check.Suite(&decodeMetaKeySuite{})
 

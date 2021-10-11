@@ -23,8 +23,7 @@ import (
 	"go.etcd.io/etcd/clientv3"
 )
 
-type clientSuite struct {
-}
+type clientSuite struct{}
 
 var _ = check.Suite(&clientSuite{})
 
