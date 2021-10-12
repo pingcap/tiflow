@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -47,14 +48,20 @@ type sorterNode struct {
 
 	wg     errgroup.Group
 	cancel context.CancelFunc
+
+	resolvedTs model.Ts
 }
 
-func newSorterNode(tableName string, tableID model.TableID, flowController tableFlowController, mounter entry.Mounter) pipeline.Node {
+func newSorterNode(
+	tableName string, tableID model.TableID, startTs model.Ts,
+	flowController tableFlowController, mounter entry.Mounter,
+) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
 		tableID:        tableID,
 		flowController: flowController,
 		mounter:        mounter,
+		resolvedTs:     startTs,
 	}
 }
 
@@ -190,6 +197,10 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	msg := ctx.Message()
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
+		rawKV := msg.PolymorphicEvent.RawKV
+		if rawKV.OpType == model.OpTypeResolved {
+			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
+		}
 		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
 	default:
 		ctx.SendToNextNode(msg)
@@ -201,4 +212,8 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
 	return n.wg.Wait()
+}
+
+func (n *sorterNode) ResolvedTs() model.Ts {
+	return atomic.LoadUint64(&n.resolvedTs)
 }

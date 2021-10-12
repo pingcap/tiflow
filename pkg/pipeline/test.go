@@ -20,7 +20,7 @@ import "github.com/pingcap/ticdc/pkg/context"
 // Only `Node.Receive` will be called, other functions in `Node` will never be called.
 // When the `Receive` function of the `Node` returns an error, this function will return the message that caused the error and the error
 func SendMessageToNode4Test(ctx context.Context, node Node, msgs []Message, outputCh chan Message) (Message, error) {
-	nodeCtx := newNodeContext(ctx, Message{}, outputCh)
+	nodeCtx := NewNodeContext(ctx, Message{}, outputCh)
 	for _, msg := range msgs {
 		err := node.Receive(withMessage(nodeCtx, msg))
 		if err != nil {
@@ -32,5 +32,5 @@ func SendMessageToNode4Test(ctx context.Context, node Node, msgs []Message, outp
 
 // MockNodeContext4Test creates a node context with a message and a output channel for tests.
 func MockNodeContext4Test(ctx context.Context, msg Message, outputCh chan Message) NodeContext {
-	return newNodeContext(ctx, msg, outputCh)
+	return NewNodeContext(ctx, msg, outputCh)
 }
