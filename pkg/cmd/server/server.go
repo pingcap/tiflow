@@ -67,6 +67,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().Int64Var(&o.serverConfig.GcTTL, "gc-ttl", o.serverConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	cmd.Flags().StringVar(&o.serverConfig.LogFile, "log-file", o.serverConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&o.serverConfig.LogLevel, "log-level", o.serverConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().BoolVar(&o.serverConfig.LogHTTP, "log-http", o.serverConfig.LogHTTP, "turn on http api request log output")
 	cmd.Flags().StringVar(&o.serverConfig.DataDir, "data-dir", o.serverConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(o.serverConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(o.serverConfig.ProcessorFlushInterval), "processor flushes task status interval")
@@ -171,6 +172,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.LogFile = o.serverConfig.LogFile
 		case "log-level":
 			cfg.LogLevel = o.serverConfig.LogLevel
+		case "log-http":
+			cfg.LogHTTP = o.serverConfig.LogHTTP
 		case "data-dir":
 			cfg.DataDir = o.serverConfig.DataDir
 		case "owner-flush-interval":

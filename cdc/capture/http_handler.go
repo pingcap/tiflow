@@ -473,12 +473,12 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 	}{}
 	err = c.BindJSON(&data)
 	if err != nil {
-		c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
 	}
 
 	if err := model.ValidateChangefeedID(data.CaptureID); err != nil {
-		c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", data.CaptureID))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", data.CaptureID))
 		return
 	}
 

@@ -38,7 +38,9 @@ import (
 )
 
 func (s *Server) startStatusHTTP() error {
-	router := newRouter(s.capture)
+	conf := config.GetGlobalServerConfig()
+
+	router := newRouter(s.capture, conf)
 
 	router.GET("/status", gin.WrapF(s.handleStatus))
 	router.GET("/debug/info", gin.WrapF(s.handleDebugInfo))
@@ -57,7 +59,6 @@ func (s *Server) startStatusHTTP() error {
 	prometheus.DefaultGatherer = registry
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
-	conf := config.GetGlobalServerConfig()
 	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))

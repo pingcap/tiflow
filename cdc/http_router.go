@@ -20,6 +20,8 @@ import (
 	"net/http/pprof"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -36,13 +38,14 @@ import (
 )
 
 // newRouter create a router for OpenAPI
-func newRouter(capture2 *capture.Capture) *gin.Engine {
+func newRouter(capture2 *capture.Capture, conf *config.ServerConfig) *gin.Engine {
 	// discard gin default log output
 	gin.DefaultWriter = io.Discard
 
 	router := gin.New()
-
-	router.Use(logMiddleware())
+	if conf.LogHTTP {
+		router.Use(logMiddleware())
+	}
 	// request will timeout after 10 second
 	router.Use(timeoutMiddleware(time.Second * 10))
 	router.Use(errorHandleMiddleware())
@@ -137,6 +140,13 @@ func logMiddleware() gin.HandlerFunc {
 		c.Next()
 
 		cost := time.Since(start)
+
+		var errMessage string
+		err := c.Errors.Last()
+		if err != nil {
+			errMessage = errors.Trace(c.Errors.Last().Err).Error()
+		}
+
 		log.Info(path,
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
@@ -144,7 +154,7 @@ func logMiddleware() gin.HandlerFunc {
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user-agent", c.Request.UserAgent()),
-			zap.String("errors", errors.Trace(c.Errors.Last().Err).Error()),
+			zap.String("errors", errMessage),
 			zap.Duration("cost", cost),
 		)
 	}

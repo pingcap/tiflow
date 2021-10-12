@@ -160,6 +160,7 @@ var defaultServerConfig = &ServerConfig{
 	AdvertiseAddr: "",
 	LogFile:       "",
 	LogLevel:      "info",
+	LogHTTP:       true,
 	Log: &LogConfig{
 		File: &LogFileConfig{
 			MaxSize:    300,
@@ -201,6 +202,7 @@ type ServerConfig struct {
 
 	LogFile  string     `toml:"log-file" json:"log-file"`
 	LogLevel string     `toml:"log-level" json:"log-level"`
+	LogHTTP  bool       `toml:"log-http"  json:"log_http""`
 	Log      *LogConfig `toml:"log" json:"log"`
 
 	DataDir string `toml:"data-dir" json:"data-dir"`
