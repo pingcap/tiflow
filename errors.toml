@@ -6,6 +6,21 @@ error = '''
 invalid api parameter
 '''
 
+["CDC:ErrActorDuplicate"]
+error = '''
+duplicated actor, already in use
+'''
+
+["CDC:ErrActorNotFound"]
+error = '''
+actor not found
+'''
+
+["CDC:ErrActorStopped"]
+error = '''
+actor stopped
+'''
+
 ["CDC:ErrAdminStopProcessor"]
 error = '''
 stop processor by admin command
@@ -431,6 +446,11 @@ error = '''
 locate region by id
 '''
 
+["CDC:ErrMailboxFull"]
+error = '''
+mailbox is full, please try again. Internal use only, report a bug if seen externally
+'''
+
 ["CDC:ErrMarshalFailed"]
 error = '''
 marshal failed
@@ -593,7 +613,7 @@ prepare avro failed
 
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
-prewrite not match, key: %b, start-ts: %d
+prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -823,7 +843,7 @@ unified sorter IO error. Make sure your sort-dir is configured correctly by pass
 
 ["CDC:ErrUnknownKVEventType"]
 error = '''
-unknown kv event type: %v, entry: %v
+unknown kv optype: %s, entry: %v
 '''
 
 ["CDC:ErrUnknownMetaType"]
