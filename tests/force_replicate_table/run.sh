@@ -75,7 +75,7 @@ function run() {
 	# data could be duplicated due to https://github.com/pingcap/ticdc/issues/964,
 	# so we just check downstream contains all data in upstream.
 	for i in $(seq 0 6); do
-		ensure 5 check_data_subset "force_replicate_table.t$i" \
+		ensure 30 check_data_subset "force_replicate_table.t$i" \
 			${UP_TIDB_HOST} ${UP_TIDB_PORT} ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
 	cleanup_process $CDC_BINARY
