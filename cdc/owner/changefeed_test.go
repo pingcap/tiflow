@@ -217,6 +217,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+		NewSchedDisabled: true,
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test",

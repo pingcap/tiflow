@@ -17,7 +17,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/scheduler"
+	schedulerv2 "github.com/pingcap/ticdc/cdc/scheduler"
 	"github.com/pingcap/ticdc/pkg/context"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/p2p"
@@ -25,7 +25,7 @@ import (
 )
 
 type schedulerV2 struct {
-	*scheduler.BaseScheduleDispatcher
+	*schedulerv2.BaseScheduleDispatcher
 
 	changeFeedID  model.ChangeFeedID
 	handlerErrChs []<-chan error
@@ -36,7 +36,7 @@ func NewSchedulerV2(ctx context.Context, changeFeedID model.ChangeFeedID, checkp
 	ret := &schedulerV2{
 		changeFeedID: changeFeedID,
 	}
-	ret.BaseScheduleDispatcher = scheduler.NewBaseScheduleDispatcher(changeFeedID, ret, checkpointTs)
+	ret.BaseScheduleDispatcher = schedulerv2.NewBaseScheduleDispatcher(changeFeedID, ret, checkpointTs)
 	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
 		return nil, err
 	}
@@ -69,8 +69,8 @@ func (s *schedulerV2) DispatchTable(
 		return false, nil
 	}
 
-	topic := scheduler.DispatchTableTopic(changeFeedID)
-	message := &scheduler.DispatchTableMessage{
+	topic := schedulerv2.DispatchTableTopic(changeFeedID)
+	message := &schedulerv2.DispatchTableMessage{
 		OwnerRev:   ctx.GlobalVars().OwnerRev,
 		ID:         tableID,
 		IsDelete:   isDelete,
@@ -102,8 +102,8 @@ func (s *schedulerV2) Announce(
 		return false, nil
 	}
 
-	topic := scheduler.AnnounceTopic(changeFeedID)
-	message := &scheduler.AnnounceMessage{OwnerRev: ctx.GlobalVars().OwnerRev}
+	topic := schedulerv2.AnnounceTopic(changeFeedID)
+	message := &schedulerv2.AnnounceMessage{OwnerRev: ctx.GlobalVars().OwnerRev}
 
 	_, err := client.TrySendMessage(ctx, topic, message)
 	if err != nil {
@@ -145,10 +145,10 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 
 	errCh, err := ctx.GlobalVars().MessageServer.MustAddHandler(
 		ctx,
-		string(scheduler.DispatchTableResponseTopic(s.changeFeedID)),
-		&scheduler.DispatchTableResponseMessage{},
+		string(schedulerv2.DispatchTableResponseTopic(s.changeFeedID)),
+		&schedulerv2.DispatchTableResponseMessage{},
 		func(sender string, messageI interface{}) error {
-			message := messageI.(*scheduler.DispatchTableResponseMessage)
+			message := messageI.(*schedulerv2.DispatchTableResponseMessage)
 			s.OnAgentFinishedTableOperation(sender, message.ID)
 			return nil
 		})
@@ -159,10 +159,10 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 
 	errCh, err = ctx.GlobalVars().MessageServer.MustAddHandler(
 		ctx,
-		string(scheduler.SyncTopic(s.changeFeedID)),
-		&scheduler.SyncMessage{},
+		string(schedulerv2.SyncTopic(s.changeFeedID)),
+		&schedulerv2.SyncMessage{},
 		func(sender string, messageI interface{}) error {
-			message := messageI.(*scheduler.SyncMessage)
+			message := messageI.(*schedulerv2.SyncMessage)
 			s.OnAgentSyncTaskStatuses(
 				sender,
 				message.Running,
@@ -177,10 +177,10 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 
 	errCh, err = ctx.GlobalVars().MessageServer.MustAddHandler(
 		ctx,
-		scheduler.CheckpointTopic(s.changeFeedID),
-		&scheduler.CheckpointMessage{},
+		schedulerv2.CheckpointTopic(s.changeFeedID),
+		&schedulerv2.CheckpointMessage{},
 		func(sender string, messageI interface{}) error {
-			message := messageI.(*scheduler.CheckpointMessage)
+			message := messageI.(*schedulerv2.CheckpointMessage)
 			s.OnAgentCheckpoint(sender, message.CheckpointTs, message.ResolvedTs)
 			return nil
 		})
@@ -195,21 +195,21 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 func (s *schedulerV2) deregisterPeerMessageHandlers(ctx context.Context) {
 	err := ctx.GlobalVars().MessageServer.MustRemoveHandler(
 		ctx,
-		scheduler.DispatchTableResponseTopic(s.changeFeedID))
+		schedulerv2.DispatchTableResponseTopic(s.changeFeedID))
 	if err != nil {
 		log.Error("failed to remove peer message handler", zap.Error(err))
 	}
 
 	err = ctx.GlobalVars().MessageServer.MustRemoveHandler(
 		ctx,
-		scheduler.SyncTopic(s.changeFeedID))
+		schedulerv2.SyncTopic(s.changeFeedID))
 	if err != nil {
 		log.Error("failed to remove peer message handler", zap.Error(err))
 	}
 
 	err = ctx.GlobalVars().MessageServer.MustRemoveHandler(
 		ctx,
-		scheduler.CheckpointTopic(s.changeFeedID))
+		schedulerv2.CheckpointTopic(s.changeFeedID))
 	if err != nil {
 		log.Error("failed to remove peer message handler", zap.Error(err))
 	}

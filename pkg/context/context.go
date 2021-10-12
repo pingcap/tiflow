@@ -35,13 +35,15 @@ import (
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-	PDClient      pd.Client
-	KVStorage     tidbkv.Storage
-	CaptureInfo   *model.CaptureInfo
-	EtcdClient    *kv.CDCEtcdClient
-	GrpcPool      kv.GrpcPool
-	MessageRouter p2p.MessageRouter
-	MessageServer *p2p.MessageServer
+	PDClient    pd.Client
+	KVStorage   tidbkv.Storage
+	CaptureInfo *model.CaptureInfo
+	EtcdClient  *kv.CDCEtcdClient
+	GrpcPool    kv.GrpcPool
+
+	NewSchedDisabled bool
+	MessageRouter    p2p.MessageRouter
+	MessageServer    *p2p.MessageServer
 	// If this node has been elected the owner,
 	// OwnerRev stores a non-zero integer larger
 	// than the OwnerRev assigned for any previous owner.
@@ -192,6 +194,7 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+		NewSchedDisabled: true,
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{

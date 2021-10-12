@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
+	schedulerv2 "github.com/pingcap/ticdc/cdc/scheduler"
 	cdcContext "github.com/pingcap/ticdc/pkg/context"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/txnutil/gc"
@@ -37,6 +38,7 @@ type changefeed struct {
 	id    model.ChangeFeedID
 	state *model.ChangefeedReactorState
 
+	oldScheduler     *scheduler // Deprecated
 	scheduler        *schedulerV2
 	barriers         *barriers
 	feedStateManager *feedStateManager
@@ -97,13 +99,18 @@ func newChangefeed4Test(
 }
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
-	if c.scheduler == nil {
-		var err error
-		c.scheduler, err = NewSchedulerV2(ctx, c.id, state.Info.GetCheckpointTs(state.Status))
-		if err != nil {
-			return errors.Trace(err)
+	if !ctx.GlobalVars().NewSchedDisabled {
+		if c.scheduler == nil {
+			var err error
+			c.scheduler, err = NewSchedulerV2(ctx, c.id, state.Info.GetCheckpointTs(state.Status))
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
+	} else if c.oldScheduler == nil {
+		c.oldScheduler = newScheduler()
 	}
+
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- errors.Trace(err)
 		return nil
@@ -117,7 +124,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
-		c.feedStateManager.HandleError(&model.RunningError{
+		c.feedStateManager.handleError(&model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    code,
 			Message: err.Error(),
@@ -150,7 +157,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		return errors.Trace(err)
 	}
 
-	if !c.preflightCheck(captures) {
+	if !c.preflightCheck(ctx, captures) {
 		return nil
 	}
 	if err := c.initialize(ctx); err != nil {
@@ -174,41 +181,52 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		// So we return here.
 		return nil
 	}
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if newCheckpointTs > 0 {
-		if barrierTs < newResolvedTs {
-			newResolvedTs = barrierTs
-		}
-		if barrierTs < newCheckpointTs {
-			newCheckpointTs = barrierTs
-		}
-		log.Debug("uploading watermarks to Etcd",
-			zap.Uint64("barrier-ts", barrierTs),
-			zap.Uint64("resolved-ts", newResolvedTs),
-			zap.Uint64("checkpoint-ts", newCheckpointTs))
-		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-			changed := false
-			if status.ResolvedTs != newResolvedTs {
-				status.ResolvedTs = newResolvedTs
-				changed = true
-			}
-			if status.CheckpointTs != newCheckpointTs {
-				status.CheckpointTs = newCheckpointTs
-				changed = true
-			}
-			return status, changed, nil
-		})
-	}
 
-	if c.state.Status != nil {
-		phyTs := oracle.ExtractPhysical(c.state.Status.CheckpointTs)
-		c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
-		// It is more accurate to get tso from PD, but in most cases since we have
-		// deployed NTP service, a little bias is acceptable here.
-		c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+	if ctx.GlobalVars().NewSchedDisabled {
+		shouldUpdateState, err := c.oldScheduler.Tick(c.state, c.schema.AllPhysicalTables(), captures)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if shouldUpdateState {
+			c.updateStatus(barrierTs)
+		}
+	} else {
+		newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
+			if barrierTs < newResolvedTs {
+				newResolvedTs = barrierTs
+			}
+			if barrierTs < newCheckpointTs {
+				newCheckpointTs = barrierTs
+			}
+			log.Debug("uploading watermarks to Etcd",
+				zap.Uint64("barrier-ts", barrierTs),
+				zap.Uint64("resolved-ts", newResolvedTs),
+				zap.Uint64("checkpoint-ts", newCheckpointTs))
+			c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+				changed := false
+				if status.ResolvedTs != newResolvedTs {
+					status.ResolvedTs = newResolvedTs
+					changed = true
+				}
+				if status.CheckpointTs != newCheckpointTs {
+					status.CheckpointTs = newCheckpointTs
+					changed = true
+				}
+				return status, changed, nil
+			})
+		}
+
+		if c.state.Status != nil {
+			phyTs := oracle.ExtractPhysical(c.state.Status.CheckpointTs)
+			c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
+			// It is more accurate to get tso from PD, but in most cases since we have
+			// deployed NTP service, a little bias is acceptable here.
+			c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+		}
 	}
 	return nil
 }
@@ -311,8 +329,11 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	c.scheduler.Close(ctx)
-	c.scheduler = nil
+
+	if !ctx.GlobalVars().NewSchedDisabled {
+		c.scheduler.Close(ctx)
+		c.scheduler = nil
+	}
 
 	ctx1, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -331,7 +352,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 // preflightCheck makes sure that the metadata in Etcd is complete enough to run the tick.
 // If the metadata is not complete, such as when the ChangeFeedStatus is nil,
 // this function will reconstruct the lost metadata and skip this tick.
-func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureInfo) (ok bool) {
+func (c *changefeed) preflightCheck(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) (ok bool) {
 	ok = true
 	if c.state.Status == nil {
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -360,12 +381,24 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			ok = false
 		}
 	}
+
 	for captureID := range c.state.TaskStatuses {
 		if _, exist := captures[captureID]; !exist {
 			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 				return nil, status != nil, nil
 			})
 			ok = false
+		}
+	}
+
+	if ctx.GlobalVars().NewSchedDisabled {
+		for captureID := range c.state.TaskPositions {
+			if _, exist := captures[captureID]; !exist {
+				c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+					return nil, position != nil, nil
+				})
+				ok = false
+			}
 		}
 	}
 
@@ -461,6 +494,49 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		c.ddlEventCache = nil
 	}
 	return done, nil
+}
+
+// updateStatus is used to support dispatching tables via
+// the lagacy Etcd mode.
+// Deprecated.
+func (c *changefeed) updateStatus(barrierTs model.Ts) {
+	resolvedTs := barrierTs
+	for _, position := range c.state.TaskPositions {
+		if resolvedTs > position.ResolvedTs {
+			resolvedTs = position.ResolvedTs
+		}
+	}
+	for _, taskStatus := range c.state.TaskStatuses {
+		for _, opt := range taskStatus.Operation {
+			if resolvedTs > opt.BoundaryTs {
+				resolvedTs = opt.BoundaryTs
+			}
+		}
+	}
+	checkpointTs := resolvedTs
+	for _, position := range c.state.TaskPositions {
+		if checkpointTs > position.CheckPointTs {
+			checkpointTs = position.CheckPointTs
+		}
+	}
+	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		changed := false
+		if status.ResolvedTs != resolvedTs {
+			status.ResolvedTs = resolvedTs
+			changed = true
+		}
+		if status.CheckpointTs != checkpointTs {
+			status.CheckpointTs = checkpointTs
+			changed = true
+		}
+		return status, changed, nil
+	})
+
+	phyTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyTs))
+	// It is more accurate to get tso from PD, but in most cases since we have
+	// deployed NTP service, a little bias is acceptable here.
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
