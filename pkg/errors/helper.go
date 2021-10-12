@@ -15,6 +15,7 @@ package errors
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pingcap/errors"
 )
@@ -78,7 +79,8 @@ func IsRetryableError(err error) bool {
 var BadRequestError = []*errors.Error{
 	ErrAPIInvalidParam, ErrSinkURIInvalid, ErrStartTsBeforeGC,
 	ErrChangeFeedNotExists, ErrTargetTsBeforeStartTs, ErrTableIneligible,
-	ErrFilterRuleInvalid, ErrChangefeedUpdateRefused,
+	ErrFilterRuleInvalid, ErrChangefeedUpdateRefused, ErrMySQLConnectionError,
+	ErrMySQLInvalidConfig,
 }
 
 func IsHTTPBadRequestError(err error) bool {
@@ -87,6 +89,15 @@ func IsHTTPBadRequestError(err error) bool {
 	}
 	for _, e := range BadRequestError {
 		if e.Equal(err) {
+			return true
+		}
+
+		rfcCode, ok := RFCCode(err)
+		if ok && e.RFCCode() == rfcCode {
+			return true
+		}
+
+		if strings.Contains(err.Error(), string(e.RFCCode())) {
 			return true
 		}
 	}

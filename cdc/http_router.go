@@ -20,15 +20,12 @@ import (
 	"net/http/pprof"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/capture"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
@@ -141,10 +138,10 @@ func logMiddleware() gin.HandlerFunc {
 
 		cost := time.Since(start)
 
-		var errMessage string
 		err := c.Errors.Last()
+		var inErr error
 		if err != nil {
-			errMessage = errors.Trace(c.Errors.Last().Err).Error()
+			inErr = err.Err
 		}
 
 		log.Info(path,
@@ -154,7 +151,7 @@ func logMiddleware() gin.HandlerFunc {
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user-agent", c.Request.UserAgent()),
-			zap.String("errors", errMessage),
+			zap.Error(inErr),
 			zap.Duration("cost", cost),
 		)
 	}
