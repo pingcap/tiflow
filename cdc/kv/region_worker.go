@@ -233,7 +233,7 @@ func (w *regionWorker) checkShouldExit() error {
 	// If there is not region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
 	if empty {
-		w.cancelStream(0)
+		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
 	return nil
@@ -288,7 +288,9 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 	// resource in this region worker by accident.
 	retErr := w.checkShouldExit()
 
-	if err == cerror.ErrPrewriteNotMatch {
+	// `ErrPrewriteNotMatch` would cause duplicated request to the same region,
+	// so cancel the original gRPC stream before restarts a new stream.
+	if errors.Cause(err) == cerror.ErrPrewriteNotMatch {
 		w.cancelStream(time.Second)
 	}
 
