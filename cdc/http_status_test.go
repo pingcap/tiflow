@@ -16,7 +16,7 @@ package cdc
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -41,7 +41,7 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 	for i := 0; i < retryTime; i++ {
 		resp, err := http.Get(statusURL)
 		if err == nil {
-			_, err := ioutil.ReadAll(resp.Body)
+			_, err := io.ReadAll(resp.Body)
 			c.Assert(err, check.IsNil)
 			resp.Body.Close()
 			return
@@ -82,7 +82,7 @@ func testPprof(c *check.C) {
 		c.Assert(err, check.IsNil)
 		defer resp.Body.Close()
 		c.Assert(resp.StatusCode, check.Equals, 200)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		c.Assert(err, check.IsNil)
 	}
 	testValidPprof(fmt.Sprintf("http://%s/debug/pprof", advertiseAddr4Test))
@@ -119,7 +119,7 @@ func testHandleChangefeedQuery(c *check.C) {
 func testRequestNonOwnerFailed(c *check.C, uri string) {
 	resp, err := http.PostForm(uri, url.Values{})
 	c.Assert(err, check.IsNil)
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)

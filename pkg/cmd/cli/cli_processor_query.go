@@ -88,6 +88,7 @@ func newCmdQueryProcessor(f factory.Factory) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query",
 		Short: "Query information and status of a sub replication task (processor)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {

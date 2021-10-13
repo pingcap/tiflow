@@ -82,7 +82,7 @@ func ParseLogFileName(name string) (uint64, string, error) {
 
 	var commitTs, d1 uint64
 	var s1, s2, fileType string
-	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
+	// the log looks like: fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
 	formatStr := "%s %s %d %s %d" + LogEXT
 	if ext == TmpEXT {
 		formatStr += TmpEXT
