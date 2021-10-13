@@ -64,7 +64,7 @@ The syntactic parsing of column selector rules is similar to that of matcher, bu
 - Use column names directly
   - Only columns whose names match the rules exactly will be accepted.
 - Using wildcards
-  - * — matches zero or more characters
+  - - — matches zero or more characters
   - ? — matches one character
   - [a-z] — matches one character between "a" and "z" inclusively
   - [!a-z] — matches one character except "a" to "z"
@@ -75,8 +75,9 @@ The syntactic parsing of column selector rules is similar to that of matcher, bu
 Column is not case-sensitive on any platform, nor are column aliases. The matching order is the same as the filter rule, the first match from the back to the front.
 
 Some examples:
+
 - matcher = ['test1.student_*'], columns = ["id", "name"]
-  - For the schema named test1, all tables prefixed with student_, only the id, name columns are synchronized
+  - For the schema named test1, all tables prefixed with student\_, only the id, name columns are synchronized
 - matcher = ['test1.t1'], columns = ["*", "!name"]
   - For the test1.t1 table, synchronize the columns except for the name column
 - matcher = ['test1.t2'], columns = ["src*", "!src1"]
@@ -133,5 +134,4 @@ N/A
 
 How to build a mock integration test framework to validate filtering rules, and that integration test framework should also be able to be used to validate other encodings and message formats.
 
-
-[TiDB table filter rules]: https://docs.pingcap.com/zh/tidb/stable/table-filter#%E8%A1%A8%E5%BA%93%E8%BF%87%E6%BB%A4%E8%AF%AD%E6%B3%95
+[tidb table filter rules]: https://docs.pingcap.com/zh/tidb/stable/table-filter#%E8%A1%A8%E5%BA%93%E8%BF%87%E6%BB%A4%E8%AF%AD%E6%B3%95
