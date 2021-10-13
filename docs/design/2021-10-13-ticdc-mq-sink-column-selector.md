@@ -53,7 +53,7 @@ column_selectors = [
 ]
 ```
 
-Add a new selector array configuration item named column_selectors. Each item consists of a matcher array and a columns array. This allows us to support multiple table and column selections.
+Add a new selector array configuration item named `column_selectors`. Each item consists of a matcher array and a columns array. This allows us to support multiple table and column selections.
 
 The matcher match rules for tables are the same as the [TiDB table filter rules]. The column selector rules are explained in detail below.
 
@@ -64,11 +64,11 @@ The syntactic parsing of column selector rules is similar to that of matcher, bu
 - Use column names directly
   - Only columns whose names match the rules exactly will be accepted.
 - Using wildcards
-  - - — matches zero or more characters
-  - ? — matches one character
-  - [a-z] — matches one character between "a" and "z" inclusively
-  - [!a-z] — matches one character except "a" to "z"
-  - "Character" here means a Unicode code point
+  - `*` — matches zero or more characters
+  - `?` — matches one character
+  - `[a-z]` — matches one character between "a" and "z" inclusively
+  - `[!a-z]` — matches one character except "a" to "z"
+  - `Character` here means a Unicode code point
 - Exclusion
   - An ! at the beginning of the rule means the pattern after it is used to exclude columns from being processed
 
