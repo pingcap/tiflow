@@ -403,7 +403,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
 	}
 
-	config := kafka.NewKafkaConfig()
+	config := kafka.NewConfig()
 	if err := config.Initialize(sinkURI, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
