@@ -145,7 +145,7 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 			r.lock.Lock()
 			for id, buf := range r.buffer {
 				available := r.sizeLimit - r.tokens[id]
-				// the tokens used could be more then size limit, since we have
+				// the tokens used could be more than size limit, since we have
 				// a sized channel as level1 cache
 				if available <= 0 {
 					continue
