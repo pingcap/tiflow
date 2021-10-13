@@ -68,7 +68,7 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 
 func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	defer testleak.AfterTest(c)
-	cfg := NewKafkaConfig()
+	cfg := NewConfig()
 
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
 		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
@@ -135,7 +135,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	}
 
 	errCh := make(chan error, 1)
-	config := NewKafkaConfig()
+	config := NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
@@ -254,7 +254,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 		"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(c),
 	})
 
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.PartitionNum = int32(0)
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
@@ -287,7 +287,7 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 	})
 	defer broker.Close()
 
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.PartitionNum = int32(0)
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
@@ -299,7 +299,7 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.Version = "invalid"
 	_, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
@@ -335,7 +335,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	_, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
 
-	saslConfig := NewKafkaConfig()
+	saslConfig := NewConfig()
 	saslConfig.Version = "2.6.0"
 	saslConfig.ClientID = "test-sasl-scram"
 	saslConfig.SaslScram = &security.SaslScram{
@@ -356,7 +356,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	errCh := make(chan error, 1)
-	config := NewKafkaConfig()
+	config := NewConfig()
 	config.Version = "invalid"
 	_, err := NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
@@ -382,7 +382,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	leader.Returns(metadataResponse)
 	leader.Returns(metadataResponse)
 
-	config := NewKafkaConfig()
+	config := NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
@@ -456,7 +456,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	leader.Returns(metadataResponse)
 	leader.Returns(metadataResponse)
 
-	config := NewKafkaConfig()
+	config := NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
