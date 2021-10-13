@@ -54,8 +54,8 @@ type Config struct {
 	TopicPreProcess bool
 }
 
-// NewKafkaConfig returns a default Kafka configuration
-func NewKafkaConfig() *Config {
+// NewConfig returns a default Kafka configuration
+func NewConfig() *Config {
 	return &Config{
 		Version:           "2.4.0",
 		MaxMessageBytes:   512 * 1024 * 1024, // 512M
