@@ -35,23 +35,29 @@ import (
 )
 
 //go:generate mockery --name=RedoLogWriter --inpackage
-// RedoLogWriter ...
+// RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe
 type RedoLogWriter interface {
 	io.Closer
 
-	// WriteLog ...
+	// WriteLog writer RedoRowChangedEvent to row log file
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
+
 	// SendDDL EmitCheckpointTs and EmitResolvedTs are called from owner only
+	// SendDDL writer RedoDDLEvent to ddl log file
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
+
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// some time, and the resolved ts of this table should be moved forward.
 	FlushLog(ctx context.Context, tableID int64, ts uint64) error
-	// EmitCheckpointTs ...
+
+	// EmitCheckpointTs write CheckpointTs to meta file
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
-	// EmitResolvedTs ...
+
+	// EmitResolvedTs write ResolvedTs to meta file
 	EmitResolvedTs(ctx context.Context, ts uint64) error
-	// GetCurrentResolvedTs ...
+
+	// GetCurrentResolvedTs return all the ResolvedTs list for given tableIDs
 	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
 }
 
