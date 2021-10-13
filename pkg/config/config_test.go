@@ -118,4 +118,8 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	conf.AdvertiseAddr = "advertise:1234"
 	conf.PerTableMemoryQuota = 1
 	require.Nil(t, conf.ValidateAndAdjust())
+	require.EqualValues(t, 1, conf.PerTableMemoryQuota)
+	conf.PerTableMemoryQuota = 0
+	require.Nil(t, conf.ValidateAndAdjust())
+	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
 }
