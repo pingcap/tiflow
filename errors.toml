@@ -6,6 +6,21 @@ error = '''
 invalid api parameter
 '''
 
+["CDC:ErrActorDuplicate"]
+error = '''
+duplicated actor, already in use
+'''
+
+["CDC:ErrActorNotFound"]
+error = '''
+actor not found
+'''
+
+["CDC:ErrActorStopped"]
+error = '''
+actor stopped
+'''
+
 ["CDC:ErrAdminStopProcessor"]
 error = '''
 stop processor by admin command
@@ -146,6 +161,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrClusterIDMismatch"]
+error = '''
+cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
@@ -239,6 +259,11 @@ file sink file operation
 ["CDC:ErrFileSinkMetaAlreadyExists"]
 error = '''
 file sink meta file already exists
+'''
+
+["CDC:ErrFileSizeExceed"]
+error = '''
+rawData size %d exceeds maximum file size %d
 '''
 
 ["CDC:ErrFilterRuleInvalid"]
@@ -426,6 +451,11 @@ error = '''
 locate region by id
 '''
 
+["CDC:ErrMailboxFull"]
+error = '''
+mailbox is full, please try again. Internal use only, report a bug if seen externally
+'''
+
 ["CDC:ErrMarshalFailed"]
 error = '''
 marshal failed
@@ -588,7 +618,7 @@ prepare avro failed
 
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
-prewrite not match, key: %b, start-ts: %d
+prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -631,6 +661,26 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRedoConfigInvalid"]
+error = '''
+redo log config invalid
+'''
+
+["CDC:ErrRedoFileOp"]
+error = '''
+redo file operation
+'''
+
+["CDC:ErrRedoMetaInitialize"]
+error = '''
+initialize meta for redo log
+'''
+
+["CDC:ErrRedoWriterStopped"]
+error = '''
+redo log writer stopped
+'''
+
 ["CDC:ErrRegionWorkerExit"]
 error = '''
 region worker exited
@@ -659,6 +709,16 @@ s3 sink storage api
 ["CDC:ErrS3SinkWriteStorage"]
 error = '''
 write to storage
+'''
+
+["CDC:ErrS3StorageAPI"]
+error = '''
+s3 storage api
+'''
+
+["CDC:ErrS3StorageInitialize"]
+error = '''
+new s3 storage for redo log
 '''
 
 ["CDC:ErrScanLockFailed"]
@@ -813,7 +873,7 @@ unified sorter IO error. Make sure your sort-dir is configured correctly by pass
 
 ["CDC:ErrUnknownKVEventType"]
 error = '''
-unknown kv event type: %v, entry: %v
+unknown kv optype: %s, entry: %v
 '''
 
 ["CDC:ErrUnknownMetaType"]
