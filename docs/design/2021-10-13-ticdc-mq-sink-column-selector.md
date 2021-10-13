@@ -70,7 +70,7 @@ The syntactic parsing of column selector rules is similar to that of matcher, bu
   - `[!a-z]` — matches one character except "a" to "z"
   - `Character` here means a Unicode code point
 - Exclusion
-  - An ! at the beginning of the rule means the pattern after it is used to exclude columns from being processed
+  - An `!` at the beginning of the rule means the pattern after it is used to exclude columns from being processed
 
 Column is not case-sensitive on any platform, nor are column aliases. The matching order is the same as the filter rule, the first match from the back to the front.
 
