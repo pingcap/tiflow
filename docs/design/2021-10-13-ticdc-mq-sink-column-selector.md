@@ -91,11 +91,11 @@ This functionality will be mainly covered by unit and integration tests, and we 
 
 ### Functional Tests
 
-### Unit test
+#### Unit test
 
 Coverage should be more than 75% in new added code.
 
-### Integration test
+#### Integration test
 
 Can pass all existing integration tests when changefeed without column selector configuration.
 Build a new mock integration test framework to validate column selector.
