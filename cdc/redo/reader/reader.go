@@ -24,12 +24,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/multierr"
-	"go.uber.org/zap"
 )
 
 //go:generate mockery --name=Reader --inpackage
@@ -84,30 +82,25 @@ type LogReader struct {
 // NewLogReader creates a LogReader instance. Need the client to guarantee only one LogReader per changefeed
 // currently support rewind operation by ResetReader api
 // if s3 will download logs first, if OP environment need fetch the redo logs to local dir first
-func NewLogReader(ctx context.Context, cfg *LogReaderConfig) *LogReader {
+func NewLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error) {
 	if cfg == nil {
-		log.Panic("LogWriterConfig can not be nil")
-		return nil
+		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogReaderConfig can not be nil"))
 	}
+
 	logReader := &LogReader{
 		cfg: cfg,
 	}
 	if cfg.S3Storage {
-		s3storage, err := common.InitS3storage(ctx, *cfg.S3URI)
+		s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
 		if err != nil {
-			log.Panic("initS3storage fail",
-				zap.Error(err),
-				zap.Any("S3URI", cfg.S3URI))
+			return nil, err
 		}
 		err = downLoadToLocal(ctx, cfg.Dir, s3storage, common.DefaultMetaFileType)
 		if err != nil {
-			log.Panic("downLoadToLocal fail",
-				zap.Error(err),
-				zap.String("file type", common.DefaultMetaFileType),
-				zap.Any("s3URI", cfg.S3URI))
+			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
 		}
 	}
-	return logReader
+	return logReader, nil
 }
 
 // ResetReader ...
@@ -161,7 +154,11 @@ func (l *LogReader) setUpRowReader(ctx context.Context, startTs, endTs uint64) e
 		s3URI:      l.cfg.S3URI,
 		workerNums: l.cfg.WorkerNums,
 	}
-	l.rowReader = newReader(ctx, rowCfg)
+	l.rowReader, err = newReader(ctx, rowCfg)
+	if err != nil {
+		return err
+	}
+
 	l.rowHeap = logHeap{}
 	l.cfg.startTs = startTs
 	l.cfg.endTs = endTs
@@ -186,7 +183,11 @@ func (l *LogReader) setUpDDLReader(ctx context.Context, startTs, endTs uint64) e
 		s3URI:      l.cfg.S3URI,
 		workerNums: l.cfg.WorkerNums,
 	}
-	l.ddlReader = newReader(ctx, ddlCfg)
+	l.ddlReader, err = newReader(ctx, ddlCfg)
+	if err != nil {
+		return err
+	}
+
 	l.ddlHeap = logHeap{}
 	l.cfg.startTs = startTs
 	l.cfg.endTs = endTs

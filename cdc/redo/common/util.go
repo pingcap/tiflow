@@ -28,15 +28,20 @@ import (
 
 // InitS3storage init a storage used for s3,
 // s3URI should be like s3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-func InitS3storage(ctx context.Context, s3URI url.URL) (storage.ExternalStorage, error) {
-	if len(s3URI.Host) == 0 {
+func InitS3storage(ctx context.Context, s3URI *url.URL) (storage.ExternalStorage, error) {
+	if s3URI == nil {
+		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.New("s3URI can not be nil"))
+	}
+
+	uri := *s3URI
+	if len(uri.Host) == 0 {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %v", s3URI))
 	}
 
-	prefix := strings.Trim(s3URI.Path, "/")
-	s3 := &backuppb.S3{Bucket: s3URI.Host, Prefix: prefix}
+	prefix := strings.Trim(uri.Path, "/")
+	s3 := &backuppb.S3{Bucket: uri.Host, Prefix: prefix}
 	options := &storage.BackendOptions{}
-	storage.ExtractQueryParameters(&s3URI, &options.S3)
+	storage.ExtractQueryParameters(&uri, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)
 	}

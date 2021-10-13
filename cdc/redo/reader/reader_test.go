@@ -32,12 +32,11 @@ import (
 )
 
 func TestNewLogReader(t *testing.T) {
-	require.Panics(t, func() {
-		NewLogReader(context.Background(), nil)
-	})
-	require.NotPanics(t, func() {
-		NewLogReader(context.Background(), &LogReaderConfig{})
-	})
+	_, err := NewLogReader(context.Background(), nil)
+	require.NotNil(t, err)
+
+	_, err = NewLogReader(context.Background(), &LogReaderConfig{})
+	require.Nil(t, err)
 }
 
 func TestLogReader_ResetReader(t *testing.T) {

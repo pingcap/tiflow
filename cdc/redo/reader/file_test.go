@@ -26,25 +26,24 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	"github.com/pingcap/ticdc/cdc/redo/writer"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 	"golang.org/x/net/context"
 )
 
-// LeakOptions is used to filter the goroutines.
-// TODO: to common
-var LeakOptions = []goleak.Option{
-	goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
-	goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
-}
-
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m, LeakOptions...)
+	util.SetUpLeakTest(m)
 }
 
 func TestReader_newReader(t *testing.T) {
-	require.Panics(t, func() { newReader(context.Background(), nil) })
-	require.Panics(t, func() { newReader(context.Background(), &readerConfig{dir: ""}) })
+	_, err := newReader(context.Background(), nil)
+	require.NotNil(t, err)
+
+	dir, err := ioutil.TempDir("", "redo-newReader")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+	_, err = newReader(context.Background(), &readerConfig{dir: dir})
+	require.Nil(t, err)
 }
 
 func TestReader_Read(t *testing.T) {
@@ -79,12 +78,13 @@ func TestReader_Read(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
 
-	r := newReader(ctx, &readerConfig{
+	r, err := newReader(ctx, &readerConfig{
 		dir:      dir,
 		startTs:  1,
 		endTs:    12,
 		fileType: common.DefaultRowLogFileType,
 	})
+	require.Nil(t, err)
 	require.Equal(t, 1, len(r))
 	defer r[0].Close() //nolint:errcheck
 	log = &model.RedoLog{}

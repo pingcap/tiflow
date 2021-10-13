@@ -631,6 +631,16 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
+["CDC:ErrRedoConfigInvalid"]
+error = '''
+redo log config invalid
+'''
+
+["CDC:ErrRedoDownloadFailed"]
+error = '''
+redo log down load to local failed
+'''
+
 ["CDC:ErrRedoFileOp"]
 error = '''
 redo file operation

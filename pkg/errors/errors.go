@@ -81,6 +81,8 @@ var (
 	ErrPulsarSendMessage         = errors.Normalize("pulsar send message failed", errors.RFCCodeText("CDC:ErrPulsarSendMessage"))
 	ErrFileSinkCreateDir         = errors.Normalize("file sink create dir", errors.RFCCodeText("CDC:ErrFileSinkCreateDir"))
 	ErrFileSinkFileOp            = errors.Normalize("file sink file operation", errors.RFCCodeText("CDC:ErrFileSinkFileOp"))
+	ErrRedoConfigInvalid         = errors.Normalize("redo log config invalid", errors.RFCCodeText("CDC:ErrRedoConfigInvalid"))
+	ErrRedoDownloadFailed        = errors.Normalize("redo log down load to local failed", errors.RFCCodeText("CDC:ErrRedoDownloadFailed"))
 	ErrRedoWriterStopped         = errors.Normalize("redo log writer stopped", errors.RFCCodeText("CDC:ErrRedoWriterStopped"))
 	ErrRedoFileOp                = errors.Normalize("redo file operation", errors.RFCCodeText("CDC:ErrRedoFileOp"))
 	ErrRedoMetaFileNotFound      = errors.Normalize("no redo meta file found in dir: %s", errors.RFCCodeText("CDC:ErrRedoMetaFileNotFound"))

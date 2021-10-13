@@ -75,24 +75,20 @@ type reader struct {
 	lastValidOff int64
 }
 
-func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
+func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 	if cfg == nil {
-		log.Panic("readerConfig can not be nil")
-		return nil
+		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("readerConfig can not be nil"))
 	}
+
 	if cfg.s3Storage {
-		s3storage, err := common.InitS3storage(ctx, *cfg.s3URI)
+		s3storage, err := common.InitS3storage(ctx, cfg.s3URI)
 		if err != nil {
-			log.Panic("initS3storage fail",
-				zap.Error(err),
-				zap.Any("s3URI", cfg.s3URI))
+			return nil, err
 		}
+
 		err = downLoadToLocal(ctx, cfg.dir, s3storage, cfg.fileType)
 		if err != nil {
-			log.Panic("downLoadToLocal fail",
-				zap.Error(err),
-				zap.String("file type", cfg.fileType),
-				zap.Any("s3URI", cfg.s3URI))
+			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
 		}
 	}
 	if cfg.workerNums == 0 {
@@ -101,9 +97,7 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 
 	rr, err := openSelectedFiles(ctx, cfg.dir, cfg.fileType, cfg.startTs, cfg.endTs, cfg.workerNums)
 	if err != nil {
-		log.Panic("openSelectedFiles fail",
-			zap.Error(err),
-			zap.Any("cfg", cfg))
+		return nil, err
 	}
 
 	readers := []fileReader{}
@@ -117,7 +111,7 @@ func newReader(ctx context.Context, cfg *readerConfig) []fileReader {
 			})
 	}
 
-	return readers
+	return readers, nil
 }
 
 func selectDownLoadFile(ctx context.Context, s3storage storage.ExternalStorage, fixedType string) ([]string, error) {
