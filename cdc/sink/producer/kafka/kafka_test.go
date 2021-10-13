@@ -391,7 +391,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	config.TopicPreProcess = false
 
 	newSaramaConfigImplBak := newSaramaConfigImpl
-	newSaramaConfigImpl = func(ctx context.Context, config Config) (*sarama.Config, error) {
+	newSaramaConfigImpl = func(ctx context.Context, config *Config) (*sarama.Config, error) {
 		cfg, err := newSaramaConfigImplBak(ctx, config)
 		c.Assert(err, check.IsNil)
 		cfg.Producer.Flush.MaxMessages = 1
