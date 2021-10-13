@@ -15,7 +15,7 @@ package cli
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -42,7 +42,7 @@ func (s *changefeedSuite) TestStrictDecodeConfig(c *check.C) {
 	content := `
 	[filter]
 	rules = ['*.*', '!test.*']`
-	err := ioutil.WriteFile(path, []byte(content), 0o644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}), check.IsNil)
@@ -55,7 +55,7 @@ func (s *changefeedSuite) TestStrictDecodeConfig(c *check.C) {
 	content = `
 	[filter]
 	rules = ['*.*', '!test.*','rtest1']`
-	err = ioutil.WriteFile(path, []byte(content), 0o644)
+	err = os.WriteFile(path, []byte(content), 0o644)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}), check.IsNil)

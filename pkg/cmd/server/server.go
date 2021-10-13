@@ -120,6 +120,7 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 
 	util.LogHTTPProxies()
+	cdc.RecordGoRuntimeSettings()
 	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
@@ -261,6 +262,7 @@ func NewCmdServer() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(cmd)
 			if err != nil {

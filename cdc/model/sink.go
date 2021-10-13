@@ -229,6 +229,9 @@ const (
 )
 
 // RedoLog defines the persistent structure of redo log
+// since MsgPack do not support types that are defined in another package,
+// more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
+// so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
 type RedoLog struct {
 	Row  *RedoRowChangedEvent `msg:"row"`
 	DDL  *RedoDDLEvent        `msg:"ddl"`
@@ -238,28 +241,28 @@ type RedoLog struct {
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
-	PreColumns []*RedoColumn    `msg:"preColumns"`
+	PreColumns []*RedoColumn    `msg:"pre-columns"`
 	Columns    []*RedoColumn    `msg:"columns"`
 }
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	StartTs  uint64 `json:"start-ts" msg:"startTs"`
-	CommitTs uint64 `json:"commit-ts" msg:"commitTs"`
+	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
+	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
 	Table *TableName `json:"table" msg:"table"`
 
-	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"tableInfoVersion"`
+	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
 
-	ReplicaID    uint64    `json:"replica-id" msg:"replicaID"`
+	ReplicaID    uint64    `json:"replica-id" msg:"replica-id"`
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
-	IndexColumns [][]int   `json:"-" msg:"indexColumns"`
+	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
 	// approximate size of this event, calculate by tikv proto bytes size
-	ApproximateSize int64 `json:"-" msg:"approximateSize"`
+	ApproximateSize int64 `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
@@ -390,16 +393,16 @@ type SimpleTableInfo struct {
 	// table name
 	Table string `msg:"table"`
 	// table ID
-	TableID    int64         `msg:"tableID"`
-	ColumnInfo []*ColumnInfo `msg:"columnInfo"`
+	TableID    int64         `msg:"table-id"`
+	ColumnInfo []*ColumnInfo `msg:"column-info"`
 }
 
 // DDLEvent stores DDL event
 type DDLEvent struct {
-	StartTs      uint64           `msg:"startTs"`
-	CommitTs     uint64           `msg:"commitTs"`
-	TableInfo    *SimpleTableInfo `msg:"tableInfo"`
-	PreTableInfo *SimpleTableInfo `msg:"preTableInfo"`
+	StartTs      uint64           `msg:"start-ts"`
+	CommitTs     uint64           `msg:"commit-ts"`
+	TableInfo    *SimpleTableInfo `msg:"table-info"`
+	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
 	Query        string           `msg:"query"`
 	Type         model.ActionType `msg:"-"`
 }

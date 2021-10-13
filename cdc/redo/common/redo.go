@@ -16,38 +16,43 @@
 package common
 
 const (
-	// MinSectorSize ...
+	// MinSectorSize is minimum sector size used when flushing log so that log can safely
+	// distinguish between torn writes and ordinary data corruption.
 	MinSectorSize = 512
+)
 
-	// TmpEXT ...
+const (
+	// TmpEXT is the file ext of log file before safely wrote to disk
 	TmpEXT = ".tmp"
-	// LogEXT ...
+	// LogEXT is the file ext of log file after safely wrote to disk
 	LogEXT = ".log"
-	// MetaEXT ...
+	// MetaEXT is the meta file ext of meta file after safely wrote to disk
 	MetaEXT = ".meta"
-	// MetaTmpEXT ...
+	// MetaTmpEXT is the meta file ext of meta file before safely wrote to disk
 	MetaTmpEXT = ".mtmp"
-	// SortLogEXT ...
+	// SortLogEXT is the sorted log file ext of log file after safely wrote to disk
 	SortLogEXT = ".sort"
+)
 
-	// DefaultFileMode ...
+const (
+	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
-	// DefaultDirMode ...
+	// DefaultDirMode is the default mode when operation dir
 	DefaultDirMode = 0o755
 )
 
 const (
-	// DefaultMetaFileType ...
+	// DefaultMetaFileType is the default file type of meta file
 	DefaultMetaFileType = "meta"
-	// DefaultRowLogFileType ...
+	// DefaultRowLogFileType is the default file type of row log file
 	DefaultRowLogFileType = "row"
-	// DefaultDDLLogFileType ...
+	// DefaultDDLLogFileType is the default file type of ddl log file
 	DefaultDDLLogFileType = "ddl"
 )
 
-// LogMeta ...
+// LogMeta is used for store meta info.
 type LogMeta struct {
 	CheckPointTs   uint64           `msg:"checkPointTs"`
 	ResolvedTs     uint64           `msg:"resolvedTs"`
-	ResolvedTsList map[int64]uint64 `msg:"-"`
+	ResolvedTsList map[int64]uint64 `msg:"resolvedTsList"`
 }

@@ -16,7 +16,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 	"time"
 
@@ -142,7 +142,7 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClien
 		return "", err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.BadRequestf("query changefeed simplified status")
 	}
@@ -187,7 +187,7 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClie
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.BadRequestf("admin changefeed failed")
 		}

@@ -241,11 +241,6 @@ error = '''
 file sink meta file already exists
 '''
 
-["CDC:ErrFileSizeExceed"]
-error = '''
-rawData size %d exceeds maximum file size %d
-'''
-
 ["CDC:ErrFilterRuleInvalid"]
 error = '''
 filter rule is invalid
@@ -636,26 +631,6 @@ error = '''
 the reactor has done its job and should no longer be executed
 '''
 
-["CDC:ErrRedoConfigInvalid"]
-error = '''
-redo log config invalid
-'''
-
-["CDC:ErrRedoFileOp"]
-error = '''
-redo file operation
-'''
-
-["CDC:ErrRedoMetaInitialize"]
-error = '''
-initialize meta for redo log
-'''
-
-["CDC:ErrRedoWriterStopped"]
-error = '''
-redo log writer stopped
-'''
-
 ["CDC:ErrRegionWorkerExit"]
 error = '''
 region worker exited
@@ -684,16 +659,6 @@ s3 sink storage api
 ["CDC:ErrS3SinkWriteStorage"]
 error = '''
 write to storage
-'''
-
-["CDC:ErrS3StorageAPI"]
-error = '''
-s3 storage api
-'''
-
-["CDC:ErrS3StorageInitialize"]
-error = '''
-new s3 storage for redo log
 '''
 
 ["CDC:ErrScanLockFailed"]

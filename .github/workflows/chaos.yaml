@@ -1,13 +1,12 @@
 name: chaos
 
 on:
-
   schedule:
     - cron: '40 16-23 * * *' # run at minute 0 and 40 every hour from 00:00 ~ 07:00 UTC+8
 
 jobs:
   pre_job:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     timeout-minutes: 40
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -28,7 +27,7 @@ jobs:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
     # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -63,7 +62,9 @@ jobs:
     # so, simply wait for a long time.
       - name: Wait for coredns
         run: |
-          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
+          kubectl rollout status --watch --timeout 900s deployment/coredns -n kube-system
+          kubectl get pod -n kube-system
+
         shell: bash
         env:
           KUBECONFIG: /etc/rancher/k3s/k3s.yaml
