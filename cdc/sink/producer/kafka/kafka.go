@@ -68,11 +68,13 @@ type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncClient and syncClient.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock   sync.RWMutex
-	asyncClient  sarama.AsyncProducer
-	syncClient   sarama.SyncProducer
-	topic        string
-	partitionNum int32
+	clientLock  sync.RWMutex
+	asyncClient sarama.AsyncProducer
+	syncClient  sarama.SyncProducer
+	// producersReleased records whether asyncClient and syncClient have been closed properly
+	producersReleased bool
+	topic             string
+	partitionNum      int32
 
 	partitionOffset []struct {
 		flushed uint64
@@ -84,12 +86,27 @@ type kafkaSaramaProducer struct {
 	failpointCh chan error
 
 	closeCh chan struct{}
-	closed  int32
+	// atomic flag indicating whether the producer is closing
+	closing kafkaProducerClosingFlag
 }
+
+type kafkaProducerClosingFlag = int32
+
+const (
+	kafkaProducerRunning = 0
+	kafkaProducerClosing = 1
+)
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
+
+	// Checks whether the producer is closing.
+	// The atomic flag must be checked under `clientLock.RLock()`
+	if atomic.LoadInt32(&k.closing) == kafkaProducerClosing {
+		return nil
+	}
+
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
 		Key:       sarama.ByteEncoder(message.Key),
@@ -116,8 +133,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
-	default:
-		k.asyncClient.Input() <- msg
+	case k.asyncClient.Input() <- msg:
 	}
 	return nil
 }
@@ -197,26 +213,27 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 }
 
 // stop closes the closeCh to signal other routines to exit
+// It SHOULD NOT be called under `clientLock`.
 func (k *kafkaSaramaProducer) stop() {
-	k.clientLock.Lock()
-	defer k.clientLock.Unlock()
-	select {
-	case <-k.closeCh:
+	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
-	default:
-		close(k.closeCh)
 	}
+	close(k.closeCh)
 }
 
 // Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
 	k.stop()
+
 	k.clientLock.Lock()
 	defer k.clientLock.Unlock()
-	// close sarama client multiple times will cause panic
-	if atomic.LoadInt32(&k.closed) == 1 {
+
+	if k.producersReleased {
+		// We need to guard against double closing the clients,
+		// which could lead to panic.
 		return nil
 	}
+	k.producersReleased = true
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
@@ -228,7 +245,6 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err2 != nil {
 		log.Error("close async client with error", zap.Error(err2))
 	}
-	atomic.StoreInt32(&k.closed, 1)
 	return nil
 }
 
@@ -362,6 +378,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		flushedReceiver: flushedReceiver,
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
+		closing:         kafkaProducerRunning,
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
