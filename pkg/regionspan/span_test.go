@@ -14,21 +14,16 @@
 package regionspan
 
 import (
+	"bytes"
 	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/tablecodec"
+	"github.com/stretchr/testify/require"
 )
 
-type spanSuite struct{}
+func TestStartCompare(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&spanSuite{})
-
-func Test(t *testing.T) { check.TestingT(t) }
-
-func (s *spanSuite) TestStartCompare(c *check.C) {
-	defer testleak.AfterTest(c)()
 	tests := []struct {
 		lhs []byte
 		rhs []byte
@@ -43,13 +38,14 @@ func (s *spanSuite) TestStartCompare(c *check.C) {
 		{[]byte{3}, []byte{3}, 0},
 	}
 
-	for _, t := range tests {
-		c.Assert(StartCompare(t.lhs, t.rhs), check.Equals, t.res)
+	for _, test := range tests {
+		require.Equal(t, test.res, StartCompare(test.lhs, test.rhs))
 	}
 }
 
-func (s *spanSuite) TestEndCompare(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEndCompare(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		lhs []byte
 		rhs []byte
@@ -64,13 +60,14 @@ func (s *spanSuite) TestEndCompare(c *check.C) {
 		{[]byte{3}, []byte{3}, 0},
 	}
 
-	for _, t := range tests {
-		c.Assert(EndCompare(t.lhs, t.rhs), check.Equals, t.res)
+	for _, test := range tests {
+		require.Equal(t, test.res, EndCompare(test.lhs, test.rhs))
 	}
 }
 
-func (s *spanSuite) TestIntersect(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestIntersect(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		lhs ComparableSpan
 		rhs ComparableSpan
@@ -84,37 +81,39 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 		{ComparableSpan{[]byte{0}, []byte{2}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
 	}
 
-	for _, t := range tests {
-		c.Log("running..", t)
-		res, err := Intersect(t.lhs, t.rhs)
-		if t.res == nil {
-			c.Assert(err, check.NotNil)
+	for _, test := range tests {
+		t.Logf("running.., %v", test)
+		res, err := Intersect(test.lhs, test.rhs)
+		if test.res == nil {
+			require.NotNil(t, err)
 		} else {
-			c.Assert(res, check.DeepEquals, *t.res)
+			require.Equal(t, *test.res, res)
 		}
 
 		// Swap lhs and rhs, should get the same result
-		res2, err2 := Intersect(t.rhs, t.lhs)
-		if t.res == nil {
-			c.Assert(err2, check.NotNil)
+		res2, err2 := Intersect(test.rhs, test.lhs)
+		if test.res == nil {
+			require.NotNil(t, err2)
 		} else {
-			c.Assert(res2, check.DeepEquals, *t.res)
+			require.Equal(t, *test.res, res2)
 		}
 	}
 }
 
-func (s *spanSuite) TestGetTableSpan(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGetTableSpan(t *testing.T) {
+	t.Parallel()
+
 	span := GetTableSpan(123)
-	c.Assert(span.Start, check.Less, span.End)
+	require.Equal(t, -1, bytes.Compare(span.Start, span.End))
 	prefix := []byte(tablecodec.GenTableRecordPrefix(123))
-	c.Assert(span.Start, check.GreaterEqual, prefix)
+	require.GreaterOrEqual(t, 0, bytes.Compare(span.Start, prefix))
 	prefix[len(prefix)-1]++
-	c.Assert(span.End, check.LessEqual, prefix)
+	require.LessOrEqual(t, 0, bytes.Compare(span.End, prefix))
 }
 
-func (s *spanSuite) TestSpanHack(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSpanHack(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		input  Span
 		expect Span
@@ -127,19 +126,20 @@ func (s *spanSuite) TestSpanHack(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		c.Assert(tc.input.Hack(), check.DeepEquals, tc.expect)
+		require.Equal(t, tc.expect, tc.input.Hack())
 	}
 }
 
-func (s *spanSuite) TestSpanClone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSpanClone(t *testing.T) {
+	t.Parallel()
+
 	sp := ComparableSpan{
 		Start: []byte{1},
 		End:   []byte{2},
 	}
 	sp2 := sp.Clone()
-	c.Assert(sp2.String(), check.Equals, "[01, 02)")
+	require.Equal(t, "[01, 02)", sp2.String())
 	sp2.End[0] = 9
-	c.Assert(sp.String(), check.Equals, "[01, 02)")
-	c.Assert(sp2.String(), check.Equals, "[01, 09)")
+	require.Equal(t, "[01, 02)", sp.String())
+	require.Equal(t, "[01, 09)", sp2.String())
 }

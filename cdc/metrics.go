@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/actor"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -42,4 +43,5 @@ func init() {
 	owner.InitMetrics(registry)
 	etcd.InitMetrics(registry)
 	initServerMetrics(registry)
+	actor.InitMetrics(registry)
 }
