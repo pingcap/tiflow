@@ -134,4 +134,4 @@ N/A
 
 How to build a mock integration test framework to validate filtering rules, and that integration test framework should also be able to be used to validate other encodings and message formats.
 
-[tidb table filter rules]: https://docs.pingcap.com/zh/tidb/stable/table-filter#%E8%A1%A8%E5%BA%93%E8%BF%87%E6%BB%A4%E8%AF%AD%E6%B3%95
+[tidb table filter rules]: https://docs.pingcap.com/tidb/stable/table-filter#syntax
