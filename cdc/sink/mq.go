@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -85,53 +84,15 @@ func newMqSink(
 		partitionInput[i] = make(chan mqEvent, defaultPartitionInputChSize)
 	}
 
-	newEncoder := codec.NewEventBatchEncoder(protocol)
-	if protocol == codec.ProtocolAvro {
-		registryURI, ok := opts["registry"]
-		if !ok {
-			return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
-		}
-		keySchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-key")
-		if err != nil {
-			return nil, errors.Annotate(
-				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
-				"Could not create Avro schema manager for message keys")
-		}
-		valueSchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
-		if err != nil {
-			return nil, errors.Annotate(
-				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
-				"Could not create Avro schema manager for message values")
-		}
-		newEncoder1 := newEncoder
-		newEncoder = func() codec.EventBatchEncoder {
-			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
-			avroEncoder.SetKeySchemaManager(keySchemaManager)
-			avroEncoder.SetValueSchemaManager(valueSchemaManager)
-			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
-			return avroEncoder
-		}
-	}
-
-	// pre-flight verification of encoder parameters
-	if err := newEncoder().SetParams(opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	newEncoder1 := newEncoder
-	newEncoder = func() codec.EventBatchEncoder {
-		ret := newEncoder1()
-		err := ret.SetParams(opts)
-		if err != nil {
-			log.Panic("MQ Encoder could not parse parameters", zap.Error(err))
-		}
-		return ret
+	newEncoder, err := codec.CreateEventBatchEncoder(ctx, protocol, credential, opts)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	notifier := new(notify.Notifier)
 	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	k := &mqSink{
 		mqProducer: mqProducer,

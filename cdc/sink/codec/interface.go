@@ -14,12 +14,17 @@
 package codec
 
 import (
+	"context"
 	"encoding/binary"
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -176,7 +181,7 @@ func (p *Protocol) FromString(protocol string) {
 }
 
 // NewEventBatchEncoder returns a function of creating an EventBatchEncoder by protocol.
-func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
+func NewEventBatchEncoder(p Protocol) newEncoderFunc {
 	switch p {
 	case ProtocolDefault:
 		return NewJSONEventBatchEncoder
@@ -194,4 +199,53 @@ func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
 		return NewJSONEventBatchEncoder
 	}
+}
+
+type newEncoderFunc func() EventBatchEncoder
+
+func CreateEventBatchEncoder(ctx context.Context, protocol Protocol, credential *security.Credential, opts map[string]string) (newEncoderFunc, error) {
+	newEncoder := NewEventBatchEncoder(protocol)
+	if protocol == ProtocolAvro {
+		registryURI, ok := opts["registry"]
+		if !ok {
+			return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+		}
+		keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, "-key")
+		if err != nil {
+			return nil, errors.Annotate(
+				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+				"Could not create Avro schema manager for message keys")
+		}
+		valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, "-value")
+		if err != nil {
+			return nil, errors.Annotate(
+				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+				"Could not create Avro schema manager for message values")
+		}
+		newEncoder1 := newEncoder
+		newEncoder = func() EventBatchEncoder {
+			avroEncoder := newEncoder1().(*AvroEventBatchEncoder)
+			avroEncoder.SetKeySchemaManager(keySchemaManager)
+			avroEncoder.SetValueSchemaManager(valueSchemaManager)
+			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
+			return avroEncoder
+		}
+	}
+
+	// pre-flight verification of encoder parameters
+	if err := newEncoder().SetParams(opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	newEncoder1 := newEncoder
+	newEncoder = func() EventBatchEncoder {
+		ret := newEncoder1()
+		err := ret.SetParams(opts)
+		if err != nil {
+			log.Panic("MQ Encoder could not parse parameters", zap.Error(err))
+		}
+		return ret
+	}
+
+	return newEncoder, nil
 }
