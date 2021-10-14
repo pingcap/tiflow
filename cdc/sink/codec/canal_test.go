@@ -86,7 +86,7 @@ var _ = check.Suite(&canalBatchSuite{
 func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	defer testleak.AfterTest(c)()
 	for _, cs := range s.rowCases {
-		encoder := newCanalEventBatchEncoder()
+		encoder := NewCanalEventBatchEncoder()
 		for _, row := range cs {
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
@@ -114,7 +114,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	}
 
 	for _, cs := range s.ddlCases {
-		encoder := newCanalEventBatchEncoder()
+		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)

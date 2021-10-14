@@ -32,7 +32,8 @@ type CanalFlatEventBatchEncoder struct {
 	resolvedBuf   []*canalFlatMessage
 }
 
-func newCanalFlatEventBatchEncoder() EventBatchEncoder {
+// NewCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
+func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 	return &CanalFlatEventBatchEncoder{
 		builder:       NewCanalEntryBuilder(),
 		unresolvedBuf: make([]*canalFlatMessage, 0),
@@ -46,7 +47,7 @@ type canalFlatEventBatchEncoderBuilder struct {
 
 // Build a `CanalFlatEventBatchEncoder`
 func (b *canalFlatEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := newCanalFlatEventBatchEncoder()
+	encoder := NewCanalFlatEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrKafkaInvalidConfig, err)
 	}

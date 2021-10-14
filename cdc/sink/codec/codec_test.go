@@ -219,7 +219,7 @@ func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
 		if len(cs) == 0 {
 			continue
 		}
-		craftEncoder := newCraftEventBatchEncoder()
+		craftEncoder := NewCraftEventBatchEncoder()
 		jsonEncoder := NewJSONEventBatchEncoder()
 		craftMessages := s.encodeRowCase(c, craftEncoder, cs)
 		jsonMessages := s.encodeRowCase(c, jsonEncoder, cs)
@@ -369,7 +369,7 @@ func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEve
 
 func init() {
 	var err error
-	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(newCraftEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
+	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(NewCraftEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(NewJSONEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {

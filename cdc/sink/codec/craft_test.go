@@ -137,7 +137,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 
 func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := newCraftEventBatchEncoder().(*CraftEventBatchEncoder)
+	encoder := NewCraftEventBatchEncoder().(*CraftEventBatchEncoder)
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
@@ -177,7 +177,7 @@ func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 
 func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := newCraftEventBatchEncoder()
+	encoder := NewCraftEventBatchEncoder()
 	err := encoder.SetParams(map[string]string{"max-message-bytes": "256"})
 	c.Check(err, check.IsNil)
 
@@ -201,7 +201,7 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := newCraftEventBatchEncoder()
+	encoder := NewCraftEventBatchEncoder()
 	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
 	c.Check(err, check.IsNil)
 
@@ -244,7 +244,7 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 func (s *craftBatchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
 	s.testBatchCodec(c, func() EventBatchEncoder {
-		encoder := newCraftEventBatchEncoder()
+		encoder := NewCraftEventBatchEncoder()
 		return encoder
 	}, NewCraftEventBatchDecoder)
 }
