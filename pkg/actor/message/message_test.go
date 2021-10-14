@@ -11,14 +11,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package context
+package message
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/pingcap/ticdc/pkg/leakutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
+}
+
+// Make sure Message can be printed in JSON format, so that it can be logged by
+// pingcap/log package.
+func TestJSONPrint(t *testing.T) {
+	_, err := json.Marshal(Message{})
+	require.Nil(t, err)
+}
+
+func TestTickMessage(t *testing.T) {
+	msg := TickMessage()
+	require.Equal(t, TypeTick, msg.Tp)
+}
+
+func TestBarrierMessage(t *testing.T) {
+	msg := BarrierMessage(1)
+	require.Equal(t, TypeBarrier, msg.Tp)
 }

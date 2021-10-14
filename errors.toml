@@ -6,6 +6,21 @@ error = '''
 invalid api parameter
 '''
 
+["CDC:ErrActorDuplicate"]
+error = '''
+duplicated actor, already in use
+'''
+
+["CDC:ErrActorNotFound"]
+error = '''
+actor not found
+'''
+
+["CDC:ErrActorStopped"]
+error = '''
+actor stopped
+'''
+
 ["CDC:ErrAdminStopProcessor"]
 error = '''
 stop processor by admin command
@@ -429,6 +444,11 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
+'''
+
+["CDC:ErrMailboxFull"]
+error = '''
+mailbox is full, please try again. Internal use only, report a bug if seen externally
 '''
 
 ["CDC:ErrMarshalFailed"]
