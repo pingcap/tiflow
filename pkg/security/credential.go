@@ -76,6 +76,9 @@ func (s *Credential) ToTLSConfigWithVerify() (*tls.Config, error) {
 }
 
 func (s *Credential) GetCommonName() (string, error) {
+	if s.CertPath == "" {
+		return "", nil
+	}
 	data, err := os.ReadFile(s.CertPath)
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
