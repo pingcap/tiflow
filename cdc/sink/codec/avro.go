@@ -28,6 +28,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	tijson "github.com/pingcap/tidb/types/json"
@@ -521,4 +523,40 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 		}
 	}
 	return buf.Bytes(), nil
+}
+
+type avroEncoderBuilder struct {
+}
+
+const (
+	keySchemaManagerSuffix   = "-key"
+	valueSchemaManagerSuffix = "-value"
+)
+
+func (b *avroEncoderBuilder) Build(ctx context.Context, credential *security.Credential, opts map[string]string) (newEncoderFunc, error) {
+	registryURI, ok := opts["registry"]
+	if !ok {
+		return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+	}
+
+	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, keySchemaManagerSuffix)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+			"Could not create Avro schema manager for message keys")
+	}
+	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, valueSchemaManagerSuffix)
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+			"Could not create Avro schema manager for message values")
+	}
+
+	return func() EventBatchEncoder {
+		encoder := NewAvroEventBatchEncoder().(*AvroEventBatchEncoder)
+		encoder.SetKeySchemaManager(keySchemaManager)
+		encoder.SetValueSchemaManager(valueSchemaManager)
+		encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
+		return encoder
+	}, nil
 }
