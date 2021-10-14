@@ -344,13 +344,13 @@ type JSONEventBatchEncoder struct {
 	messageBuf   []*MQMessage
 	curBatchSize int
 	// configs
-	maxKafkaMessageSize int
-	maxBatchSize        int
+	maxMessageSize int
+	maxBatchSize   int
 }
 
-// GetMaxKafkaMessageSize is only for unit testing.
-func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
-	return d.maxKafkaMessageSize
+// GetMaxMessageSize is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
+	return d.maxMessageSize
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -437,7 +437,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
-			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageSize {
 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
@@ -455,10 +455,10 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
 
-		if message.Length() > d.maxKafkaMessageSize {
+		if message.Length() > d.maxMessageSize {
 			// `len(d.messageBuf) == 1` is implied
 			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
+				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageSize))
 		}
 		d.curBatchSize++
 	}
@@ -577,16 +577,13 @@ func (d *JSONEventBatchEncoder) Reset() {
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
+		d.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		d.maxKafkaMessageSize = DefaultMaxMessageBytes
 	}
-
-	if d.maxKafkaMessageSize <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
+	if d.maxMessageSize <= 0 {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageSize))
 	}
 
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
@@ -594,13 +591,11 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		d.maxBatchSize = DefaultMaxBatchSize
 	}
-
 	if d.maxBatchSize <= 0 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
 	}
+
 	return nil
 }
 
@@ -626,6 +621,9 @@ func NewJSONEventBatchEncoder() EventBatchEncoder {
 	batch := &JSONEventBatchEncoder{
 		keyBuf:   &bytes.Buffer{},
 		valueBuf: &bytes.Buffer{},
+
+		maxMessageSize: DefaultMaxMessageBytes,
+		maxBatchSize:   DefaultMaxBatchSize,
 	}
 	var versionByte [8]byte
 	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)

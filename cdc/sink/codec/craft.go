@@ -15,7 +15,6 @@ package codec
 
 import (
 	"context"
-	"math"
 	"strconv"
 
 	"github.com/pingcap/errors"
@@ -102,11 +101,8 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		e.maxMessageSize = DefaultMaxMessageBytes
 	}
-
-	if e.maxMessageSize <= 0 || e.maxMessageSize > math.MaxInt32 {
+	if e.maxMessageSize <= 0 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageSize))
 	}
 
@@ -115,13 +111,11 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
-	} else {
-		e.maxBatchSize = DefaultMaxBatchSize
 	}
-
-	if e.maxBatchSize <= 0 || e.maxBatchSize > math.MaxUint16 {
+	if e.maxBatchSize <= 0 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", e.maxBatchSize))
 	}
+
 	return nil
 }
 
@@ -138,7 +132,7 @@ type craftEventBatchEncoderBuilder struct {
 }
 
 func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewJSONEventBatchEncoder()
+	encoder := NewCraftEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -156,6 +150,9 @@ func NewCraftEventBatchEncoderWithAllocator(allocator *craft.SliceAllocator) Eve
 		allocator:        allocator,
 		messageBuf:       make([]*MQMessage, 0, 2),
 		rowChangedBuffer: craft.NewRowChangedEventBuffer(allocator),
+
+		maxMessageSize: DefaultMaxMessageBytes,
+		maxBatchSize:   DefaultMaxBatchSize,
 	}
 }
 
