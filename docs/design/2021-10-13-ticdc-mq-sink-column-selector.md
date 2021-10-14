@@ -23,7 +23,7 @@ This document provides a complete design about implementing column selector in T
 
 ## Motivation or Background
 
-TiCDC is a change data capture for TiDB, it supports replicating change data from upstream TiDB to various kinds of downstream, including MySQL compatible database, messaging queue system such as Kafka. When synchronizing data to Kafka, we currently support row data synchronization, but there are some user scenarios where users only need a few rows of data that have changed.
+TiCDC is a change data capture for TiDB, it supports replicating change data from upstream TiDB to various kinds of downstream, including MySQL compatible database, messaging queue system such as Kafka. When synchronizing data to Kafka, we currently support row data synchronization, but there are some user scenarios where users only need a few columns of data that have changed.
 
 In this scenario, we need to support synchronization of specified columns. The key requirements of this feature are as follows:
 
