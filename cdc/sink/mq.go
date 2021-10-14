@@ -38,6 +38,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type mqEvent struct {
+	row        *model.RowChangedEvent
+	resolvedTs uint64
+}
+
+const defaultPartitionInputChSize = 12800
+
 type mqSink struct {
 	mqProducer producer.Producer
 	dispatcher dispatcher.Dispatcher
@@ -45,15 +52,13 @@ type mqSink struct {
 	filter     *filter.Filter
 	protocol   codec.Protocol
 
-	partitionNum   int32
-	partitionInput []chan struct {
-		row        *model.RowChangedEvent
-		resolvedTs uint64
-	}
+	partitionNum        int32
+	partitionInput      []chan mqEvent
 	partitionResolvedTs []uint64
-	checkpointTs        uint64
-	resolvedNotifier    *notify.Notifier
-	resolvedReceiver    *notify.Receiver
+
+	checkpointTs     uint64
+	resolvedNotifier *notify.Notifier
+	resolvedReceiver *notify.Receiver
 
 	statistics *Statistics
 }
@@ -62,24 +67,23 @@ func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
 	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
-	partitionNum := mqProducer.GetPartitionNum()
-	partitionInput := make([]chan struct {
-		row        *model.RowChangedEvent
-		resolvedTs uint64
-	}, partitionNum)
-	for i := 0; i < int(partitionNum); i++ {
-		partitionInput[i] = make(chan struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}, 12800)
+	var protocol codec.Protocol
+	protocol.FromString(config.Sink.Protocol)
+	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
+		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
-	d, err := dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum())
+
+	partitionNum := mqProducer.GetPartitionNum()
+	d, err := dispatcher.NewDispatcher(config, partitionNum)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	notifier := new(notify.Notifier)
-	var protocol codec.Protocol
-	protocol.FromString(config.Sink.Protocol)
+
+	partitionInput := make([]chan mqEvent, partitionNum)
+	for i := 0; i < int(partitionNum); i++ {
+		partitionInput[i] = make(chan mqEvent, defaultPartitionInputChSize)
+	}
 
 	newEncoder := codec.NewEventBatchEncoder(protocol)
 	if protocol == codec.ProtocolAvro {
@@ -107,9 +111,6 @@ func newMqSink(
 			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
-	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
-		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
 
 	// pre-flight verification of encoder parameters
@@ -127,6 +128,7 @@ func newMqSink(
 		return ret
 	}
 
+	notifier := new(notify.Notifier)
 	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
 	if err != nil {
 		return nil, err
@@ -275,7 +277,7 @@ func (k *mqSink) Close(ctx context.Context) error {
 
 func (k *mqSink) Barrier(cxt context.Context) error {
 	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
-	// all buffered events forcedlly.
+	// all buffered events by force.
 	return nil
 }
 
@@ -325,10 +327,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		})
 	}
 	for {
-		var e struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}
+		var e mqEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
