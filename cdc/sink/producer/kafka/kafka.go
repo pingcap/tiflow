@@ -16,7 +16,9 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,6 +29,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -51,9 +54,9 @@ type Config struct {
 	TopicPreProcess bool
 }
 
-// NewKafkaConfig returns a default Kafka configuration
-func NewKafkaConfig() Config {
-	return Config{
+// NewConfig returns a default Kafka configuration
+func NewConfig() *Config {
+	return &Config{
 		Version:           "2.4.0",
 		MaxMessageBytes:   512 * 1024 * 1024, // 512M
 		ReplicationFactor: 1,
@@ -62,6 +65,103 @@ func NewKafkaConfig() Config {
 		SaslScram:         &security.SaslScram{},
 		TopicPreProcess:   true,
 	}
+}
+
+func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
+	s := sinkURI.Query().Get("partition-num")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		c.PartitionNum = int32(a)
+	}
+
+	s = sinkURI.Query().Get("replication-factor")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		c.ReplicationFactor = int16(a)
+	}
+
+	s = sinkURI.Query().Get("kafka-version")
+	if s != "" {
+		c.Version = s
+	}
+
+	s = sinkURI.Query().Get("max-message-bytes")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		// `MaxMessageBytes` is set to `512 mb` by default, but it's still possible that a larger value expected.
+		// TiCDC should send the message at best.
+		if a > c.MaxMessageBytes {
+			c.MaxMessageBytes = a
+		}
+		opts["max-message-bytes"] = s
+	}
+
+	s = sinkURI.Query().Get("max-batch-size")
+	if s != "" {
+		opts["max-batch-size"] = s
+	}
+
+	s = sinkURI.Query().Get("compression")
+	if s != "" {
+		c.Compression = s
+	}
+
+	c.ClientID = sinkURI.Query().Get("kafka-client-id")
+
+	s = sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
+	}
+
+	s = sinkURI.Query().Get("ca")
+	if s != "" {
+		c.Credential.CAPath = s
+	}
+
+	s = sinkURI.Query().Get("cert")
+	if s != "" {
+		c.Credential.CertPath = s
+	}
+
+	s = sinkURI.Query().Get("key")
+	if s != "" {
+		c.Credential.KeyPath = s
+	}
+
+	s = sinkURI.Query().Get("sasl-user")
+	if s != "" {
+		c.SaslScram.SaslUser = s
+	}
+
+	s = sinkURI.Query().Get("sasl-password")
+	if s != "" {
+		c.SaslScram.SaslPassword = s
+	}
+
+	s = sinkURI.Query().Get("sasl-mechanism")
+	if s != "" {
+		c.SaslScram.SaslMechanism = s
+	}
+
+	s = sinkURI.Query().Get("auto-create-topic")
+	if s != "" {
+		autoCreate, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		c.TopicPreProcess = autoCreate
+	}
+
+	return nil
 }
 
 type kafkaSaramaProducer struct {
@@ -267,7 +367,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 
 // kafkaTopicPreProcess gets partition number from existing topic, if topic doesn't
 // exit, creates it automatically.
-func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Config) (int32, error) {
+func kafkaTopicPreProcess(topic, address string, config *Config, cfg *sarama.Config) (int32, error) {
 	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -318,7 +418,7 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
@@ -400,7 +500,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
+func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
