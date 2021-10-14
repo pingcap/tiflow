@@ -441,8 +441,10 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	ddlPuller := puller.NewPuller(
-		ctx,
+		stdCtx,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
@@ -458,7 +460,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.sendError(ddlPuller.Run(ctx))
+		p.sendError(ddlPuller.Run(stdCtx))
 	}()
 	ddlRawKVCh := puller.SortOutput(ctx, ddlPuller.Output())
 	p.wg.Add(1)
