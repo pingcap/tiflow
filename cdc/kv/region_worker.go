@@ -365,10 +365,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					if rts.ts.penalty < resolveLockPenalty {
 						if lastResolvedTs > rts.ts.resolvedTs {
 							rts.ts.resolvedTs = lastResolvedTs
-							rts.ts.eventTime = time.Now()
 							rts.ts.penalty = 0
+							rts.ts.eventTime = time.Now()
+							w.rtsManager.Upsert(rts)
 						}
-						w.rtsManager.Upsert(rts)
+
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
@@ -383,9 +384,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
 						continue
 					}
+				} else {
+					rts.ts.resolvedTs = lastResolvedTs
+					w.rtsManager.Upsert(rts)
 				}
-				rts.ts.resolvedTs = lastResolvedTs
-				w.rtsManager.Upsert(rts)
 			}
 		}
 	}
@@ -739,14 +741,29 @@ func (w *regionWorker) handleResolvedTs(
 		return nil
 	}
 	regionID := state.sri.verID.GetID()
+
+	// Send resolved ts update in non blocking way, since we can re-query real
+	// resolved ts from region state even if resolved ts update is discarded.
+	// NOTICE: We send any regionTsInfo to resolveLock thread to give us a chance to trigger resolveLock logic
+	// (1) if it is a fallback resolvedTs event, it will be discarded and accumulate penalty on the progress;
+	// (2) if it is normal one, update rtsManager and check sinceLastResolvedTs
+	select {
+	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)}:
+	default:
+	}
+
 	if resolvedTs < state.lastResolvedTs {
 		log.Warn("The resolvedTs is fallen back in kvclient",
 			zap.String("Event Type", "RESOLVED"),
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
 			zap.Uint64("regionID", regionID))
+
 		return nil
 	}
+
+	state.lastResolvedTs = resolvedTs
+
 	// emit a checkpointTs
 	revent := model.RegionFeedEvent{
 		RegionID: regionID,
@@ -754,13 +771,6 @@ func (w *regionWorker) handleResolvedTs(
 			Span:       state.sri.span,
 			ResolvedTs: resolvedTs,
 		},
-	}
-	state.lastResolvedTs = resolvedTs
-	// Send resolved ts update in non blocking way, since we can re-query real
-	// resolved ts from region state even if resolved ts update is discarded.
-	select {
-	case w.rtsUpdateCh <- &regionTsInfo{regionID: regionID, ts: newResolvedTsItem(resolvedTs)}:
-	default:
 	}
 
 	select {
