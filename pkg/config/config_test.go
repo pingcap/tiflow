@@ -75,19 +75,13 @@ func (s *replicaConfigSuite) TestOutDated(c *check.C) {
 	c.Assert(conf2, check.DeepEquals, conf)
 }
 
-<<<<<<< HEAD
 type serverConfigSuite struct{}
 
 var _ = check.Suite(&serverConfigSuite{})
 
 func (s *serverConfigSuite) TestMarshal(c *check.C) {
 	defer testleak.AfterTest(c)()
-	rawConfig := `{"addr":"192.155.22.33:8887","advertise-addr":"","log-file":"","log-level":"info","log":{"file":{"max-size":300,"max-days":0,"max-backups":0}},"data-dir":"","gc-ttl":86400,"tz":"System","capture-session-ttl":10,"owner-flush-interval":200000000,"processor-flush-interval":100000000,"sorter":{"num-concurrent-worker":4,"chunk-size-limit":999,"max-memory-percentage":30,"max-memory-consumption":17179869184,"num-workerpool-goroutine":16,"sort-dir":"/tmp/sorter"},"security":{"ca-path":"","cert-path":"","key-path":"","cert-allowed-cn":null},"per-table-memory-quota":20971520,"kv-client":{"worker-concurrent":8,"worker-pool-size":0,"region-scan-limit":6}}`
-=======
-func TestServerConfigMarshal(t *testing.T) {
-	t.Parallel()
-	rawConfig := `{"addr":"192.155.22.33:8887","advertise-addr":"","log-file":"","log-level":"info","log":{"file":{"max-size":300,"max-days":0,"max-backups":0}},"data-dir":"","gc-ttl":86400,"tz":"System","capture-session-ttl":10,"owner-flush-interval":200000000,"processor-flush-interval":100000000,"sorter":{"num-concurrent-worker":4,"chunk-size-limit":999,"max-memory-percentage":30,"max-memory-consumption":17179869184,"num-workerpool-goroutine":16,"sort-dir":"/tmp/sorter"},"security":{"ca-path":"","cert-path":"","key-path":"","cert-allowed-cn":null},"per-table-memory-quota":10485760,"kv-client":{"worker-concurrent":8,"worker-pool-size":0,"region-scan-limit":40}}`
->>>>>>> be1f3fe4c (config: remove per-table-memory-quota min value check (#3022))
+	rawConfig := `{"addr":"192.155.22.33:8887","advertise-addr":"","log-file":"","log-level":"info","log":{"file":{"max-size":300,"max-days":0,"max-backups":0}},"data-dir":"","gc-ttl":86400,"tz":"System","capture-session-ttl":10,"owner-flush-interval":200000000,"processor-flush-interval":100000000,"sorter":{"num-concurrent-worker":4,"chunk-size-limit":999,"max-memory-percentage":30,"max-memory-consumption":17179869184,"num-workerpool-goroutine":16,"sort-dir":"/tmp/sorter"},"security":{"ca-path":"","cert-path":"","key-path":"","cert-allowed-cn":null},"per-table-memory-quota":10485760,"kv-client":{"worker-concurrent":8,"worker-pool-size":0,"region-scan-limit":6}}`
 
 	conf := GetDefaultServerConfig()
 	conf.Addr = "192.155.22.33:8887"
@@ -135,13 +129,9 @@ func (s *serverConfigSuite) TestValidateAndAdjust(c *check.C) {
 	c.Assert(conf.ValidateAndAdjust(), check.ErrorMatches, ".*does not contain a port")
 	conf.AdvertiseAddr = "advertise:1234"
 	conf.PerTableMemoryQuota = 1
-<<<<<<< HEAD
-	c.Assert(conf.ValidateAndAdjust(), check.ErrorMatches, ".*should be at least.*")
-=======
-	require.Nil(t, conf.ValidateAndAdjust())
-	require.EqualValues(t, 1, conf.PerTableMemoryQuota)
+	c.Assert(conf.ValidateAndAdjust(), check.IsNil)
+	c.Assert(uint64(1), check.Equals, conf.PerTableMemoryQuota)
 	conf.PerTableMemoryQuota = 0
-	require.Nil(t, conf.ValidateAndAdjust())
-	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
->>>>>>> be1f3fe4c (config: remove per-table-memory-quota min value check (#3022))
+	c.Assert(conf.ValidateAndAdjust(), check.IsNil)
+	c.Assert(GetDefaultServerConfig().PerTableMemoryQuota, check.Equals, conf.PerTableMemoryQuota)
 }
