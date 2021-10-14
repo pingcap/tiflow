@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+	"math"
 	"strconv"
 
 	"github.com/pingcap/errors"
@@ -102,7 +103,7 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
 	}
-	if e.maxMessageSize <= 0 {
+	if e.maxMessageSize <= 0 || e.maxMessageSize > math.MaxInt32 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageSize))
 	}
 
@@ -112,7 +113,7 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
 	}
-	if e.maxBatchSize <= 0 {
+	if e.maxBatchSize <= 0 || e.maxBatchSize > math.MaxUint16 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", e.maxBatchSize))
 	}
 
