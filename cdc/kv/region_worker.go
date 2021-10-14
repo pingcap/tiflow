@@ -290,7 +290,7 @@ func (w *regionWorker) handleSingleRegionError(ctx context.Context, err error, s
 
 	// `ErrPrewriteNotMatch` would cause duplicated request to the same region,
 	// so cancel the original gRPC stream before restarts a new stream.
-	if errors.Cause(err) == cerror.ErrPrewriteNotMatch {
+	if cerror.ErrPrewriteNotMatch.Equal(errors.Cause(err)) {
 		w.cancelStream(time.Second)
 	}
 
