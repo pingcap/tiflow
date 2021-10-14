@@ -608,7 +608,7 @@ type jsonEventBatchEncoderBuilder struct {
 
 // Build a JSONEventBatchEncoder
 func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := newJSONEventBatchEncoder()
+	encoder := NewJSONEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -621,7 +621,8 @@ func NewJSONEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &jsonEventBatchEncoderBuilder{opts: opts}
 }
 
-func newJSONEventBatchEncoder() EventBatchEncoder {
+// NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
+func NewJSONEventBatchEncoder() EventBatchEncoder {
 	batch := &JSONEventBatchEncoder{
 		keyBuf:   &bytes.Buffer{},
 		valueBuf: &bytes.Buffer{},

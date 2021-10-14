@@ -73,8 +73,7 @@ func newLogSink(root string, storage storage.ExternalStorage) *logSink {
 		notifyChan:     make(chan []logUnit),
 		notifyWaitChan: make(chan struct{}),
 		encoder: func() codec.EventBatchEncoder {
-			// since no options, no error would occur, just ignore the error at the moment.
-			ret, _ := codec.NewJSONEventBatchEncoderBuilder(nil).Build(context.Background())
+			ret := codec.NewJSONEventBatchEncoder()
 			ret.(*codec.JSONEventBatchEncoder).SetMixedBuildSupport(true)
 			return ret
 		},

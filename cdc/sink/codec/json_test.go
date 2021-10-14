@@ -199,7 +199,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := newJSONEventBatchEncoder().(*JSONEventBatchEncoder)
+	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
@@ -240,7 +240,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := newJSONEventBatchEncoder()
+	encoder := NewJSONEventBatchEncoder()
 
 	// the size of `testEvent` is 87
 	testEvent := &model.RowChangedEvent{
@@ -282,7 +282,7 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := newJSONEventBatchEncoder()
+	encoder := NewJSONEventBatchEncoder()
 	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
 	c.Check(err, check.IsNil)
 
@@ -324,7 +324,7 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 
 func (s *batchSuite) TestEmptyMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := newJSONEventBatchEncoder()
+	encoder := NewJSONEventBatchEncoder()
 	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
 	c.Check(err, check.IsNil)
 
@@ -347,7 +347,7 @@ func (s *batchSuite) TestEmptyMessage(c *check.C) {
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
 	s.testBatchCodec(c, func() EventBatchEncoder {
-		encoder := newJSONEventBatchEncoder()
+		encoder := NewJSONEventBatchEncoder()
 		return encoder
 	}, NewJSONEventBatchDecoder)
 }
