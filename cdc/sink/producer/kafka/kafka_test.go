@@ -366,8 +366,6 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	_, err = NewKafkaSaramaProducer(ctx, "127.0.0.1:1111", "topic", config, errCh)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
-<<<<<<< HEAD
-=======
 
 func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -482,4 +480,3 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	err = producer.Close()
 	c.Assert(err, check.IsNil)
 }
->>>>>>> b7c783f2f (sink: fix kafka max message size inaccurate issue. (#3002))
