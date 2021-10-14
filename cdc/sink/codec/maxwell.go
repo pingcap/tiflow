@@ -31,6 +31,7 @@ type maxwellEventBatchEncoderBuilder struct {
 	opts map[string]string
 }
 
+// Build a `MaxwellEventBatchEncoder`
 func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := newMaxwellEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
@@ -40,6 +41,7 @@ func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatch
 	return encoder, nil
 }
 
+// NewMaxwellEventBatchEncoderBuilder return an `EncoderBuilder`
 func NewMaxwellEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &maxwellEventBatchEncoderBuilder{opts: opts}
 }

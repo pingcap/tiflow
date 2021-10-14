@@ -606,6 +606,7 @@ type jsonEventBatchEncoderBuilder struct {
 	opts map[string]string
 }
 
+// Build a JSONEventBatchEncoder
 func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := newJSONEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
@@ -615,6 +616,7 @@ func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEnc
 	return encoder, nil
 }
 
+// NewJSONEventBatchEncoderBuilder return an `EncoderBuilder`
 func NewJSONEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &jsonEventBatchEncoderBuilder{opts: opts}
 }

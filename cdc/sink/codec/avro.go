@@ -535,7 +535,7 @@ type avroEncoderBuilder struct {
 	initialized *atomic.Bool
 }
 
-// NewAvroEncoderBuilder implement the `EncoderBuilder`
+// NewAvroEncoderBuilder return an `EncoderBuilder`
 func NewAvroEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
 	return &avroEncoderBuilder{
 		credential:  credential,
@@ -566,7 +566,7 @@ func (b *avroEncoderBuilder) newSchemaManagers(ctx context.Context) error {
 	return nil
 }
 
-// Build the avroEncoder.
+// Build an AvroEventBatchEncoder.
 func (b *avroEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	if !b.initialized.Load() {
 		if err := b.newSchemaManagers(ctx); err != nil {

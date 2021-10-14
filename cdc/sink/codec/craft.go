@@ -134,6 +134,7 @@ type craftEventBatchEncoderBuilder struct {
 	opts map[string]string
 }
 
+// Build a CraftEventBatchEncoder
 func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := newCraftEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
@@ -143,6 +144,7 @@ func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEn
 	return encoder, nil
 }
 
+// NewCraftEventBatchEncoderBuilder return an `EncoderBuilder`
 func NewCraftEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &craftEventBatchEncoderBuilder{opts: opts}
 }

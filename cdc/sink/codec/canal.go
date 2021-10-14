@@ -461,6 +461,7 @@ type canalEventBatchEncoderBuilder struct {
 	opts map[string]string
 }
 
+// Build a `CanalEventBatchEncoder`
 func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := newCanalEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
@@ -470,6 +471,7 @@ func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEn
 	return encoder, nil
 }
 
+// NewCanalEventBatchEncoderBuilder return an `EncoderBuilder`
 func NewCanalEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &canalEventBatchEncoderBuilder{opts: opts}
 }

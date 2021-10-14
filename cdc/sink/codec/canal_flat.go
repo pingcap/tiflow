@@ -44,6 +44,7 @@ type canalFlatEventBatchEncoderBuilder struct {
 	opts map[string]string
 }
 
+// Build a `CanalFlatEventBatchEncoder`
 func (b *canalFlatEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := newCanalFlatEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
@@ -53,6 +54,7 @@ func (b *canalFlatEventBatchEncoderBuilder) Build(ctx context.Context) (EventBat
 	return encoder, nil
 }
 
+// NewCanalFlatEventBatchEncoderBuilder return an `EncoderBuilder`
 func NewCanalFlatEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &canalFlatEventBatchEncoderBuilder{opts: opts}
 }
