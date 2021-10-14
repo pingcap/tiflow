@@ -24,9 +24,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// Dispatcher is an abstraction for dispatching rows into different partitions
+// Dispatcher is an abstraction for dispatching rows into different target destination.
 type Dispatcher interface {
-	// Dispatch returns an index of partitions according to RowChangedEvent
+	// Dispatch returns an index which can be used to select a target dispatch destination.
 	Dispatch(row *model.RowChangedEvent) int32
 }
 
@@ -38,6 +38,10 @@ const (
 	dispatchRuleTS
 	dispatchRuleTable
 	dispatchRuleIndexValue
+	dispatchRuleTSO
+	dispatchRulePK
+	dispatchTableName
+	dispatchColumnName
 )
 
 func (r *dispatchRule) fromString(rule string) {
