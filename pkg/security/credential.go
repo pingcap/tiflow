@@ -15,7 +15,11 @@ package security
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"os"
 
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
 	pd "github.com/tikv/pd/client"
@@ -61,8 +65,34 @@ func (s *Credential) ToTLSConfig() (*tls.Config, error) {
 }
 
 // ToTLSConfigWithVerify generates tls's config from *Security and requires
-// verifing remote cert common name.
+// verified remote cert common name.c
 func (s *Credential) ToTLSConfigWithVerify() (*tls.Config, error) {
-	cfg, err := utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
+	cfg, err := utils.ToTLSConfig(s.CAPath, s.CertPath, s.KeyPath)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+	}
+	cn, err := s.GetCommonName()
+	if err != nil {
+		return nil, err
+	}
+	s.CertAllowedCN = append(s.CertAllowedCN, cn)
+	cfg, err = utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
 	return cfg, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+}
+
+func (s *Credential) GetCommonName() (string, error) {
+	data, err := os.ReadFile(s.CertPath)
+	if err != nil {
+		return "", cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		log.Info("failed to decode PEM block")
+		return "", cerror.ErrToTLSConfigFailed.GenWithStack("failed to decode PEM block")
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+	}
+	return certificate.Subject.CommonName, nil
 }
