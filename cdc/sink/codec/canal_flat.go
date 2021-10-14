@@ -33,7 +33,6 @@ type CanalFlatEventBatchEncoder struct {
 	resolvedBuf   []*canalFlatMessage
 }
 
-// newCanalFlatEventBatchEncoder creates a new CanalFlatEventBatchEncoder
 func newCanalFlatEventBatchEncoder() EventBatchEncoder {
 	return &CanalFlatEventBatchEncoder{
 		builder:       NewCanalEntryBuilder(),

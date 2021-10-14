@@ -320,7 +320,6 @@ func (d *MaxwellEventBatchEncoder) Size() int {
 	return d.keyBuf.Len() + d.valueBuf.Len()
 }
 
-// newMaxwellEventBatchEncoder creates a new MaxwellEventBatchEncoder.
 func newMaxwellEventBatchEncoder() EventBatchEncoder {
 	batch := &MaxwellEventBatchEncoder{
 		keyBuf:   &bytes.Buffer{},

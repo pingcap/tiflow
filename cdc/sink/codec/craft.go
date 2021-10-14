@@ -123,7 +123,6 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
-// newCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
 func newCraftEventBatchEncoder() EventBatchEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
 	// 1. Most table will not have more than 64 columns

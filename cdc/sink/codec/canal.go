@@ -447,7 +447,6 @@ func (d *CanalEventBatchEncoder) resetPacket() {
 	}
 }
 
-// newCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
 func newCanalEventBatchEncoder() EventBatchEncoder {
 	encoder := &CanalEventBatchEncoder{
 		messages:     &canal.Messages{},

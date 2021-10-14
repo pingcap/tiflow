@@ -619,7 +619,6 @@ func NewJSONEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &jsonEventBatchEncoderBuilder{opts: opts}
 }
 
-// newJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
 func newJSONEventBatchEncoder() EventBatchEncoder {
 	batch := &JSONEventBatchEncoder{
 		keyBuf:   &bytes.Buffer{},
