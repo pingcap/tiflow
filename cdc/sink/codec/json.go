@@ -576,6 +576,8 @@ func (d *JSONEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for Open Protocol
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
+
+	d.maxMessageSize = DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
@@ -586,6 +588,7 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageSize))
 	}
 
+	d.maxBatchSize = DefaultMaxBatchSize
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
 		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
 		if err != nil {
@@ -621,9 +624,6 @@ func newJSONEventBatchEncoder() EventBatchEncoder {
 	batch := &JSONEventBatchEncoder{
 		keyBuf:   &bytes.Buffer{},
 		valueBuf: &bytes.Buffer{},
-
-		maxMessageSize: DefaultMaxMessageBytes,
-		maxBatchSize:   DefaultMaxBatchSize,
 	}
 	var versionByte [8]byte
 	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)

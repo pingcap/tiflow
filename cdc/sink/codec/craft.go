@@ -97,6 +97,8 @@ func (e *CraftEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for craft protocol
 func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
+
+	e.maxMessageSize = DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		e.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
 		if err != nil {
@@ -107,6 +109,7 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageSize))
 	}
 
+	e.maxBatchSize = DefaultMaxBatchSize
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
 		e.maxBatchSize, err = strconv.Atoi(maxBatchSize)
 		if err != nil {
@@ -151,9 +154,6 @@ func NewCraftEventBatchEncoderWithAllocator(allocator *craft.SliceAllocator) Eve
 		allocator:        allocator,
 		messageBuf:       make([]*MQMessage, 0, 2),
 		rowChangedBuffer: craft.NewRowChangedEventBuffer(allocator),
-
-		maxMessageSize: DefaultMaxMessageBytes,
-		maxBatchSize:   DefaultMaxBatchSize,
 	}
 }
 
