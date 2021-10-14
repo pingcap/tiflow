@@ -528,6 +528,9 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 type avroEncoderBuilder struct {
 	credential *security.Credential
 	opts       map[string]string
+
+	keySchemaManager   *AvroSchemaManager
+	valueSchemaManager *AvroSchemaManager
 }
 
 func NewAvroEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
@@ -537,37 +540,36 @@ func NewAvroEncoderBuilder(credential *security.Credential, opts map[string]stri
 	}
 }
 
-const (
-	keySchemaManagerSuffix   = "-key"
-	valueSchemaManagerSuffix = "-value"
-)
+func (b *avroEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	if b.keySchemaManager == nil && b.valueSchemaManager == nil {
+		registryURI, ok := b.opts["registry"]
+		if !ok {
+			return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+		}
 
-func (b *avroEncoderBuilder) Build(ctx context.Context, credential *security.Credential, opts map[string]string) (newEncoderFunc, error) {
-	registryURI, ok := opts["registry"]
-	if !ok {
-		return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+		var err error
+		b.keySchemaManager, err = NewAvroSchemaManager(ctx, b.credential, registryURI, "-key")
+		if err != nil {
+			return nil, errors.Annotate(
+				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+				"Could not create Avro schema manager for message keys")
+		}
+		b.valueSchemaManager, err = NewAvroSchemaManager(ctx, b.credential, registryURI, "-value")
+		if err != nil {
+			return nil, errors.Annotate(
+				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+				"Could not create Avro schema manager for message values")
+		}
 	}
 
-	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, keySchemaManagerSuffix)
-	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
-			"Could not create Avro schema manager for message keys")
-	}
-	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, valueSchemaManagerSuffix)
-	if err != nil {
-		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
-			"Could not create Avro schema manager for message values")
-	}
-
+	var err error
 	encoder := NewAvroEventBatchEncoder().(*AvroEventBatchEncoder)
-	if err := encoder.SetParams(b.opts); err != nil {
+	if err = encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoder.SetKeySchemaManager(keySchemaManager)
-	encoder.SetValueSchemaManager(valueSchemaManager)
+	encoder.SetKeySchemaManager(b.keySchemaManager)
+	encoder.SetValueSchemaManager(b.valueSchemaManager)
 	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 
 	return encoder, nil
