@@ -14,11 +14,13 @@
 package codec
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"go.uber.org/zap"
@@ -38,6 +40,23 @@ func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 		unresolvedBuf: make([]*canalFlatMessage, 0),
 		resolvedBuf:   make([]*canalFlatMessage, 0),
 	}
+}
+
+type canalFlatEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+func (b *canalFlatEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewJSONEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func NewCanalFlatEventBatchEncoderBuilder(opts map[string]string) encoderBuilder {
+	return &canalFlatEventBatchEncoderBuilder{opts: opts}
 }
 
 // adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java

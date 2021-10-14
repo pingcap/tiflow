@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
@@ -455,4 +456,21 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 
 	encoder.resetPacket()
 	return encoder
+}
+
+type canalEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewJSONEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func NewCanalEventBatchEncoderBuilder(opts map[string]string) encoderBuilder {
+	return &canalEventBatchEncoderBuilder{opts: opts}
 }

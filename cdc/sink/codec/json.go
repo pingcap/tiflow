@@ -15,6 +15,7 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -601,6 +602,23 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
 	}
 	return nil
+}
+
+type jsonEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewJSONEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func NewJSONEventBatchEncoderBuilder(opts map[string]string) encoderBuilder {
+	return &jsonEventBatchEncoderBuilder{opts: opts}
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.

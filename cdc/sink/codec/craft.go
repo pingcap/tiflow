@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"math"
 	"strconv"
 
@@ -130,6 +131,23 @@ func NewCraftEventBatchEncoder() EventBatchEncoder {
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
 	return NewCraftEventBatchEncoderWithAllocator(craft.NewSliceAllocator(64))
+}
+
+type craftEventBatchEncoderBuilder struct {
+	opts map[string]string
+}
+
+func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+	encoder := NewJSONEventBatchEncoder()
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	return encoder, nil
+}
+
+func NewCraftEventBatchEncoderBuilder(opts map[string]string) encoderBuilder {
+	return &craftEventBatchEncoderBuilder{opts: opts}
 }
 
 // NewCraftEventBatchEncoderWithAllocator creates a new CraftEventBatchEncoder with given allocator.

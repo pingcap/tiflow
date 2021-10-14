@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -178,50 +177,27 @@ func (p *Protocol) FromString(protocol string) {
 	}
 }
 
-// NewEventBatchEncoder returns a function of creating an EventBatchEncoder by protocol.
-func NewEventBatchEncoder(p Protocol) newEncoderFunc {
+type encoderBuilder interface {
+	Build(ctx context.Context) (EventBatchEncoder, error)
+}
+
+// GetEventBatchEncoderBuild returns a function of creating an EventBatchEncoder by protocol.
+func GetEventBatchEncoderBuild(ctx context.Context, p Protocol, credential *security.Credential, opts map[string]string) encoderBuilder {
 	switch p {
 	case ProtocolDefault:
-		return NewJSONEventBatchEncoder
+		return NewJSONEventBatchEncoderBuilder(opts)
 	case ProtocolCanal:
-		return NewCanalEventBatchEncoder
+		return NewCanalEventBatchEncoderBuilder(opts)
 	case ProtocolAvro:
-		return NewAvroEventBatchEncoder
+		return NewAvroEncoderBuilder(credential, opts)
 	case ProtocolMaxwell:
-		return NewMaxwellEventBatchEncoder
+		return NewMaxwellEventBatchEncoderBuilder(opts)
 	case ProtocolCanalJSON:
-		return NewCanalFlatEventBatchEncoder
+		return NewCanalFlatEventBatchEncoderBuilder(opts)
 	case ProtocolCraft:
-		return NewCraftEventBatchEncoder
+		return NewCraftEventBatchEncoderBuilder(opts)
 	default:
 		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
-		return NewJSONEventBatchEncoder
+		return NewJSONEventBatchEncoderBuilder(opts)
 	}
-}
-
-type newEncoderFunc func() EventBatchEncoder
-
-type encoderBuilder interface {
-	Build(ctx context.Context, credential *security.Credential, opts map[string]string) (newEncoderFunc, error)
-}
-
-func CreateEventBatchEncoder(ctx context.Context, protocol Protocol, opts map[string]string) (newEncoderFunc, error) {
-	newEncoder := NewEventBatchEncoder(protocol)
-
-	// pre-flight verification of encoder parameters
-	if err := newEncoder().SetParams(opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	newEncoder1 := newEncoder
-	newEncoder = func() EventBatchEncoder {
-		ret := newEncoder1()
-		err := ret.SetParams(opts)
-		if err != nil {
-			log.Panic("MQ Encoder could not parse parameters", zap.Error(err))
-		}
-		return ret
-	}
-
-	return newEncoder, nil
 }

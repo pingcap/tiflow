@@ -526,6 +526,8 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 }
 
 type avroEncoderBuilder struct {
+	credential *security.Credential
+	opts       map[string]string
 }
 
 const (
@@ -552,11 +554,14 @@ func (b *avroEncoderBuilder) Build(ctx context.Context, credential *security.Cre
 			"Could not create Avro schema manager for message values")
 	}
 
-	return func() EventBatchEncoder {
-		encoder := NewAvroEventBatchEncoder().(*AvroEventBatchEncoder)
-		encoder.SetKeySchemaManager(keySchemaManager)
-		encoder.SetValueSchemaManager(valueSchemaManager)
-		encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
-		return encoder
-	}, nil
+	encoder := NewAvroEventBatchEncoder().(*AvroEventBatchEncoder)
+	if err := encoder.SetParams(b.opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	encoder.SetKeySchemaManager(keySchemaManager)
+	encoder.SetValueSchemaManager(valueSchemaManager)
+	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
+
+	return encoder, nil
 }
