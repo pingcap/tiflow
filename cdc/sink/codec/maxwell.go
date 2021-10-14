@@ -32,7 +32,7 @@ type maxwellEventBatchEncoderBuilder struct {
 }
 
 func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewJSONEventBatchEncoder()
+	encoder := newMaxwellEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -320,8 +320,8 @@ func (d *MaxwellEventBatchEncoder) Size() int {
 	return d.keyBuf.Len() + d.valueBuf.Len()
 }
 
-// NewMaxwellEventBatchEncoder creates a new MaxwellEventBatchEncoder.
-func NewMaxwellEventBatchEncoder() EventBatchEncoder {
+// newMaxwellEventBatchEncoder creates a new MaxwellEventBatchEncoder.
+func newMaxwellEventBatchEncoder() EventBatchEncoder {
 	batch := &MaxwellEventBatchEncoder{
 		keyBuf:   &bytes.Buffer{},
 		valueBuf: &bytes.Buffer{},

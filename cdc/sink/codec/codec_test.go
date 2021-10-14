@@ -219,8 +219,8 @@ func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
 		if len(cs) == 0 {
 			continue
 		}
-		craftEncoder := NewCraftEventBatchEncoder()
-		jsonEncoder := NewJSONEventBatchEncoder()
+		craftEncoder := newCraftEventBatchEncoder()
+		jsonEncoder := newJSONEventBatchEncoder()
 		craftMessages := s.encodeRowCase(c, craftEncoder, cs)
 		jsonMessages := s.encodeRowCase(c, jsonEncoder, cs)
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
@@ -369,10 +369,10 @@ func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEve
 
 func init() {
 	var err error
-	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(NewCraftEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
+	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(newCraftEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
-	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(NewJSONEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
+	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(newJSONEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 	codecPB1EncodedRowChanges = codecEncodeRowChangedPB1ToMessage(codecBenchmarkRowChanges)
@@ -388,7 +388,7 @@ func BenchmarkCraftEncoding(b *testing.B) {
 
 func BenchmarkJsonEncoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_, _ = codecEncodeRowCase(NewJSONEventBatchEncoder(), codecBenchmarkRowChanges)
+		_, _ = codecEncodeRowCase(newJSONEventBatchEncoder(), codecBenchmarkRowChanges)
 	}
 }
 

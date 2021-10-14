@@ -199,7 +199,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
+	encoder := newJSONEventBatchEncoder().(*JSONEventBatchEncoder)
 	err := encoder.SetParams(map[string]string{})
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
@@ -240,7 +240,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder()
+	encoder := newJSONEventBatchEncoder()
 
 	// the size of `testEvent` is 87
 	testEvent := &model.RowChangedEvent{
@@ -282,7 +282,7 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder()
+	encoder := newJSONEventBatchEncoder()
 	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
 	c.Check(err, check.IsNil)
 
@@ -322,10 +322,32 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	c.Check(sum, check.Equals, 10000)
 }
 
+func (s *batchSuite) TestEmptyMessage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	encoder := newJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
+	c.Check(err, check.IsNil)
+
+	emptyEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{},
+	}
+
+	for i := 0; i < 10000; i++ {
+		r, err := encoder.AppendRowChangedEvent(emptyEvent)
+		c.Check(r, check.Equals, EncoderNoOperation)
+		c.Check(err, check.IsNil)
+	}
+
+	messages := encoder.Build()
+	c.Assert(messages, check.HasLen, 0)
+}
+
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
 	s.testBatchCodec(c, func() EventBatchEncoder {
-		encoder := NewJSONEventBatchEncoder()
+		encoder := newJSONEventBatchEncoder()
 		return encoder
 	}, NewJSONEventBatchDecoder)
 }

@@ -70,7 +70,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 
 func (s *maxwellbatchSuite) TestmaxwellEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.testmaxwellBatchCodec(c, NewMaxwellEventBatchEncoder)
+	s.testmaxwellBatchCodec(c, newMaxwellEventBatchEncoder)
 }
 
 var _ = check.Suite(&maxwellcolumnSuite{})

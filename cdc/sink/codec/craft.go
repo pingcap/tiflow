@@ -120,8 +120,8 @@ func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
-// NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
-func NewCraftEventBatchEncoder() EventBatchEncoder {
+// newCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
+func newCraftEventBatchEncoder() EventBatchEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
@@ -133,7 +133,7 @@ type craftEventBatchEncoderBuilder struct {
 }
 
 func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewCraftEventBatchEncoder()
+	encoder := newCraftEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}

@@ -447,8 +447,8 @@ func (d *CanalEventBatchEncoder) resetPacket() {
 	}
 }
 
-// NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
-func NewCanalEventBatchEncoder() EventBatchEncoder {
+// newCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
+func newCanalEventBatchEncoder() EventBatchEncoder {
 	encoder := &CanalEventBatchEncoder{
 		messages:     &canal.Messages{},
 		entryBuilder: NewCanalEntryBuilder(),
@@ -463,7 +463,7 @@ type canalEventBatchEncoderBuilder struct {
 }
 
 func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewJSONEventBatchEncoder()
+	encoder := newCanalEventBatchEncoder()
 	if err := encoder.SetParams(b.opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
