@@ -73,7 +73,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	testHandleRebalance(c)
 	testHandleMoveTable(c)
 	testHandleChangefeedQuery(c)
-	testHandleFailpoint(c)
+	// testHandleFailpoint(c)
 }
 
 func testPprof(c *check.C) {
