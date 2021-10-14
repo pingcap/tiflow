@@ -530,6 +530,13 @@ type avroEncoderBuilder struct {
 	opts       map[string]string
 }
 
+func NewAvroEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
+	return &avroEncoderBuilder{
+		credential: credential,
+		opts:       opts,
+	}
+}
+
 const (
 	keySchemaManagerSuffix   = "-key"
 	valueSchemaManagerSuffix = "-value"

@@ -617,7 +617,7 @@ func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEnc
 	return encoder, nil
 }
 
-func NewJSONEventBatchEncoderBuilder(opts map[string]string) encoderBuilder {
+func NewJSONEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &jsonEventBatchEncoderBuilder{opts: opts}
 }
 

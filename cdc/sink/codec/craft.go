@@ -146,7 +146,7 @@ func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEn
 	return encoder, nil
 }
 
-func NewCraftEventBatchEncoderBuilder(opts map[string]string) encoderBuilder {
+func NewCraftEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &craftEventBatchEncoderBuilder{opts: opts}
 }
 

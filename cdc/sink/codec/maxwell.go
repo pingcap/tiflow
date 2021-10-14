@@ -40,7 +40,7 @@ func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatch
 	return encoder, nil
 }
 
-func NewMaxwellEventBatchEncoderBuilder(opts map[string]string) encoderBuilder {
+func NewMaxwellEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &maxwellEventBatchEncoderBuilder{opts: opts}
 }
 

@@ -177,12 +177,12 @@ func (p *Protocol) FromString(protocol string) {
 	}
 }
 
-type encoderBuilder interface {
+type EncoderBuilder interface {
 	Build(ctx context.Context) (EventBatchEncoder, error)
 }
 
 // GetEventBatchEncoderBuild returns a function of creating an EventBatchEncoder by protocol.
-func GetEventBatchEncoderBuild(ctx context.Context, p Protocol, credential *security.Credential, opts map[string]string) encoderBuilder {
+func GetEventBatchEncoderBuild(ctx context.Context, p Protocol, credential *security.Credential, opts map[string]string) EncoderBuilder {
 	switch p {
 	case ProtocolDefault:
 		return NewJSONEventBatchEncoderBuilder(opts)
