@@ -19,6 +19,7 @@ require (
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/gin-gonic/gin v1.7.0
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.6
@@ -33,6 +34,7 @@ require (
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/modern-go/reflect2 v1.0.1
+	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63
@@ -44,7 +46,7 @@ require (
 	github.com/pingcap/tidb-tools v5.0.3+incompatible
 	github.com/prometheus/client_golang v1.7.1
 	github.com/r3labs/diff v1.1.0
-	github.com/soheilhy/cmux v0.1.4
+	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0

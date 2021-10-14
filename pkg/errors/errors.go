@@ -255,4 +255,7 @@ var (
 	// cli commands related errors
 	ErrCliHttpError            = errors.Normalize("TiCDC cli encounterd error when sending an http request", errors.RFCCodeText("CDC:ErrCliHttpError"))
 	ErrCliUnexpectedHttpStatus = errors.Normalize("TiCDC cli encountered an unexpected http status when sending a request. URL: %s, status: %d", errors.RFCCodeText("CDC:ErrCliHttpErrorStatus"))
+
+	// tcp server error
+	ErrTCPServerClosed = errors.Normalize("The TCP server has been closed", errors.RFCCodeText("CDC:ErrTCPServerClosed"))
 )
