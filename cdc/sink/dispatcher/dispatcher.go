@@ -108,7 +108,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		var rule dispatchRule
 		rule.fromString(ruleConfig.Dispatcher)
 		switch rule {
-		case dispatchRuleRowID, dispatchRuleIndexValue:
+		case dispatchRuleRowID, dispatchRuleIndexValue, dispatchRulePK:
 			if cfg.EnableOldValue {
 				log.Warn("This index-value distribution mode " +
 					"does not guarantee row-level orderliness when " +
@@ -121,7 +121,8 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			d = newTableDispatcher(partitionNum)
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
-		case dispatchRule
+		case dispatchRuleTSO:
+			d = newTSODispatcher(partitionNum)
 		}
 		rules = append(rules, struct {
 			Dispatcher
