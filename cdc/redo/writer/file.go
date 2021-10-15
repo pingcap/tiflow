@@ -445,6 +445,8 @@ func (w *Writer) GC(checkPointTs uint64) error {
 	return nil
 }
 
+// shouldRemoved remove the file which commitTs in file name (max commitTs of all event ts in the file) < checkPointTs,
+// since all event ts < checkPointTs already sent to sink, the log is not needed any more for recovery
 func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
 	if filepath.Ext(f.Name()) != common.LogEXT {
 		return false, nil

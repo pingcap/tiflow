@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// blackholeWriter defines a blockhole storage, it receives events and persists
+// blackholeWriter defines a blackhole storage, it receives events and persists
 // without any latency
 type blackholeWriter struct {
 	tableRtsMap  map[model.TableID]uint64
