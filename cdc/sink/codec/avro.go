@@ -526,7 +526,7 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type avroEncoderBuilder struct {
+type avroEventBatchEncoderBuilder struct {
 	credential *security.Credential
 	opts       map[string]string
 
@@ -536,9 +536,9 @@ type avroEncoderBuilder struct {
 	initialized *atomic.Bool
 }
 
-// NewAvroEncoderBuilder return an `EncoderBuilder`
-func NewAvroEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
-	return &avroEncoderBuilder{
+// NewAvroEventBatchEncoderBuilder return an `EncoderBuilder`
+func NewAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
+	return &avroEventBatchEncoderBuilder{
 		credential:  credential,
 		opts:        opts,
 		initialized: atomic.NewBool(false),
@@ -546,7 +546,7 @@ func NewAvroEncoderBuilder(credential *security.Credential, opts map[string]stri
 }
 
 // newSchemaManagers initialize the `keySchemaManager` and `valueSchemaManager` in an atomic way.
-func (b *avroEncoderBuilder) newSchemaManagers(ctx context.Context) error {
+func (b *avroEventBatchEncoderBuilder) newSchemaManagers(ctx context.Context) error {
 	registryURI, ok := b.opts["registry"]
 	if !ok {
 		return cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
@@ -568,7 +568,7 @@ func (b *avroEncoderBuilder) newSchemaManagers(ctx context.Context) error {
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *avroEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	if !b.initialized.Load() {
 		if err := b.newSchemaManagers(ctx); err != nil {
 			return nil, errors.Annotate(

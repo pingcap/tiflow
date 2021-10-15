@@ -189,7 +189,7 @@ func GetEventBatchEncoderBuild(p Protocol, credential *security.Credential, opts
 	case ProtocolCanal:
 		return NewCanalEventBatchEncoderBuilder(opts)
 	case ProtocolAvro:
-		return NewAvroEncoderBuilder(credential, opts)
+		return NewAvroEventBatchEncoderBuilder(credential, opts)
 	case ProtocolMaxwell:
 		return NewMaxwellEventBatchEncoderBuilder(opts)
 	case ProtocolCanalJSON:
