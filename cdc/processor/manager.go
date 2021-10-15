@@ -79,7 +79,7 @@ func NewManager4Test(
 func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*model.GlobalReactorState)
-	if err := m.handleCommand(); err != nil {
+	if err := m.handleCommand(ctx); err != nil {
 		return state, err
 	}
 	captureID := ctx.GlobalVars().CaptureInfo.ID
@@ -87,7 +87,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	for changefeedID, changefeedState := range globalState.Changefeeds {
 		if !changefeedState.Active(captureID) {
 			inactiveChangefeedCount++
-			m.closeProcessor(changefeedID)
+			m.closeProcessor(ctx, changefeedID)
 			continue
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
@@ -107,7 +107,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
-			m.closeProcessor(changefeedID)
+			m.closeProcessor(ctx, changefeedID)
 			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 				continue
 			}
@@ -118,16 +118,16 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	if len(globalState.Changefeeds)-inactiveChangefeedCount != len(m.processors) {
 		for changefeedID := range m.processors {
 			if _, exist := globalState.Changefeeds[changefeedID]; !exist {
-				m.closeProcessor(changefeedID)
+				m.closeProcessor(ctx, changefeedID)
 			}
 		}
 	}
 	return state, nil
 }
 
-func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
+func (m *Manager) closeProcessor(ctx cdcContext.Context, changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
-		err := processor.Close()
+		err := processor.Close(ctx)
 		if err != nil {
 			log.Warn("failed to close processor", zap.Error(err))
 		}
@@ -164,7 +164,7 @@ func (m *Manager) sendCommand(tp commandTp, payload interface{}) chan struct{} {
 	return cmd.done
 }
 
-func (m *Manager) handleCommand() error {
+func (m *Manager) handleCommand(ctx cdcContext.Context) error {
 	var cmd *command
 	select {
 	case cmd = <-m.commandQueue:
@@ -175,7 +175,7 @@ func (m *Manager) handleCommand() error {
 	switch cmd.tp {
 	case commandTpClose:
 		for changefeedID := range m.processors {
-			m.closeProcessor(changefeedID)
+			m.closeProcessor(ctx, changefeedID)
 		}
 		return cerrors.ErrReactorFinished
 	case commandTpWriteDebugInfo:

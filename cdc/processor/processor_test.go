@@ -36,7 +36,7 @@ type processorSuite struct{}
 var _ = check.Suite(&processorSuite{})
 
 func initProcessor4Test(ctx cdcContext.Context, c *check.C) (*processor, *orchestrator.ReactorStateTester) {
-	p := newProcessor4Test(ctx, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	p, err := newProcessor4Test(ctx, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
@@ -45,6 +45,7 @@ func initProcessor4Test(ctx cdcContext.Context, c *check.C) (*processor, *orches
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	})
+	c.Assert(err, check.IsNil)
 	p.changefeed = model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	return p, orchestrator.NewReactorStateTester(c, p.changefeed, map[string]string{
 		"/tidb/cdc/capture/" + ctx.GlobalVars().CaptureInfo.ID:                                     `{"id":"` + ctx.GlobalVars().CaptureInfo.ID + `","address":"127.0.0.1:8300"}`,
@@ -577,7 +578,7 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	})
 	c.Assert(p.changefeed.Workloads[p.captureInfo.ID], check.DeepEquals, model.TaskWorkload{1: {Workload: 1}, 2: {Workload: 1}})
 
-	c.Assert(p.Close(), check.IsNil)
+	c.Assert(p.Close(ctx), check.IsNil)
 	tester.MustApplyPatches()
 	c.Assert(p.tables[1].(*mockTablePipeline).canceled, check.IsTrue)
 	c.Assert(p.tables[2].(*mockTablePipeline).canceled, check.IsTrue)
@@ -605,7 +606,7 @@ func (s *processorSuite) TestProcessorClose(c *check.C) {
 	c.Assert(cerror.ErrReactorFinished.Equal(errors.Cause(err)), check.IsTrue)
 	tester.MustApplyPatches()
 
-	c.Assert(p.Close(), check.IsNil)
+	c.Assert(p.Close(ctx), check.IsNil)
 	tester.MustApplyPatches()
 	c.Assert(p.changefeed.TaskPositions[p.captureInfo.ID].Error, check.DeepEquals, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
