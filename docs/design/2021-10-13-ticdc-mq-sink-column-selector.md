@@ -108,7 +108,7 @@ N/A
 
 #### Compatibility with other features/components
 
-When we do not open the old value and filter to the pk column, the open protocol delete event may have empty data. If this happens we will delete the message.
+Because there is a possibility of filtering out all columns, the open protocol delete event may have empty data. If this happens we will delete the message.
 
 #### Upgrade compatibility
 
