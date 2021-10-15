@@ -4,20 +4,11 @@ import requests as rq
 import time
 import json
 
-
-
 # the max retry time
 RETRY_TIME = 10
 
 BASE_URL0 = "https://127.0.0.1:8300/api/v1"
 BASE_URL1 = "https://127.0.0.1:8301/api/v1"
-
-# CERTIFICATE_PATH = ''
-# CLIENT_PEM_PATH = ''
-# CLIENT_KEY_PEM_PATH = ''
-# CA_PEM_PATH = ''
-# CERT=(CLIENT_PEM_PATH, CLIENT_KEY_PEM_PATH)
-# VERIFY=(CA_PEM_PATH)
 
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):

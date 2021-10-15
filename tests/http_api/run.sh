@@ -15,7 +15,7 @@ function run() {
 		return
 	fi
 
-	sudo pip install -U requests==2.26.0
+	#sudo pip install -U requests==2.26.0
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -65,10 +65,14 @@ function run() {
 	python $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
 	# wait for changefeed created
 	sleep 2
-	
+
 	run_sql "CREATE table test.simple0(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
 	run_sql "CREATE table test.simple1(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+		--ssl-ca=$TLS_DIR/ca.pem \
+		--ssl-cert=$TLS_DIR/server.pem \
+		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "CREATE table test.simple2(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
 		--ssl-ca=$TLS_DIR/ca.pem \
 		--ssl-cert=$TLS_DIR/server.pem \
 		--ssl-key=$TLS_DIR/server-key.pem
@@ -82,9 +86,9 @@ function run() {
 		"update_changefeed"
 		"resume_changefeed"
 		"rebalance_table"
-		"move_table"
-		"get_processor"
 		"list_processor"
+		"get_processor"
+		"move_table"
 		"set_log_level"
 		"remove_changefeed"
 		"resign_owner"
