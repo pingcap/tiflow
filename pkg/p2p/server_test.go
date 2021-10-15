@@ -330,8 +330,8 @@ func TestServerSingleClientMultiTopic(t *testing.T) {
 				require.Equal(t, "test-client-1", senderID)
 				require.IsType(t, &testTopicContent{}, value)
 				content := value.(*testTopicContent)
-				swapped := atomic.CompareAndSwapInt64(&lastIndices[i], content.Index-1, content.Index)
-				require.True(t, swapped)
+				old := atomic.SwapInt64(&lastIndices[i], content.Index)
+				require.Equal(t, content.Index-1, old)
 				return nil
 			})
 
