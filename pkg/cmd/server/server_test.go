@@ -186,6 +186,16 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
 		},
+		SchedulerV2: &config.SchedulerV2Config{
+			Enabled:                      true,
+			ProcessorCheckpointInterval:  config.TomlDuration(time.Millisecond * 200),
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
+			ClientMaxBatchSize:           8192,
+			ClientRetryRateLimit:         1.0,
+			ServerMaxPendingMessageCount: 102400,
+			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+			ServerWorkerPoolSize:         4,
+		},
 	})
 }
 
@@ -221,6 +231,11 @@ max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
+
+[scheduler-v2]
+enabled = true
+processor-checkpoint-interval = "15ms"
+client-retry-rate-limit = 0.2
 `, dataDir)
 	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -268,6 +283,16 @@ sort-dir = "/tmp/just_a_test"
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
 		},
+		SchedulerV2: &config.SchedulerV2Config{
+			Enabled:                      true,
+			ProcessorCheckpointInterval:  config.TomlDuration(time.Millisecond*15),
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
+			ClientMaxBatchSize:           8192,
+			ClientRetryRateLimit:         0.2,
+			ServerMaxPendingMessageCount: 102400,
+			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+			ServerWorkerPoolSize:         4,
+		},
 	})
 }
 
@@ -309,6 +334,11 @@ ca-path = "aa"
 cert-path = "bb"
 key-path = "cc"
 cert-allowed-cn = ["dd","ee"]
+
+[scheduler-v2]
+enabled = true
+processor-checkpoint-interval = "15ms"
+client-retry-rate-limit = 0.2
 `, dataDir)
 	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -374,6 +404,16 @@ cert-allowed-cn = ["dd","ee"]
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
+		},
+		SchedulerV2: &config.SchedulerV2Config{
+			Enabled:                      true,
+			ProcessorCheckpointInterval:  config.TomlDuration(time.Millisecond*15),
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
+			ClientMaxBatchSize:           8192,
+			ClientRetryRateLimit:         0.2,
+			ServerMaxPendingMessageCount: 102400,
+			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+			ServerWorkerPoolSize:         4,
 		},
 	})
 }
