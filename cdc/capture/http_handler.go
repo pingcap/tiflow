@@ -768,6 +768,12 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 		return
 	}
 
+	// we should add self commonName before call ToTLSConfigWithVerify
+	conf := config.GetDefaultServerConfig()
+	err = conf.Security.AddSelfCommonName()
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+	}
 	tslConfig, err := config.GetGlobalServerConfig().Security.ToTLSConfigWithVerify()
 	if err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))

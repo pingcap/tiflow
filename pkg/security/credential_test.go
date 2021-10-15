@@ -25,7 +25,12 @@ func TestGetCommonName(t *testing.T) {
 		CertPath: "../../tests/_certificates/server.pem",
 		KeyPath:  "../../tests/_certificates/server-key.pem",
 	}
-	cn, err := cd.GetCommonName()
+	cn, err := cd.getSelfCommonName()
 	require.Nil(t, err)
 	require.Equal(t, "tidb-server", cn)
+
+	cd.CertPath = "../../tests/_certificates/server-key.pem"
+	_, err = cd.getSelfCommonName()
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "failed to decode PEM block to certificate")
 }
