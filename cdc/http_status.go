@@ -23,7 +23,6 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -58,23 +57,11 @@ func (s *Server) startStatusHTTP(ln net.Listener) error {
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
 	conf := config.GetGlobalServerConfig()
-	tlsConfig, err := conf.Security.ToTLSConfigWithVerify()
-	if err != nil {
-		log.Error("status server get tls config failed", zap.Error(err))
-		return errors.Trace(err)
-	}
 
-	s.statusServer = &http.Server{Addr: conf.Addr, Handler: router, TLSConfig: tlsConfig}
-	if err != nil {
-		return cerror.WrapError(cerror.ErrServeHTTP, err)
-	}
+	s.statusServer = &http.Server{Addr: conf.Addr, Handler: router}
 	go func() {
 		log.Info("http server is running", zap.String("addr", conf.Addr))
-		if tlsConfig != nil {
-			err = s.statusServer.ServeTLS(ln, conf.Security.CertPath, conf.Security.KeyPath)
-		} else {
-			err = s.statusServer.Serve(ln)
-		}
+		err := s.statusServer.Serve(ln)
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("http server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
 		}
