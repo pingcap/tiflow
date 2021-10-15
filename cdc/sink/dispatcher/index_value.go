@@ -36,7 +36,7 @@ func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	// FIXME(leoppro): if the row events includes both pre-cols and cols
 	// the dispatch logic here is wrong
 
-	// distribute partition by rowid or unique column value
+	// distribute partition by RowID or unique column value
 	dispatchCols := row.Columns
 	if len(row.Columns) == 0 {
 		dispatchCols = row.PreColumns

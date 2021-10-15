@@ -37,6 +37,7 @@ const (
 	dispatchRuleRowID
 	dispatchRuleTS
 	dispatchRuleTable
+	// alias of RowID
 	dispatchRuleIndexValue
 	dispatchRuleTSO
 	dispatchRulePK
@@ -120,6 +121,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 			d = newTableDispatcher(partitionNum)
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
+		case dispatchRule
 		}
 		rules = append(rules, struct {
 			Dispatcher
@@ -130,3 +132,8 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		rules: rules,
 	}, nil
 }
+
+// dispatchRuleTSO
+// dispatchRulePK
+// dispatchTableName
+// dispatchColumnName
