@@ -15,7 +15,7 @@ function run() {
 		return
 	fi
 
-	#sudo pip install -U requests==2.26.0
+	sudo pip install -U requests==2.26.0
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
