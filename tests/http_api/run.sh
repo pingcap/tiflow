@@ -63,7 +63,9 @@ function run() {
 	python $CUR/util/test_case.py get_status $TLS_DIR
 
 	python $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
-
+	# wait for changefeed created
+	sleep 2
+	
 	run_sql "CREATE table test.simple0(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
 	run_sql "CREATE table test.simple1(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
