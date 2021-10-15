@@ -67,6 +67,7 @@ func NewConfig() *Config {
 	}
 }
 
+// Initialize the kafka configuration
 func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
