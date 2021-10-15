@@ -152,9 +152,19 @@ func (m *MessageServer) run(ctx context.Context) error {
 				}
 				log.Debug("handler registered", zap.String("topic", task.topic))
 			case taskOnDeregisterHandler:
-				m.doRemoveHandler(task.topic)
-				if task.done != nil {
-					close(task.done)
+				if handler, ok := m.handlers[task.topic]; ok {
+					delete(m.handlers, task.topic)
+					go func() {
+						err := handler.poolHandle.GracefulUnregister(ctx, time.Second*5)
+						if err != nil {
+							log.L().DPanic("failed to gracefully unregister handle",
+								zap.Error(err))
+						}
+						log.Debug("handler deregistered", zap.String("topic", task.topic))
+						if task.done != nil {
+							close(task.done)
+						}
+					}()
 				}
 			case taskOnMessageBackFill:
 				for _, entry := range task.entries {
