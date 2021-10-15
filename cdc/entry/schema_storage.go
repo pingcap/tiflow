@@ -22,12 +22,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

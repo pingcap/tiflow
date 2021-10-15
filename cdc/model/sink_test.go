@@ -15,10 +15,10 @@ package model
 
 import (
 	"github.com/pingcap/check"
-	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 )
 
 type columnFlagTypeSuite struct{}
