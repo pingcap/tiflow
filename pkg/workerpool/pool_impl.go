@@ -186,7 +186,7 @@ func (h *defaultEventHandle) GracefulUnregister(ctx context.Context, timeout tim
 	}
 
 	defer func() {
-		if !atomic.CompareAndSwapInt32(&h.status, handleRunning, handleCancelled) {
+		if !atomic.CompareAndSwapInt32(&h.status, handleCancelling, handleCancelled) {
 			// already cancelled
 			return
 		}
