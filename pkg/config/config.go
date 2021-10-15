@@ -202,7 +202,7 @@ type ServerConfig struct {
 
 	LogFile  string     `toml:"log-file" json:"log-file"`
 	LogLevel string     `toml:"log-level" json:"log-level"`
-	LogHTTP  bool       `toml:"log-http"  json:"log-http""`
+	LogHTTP  bool       `toml:"log-http"  json:"log-http"`
 	Log      *LogConfig `toml:"log" json:"log"`
 
 	DataDir string `toml:"data-dir" json:"data-dir"`
