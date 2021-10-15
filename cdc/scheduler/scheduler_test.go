@@ -874,13 +874,8 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
-		TableID:   1,
-		CaptureID: "capture-1",
-		Status:    runningTable,
-	})
-	dispatcher.tables.AddTableRecord(&util.TableRecord{
 		TableID:   2,
-		CaptureID: "capture-2",
+		CaptureID: "capture-1",
 		Status:    runningTable,
 	})
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -889,29 +884,17 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 		Status:    runningTable,
 	})
 
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", model.Ts(1300), true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", model.Ts(1300), false).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
 
 	dispatcher.MoveTable(1, "capture-2")
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-1", model.Ts(1300), true).
-		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
 	require.NoError(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 	communicator.AssertNotCalled(t, "Announce")
-
-	dispatcher.OnAgentFinishedTableOperation("capture-1", 1)
-	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", model.Ts(1300), false).
-		Return(true, nil)
-	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
-	require.NoError(t, err)
-	require.Equal(t, CheckpointCannotProceed, checkpointTs)
-	require.Equal(t, CheckpointCannotProceed, resolvedTs)
-	communicator.AssertExpectations(t)
 
 	dispatcher.OnAgentFinishedTableOperation("capture-2", 1)
 	communicator.Reset()
