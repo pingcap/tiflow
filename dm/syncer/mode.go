@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/unit"
-	tcontext "github.com/pingcap/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/dm/unit"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
 )
 
 func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {

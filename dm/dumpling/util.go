@@ -22,8 +22,8 @@ import (
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/spf13/pflag"
 
-	dutils "github.com/pingcap/dm/pkg/dumpling"
-	"github.com/pingcap/dm/pkg/log"
+	dutils "github.com/pingcap/ticdc/dm/pkg/dumpling"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 // ParseArgLikeBash parses list arguments like bash, which helps us to run

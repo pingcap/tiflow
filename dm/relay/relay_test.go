@@ -31,16 +31,16 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/parser"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/binlog/event"
-	"github.com/pingcap/dm/pkg/conn"
-	"github.com/pingcap/dm/pkg/gtid"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/utils"
-	"github.com/pingcap/dm/relay/reader"
-	"github.com/pingcap/dm/relay/retry"
-	"github.com/pingcap/dm/relay/transformer"
-	"github.com/pingcap/dm/relay/writer"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay/reader"
+	"github.com/pingcap/ticdc/dm/relay/retry"
+	"github.com/pingcap/ticdc/dm/relay/transformer"
+	"github.com/pingcap/ticdc/dm/relay/writer"
 )
 
 var _ = Suite(&testRelaySuite{})
@@ -167,9 +167,9 @@ func (t *testRelaySuite) TestTryRecoverLatestFile(c *C) {
 		relayCfg = newRelayCfg(c, gmysql.MySQLFlavor)
 		r        = NewRelay(relayCfg).(*Relay)
 	)
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/utils/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged")
 	cfg := getDBConfigForTest()
 	conn.InitMockDB(c)
 	db, err := conn.DefaultDBProvider.Apply(cfg)
@@ -294,9 +294,9 @@ func (t *testRelaySuite) TestTryRecoverMeta(c *C) {
 	f.Close()
 
 	// recover with empty GTIDs.
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/utils/GetGTIDPurged", `return("")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged", `return("")`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/pkg/utils/GetGTIDPurged")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/utils/GetGTIDPurged")
 	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), IsNil)
 	_, latestPos := r.meta.Pos()
 	c.Assert(latestPos, DeepEquals, gmysql.Position{Name: filename, Pos: g.LatestPos})
@@ -541,9 +541,9 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 	mockGetRandomServerID(mockDB)
 	//  mock AddGSetWithPurged
 	mockDB.ExpectQuery("select @@GLOBAL.gtid_purged").WillReturnRows(sqlmock.NewRows([]string{"@@GLOBAL.gtid_purged"}).AddRow(""))
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet", "return()"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet", "return()"), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet")
 	c.Assert(r.reSetupMeta(ctx), IsNil)
 	uuid001 := fmt.Sprintf("%s.000001", uuid)
 	t.verifyMetadata(c, r, uuid001, gmysql.Position{Name: r.cfg.BinLogName, Pos: 4}, emptyGTID.String(), []string{uuid001})

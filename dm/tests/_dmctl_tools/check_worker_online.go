@@ -20,8 +20,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/tests/utils"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/tests/utils"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 )
 

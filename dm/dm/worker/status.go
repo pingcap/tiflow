@@ -20,9 +20,9 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/common"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/dm/common"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
 )
 
 // Status returns the status of the current sub task.

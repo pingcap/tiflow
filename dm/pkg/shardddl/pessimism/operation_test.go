@@ -19,7 +19,7 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 func (t *testForEtcd) TestOperationJSON(c *C) {

@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 
 	"github.com/coreos/go-semver/semver"
 )

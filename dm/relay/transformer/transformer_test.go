@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser"
 
-	"github.com/pingcap/dm/pkg/binlog/event"
-	"github.com/pingcap/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
 )
 
 var _ = check.Suite(&testTransformerSuite{})

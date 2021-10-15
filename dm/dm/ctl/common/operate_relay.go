@@ -16,7 +16,7 @@ package common
 import (
 	"context"
 
-	"github.com/pingcap/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/pb"
 )
 
 // OperateRelay does operation on relay unit.

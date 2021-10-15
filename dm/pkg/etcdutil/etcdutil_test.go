@@ -29,8 +29,8 @@ import (
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 var _ = Suite(&testEtcdUtilSuite{})
@@ -239,9 +239,9 @@ func (t *testEtcdUtilSuite) testDoOpsInOneTxnWithRetry(c *C) {
 	c.Assert(resp.Responses, HasLen, 2)
 
 	// enable failpoint
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/etcdutil/ErrNoSpace", `3*return()`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/etcdutil/ErrNoSpace", `3*return()`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/dm/pkg/etcdutil/ErrNoSpace")
+	defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/etcdutil/ErrNoSpace")
 
 	// put again
 	resp, rev2, err = DoOpsInOneCmpsTxnWithRetry(cli, []clientv3.Cmp{clientv3util.KeyMissing(key1), clientv3util.KeyMissing(key2)}, []clientv3.Op{

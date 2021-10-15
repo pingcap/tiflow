@@ -24,16 +24,16 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/binlog"
-	"github.com/pingcap/dm/pkg/conn"
-	tcontext "github.com/pingcap/dm/pkg/context"
-	"github.com/pingcap/dm/pkg/cputil"
-	"github.com/pingcap/dm/pkg/retry"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
-	"github.com/pingcap/dm/syncer/dbconn"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/pkg/cputil"
+	"github.com/pingcap/ticdc/dm/pkg/retry"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 var _ = Suite(&testShardingGroupSuite{})

@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/diff"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 // diffDataLoop checks whether target has the same data with source via `sync-diff-inspector` multiple times.

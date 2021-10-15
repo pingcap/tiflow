@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/pingcap/dm/dm/portal"
-	_ "github.com/pingcap/dm/dm/portal/statik"
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/dm/portal"
+	_ "github.com/pingcap/ticdc/dm/dm/portal/statik"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 	"github.com/rakyll/statik/fs"
 	"go.uber.org/zap"
 )

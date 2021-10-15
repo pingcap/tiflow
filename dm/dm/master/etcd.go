@@ -26,9 +26,9 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/dm/pkg/etcdutil"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 const (

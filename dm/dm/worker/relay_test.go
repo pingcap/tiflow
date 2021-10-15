@@ -21,15 +21,15 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/dm/unit"
-	"github.com/pingcap/dm/pkg/binlog"
-	"github.com/pingcap/dm/pkg/gtid"
-	pkgstreamer "github.com/pingcap/dm/pkg/streamer"
-	"github.com/pingcap/dm/pkg/utils"
-	"github.com/pingcap/dm/relay"
-	"github.com/pingcap/dm/relay/purger"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/dm/unit"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
+	"github.com/pingcap/ticdc/dm/relay/purger"
 )
 
 type testRelay struct{}

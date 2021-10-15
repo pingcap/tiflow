@@ -24,9 +24,9 @@ import (
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/infoschema"
 
-	"github.com/pingcap/dm/pkg/conn"
-	tcontext "github.com/pingcap/dm/pkg/context"
-	"github.com/pingcap/dm/syncer/dbconn"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 func newMysqlErr(number uint16, message string) *mysql.MySQLError {

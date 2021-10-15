@@ -24,14 +24,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/pingcap/dm/dm/common"
-	"github.com/pingcap/dm/dumpling"
-	"github.com/pingcap/dm/loader"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/metricsproxy"
-	"github.com/pingcap/dm/pkg/utils"
-	"github.com/pingcap/dm/relay"
-	syncer "github.com/pingcap/dm/syncer/metrics"
+	"github.com/pingcap/ticdc/dm/dm/common"
+	"github.com/pingcap/ticdc/dm/dumpling"
+	"github.com/pingcap/ticdc/dm/loader"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/metricsproxy"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/relay"
+	syncer "github.com/pingcap/ticdc/dm/syncer/metrics"
 )
 
 const (

@@ -17,7 +17,7 @@ package main
 
 //nolint: gofumpt
 import (
-	_ "github.com/pingcap/dm/pkg/printinit"
+	_ "github.com/pingcap/ticdc/dm/pkg/printinit"
 
 	"fmt"
 	"os"

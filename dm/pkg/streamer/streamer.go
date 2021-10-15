@@ -18,11 +18,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/dm/pkg/binlog/common"
-	"github.com/pingcap/dm/pkg/binlog/event"
-	"github.com/pingcap/dm/pkg/binlog/reader"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"

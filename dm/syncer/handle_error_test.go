@@ -19,9 +19,9 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/conn"
-	"github.com/pingcap/dm/syncer/dbconn"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 func (s *testSyncerSuite) TestHandleError(c *C) {

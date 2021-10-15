@@ -1,8 +1,8 @@
-LDFLAGS += -X "github.com/pingcap/dm/pkg/utils.ReleaseVersion=$(shell git describe --tags --dirty="-dev")"
-LDFLAGS += -X "github.com/pingcap/dm/pkg/utils.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
-LDFLAGS += -X "github.com/pingcap/dm/pkg/utils.GitHash=$(shell git rev-parse HEAD)"
-LDFLAGS += -X "github.com/pingcap/dm/pkg/utils.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
-LDFLAGS += -X "github.com/pingcap/dm/pkg/utils.GoVersion=$(shell go version)"
+LDFLAGS += -X "github.com/pingcap/ticdc/dm/pkg/utils.ReleaseVersion=$(shell git describe --tags --dirty="-dev")"
+LDFLAGS += -X "github.com/pingcap/ticdc/dm/pkg/utils.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
+LDFLAGS += -X "github.com/pingcap/ticdc/dm/pkg/utils.GitHash=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/pingcap/ticdc/dm/pkg/utils.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
+LDFLAGS += -X "github.com/pingcap/ticdc/dm/pkg/utils.GoVersion=$(shell go version)"
 
 CURDIR   := $(shell pwd)
 GO       := GO111MODULE=on go
@@ -19,7 +19,7 @@ FILES    := $$(find . -name "*.go" | grep -vE "vendor|_tools")
 TOPDIRS  := $$(ls -d */ | grep -vE "vendor|_tools")
 SHELL    := /usr/bin/env bash
 TEST_DIR := /tmp/dm_test
-FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/dm/"}; done)
+FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/ticdc/dm/"}; done)
 FAILPOINT := tools/bin/failpoint-ctl
 
 RACE_FLAG =
@@ -41,13 +41,13 @@ LINUX     := "Linux"
 MAC       := "Darwin"
 
 ifeq ($(ARCH), $(LINUX))
-	LDFLAGS += -X "github.com/pingcap/dm/dm/worker.SampleConfigFile=$(shell cat dm/worker/dm-worker.toml | base64 -w 0)"
-	LDFLAGS += -X "github.com/pingcap/dm/dm/master.SampleConfigFile=$(shell cat dm/master/dm-master.toml | base64 -w 0)"
-	LDFLAGS += -X "github.com/pingcap/dm/dm/config.SampleConfigFile=$(shell cat dm/master/source.yaml | base64 -w 0)"
+	LDFLAGS += -X "github.com/pingcap/ticdc/dm/dm/worker.SampleConfigFile=$(shell cat dm/worker/dm-worker.toml | base64 -w 0)"
+	LDFLAGS += -X "github.com/pingcap/ticdc/dm/dm/master.SampleConfigFile=$(shell cat dm/master/dm-master.toml | base64 -w 0)"
+	LDFLAGS += -X "github.com/pingcap/ticdc/dm/dm/config.SampleConfigFile=$(shell cat dm/master/source.yaml | base64 -w 0)"
 else
-	LDFLAGS += -X "github.com/pingcap/dm/dm/worker.SampleConfigFile=$(shell cat dm/worker/dm-worker.toml | base64)"
-	LDFLAGS += -X "github.com/pingcap/dm/dm/master.SampleConfigFile=$(shell cat dm/master/dm-master.toml | base64)"
-	LDFLAGS += -X "github.com/pingcap/dm/dm/config.SampleConfigFile=$(shell cat dm/master/source.yaml | base64)"
+	LDFLAGS += -X "github.com/pingcap/ticdc/dm/dm/worker.SampleConfigFile=$(shell cat dm/worker/dm-worker.toml | base64)"
+	LDFLAGS += -X "github.com/pingcap/ticdc/dm/dm/master.SampleConfigFile=$(shell cat dm/master/dm-master.toml | base64)"
+	LDFLAGS += -X "github.com/pingcap/ticdc/dm/dm/config.SampleConfigFile=$(shell cat dm/master/source.yaml | base64)"
 endif
 
 .PHONY: build tools_setup test unit_test dm_integration_test_build integration_test \

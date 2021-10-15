@@ -22,7 +22,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
 )
 
 var _ = Suite(&testGeneratorSuite{})

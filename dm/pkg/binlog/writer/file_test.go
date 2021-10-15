@@ -23,8 +23,8 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/pkg/binlog/common"
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 func TestSuite(t *testing.T) {

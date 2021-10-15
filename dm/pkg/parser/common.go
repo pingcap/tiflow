@@ -16,9 +16,9 @@ package parser
 import (
 	"bytes"
 
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"

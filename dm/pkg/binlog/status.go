@@ -7,7 +7,7 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // in MySQL, we can set `max_binlog_size` to control the max size of a binlog file.

@@ -21,8 +21,8 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 func (d *testDumplingSuite) TestParseArgs(c *C) {

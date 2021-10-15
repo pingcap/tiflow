@@ -24,8 +24,8 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
 )
 
 type testFilterSuite struct {

@@ -29,9 +29,9 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"go.uber.org/zap"
 
-	tcontext "github.com/pingcap/dm/pkg/context"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/syncer/dbconn"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/syncer/dbconn"
 )
 
 func ignoreDDLError(err error) bool {

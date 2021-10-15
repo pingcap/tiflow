@@ -16,8 +16,8 @@ package syncer
 import (
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // TestInjector is used to support inject test cases into syncer.

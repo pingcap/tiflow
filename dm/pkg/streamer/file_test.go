@@ -28,8 +28,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 var _ = Suite(&testFileSuite{})
@@ -422,9 +422,9 @@ func (t *testFileSuite) TestrelayLogUpdatedOrNewCreated(c *C) {
 		// write old binlog file
 		err5 := os.WriteFile(relayPaths[1], data, 0o600)
 		c.Assert(err5, IsNil)
-		c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/streamer/CMPAlwaysReturn0", `return(true)`), IsNil)
+		c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/streamer/CMPAlwaysReturn0", `return(true)`), IsNil)
 		//nolint:errcheck
-		defer failpoint.Disable("github.com/pingcap/dm/pkg/streamer/CMPAlwaysReturn0")
+		defer failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/streamer/CMPAlwaysReturn0")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -433,7 +433,7 @@ func (t *testFileSuite) TestrelayLogUpdatedOrNewCreated(c *C) {
 		up := <-updatePathCh
 		c.Assert(up, Equals, relayPaths[1])
 		c.Assert(len(errCh), Equals, 0)
-		c.Assert(failpoint.Disable("github.com/pingcap/dm/pkg/streamer/CMPAlwaysReturn0"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/streamer/CMPAlwaysReturn0"), IsNil)
 	}()
 	wg.Wait()
 

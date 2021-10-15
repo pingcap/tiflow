@@ -107,7 +107,7 @@ function run() {
     # ---------- test for incremental replication ----------
     # stop DM-worker, then enable failponits
     kill_dm_worker
-    export GO_FAILPOINTS="github.com/pingcap/dm/pkg/conn/retryableError=return(\"retry_cancel\")"
+    export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/pkg/conn/retryableError=return(\"retry_cancel\")"
 
     # run sql files to trigger incremental replication
     run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1

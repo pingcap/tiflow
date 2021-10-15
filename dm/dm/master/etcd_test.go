@@ -27,9 +27,9 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 var _ = check.Suite(&testEtcdSuite{})

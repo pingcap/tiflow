@@ -30,8 +30,8 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	inject_points=(
-		"github.com/pingcap/dm/syncer/online-ddl-tools/ExitAfterSaveOnlineDDL=return()"
-		"github.com/pingcap/dm/syncer/ExitAfterSaveOnlineDDL=return()"
+		"github.com/pingcap/ticdc/dm/syncer/online-ddl-tools/ExitAfterSaveOnlineDDL=return()"
+		"github.com/pingcap/ticdc/dm/syncer/ExitAfterSaveOnlineDDL=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml

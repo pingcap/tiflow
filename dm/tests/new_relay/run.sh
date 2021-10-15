@@ -50,7 +50,7 @@ function test_kill_dump_connection() {
 }
 
 function run() {
-	export GO_FAILPOINTS="github.com/pingcap/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'

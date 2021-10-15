@@ -15,7 +15,7 @@ function run() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
-	export GO_FAILPOINTS="github.com/pingcap/dm/dm/worker/defaultKeepAliveTTL=return(1)"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/worker/defaultKeepAliveTTL=return(1)"
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -170,7 +170,7 @@ function run() {
 	check_port_offline $WORKER2_PORT 20
 
 	# only mock pull binlog failed once
-	export GO_FAILPOINTS="github.com/pingcap/dm/syncer/WaitUserCancel=return(8);github.com/pingcap/dm/syncer/GetEventError=1*return"
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/WaitUserCancel=return(8);github.com/pingcap/dm/syncer/GetEventError=1*return"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -211,7 +211,7 @@ function run() {
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
 
-	export GO_FAILPOINTS="github.com/pingcap/dm/syncer/FlushCheckpointStage=return(100)" # for all stages
+	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/FlushCheckpointStage=return(100)" # for all stages
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml

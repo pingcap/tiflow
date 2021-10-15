@@ -26,15 +26,15 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/common"
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/master/metrics"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/etcdutil"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/common"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/master/metrics"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // Optimist is used to coordinate the shard DDL migration in optimism mode.

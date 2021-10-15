@@ -18,7 +18,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/parser"
 
-	"github.com/pingcap/dm/relay/common"
+	"github.com/pingcap/ticdc/dm/relay/common"
 )
 
 const (

@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 
-	br "github.com/pingcap/dm/pkg/binlog/reader"
+	br "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
 )
 
 var _ = check.Suite(&testReaderSuite{})

@@ -13,7 +13,7 @@
 
 package purger
 
-import "github.com/pingcap/dm/pkg/streamer"
+import "github.com/pingcap/ticdc/dm/pkg/streamer"
 
 type strategyType uint32
 

@@ -19,11 +19,11 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/dm/master/workerrpc"
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/ha"
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/ha"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 type testWorker struct{}

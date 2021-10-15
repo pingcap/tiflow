@@ -248,7 +248,7 @@ function DM_DROP_COLUMN_EXEC_ERROR_CASE() {
 		w="2"
 	fi
 
-	restart_worker $w "github.com/pingcap/dm/syncer/ExecDDLError=return()"
+	restart_worker $w "github.com/pingcap/ticdc/dm/syncer/ExecDDLError=return()"
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,'aaa');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,'bbb');"
@@ -309,7 +309,7 @@ function DM_DROP_COLUMN_ALL_DONE_CASE() {
 		w="2"
 	fi
 
-	restart_worker $w "github.com/pingcap/dm/syncer/ExecDDLError=return()"
+	restart_worker $w "github.com/pingcap/ticdc/dm/syncer/ExecDDLError=return()"
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,'aaa');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,'bbb');"

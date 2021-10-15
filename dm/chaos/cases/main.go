@@ -28,8 +28,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 )
 
 // main starts to run the test case logic after MySQL, TiDB and DM have been set up.

@@ -19,8 +19,8 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
-	"github.com/pingcap/dm/openapi"
-	"github.com/pingcap/dm/openapi/fixtures"
+	"github.com/pingcap/ticdc/dm/openapi"
+	"github.com/pingcap/ticdc/dm/openapi/fixtures"
 )
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {

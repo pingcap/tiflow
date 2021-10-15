@@ -17,7 +17,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/pingcap/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/log"
 
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"

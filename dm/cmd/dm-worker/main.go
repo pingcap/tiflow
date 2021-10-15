@@ -25,11 +25,11 @@ import (
 	globalLog "github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/ctl/common"
-	"github.com/pingcap/dm/dm/worker"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/ctl/common"
+	"github.com/pingcap/ticdc/dm/dm/worker"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
 )
 

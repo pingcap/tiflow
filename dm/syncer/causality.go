@@ -14,7 +14,7 @@
 package syncer
 
 import (
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.

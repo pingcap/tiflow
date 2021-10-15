@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/pingcap/dm/pkg/conn"
+	"github.com/pingcap/ticdc/dm/pkg/conn"
 )
 
 func Test(t *testing.T) {

@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/parser/mysql"
 
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // some error reference: https://docs.pingcap.com/tidb/stable/tidb-limitations#limitations-on-a-single-table

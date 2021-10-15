@@ -25,10 +25,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/dm/dm/config"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // SampleConfigFile is sample config file of dm-worker

@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/mysql"
 
-	"github.com/pingcap/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
 )
 
 // encodeTableMapColumnMeta generates the column_meta_def according to the column_type_def.

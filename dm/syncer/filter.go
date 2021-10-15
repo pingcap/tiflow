@@ -19,9 +19,9 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
-	onlineddl "github.com/pingcap/dm/syncer/online-ddl-tools"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 )
 
 func (s *Syncer) skipQueryEvent(tables []*filter.Table, stmt ast.StmtNode, sql string) (bool, error) {

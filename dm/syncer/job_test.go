@@ -17,7 +17,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
-	"github.com/pingcap/dm/pkg/binlog"
+	"github.com/pingcap/ticdc/dm/pkg/binlog"
 )
 
 var _ = Suite(&testJobSuite{})

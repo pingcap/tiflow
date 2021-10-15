@@ -20,9 +20,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/dm/checker"
-	"github.com/pingcap/dm/dm/ctl/common"
-	"github.com/pingcap/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/checker"
+	"github.com/pingcap/ticdc/dm/dm/ctl/common"
+	"github.com/pingcap/ticdc/dm/dm/pb"
 )
 
 // NewCheckTaskCmd creates a CheckTask command.

@@ -21,9 +21,9 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/dm/dm/pb"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 type testAPI struct{}

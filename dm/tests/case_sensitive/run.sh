@@ -10,8 +10,8 @@ API_VERSION="v1alpha1"
 function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 	inject_points=(
-		"github.com/pingcap/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/dm/relay/NewUpstreamServer=return(true)"
+		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/ticdc/dm/relay/NewUpstreamServer=return(true)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 

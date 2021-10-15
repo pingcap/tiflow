@@ -36,11 +36,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/dm/pkg/binlog/event"
-	"github.com/pingcap/dm/pkg/gtid"
-	"github.com/pingcap/dm/pkg/log"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
+	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 var parseFileTimeout = 10 * time.Second
@@ -61,11 +61,11 @@ func (t *testReaderSuite) SetUpSuite(c *C) {
 	t.lastPos = 0
 	t.lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110002:0")
 	c.Assert(err, IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/dm/pkg/streamer/SetHeartbeatInterval", "return(10000)"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval", "return(10000)"), IsNil)
 }
 
 func (t *testReaderSuite) TearDownSuite(c *C) {
-	c.Assert(failpoint.Disable("github.com/pingcap/dm/pkg/streamer/SetHeartbeatInterval"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/pkg/streamer/SetHeartbeatInterval"), IsNil)
 }
 
 func (t *testReaderSuite) TestParseFileBase(c *C) {

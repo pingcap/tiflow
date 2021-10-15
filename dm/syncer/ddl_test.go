@@ -30,13 +30,13 @@ import (
 	"github.com/pingcap/tidb/br/pkg/mock"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/dm/dm/config"
-	tcontext "github.com/pingcap/dm/pkg/context"
-	"github.com/pingcap/dm/pkg/log"
-	parserpkg "github.com/pingcap/dm/pkg/parser"
-	"github.com/pingcap/dm/pkg/terror"
-	"github.com/pingcap/dm/pkg/utils"
-	onlineddl "github.com/pingcap/dm/syncer/online-ddl-tools"
+	"github.com/pingcap/ticdc/dm/dm/config"
+	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
+	"github.com/pingcap/ticdc/dm/pkg/log"
+	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
+	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
+	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
 )
 
 var _ = Suite(&testDDLSuite{})

@@ -28,7 +28,7 @@ import (
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 
-	"github.com/pingcap/dm/pkg/utils"
+	"github.com/pingcap/ticdc/dm/pkg/utils"
 )
 
 // do not forget to update this path if the file removed/renamed.
