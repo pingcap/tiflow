@@ -1,0 +1,26 @@
+#!/bin/bash
+# parameter 1: port
+# parameter 2: metric name
+# parameter 3: retry count, if check failed we will wait 1s before next retry, until retry time exceeds retry count
+
+set -eu
+
+port=$1
+metric_name=$2
+retry_count=$3
+
+shift 3
+
+counter=0
+while [ $counter -lt $retry_count ]; do
+	metric=$(curl -s http://127.0.0.1:$port/metrics | grep $metric_name | wc -l)
+	if [ $metric -eq 0 ]; then
+		exit 0
+	fi
+	((counter += 1))
+	echo "wait for valid metric for $counter-th time"
+	sleep 1
+done
+
+echo "metric $metric_name has invalid count $metric"
+exit 1

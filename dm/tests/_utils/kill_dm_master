@@ -1,0 +1,12 @@
+#!/bin/sh
+
+while :; do
+	dm_master_num=$(ps aux >temp && grep "dm-master.test" temp | wc -l && rm temp)
+	echo "$dm_master_num dm-master alive"
+	if [ $dm_master_num -ne 0 ]; then
+		killall dm-master.test || true
+		sleep 1
+	else
+		break
+	fi
+done

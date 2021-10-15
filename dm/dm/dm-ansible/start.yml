@@ -1,0 +1,130 @@
+---
+
+# The Playbook of DM
+
+- name: check config locally
+  hosts: localhost
+  any_errors_fatal: true
+  tags:
+    - always
+  roles:
+    - check_config_static
+
+- hosts: prometheus_servers
+  tags:
+    - prometheus
+  tasks:
+    - name: start prometheus by systemd
+      systemd: name={{ item }} state=started
+      become: true
+      with_items:
+        - prometheus-{{ prometheus_port }}.service
+
+    - name: wait for prometheus up
+      wait_for: host={{ ansible_host }} port={{ prometheus_port }} state=started
+
+- hosts: alertmanager_servers
+  tags:
+    - alertmanager
+  tasks:
+    - name: start alertmanager by systemd
+      systemd: name=alertmanager-{{ alertmanager_port }}.service state=started
+      become: true
+
+    - name: wait for alertmanager up
+      wait_for: host={{ ansible_host }} port={{ alertmanager_port }} state=started
+
+- hosts: dm_master_servers
+  tags:
+    - dm-master
+  tasks:
+    - name: start dm-master by systemd
+      become: true
+      systemd: name=dm-master-{{ dm_master_port }}.service state=started enabled=no
+
+    - name: wait for dm-master up
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_master_port }} state=started
+    
+    - name: wait until dm_master is available
+      uri:
+        url: "http://{{ ansible_host }}:{{ dm_master_port }}/apis/v1alpha1/status/"
+        return_content: yes
+      register: dm_master_http_result
+      until: dm_master_http_result.status == 200 and 'true' in dm_master_http_result.content
+      retries: 12
+      delay: 5
+
+- hosts: dm_worker_servers
+  tags:
+    - dm-worker
+  tasks:
+    - name: start dm-worker by systemd
+      become: true
+      systemd: name=dm-worker-{{ dm_worker_port }}.service state=started enabled=no
+
+    - name: wait for dm-worker up
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_worker_port }} state=started
+    
+    - name: wait until dm_worker is available
+      uri:
+        url: "http://{{ ansible_host }}:{{ dm_worker_port }}/status"
+        return_content: yes
+      register: dm_worker_http_result
+      until: dm_worker_http_result.status == 200
+      retries: 12
+      delay: 5
+
+- hosts: dm_portal_servers
+  tags:
+    - dm-portal
+  tasks:
+    - name: start dm-portal by systemd
+      become: true
+      systemd: name=dm-portal-{{ dm_portal_port }}.service state=started enabled=no
+
+    - name: wait for dm-portal up
+      wait_for: |
+        host={{ ansible_host }} port={{ dm_portal_port }} state=started
+
+- hosts: grafana_servers
+  tags:
+    - grafana
+  tasks:
+    - name: start grafana by systemd
+      systemd: name=grafana-{{ grafana_port }}.service state=started
+      become: true
+
+    - name: wait for grafana up
+      wait_for: host={{ ansible_host }} port={{ grafana_port }} state=started
+
+    - set_fact:
+        grafana_host: "{{ ansible_host }}"
+
+    - name: import grafana data source
+      shell: >
+        chdir={{ grafana_data_dir }}
+        warn=no
+        curl -q -X POST -d @data_source.json --header 'Content-Type: application/json'
+        "http://{{ grafana_admin_user }}:{{ grafana_admin_password }}@127.0.0.1:{{ grafana_port }}/api/datasources"
+
+    - name: import grafana dashboards - prepare config
+      delegate_to: localhost
+      template: src=grafana.dest.json.j2 dest={{ playbook_dir }}/scripts/dests.json
+      vars:
+        - grafana_dest_config:
+            name: "{{ cluster_name | title }}"
+            url: "http://{{ grafana_host }}:{{ grafana_port }}/"
+            user: "{{ grafana_admin_user }}"
+            password: "{{ grafana_admin_password }}"
+            datasource: "{{ cluster_name }}"
+            titles:
+              dm_worker: "{{ cluster_name | title }}-DM-worker"
+              dm_worker_instances: "{{ cluster_name | title }}-DM-worker-instances"
+
+    - name: import grafana dashboards - run import script
+      delegate_to: localhost
+      shell: "python import_grafana_dashboards.py"
+      args:
+        chdir: "{{ playbook_dir }}/scripts"

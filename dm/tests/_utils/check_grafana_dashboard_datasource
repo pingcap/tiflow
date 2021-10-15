@@ -1,0 +1,21 @@
+#!/usr/bin/env python2
+import sys
+import json
+
+DM_DATASOURCE = "${DS_TEST-CLUSTER}"
+
+
+def check_grafana_dashboard_datasource(file_path):
+    data = json.load(open(file_path, "r"))
+    # check annotations datasource
+    if data["annotations"]["list"][0]["datasource"] != DM_DATASOURCE:
+        raise Exception("Annotations datasource is not correct")
+
+    # check panel datasource
+    for p in data["panels"]:
+        if p["datasource"] != DM_DATASOURCE:
+            raise Exception("Panel datasource is not correct title=", p["title"])
+
+
+if __name__ == "__main__":
+    check_grafana_dashboard_datasource(sys.argv[1])

@@ -1,0 +1,87 @@
+name: "\U0001F41B Bug Report"
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please answer these questions before submitting your issue. Thanks!
+  - type: textarea
+    id: problem
+    attributes:
+      label: What did you do?
+      description: If possible, provide a recipe for reproducing the error.
+    validations:
+      required: true
+  - type: textarea
+    id: expect
+    attributes:
+      label: What did you expect to see?
+    validations:
+      required: false
+  - type: textarea
+    id: see
+    attributes:
+      label: What did you see instead?
+    validations:
+      required: false
+  - type: textarea
+    id: version
+    attributes:
+      label: Versions of the cluster
+      value: |-
+             DM version (run `dmctl -V` or `dm-worker -V` or `dm-master -V`):
+             ```console
+             (paste DM version here, and you must ensure versions of dmctl, DM-worker and DM-master are same)
+             ```
+             Upstream MySQL/MariaDB server version:
+             ```console
+             (paste upstream MySQL/MariaDB server version here)
+             ```
+             Downstream TiDB cluster version (execute `SELECT tidb_version();` in a MySQL client):
+             ```console
+             (paste TiDB cluster version here)
+             ```
+             How did you deploy DM: tiup or manually?
+             ```console
+             (leave DM-Ansible or manually here)
+             ```
+             Other interesting information (system version, hardware config, etc):
+             ```console
+             >
+             >
+             ```
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: current status of DM cluster (execute `query-status` in dmctl)
+      value: |-
+             ```console
+             (paste current status of DM cluster here)
+             ```
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        Operation logs
+          - Please upload `dm-worker.log` for every DM-worker instance if possible
+          - Please upload `dm-master.log` if possible
+          - Other interesting logs
+          - Output of dmctl's commands with problems
+  - type: markdown
+    attributes:
+      value: |
+        Configuration of the cluster and the task
+          - `dm-worker.toml` for every DM-worker instance if possible
+          - `dm-master.toml` for DM-master if possible
+          - task config, like `task.yaml` if possible
+          - `inventory.ini` if deployed by DM-Ansible
+  - type: markdown
+    attributes:
+      value: |
+        Screenshot/exported-PDF of Grafana dashboard or metrics' graph in Prometheus for DM if possible
+ 
+

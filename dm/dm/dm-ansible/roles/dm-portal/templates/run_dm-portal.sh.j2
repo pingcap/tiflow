@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+ulimit -n 1000000
+
+DEPLOY_DIR={{ deploy_dir }}
+cd "${DEPLOY_DIR}" || exit 1
+
+# WARNING: This file was auto-generated. Do not edit!
+#          All your edit might be overwritten!
+
+exec bin/dm-portal \
+    --port="{{ dm_portal_port }}" \
+    -task-file-path="{{ dm_portal_task_file_path }}"  >> "{{ dm_portal_log_dir }}/{{ dm_portal_stdout_log_file }}" 2>> "{{ dm_portal_log_dir }}/{{ dm_portal_stderr_log_file }}"

@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -eu
+
+if ! grep -Fq "$1" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
+	echo "TEST FAILED: OUTPUT DOES NOT CONTAIN '$1'"
+	echo "____________________________________"
+	cat "$TEST_DIR/sql_res.$TEST_NAME.txt"
+	echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+	exit 1
+fi

@@ -1,0 +1,260 @@
+name: Upgrade via TiUP
+
+on:
+  pull_request:
+    branches:
+      - master
+      - release-2.0
+  schedule:
+    - cron: "3 22 * * *" # run at minute 06:03 UTC+8
+  workflow_dispatch:
+    inputs: # TODO: use these inputs
+      fromVer:
+        dmVer: "v1.0.7"
+      toVer:
+        dmVer: "nightly"
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  from_v1:
+    name: From V1
+    runs-on: ubuntu-18.04
+    env:
+      working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/dm
+
+    steps:
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          path: go/src/github.com/pingcap/dm
+
+      - name: Setup containers
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+
+      - name: Run test cases
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          docker-compose exec -T control bash -c "cd /go/src/github.com/pingcap/dm && ./tests/tiup/upgrade-from-v1.sh"
+
+      # send Slack notify if failed.
+      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
+      - name: Slack notification
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
+        uses: Ilshidur/action-slack@2.1.0
+        with:
+          args: "upgrade job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+
+      - name: Feishu notification
+        if: ${{ failure() }}
+        env:
+          FEISHU_BOT_WEBHOOK_URL: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          GIT_COMMITTER_NAME: ${{ github.event.pusher.name }}
+        run: |
+          cd ${{ env.working-directory }}
+          go run tests/_utils/send_lark_notify.go
+
+      # Debug via SSH if previous steps failed
+      - name: Set up tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30
+
+  from_v2:
+    name: From V2
+    runs-on: ubuntu-18.04
+    env:
+      working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/dm
+    strategy:
+      fail-fast: false
+      matrix:
+        previous_v2:
+          ["v2.0.0", "v2.0.1", "v2.0.3", "v2.0.4", "v2.0.5", "v2.0.6"]
+
+    steps:
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          path: go/src/github.com/pingcap/dm
+
+      - name: Build
+        if: ${{ github.ref != 'refs/heads/master' }}
+        working-directory: ${{ env.working-directory }}
+        run: make build nolint=true
+
+      - name: Package files
+        if: ${{ github.ref != 'refs/heads/master' }}
+        run: |
+          mkdir ${{ github.workspace }}/package
+          cd ${{ github.workspace }}/package
+
+          echo "package dm-master"
+          mkdir dm-master
+          cp ${{ env.working-directory }}/bin/dm-master dm-master
+          cp -r ${{ env.working-directory }}/dm/dm-ansible/conf dm-master
+          cp -r ${{ env.working-directory }}/dm/dm-ansible/scripts dm-master
+          tar -czvf dm-master-nightly-linux-amd64.tar.gz dm-master
+
+          echo "package dm-worker"
+          mkdir dm-worker
+          cp ${{ env.working-directory }}/bin/dm-worker dm-worker
+          cp -r ${{ env.working-directory }}/dm/dm-ansible/conf dm-worker/conf
+          cp -r ${{ env.working-directory }}/dm/dm-ansible/scripts dm-worker/scripts
+          tar -czvf dm-worker-nightly-linux-amd64.tar.gz dm-worker
+
+          echo "package dmctl"
+          mkdir dmctl
+          cp ${{ env.working-directory }}/bin/dmctl dmctl
+          cp -r ${{ env.working-directory }}/dm/dm-ansible/conf dmctl/conf
+          cp -r ${{ env.working-directory }}/dm/dm-ansible/scripts dmctl/scripts
+          tar -czvf dmctl-nightly-linux-amd64.tar.gz dmctl
+
+      - name: Setup containers
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+
+      - name: Copy package files
+        if: ${{ github.ref != 'refs/heads/master' }}
+        run: |
+          cd ${{ github.workspace }}/package
+          docker cp dm-master-nightly-linux-amd64.tar.gz control:/tmp
+          docker cp dm-worker-nightly-linux-amd64.tar.gz control:/tmp
+          docker cp dmctl-nightly-linux-amd64.tar.gz control:/tmp
+
+      # TODO: support more CUR_VER
+      - name: Run test cases
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          docker-compose exec -e ref=${{ github.ref }} -T control bash -c "cd /go/src/github.com/pingcap/dm && ./tests/tiup/upgrade-from-v2.sh ${{ matrix.previous_v2 }} nightly"
+
+      # if above step is passed, logs will be removed by tiup dm destroy
+      - name: Copy logs to hack permission
+        if: ${{ failure() }}
+        run: |
+          mkdir ./logs
+          docker cp -L master1:/home/tidb/dm/deploy/dm-master-8261/log ./logs/master
+          docker cp -L worker1:/home/tidb/dm/deploy/dm-worker-8262/log ./logs/worker1
+          docker cp -L worker2:/home/tidb/dm/deploy/dm-worker-8262/log ./logs/worker2
+          sudo chown -R runner ./logs
+
+      # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
+      - name: Upload logs
+        continue-on-error: true
+        uses: actions/upload-artifact@v2
+        if: ${{ failure() }}
+        with:
+          name: upgrade-via-tiup-${{ matrix.previous_v2 }}
+          path: |
+            ./logs
+
+      # send Slack notify if failed.
+      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
+      - name: Slack notification
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
+        uses: Ilshidur/action-slack@2.1.0
+        with:
+          args: "upgrade-via-tiup job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+
+      - name: Feishu notification
+        if: ${{ failure() }}
+        env:
+          FEISHU_BOT_WEBHOOK_URL: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          GIT_COMMITTER_NAME: ${{ github.event.pusher.name }}
+        run: |
+          cd ${{ env.working-directory }}
+          go run tests/_utils/send_lark_notify.go
+
+      # Debug via SSH if previous steps failed
+      - name: Set up tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30
+
+  upgrade_tidb:
+    name: Upgrade TiDB
+    runs-on: ubuntu-18.04
+    env:
+      working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/dm
+    steps:
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          path: go/src/github.com/pingcap/dm
+
+      # TODO: support more versions
+      - name: Setup containers
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          sed -i "s/tidb:v4.0.7/tidb:v3.0.19/g" docker-compose.yml
+          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+
+      - name: Run test cases before upgrade
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          docker-compose exec -T control bash -c "cd /go/src/github.com/pingcap/dm && ./tests/tiup/upgrade-tidb.sh before_upgrade nightly"
+
+      - name: Upgrade TiDB
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          sed -i "s/tidb:v3.0.19/tidb:v4.0.7/g" docker-compose.yml
+          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+
+      - name: Run test cases after upgrade
+        working-directory: ${{ env.working-directory }}
+        run: |
+          cd ${{ env.working-directory }}/tests/tiup/docker
+          docker-compose exec -T control bash -c "source /root/.profile && cd /go/src/github.com/pingcap/dm && ./tests/tiup/upgrade-tidb.sh after_upgrade nightly"
+
+      # send Slack notify if failed.
+      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
+      - name: Slack notification
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
+        uses: Ilshidur/action-slack@2.1.0
+        with:
+          args: "upgrade job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+
+      - name: Feishu notification
+        if: ${{ failure() }}
+        env:
+          FEISHU_BOT_WEBHOOK_URL: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          GIT_COMMITTER_NAME: ${{ github.event.pusher.name }}
+        run: |
+          cd ${{ env.working-directory }}
+          go run tests/_utils/send_lark_notify.go
+      # Debug via SSH if previous steps failed
+      - name: Set up tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 60

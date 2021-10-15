@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dm-master
+  labels:
+    app: dm-master
+spec:
+  ports:
+    - name: dm-master
+      port: 8261
+      targetPort: 8261
+    - name: dm-master-peer
+      port: 8291
+      targetPort: 8291
+  selector:
+    app: dm-master
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dm-master
+  labels:
+    app: dm-master
+spec:
+  selector:
+    matchLabels:
+      app: dm-master
+  serviceName: dm-master
+  replicas: 3 # TODO: 1 for debug; 3 DM-master instances
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: dm-master
+    spec:
+      containers:
+        - name: dm-master
+          image: dm:chaos # build this image in GitHub action workflow
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /data
+              name: dm-master
+            - mountPath: /log
+              name: dm-master-log
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - containerPort: 8261
+              name: dm-master
+            - containerPort: 8291
+              name: dm-master-peer
+          command:
+            - "/dm-master"
+            - "--data-dir=/data"
+            - "--name=$(MY_POD_NAME)"
+            - "--master-addr=0.0.0.0:8261"
+            - "--advertise-addr=http://$(MY_POD_NAME).dm-master.$(MY_POD_NAMESPACE):8261"
+            - "--peer-urls=:8291"
+            - "--advertise-peer-urls=http://$(MY_POD_NAME).dm-master.$(MY_POD_NAMESPACE):8291"
+            - "--initial-cluster=dm-master-0=http://dm-master-0.dm-master.$(MY_POD_NAMESPACE):8291,dm-master-1=http://dm-master-1.dm-master.$(MY_POD_NAMESPACE):8291,dm-master-2=http://dm-master-2.dm-master.$(MY_POD_NAMESPACE):8291"
+            - "--log-file=/log/$(MY_POD_NAME).log"
+  volumeClaimTemplates:
+    - metadata:
+        name: dm-master
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: dm-master-log
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi

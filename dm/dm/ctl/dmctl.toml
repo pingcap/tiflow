@@ -1,0 +1,9 @@
+# dmctl Configuration.
+
+# rpc configuration
+# rpc timeout is a positive number plus time unit. we use golang standard time
+# units including: "ns", "us", "ms", "s", "m", "h". You should provide a proper
+# rpc timeout according to your use scenario.
+rpc-timeout = "10m"
+
+master-addr = ":8261"

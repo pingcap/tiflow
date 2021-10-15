@@ -1,0 +1,125 @@
+name: Test binlog 999999
+
+on:
+  push:
+    branches:
+      - master
+      - release-2.0
+  schedule:
+    - cron: "3 22 * * *" # run at minute 06:03 UTC+8
+
+jobs:
+  test-binlog-999999:
+    name: Test binlog 999999
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Cache go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-dm-${{ hashFiles('**/go.sum') }}
+
+      - name: Cache tools
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/tools
+          key: ${{ runner.os }}-dm-tools-${{ hashFiles('**/tools/go.sum') }}
+
+      - name: Build DM binary
+        run: make dm_integration_test_build
+
+      - name: Setup CI environment
+        run: |
+          docker-compose -f ./tests/binlog_999999/docker-compose.yml up -d
+          curl http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
+          mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
+          curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
+          mv tidb-nightly-linux-amd64/bin/tidb-server bin/
+
+      - name: change binlog sequence number to 999998
+        run: |
+          while ! mysqladmin -h127.0.0.1 -P3306 -p123456 -uroot ping --connect-timeout=1 > /dev/null 2>&1 ; do
+            echo "wait mysql"
+            sleep 1
+          done
+          while ! mysqladmin -h127.0.0.1 -P3307 -p123456 -uroot ping --connect-timeout=1 > /dev/null 2>&1 ; do
+            echo "wait mysql"
+            sleep 1
+          done
+
+          echo "reset master;" | mysql -uroot -h127.0.0.1 -P3306 -p123456
+          echo "reset master;" | mysql -uroot -h127.0.0.1 -P3307 -p123456
+          docker-compose -f ./tests/binlog_999999/docker-compose.yml down
+
+          sudo mv /tmp/mysql1-data/mysql-bin.000001 /tmp/mysql1-data/mysql-bin.999998
+          sudo bash -c "echo './mysql-bin.999998' > /tmp/mysql1-data/mysql-bin.index"
+          sudo mv /tmp/mysql2-data/mysql-bin.000001 /tmp/mysql2-data/mysql-bin.999998
+          sudo bash -c "echo './mysql-bin.999998' > /tmp/mysql2-data/mysql-bin.index"
+          docker-compose -f ./tests/binlog_999999/docker-compose.yml up -d
+
+          while ! mysqladmin -h127.0.0.1 -P3306 -p123456 -uroot ping --connect-timeout=1 > /dev/null 2>&1 ; do
+            echo "wait mysql"
+            sleep 1
+          done
+          while ! mysqladmin -h127.0.0.1 -P3307 -p123456 -uroot ping --connect-timeout=1 > /dev/null 2>&1 ; do
+            echo "wait mysql"
+            sleep 1
+          done
+
+      - name: Run test cases
+        run: |
+          RESET_MASTER=false make integration_test CASE=incremental_mode
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3306 -p123456 | grep -q "mysql-bin.1000000"
+          echo "show binary logs;" | mysql -uroot -h127.0.0.1 -P3307 -p123456 | grep -q "mysql-bin.1000000"
+
+      - name: Copy logs to hack permission
+        if: ${{ always() }}
+        run: |
+          mkdir ./logs
+          sudo cp -r -L /tmp/dm_test/incremental_mode/master/log ./logs/master
+          sudo cp -r -L /tmp/dm_test/incremental_mode/worker1/log ./logs/worker1
+          sudo cp -r -L /tmp/dm_test/incremental_mode/worker2/log ./logs/worker2
+          sudo chown -R runner ./logs
+
+      # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
+      - name: Upload logs
+        continue-on-error: true
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: test-binlog-999999
+          path: |
+            ./logs
+
+      # send Slack notify if failed.
+      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
+      - name: Slack notification
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
+        uses: Ilshidur/action-slack@2.1.0
+        with:
+          args: "chaos job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+
+      - name: Feishu notification
+        if: ${{ failure() }}
+        env:
+          FEISHU_BOT_WEBHOOK_URL: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          GIT_COMMITTER_NAME: ${{ github.event.pusher.name }}
+        run: go run tests/_utils/send_lark_notify.go
+
+      # Debug via SSH if previous steps failed
+      - name: Set up tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30

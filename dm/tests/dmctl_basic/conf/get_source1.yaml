@@ -1,0 +1,47 @@
+enable-gtid: false
+auto-fix-gtid: false
+relay-dir: /tmp/dm_test/dmctl_basic/worker1/relay_log
+meta-dir: ""
+flavor: mysql
+charset: ""
+enable-relay: true
+relay-binlog-name: ""
+relay-binlog-gtid: ""
+source-id: mysql-replica-01
+from:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: '******'
+  max-allowed-packet: null
+  session:
+    time_zone: "+00:00"
+  security: null
+purge:
+  interval: 3600
+  expires: 0
+  remain-space: 15
+checker:
+  check-enable: true
+  backoff-rollback: 5m0s
+  backoff-max: 5m0s
+  check-interval: 5s
+  backoff-min: 1s
+  backoff-jitter: true
+  backoff-factor: 2
+server-id: 123456
+tracer: {}
+case-sensitive: false
+filters:
+- schema-pattern: dmctl
+  table-pattern: t_1
+  events: []
+  sql-pattern:
+  - alter table .* add column `aaa` int
+  action: Ignore
+- schema-pattern: dmctl
+  table-pattern: t_2
+  events: []
+  sql-pattern:
+  - alter table .* add column `aaa` int
+  action: Ignore

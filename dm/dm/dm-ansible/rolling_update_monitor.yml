@@ -1,0 +1,123 @@
+---
+
+# The Playbook of DM
+
+- name: check config locally
+  hosts: localhost
+  any_errors_fatal: true
+  tags:
+    - always
+  roles:
+    - check_config_static
+
+
+- name: rolling update prometheus
+  hosts: prometheus_servers
+  any_errors_fatal: true
+  tags:
+    - prometheus
+
+  pre_tasks:
+    - name: stop prometheus by systemd
+      systemd: name={{ item }} state=stopped
+      become: true
+      with_items:
+        - prometheus-{{ prometheus_port }}.service
+
+    - name: wait for prometheus down
+      wait_for: host={{ ansible_host }} port={{ prometheus_port }} state=stopped
+
+  roles:
+    - prometheus
+
+  post_tasks:
+    - name: start prometheus by systemd
+      systemd: name={{ item }} state=started
+      become: true
+      with_items:
+        - prometheus-{{ prometheus_port }}.service
+
+    - name: wait for prometheus up
+      wait_for: host={{ ansible_host }} port={{ prometheus_port }} state=started
+
+
+- name: rolling update alertmanager
+  hosts: alertmanager_servers
+  any_errors_fatal: true
+  tags:
+    - alertmanager
+
+  pre_tasks:
+    - name: stop alertmanager by systemd
+      systemd: name=alertmanager-{{ alertmanager_port }}.service state=stopped
+      become: true
+
+    - name: wait for alertmanager down
+      wait_for: host={{ ansible_host }} port={{ alertmanager_port }} state=stopped
+
+  roles:
+    - alertmanager
+
+  post_tasks:
+    - name: start alertmanager by systemd
+      systemd: name=alertmanager-{{ alertmanager_port }}.service state=started
+      become: true
+
+    - name: wait for alertmanager up
+      wait_for: host={{ ansible_host }} port={{ alertmanager_port }} state=started
+
+
+- name: rolling update grafana
+  hosts: grafana_servers
+  any_errors_fatal: true
+  tags:
+    - grafana
+
+  pre_tasks:
+    - name: stop grafana by systemd
+      systemd: name=grafana-{{ grafana_port }}.service state=stopped
+      become: true
+
+    - name: wait for grafana down
+      wait_for: host={{ ansible_host }} port={{ grafana_port }} state=stopped
+
+  roles:
+    - grafana
+
+  post_tasks:
+    - name: start grafana by systemd
+      systemd: name=grafana-{{ grafana_port }}.service state=started
+      become: true
+
+    - name: wait for grafana up
+      wait_for: host={{ ansible_host }} port={{ grafana_port }} state=started
+
+    - set_fact:
+        grafana_host: "{{ ansible_host }}"
+
+    - name: import grafana data source
+      shell: >
+        chdir={{ grafana_data_dir }}
+        warn=no
+        curl -q -X POST -d @data_source.json --header 'Content-Type: application/json'
+        "http://{{ grafana_admin_user }}:{{ grafana_admin_password }}@127.0.0.1:{{ grafana_port }}/api/datasources"
+
+    - name: import grafana dashboards - prepare config
+      delegate_to: localhost
+      template: src=grafana.dest.json.j2 dest={{ playbook_dir }}/scripts/dests.json
+      vars:
+        - grafana_dest_config:
+            name: "{{ cluster_name | title }}"
+            url: "http://{{ grafana_host }}:{{ grafana_port }}/"
+            user: "{{ grafana_admin_user }}"
+            password: "{{ grafana_admin_password }}"
+            datasource: "{{ cluster_name }}"
+            titles:
+              dm_worker: "{{ cluster_name | title }}-DM-worker"
+              dm_worker_instances: "{{ cluster_name | title }}-DM-worker-instances"
+
+    - name: import grafana dashboards - run import script
+      delegate_to: localhost
+      shell: "python import_grafana_dashboards.py"
+      args:
+        chdir: "{{ playbook_dir }}/scripts"

@@ -1,0 +1,8 @@
+---
+
+- name: deploy systemd
+  include_role:
+    name: systemd
+  vars:
+    this_role_name: grafana
+    service_name: grafana-{{ grafana_port }}

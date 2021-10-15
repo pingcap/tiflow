@@ -1,0 +1,21 @@
+# MySQL Configuration.
+
+source-id: mysql-replica-02
+flavor: ''
+enable-gtid: true
+enable-relay: false
+relay-binlog-name: ''
+relay-binlog-gtid: ''
+from:
+  host: 127.0.0.1
+  user: root
+  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=
+  port: 3307
+
+
+# let dm-worker2 use the default config for checker
+#checker:
+#  check-enable: true
+#  backoff-rollback: 5m
+#  backoff-max: 5m
+

@@ -1,0 +1,923 @@
+openapi: "3.0.0"
+info:
+  title: DM OpenAPI DOC
+  version: "2.0.6"
+externalDocs:
+  description: "DM OpenAPI DOC"
+  url: "https://docs.pingcap.com/zh/tidb-data-migration/stable"
+servers:
+  - url: "https://you.domain.com/"
+tags:
+  - name: source
+    description: source
+    externalDocs:
+      description: doc
+      url: "https://docs.pingcap.com/zh/tidb-data-migration/stable/quick-start-create-source"
+  - name: task
+    description: task
+    externalDocs:
+      description: doc
+      url: "https://docs.pingcap.com/zh/tidb-data-migration/stable/quick-create-migration-task"
+
+paths:
+  /api/v1/docs:
+    get:
+      tags:
+        - doc
+      summary: "get doc html"
+      operationId: "GetDocHTML"
+      responses:
+        "200":
+          description: HTML content
+  /api/v1/dm.json:
+    get:
+      tags:
+        - doc
+      summary: "get doc json"
+      operationId: "GetDocJSON"
+      responses:
+        "200":
+          description: json content
+  /api/v1/sources:
+    post:
+      tags:
+        - source
+      summary: "create new data source"
+      operationId: "DMAPICreateSource"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/Source"
+      responses:
+        "201":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Source"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    get:
+      tags:
+        - source
+      summary: "get data source list"
+      operationId: "DMAPIGetSourceList"
+      responses:
+        "200":
+          description: "data source list"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetSourceListResponse"
+  /api/v1/sources/{source-name}:
+    delete:
+      tags:
+        - source
+      summary: "delete a data source"
+      operationId: "DMAPIDeleteSource"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+      responses:
+        "204":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/sources/{source-name}/status:
+    get:
+      tags:
+        - source
+      summary: "get the current status of the data source"
+      operationId: "DMAPIGetSourceStatus"
+      parameters:
+        - name: source-name
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-replica-01"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetSourceStatusResponse"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/sources/{source-name}/start-relay:
+    patch:
+      tags:
+        - source
+      summary: "enable relay log function for the data source"
+      operationId: "DMAPIStartRelay"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/StartRelayRequest"
+      responses:
+        "200":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/sources/{source-name}/stop-relay:
+    patch:
+      tags:
+        - source
+      summary: "disable relay log function for the data source"
+      operationId: "DMAPIStopRelay"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/StopRelayRequest"
+      responses:
+        "200":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+
+  /api/v1/tasks:
+    post:
+      tags:
+        - task
+      summary: "create and start task"
+      operationId: "DMAPIStartTask"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+      responses:
+        "201":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    get:
+      tags:
+        - task
+      summary: "get task list"
+      operationId: "DMAPIGetTaskList"
+      responses:
+        "200":
+          description: "task list"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetTaskListResponse"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/tasks/{task-name}:
+    delete:
+      tags:
+        - task
+      summary: "delete and stop task"
+      operationId: "DMAPIDeleteTask"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+        - name: source-name-list
+          in: query
+          description: "source name list"
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+              example: "source-1"
+      responses:
+        "204":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/tasks/{task-name}/status:
+    get:
+      tags:
+        - task
+      summary: "get task status"
+      operationId: "DMAPIGetTaskStatus"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetTaskStatusResponse"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+
+components:
+  schemas:
+    Security:
+      type: object
+      description: "data source ssl configuration, the field will be hidden when getting the data source configuration from the interface"
+      nullable: true
+      properties:
+        ssl_ca_content:
+          type: string
+          example: ""
+          description: "certificate file content"
+        ssl_cert_content:
+          type: string
+          example: ""
+          description: "File content of PEM format/X509 format certificates"
+        ssl_key_content:
+          type: string
+          example: ""
+          description: "Content of the private key file in X509 format"
+        cert_allowed_cn:
+          type: array
+          description: "Common Name of SSL certificates"
+          items:
+            type: string
+      required:
+        - "ssl_ca_content"
+        - "ssl_cert_content"
+        - "ssl_key_content"
+    Purge:
+      description: "relay log cleanup policy configuration"
+      type: object
+      properties:
+        interval:
+          type: integer
+          default: 3600
+          description: "The interval to periodically check if the relay log is expired, default value: 3600, in seconds"
+          format: int64
+          nullable: true
+        expires:
+          type: integer
+          default: 0
+          description: "expiration time of relay log"
+          format: int64
+          nullable: true
+        remain_space:
+          type: integer
+          default: 15
+          description: "Minimum free disk space, in GB"
+          format: int64
+          nullable: true
+    RelayStatus:
+      description: "status of relay log"
+      type: object
+      properties:
+        master_binlog:
+          type: string
+          example: "(mysql-bin.000001, 1979)"
+          description: "upstream binlog file information"
+        master_binlog_gtid:
+          type: string
+          example: "e9a1fc22-ec08-11e9-b2ac-0242ac110003:1-7849"
+          description: "GTID of the upstream"
+        relay_dir:
+          type: string
+          description: "the directory where the relay log is stored"
+          example: "./sub_dir"
+        relay_binlog_gtid:
+          type: string
+          example: "e9a1fc22-ec08-11e9-b2ac-0242ac110003:1-7849"
+          description: "relay current GTID"
+        relay_catch_up_master:
+          type: boolean
+          description: "whether to catch up with upstream progress"
+        stage:
+          type: string
+          description: "current status"
+          example: "Running"
+      required:
+        - "master_binlog"
+        - "master_binlog_gtid"
+        - "relay_dir"
+        - "relay_binlog_gtid"
+        - "relay_catch_up_master"
+        - "stage"
+    StartRelayRequest:
+      description: action to start a relay request
+      type: object
+      properties:
+        worker_name_list:
+          $ref: "#/components/schemas/WorkerNameList"
+        relay_binlog_name:
+          type: string
+          example: "mysql-bin.000002"
+          description: "starting filename of the upstream binlog"
+          nullable: true
+        relay_binlog_gtid:
+          type: string
+          example: "e9a1fc22-ec08-11e9-b2ac-0242ac110003:1-7849"
+          description: "starting GTID of the upstream binlog"
+          nullable: true
+        relay_dir:
+          type: string
+          default: "./relay_log"
+          description: "the directory where the relay log is stored"
+          nullable: true
+      required:
+        - "worker_name_list"
+    StopRelayRequest:
+      description: action to stop a relay request
+      type: object
+      properties:
+        worker_name_list:
+          $ref: "#/components/schemas/WorkerNameList"
+      required:
+        - "worker_name_list"
+    WorkerNameList:
+      description: worker name list
+      type: array
+      items:
+        type: string
+        example: "worker-1"
+    SourceNameList:
+      description: source name list
+      type: array
+      items:
+        type: string
+        example: "source-1"
+    SourceStatus:
+      description: "source status"
+      type: object
+      properties:
+        source_name:
+          type: string
+          example: "mysql-replica-01"
+          description: "source name"
+        worker_name:
+          type: string
+          example: "worker-1"
+          description: "The worker currently bound to the source"
+        relay_status:
+          $ref: "#/components/schemas/RelayStatus"
+        error_msg:
+          type: string
+          description: "error message when something wrong"
+      required:
+        - "source_name"
+        - "worker_name"
+    Source:
+      type: object
+      description: "source"
+      properties:
+        source_name:
+          type: string
+          example: "mysql-01"
+          description: "source name"
+          nullable: false
+        host:
+          type: string
+          example: "127.0.0.1"
+          description: "source address"
+          nullable: false
+        port:
+          type: integer
+          example: 3306
+          description: "source port"
+          nullable: false
+        user:
+          type: string
+          example: "root"
+          description: "source username"
+          nullable: false
+        password:
+          type: string
+          example: "123456"
+          description: "source password"
+          nullable: false
+        enable_gtid:
+          type: boolean
+          example: false
+          default: false
+          description: "whether to use GTID to pull binlogs from upstream"
+          nullable: false
+        security:
+          $ref: "#/components/schemas/Security"
+        purge:
+          $ref: "#/components/schemas/Purge"
+      required:
+        - "source_name"
+        - "host"
+        - "port"
+        - "user"
+        - "password"
+        - "enable_gtid"
+    TaskTargetDataBase:
+      type: object
+      description: "downstream database configuration"
+      properties:
+        host:
+          type: string
+          example: "127.0.0.1"
+          description: "source address"
+        port:
+          type: integer
+          example: 3306
+          description: "ource port"
+        user:
+          type: string
+          example: "root"
+          description: "source username"
+        password:
+          type: string
+          example: "123456"
+          description: "source password"
+        security:
+          $ref: "#/components/schemas/Security"
+      required:
+        - "host"
+        - "port"
+        - "user"
+        - "password"
+    TaskBinLogFilterRule:
+      description: "Filtering rules at binlog level"
+      type: object
+      properties:
+        ignore_event:
+          description: "event type"
+          type: array
+          items:
+            type: string
+            description: "event type"
+            example: "all dml"
+        ignore_sql:
+          description: "sql pattern to filter"
+          type: array
+          items:
+            type: string
+            description: "sql pattern to filter"
+            example: "^Drop"
+    TaskTableMigrateRule:
+      type: object
+      description: "upstream table to downstream migrate rules"
+      properties:
+        source:
+          type: object
+          description: source-related configuration
+          properties:
+            source_name:
+              type: string
+              description: source name
+              example: "source-name"
+            schema:
+              type: string
+              description: schema name, wildcard support
+              example: "db-*"
+            table:
+              type: string
+              description: table name, wildcard support
+              example: "tb-*"
+          required:
+            - "source_name"
+            - "schema"
+            - "table"
+        target:
+          type: object
+          description: downstream-related configuration
+          properties:
+            schema:
+              type: string
+              description: schema name, does not support wildcards
+              example: "db1"
+            table:
+              type: string
+              description: table name, does not support wildcards
+              example: "tb1"
+          required:
+            - "schema"
+            - "table"
+        binlog_filter_rule:
+          type: array
+          description: "filter rule name"
+          items:
+            type: string
+            example: rule-1
+      required:
+        - "source"
+
+    TaskFullMigrateConf:
+      description: configuration of full migrate tasks
+      type: object
+      properties:
+        export_threads:
+          type: integer
+          description: full export of concurrent
+          default: 4
+        import_threads:
+          type: integer
+          description: full import of concurrent
+          default: 16
+        data_dir:
+          type: string
+          example: "./exported_data"
+          description: "storage dir name"
+    TaskIncrMigrateConf:
+      description: configuration of incremental tasks
+      type: object
+      properties:
+        repl_threads:
+          type: integer
+          description: incremental task of concurrent
+          default: 16
+        repl_batch:
+          type: integer
+          description: incremental synchronization of batch execution sql quantities
+          default: 100
+    TaskSourceConf:
+      type: object
+      properties:
+        source_name:
+          type: string
+          example: "mysql-replica-01"
+          description: "source name"
+        binlog_name:
+          type: string
+          example: "binlog.000001"
+        binlog_pos:
+          type: integer
+          example: 4
+        binlog_gtid:
+          type: string
+          example: "03fc0263-28c7-11e7-a653-6c0b84d59f30:1-7041423,05474d3c-28c7-11e7-8352-203db246dd3d:1-170"
+      required:
+        - "source_name"
+    TaskSourceConfig:
+      type: object
+      description: "source-related configuration"
+      properties:
+        full_migrate_conf:
+          $ref: "#/components/schemas/TaskFullMigrateConf"
+        incr_migrate_conf:
+          $ref: "#/components/schemas/TaskIncrMigrateConf"
+        source_conf:
+          type: array
+          description: "source configuration"
+          items:
+            $ref: "#/components/schemas/TaskSourceConf"
+      required:
+        - "source_conf"
+    TaskCheckerConfig:
+      type: object
+      description: "task status checker configuration"
+      properties:
+        enable:
+          type: boolean
+          example: false
+          default: true
+          description: "determines whether to enable task status checker"
+        backoff_max:
+          type: string
+          example: "5m0s"
+          description: "sets the longest time interval for the automatic recovery after errors are detected."
+        backoff_rollback:
+          type: string
+          example: "5m0s"
+          description: "sets the time interval for adjusting the waiting time of the automatic recovery."
+
+    ShardingGroup:
+      type: object
+      properties:
+        target:
+          type: string
+        ddl_list:
+          type: array
+          items:
+            type: string
+          description: ""
+        first_location:
+          type: string
+        synced:
+          type: array
+          items:
+            type: string
+          description: ""
+        unsynced:
+          type: array
+          items:
+            type: string
+          description: ""
+      required:
+        - "target"
+        - "ddl_list"
+        - "first_location"
+        - "synced"
+        - "unsynced"
+    LoadStatus:
+      type: object
+      description: "status of load unit"
+      properties:
+        finished_bytes:
+          type: integer
+          format: int64
+        total_bytes:
+          type: integer
+          format: int64
+        progress:
+          type: string
+        meta_binlog:
+          type: string
+        meta_binlog_gtid:
+          type: string
+      required:
+        - "finished_bytes"
+        - "total_bytes"
+        - "progress"
+        - "meta_binlog"
+        - "meta_binlog_gtid"
+    SyncStatus:
+      type: object
+      description: "status of sync uuit"
+      properties:
+        total_events:
+          type: integer
+          format: int64
+        total_tps:
+          type: integer
+          format: int64
+        recent_tps:
+          type: integer
+          format: int64
+        master_binlog:
+          type: string
+        master_binlog_gtid:
+          type: string
+        syncer_binlog:
+          type: string
+        syncer_binlog_gtid:
+          type: string
+        blocking_ddls:
+          type: array
+          items:
+            type: string
+          description: sharding DDL which current is blocking
+        unresolved_groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShardingGroup"
+          description: sharding groups which current are un-resolved
+        synced:
+          type: boolean
+        binlog_type:
+          type: string
+        seconds_behind_master:
+          type: integer
+          format: int64
+      required:
+        - "total_events"
+        - "total_tps"
+        - "recent_tps"
+        - "master_binlog"
+        - "master_binlog_gtid"
+        - "syncer_binlog"
+        - "syncer_binlog_gtid"
+        - "blocking_ddls"
+        - "unresolved_groups"
+        - "synced"
+        - "binlog_type"
+        - "seconds_behind_master"
+    SubTaskStatus:
+      type: object
+      properties:
+        name:
+          type: string
+          description: task name
+        source_name:
+          type: string
+          description: source name
+        worker_name:
+          type: string
+          description: worker name
+        stage:
+          type: string
+          example: "runing"
+          description: "current stage of the task"
+        unit:
+          type: string
+          example: "sync"
+          description: "task unit type"
+        unresolved_ddl_lock_id:
+          type: string
+        load_status:
+          nullable: true
+          $ref: "#/components/schemas/LoadStatus"
+        sync_status:
+          nullable: true
+          $ref: "#/components/schemas/SyncStatus"
+      required:
+        - "name"
+        - "source_name"
+        - "worker_name"
+        - "stage"
+        - "unit"
+    Task:
+      description: "task"
+      type: object
+      properties:
+        name:
+          type: string
+          example: "task-1"
+          description: "task name"
+        task_mode:
+          type: string
+          example: "all"
+          description: "migrate mode"
+          enum:
+            - "full"
+            - "incremental"
+            - "all"
+        shard_mode:
+          type: string
+          description: the way to coordinate DDL
+          enum:
+            - "pessimistic"
+            - "optimistic"
+        meta_schema:
+          type: string
+          example: "dm-meta"
+          description: "downstream database for storing meta information"
+          default: "dm-meta"
+        enhance_online_schema_change:
+          type: boolean
+          example: true
+          description: whether to enable support for the online ddl plugin
+          default: true
+        on_duplicate:
+          type: string
+          description: "how to handle conflicted data"
+          enum:
+            - "overwrite"
+            - "error"
+        target_config:
+          $ref: "#/components/schemas/TaskTargetDataBase"
+        binlog_filter_rule:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/TaskBinLogFilterRule"
+        table_migrate_rule:
+          type: array
+          description: "table migrate rule"
+          items:
+            $ref: "#/components/schemas/TaskTableMigrateRule"
+        source_config:
+          $ref: "#/components/schemas/TaskSourceConfig"
+      required:
+        - "name"
+        - "task_mode"
+        - "enhance_online_schema_change"
+        - "on_duplicate"
+        - "target_config"
+        - "table_migrate_rule"
+        - "source_config"
+    ErrorWithMessage:
+      description: "operation error"
+      type: object
+      properties:
+        error_msg:
+          type: string
+          description: "error message"
+        error_code:
+          type: integer
+          description: "error code"
+      required:
+        - "error_msg"
+        - "error_code"
+    CreateTaskRequest:
+      type: object
+      properties:
+        remove_meta:
+          type: boolean
+          default: false
+          description: whether to remove meta database in downstream database
+        task:
+          $ref: "#/components/schemas/Task"
+        source_name_list:
+          $ref: "#/components/schemas/SourceNameList"
+      required:
+        - "remove_meta"
+        - "task"
+    GetSourceListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+      required:
+        - "total"
+        - "data"
+    GetTaskListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+      required:
+        - "total"
+        - "data"
+    GetTaskStatusResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubTaskStatus"
+      required:
+        - "total"
+        - "data"
+    GetSourceStatusResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceStatus"
+      required:
+        - "total"
+        - "data"

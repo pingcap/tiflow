@@ -1,0 +1,314 @@
+name: chaos
+
+# Controls when the action will run. Triggers the workflow on pull request
+# events but only for the master and release-2.0 branch
+on:
+  pull_request:
+    branches:
+      - master
+      - release-2.0
+  schedule:
+    - cron: "0,30 17-22 * * *" # run at minute 0 and 30 every hour from 01:00 ~ 06:00 UTC+8
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "base"
+  base:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-18.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        chaos-obj:
+          [
+            "pod-failure-dm",
+            "pod-kill-dm",
+            "network-partition-dm",
+            "network-emulation-dm",
+            "io-chaos-dm",
+          ]
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Set up Go for building DM, now it's v1.16
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+      - name: Print Go version
+        run: go version
+
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Cache go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-dm-${{ hashFiles('**/go.sum') }}
+
+      - name: Cache tools
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/tools
+          key: ${{ runner.os }}-dm-tools-${{ hashFiles('**/tools/go.sum') }}
+
+      # Set up Kubernetes IN Docker
+      # - name: Set up kind cluster
+      #   uses: helm/kind-action@v1.0.0
+      #   with:
+      #     cluster_name: dm-chaos
+      # Set up Kubernetes with K3s
+      - name: Set up K3s cluster
+        run: |
+          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.18.9+k3s1 sh -s - \
+            --write-kubeconfig-mode=644 \
+            "${k3s_disable_command:---disable}" metrics-server \
+            "${k3s_disable_command:---disable}" traefik \
+            --flannel-backend=none \
+            --docker
+        shell: bash
+      # this may be failed sometimes, and I want to exit the workflow directly if failed,
+      # but GitHub Actions doesnt' support early-exit yet, see https://github.com/actions/runner/issues/662.
+      # so, simply wait for a long time.
+      - name: Wait for coredns
+        run: |
+          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
+        shell: bash
+        env:
+          KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      - name: Export KUBECONFIG environment variable
+        run: |
+          echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
+        shell: bash
+      - name: Print cluster information
+        run: |
+          kubectl config view
+          kubectl cluster-info
+          kubectl get nodes
+          kubectl get pods -n kube-system
+          kubectl get sc
+          kubectl version
+
+      # Disable AppArmor for MySQL, see https://github.com/moby/moby/issues/7512#issuecomment-61787845
+      - name: Disable AppArmor for MySQL
+        run: |
+          sudo ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/
+          sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
+
+      - name: Build DM binary
+        run: make dm-master dm-worker dmctl chaos-case
+
+      # NOTE: we also copy config files into `bin` directory,
+      # so we only need to send `bin` as the context into docker daemon when building image.
+      - name: Build DM docker image
+        run: |
+          cp -r $GITHUB_WORKSPACE/chaos/cases/conf/ $GITHUB_WORKSPACE/bin/
+          docker build -f $GITHUB_WORKSPACE/chaos/manifests/Dockerfile -t dm:chaos $GITHUB_WORKSPACE/bin
+          docker image list
+      # Load DM docker image into KIND, see https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
+      # - name: Load DM docker image into KIND
+      #   run: |
+      #     kind load docker-image dm:chaos --name dm-chaos
+
+      # Set up upstream instances
+      - name: Set up sources
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/sources.yaml
+      - name: Wait for sources ready # kubectl wait --all not working
+        run: |
+          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=300s || true
+          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=300s || true
+          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=300s || true
+          sleep 10
+          echo show pvc
+          kubectl get pvc -l app=sources -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=sources -o wide
+          echo show sts
+          kubectl get sts -l app=sources -o wide
+          echo show po
+          kubectl get po -l app=sources -o wide
+          echo describe po
+          kubectl describe po -l app=sources
+          echo describe pvc
+          kubectl describe pvc -l app=sources
+          kubectl wait --for=condition=Ready pod/mysql57-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/mysql8-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/mariadb-0 --timeout=0s
+
+      # Set up downstream TiDB instance (deploy a TiDB with mockTiKV, not a TidbCluster managed by TiDB-operator)
+      - name: Set up TiDB
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/tidb.yaml
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/tidb.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/tidb.yaml
+      - name: Wait for TiDB ready
+        run: |
+          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=300s || true
+          echo show pvc
+          kubectl get pvc -l app=tidb -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=tidb -o wide
+          echo show sts
+          kubectl get sts -l app=tidb -o wide
+          echo show po
+          kubectl get po -l app=tidb -o wide
+          echo describe po
+          kubectl describe po -l app=tidb
+          echo describe pvc
+          kubectl describe pvc -l app=tidb
+          kubectl wait --for=condition=Ready pod/tidb-0 --timeout=0s
+
+      - name: Set up DM-master
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/dm-master.yaml
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/dm-master.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/dm-master.yaml
+      # NOTE: even some DM-master instances are not ready, we still continue and let chaos test cases to check again.
+      - name: Wait for DM-master ready
+        run: |
+          sleep 10
+          kubectl wait --for=condition=Ready pod -l app=dm-master --all --timeout=300s || true
+          echo "<<<<< show pvc >>>>>"
+          kubectl get pvc -l app=dm-master -o wide
+          echo "<<<<< show pv >>>>>"
+          kubectl get pv -o wide
+          echo "<<<<< show svc >>>>>"
+          kubectl get svc -l app=dm-master -o wide
+          echo "<<<<< show sts >>>>>"
+          kubectl get sts -l app=dm-master -o wide
+          echo "<<<<< show po >>>>>"
+          kubectl get po -l app=dm-master -o wide
+          echo "<<<<< describe po >>>>>"
+          kubectl describe po -l app=dm-master
+          echo "<<<<< describe pvc >>>>>"
+          kubectl describe pvc -l app=dm-master
+          echo "<<<<< show current log for dm-master-0 >>>>>"
+          kubectl logs dm-master-0 || true
+          echo "<<<<< show previous log for dm-master-0 >>>>>"
+          kubectl logs dm-master-0 -p || true
+          echo "<<<<< show current log for dm-master-1 >>>>>"
+          kubectl logs dm-master-1 || true
+          echo "<<<<< show previous log for dm-master-1 >>>>>"
+          kubectl logs dm-master-1 -p || true
+          echo "<<<<< show current log for dm-master-2 >>>>>"
+          kubectl logs dm-master-2 || true
+          echo "<<<<< show previous log for dm-master-2 >>>>>"
+          kubectl logs dm-master-2 -p || true
+
+      - name: Set up DM-worker
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/dm-worker.yaml
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/dm-worker.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/dm-worker.yaml
+      # NOTE: even some DM-worker instances are not ready, we still continue and let chaos test cases to check again.
+      - name: Wait for DM-worker ready
+        run: |
+          sleep 10
+          kubectl wait --for=condition=Ready pod -l app=dm-worker --all --timeout=300s || true
+          echo "<<<<< show pvc >>>>>"
+          kubectl get pvc -l app=dm-worker -o wide
+          echo "<<<<< show pv >>>>>"
+          kubectl get pv -o wide
+          echo "<<<<< show svc >>>>>"
+          kubectl get svc -l app=dm-worker -o wide
+          echo "<<<<< show sts >>>>>"
+          kubectl get sts -l app=dm-worker -o wide
+          echo "<<<<< show po >>>>>"
+          kubectl get po -l app=dm-worker -o wide
+          echo "<<<<< describe po >>>>>"
+          kubectl describe po -l app=dm-worker
+          echo "<<<<< describe pvc >>>>>"
+          kubectl describe pvc -l app=dm-worker
+          echo "<<<<< show current log for dm-worker-0 >>>>>"
+          kubectl logs dm-worker-0 || true
+          echo "<<<<< show previous log for dm-worker-0 >>>>>"
+          kubectl logs dm-worker-0 -p || true
+          echo "<<<<< show current log for dm-worker-1 >>>>>"
+          kubectl logs dm-worker-1 || true
+          echo "<<<<< show previous log for worker-master-1 >>>>>"
+          kubectl logs dm-worker-1 -p || true
+          echo "<<<<< show current log for dm-worker-2 >>>>>"
+          kubectl logs dm-worker-2 || true
+          echo "<<<<< show previous log for dm-worker-2 >>>>>"
+          kubectl logs dm-worker-2 -p || true
+
+      # NOTE: we sleep a while when check members ready in cases before applying any chaos operations.
+      - name: Set up chaos test cases
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
+          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
+          sleep 60
+
+      - name: Encode chaos-mesh action
+        run: |
+          echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
+
+      - name: Run chaos mesh action
+        uses: chaos-mesh/chaos-mesh-action@master
+        env:
+          CFG_BASE64: ${{ env.CFG_BASE64 }}
+          CHAOS_MESH_VERSION: v1.0.0
+
+      # check whether complete with 1m * 20 times.
+      - name: Wait for chaos test case complete
+        run: |
+          $GITHUB_WORKSPACE/chaos/scripts/check-case.sh
+
+      - name: Copy logs to hack permission
+        if: ${{ always() }}
+        run: |
+          mkdir ./logs
+          sudo cp -r -L /var/log/containers/. ./logs
+          sudo find /var/ -type f -regex '.*/dm-[^/]*.log$' | sudo xargs -i cp {} ./logs || true
+          sudo chown -R runner ./logs
+      # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
+      - name: Upload logs
+        continue-on-error: true
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: chaos-base-logs.${{ matrix.chaos-obj }}
+          path: |
+            ./logs
+            !./logs/coredns-*
+            !./logs/local-path-provisioner-*
+
+      # send Slack notify if failed.
+      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
+      - name: Slack notification
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
+        uses: Ilshidur/action-slack@2.1.0
+        with:
+          args: "chaos job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+
+      - name: Feishu notification
+        if: ${{ failure() }}
+        env:
+          FEISHU_BOT_WEBHOOK_URL: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          GIT_COMMITTER_NAME: ${{ github.event.pusher.name }}
+        run: go run tests/_utils/send_lark_notify.go
+
+      # Debug via SSH if previous steps failed
+      - name: Set up tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 15

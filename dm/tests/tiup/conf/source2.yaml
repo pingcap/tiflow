@@ -1,0 +1,10 @@
+source-id: mariadb-replica-02
+enable-gtid: false
+enable-relay: false
+server-id: 654321
+from:
+  host: mariadb2
+  user: root
+  port: 3306
+checker:
+  check-enable: true

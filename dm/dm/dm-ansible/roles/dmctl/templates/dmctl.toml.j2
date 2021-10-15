@@ -1,0 +1,6 @@
+# dmctl Configuration.
+
+{% set dm_master_host = hostvars[groups.dm_master_servers[0]].ansible_host | default(hostvars[groups.dm_master_servers[0]].inventory_hostname) -%}
+{% set dm_master_port = hostvars[groups.dm_master_servers[0]].dm_master_port -%}
+
+master-addr = "{{ dm_master_host }}:{{ dm_master_port }}"

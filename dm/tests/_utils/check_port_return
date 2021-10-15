@@ -1,0 +1,13 @@
+#!/bin/bash
+# parameter 1: port
+# returns "1" if host:post is alive, else returns "0"
+
+port=$1
+
+check_port 127.0.0.1 $port >/dev/null 2>&1
+ret=$?
+if [ "$ret" == "0" ]; then
+	echo "1"
+else
+	echo "0"
+fi

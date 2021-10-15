@@ -1,0 +1,106 @@
+name: Build & Lint
+
+on:
+  push:
+    branches:
+      - master
+      - release-2.0
+      - test-ci # please keep this branch for testing
+  pull_request:
+    branches:
+      - master
+      - release-2.0
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  make_build:
+    name: Make Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Cache go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-dm-${{ hashFiles('**/go.sum') }}
+
+      - name: Cache tools
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/tools
+          key: ${{ runner.os }}-dm-tools-${{ hashFiles('**/tools/go.sum') }}
+
+      - name: Build
+        run: make build
+
+  arm_build:
+    if: ${{ github.ref != 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    name: Make Build
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: build on ${{ matrix.arch }}
+        uses: uraimo/run-on-arch-action@v2.0.5
+        with:
+          arch: ${{ matrix.arch }}
+          distro: ubuntu20.04
+          # Not required, but speeds up builds
+          githubToken: ${{ github.token }}
+          run: |
+            apt update -y && apt install -y make gnupg ca-certificates gcc git
+            echo 'deb http://ppa.launchpad.net/longsleep/golang-backports/ubuntu focal main' > /etc/apt/sources.list
+            apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys F6BC817356A3D45E
+            apt update -y && apt install -y golang-go
+            make build nolint=true
+
+      # send Slack notify if failed.
+      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
+      - name: Slack notification
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
+        uses: Ilshidur/action-slack@2.1.0
+        with:
+          args: "chaos job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+
+      - name: Feishu notification
+        if: ${{ failure() }}
+        env:
+          FEISHU_BOT_WEBHOOK_URL: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          GIT_COMMITTER_NAME: ${{ github.event.pusher.name }}
+        run: go run tests/_utils/send_lark_notify.go
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: GolangCI Lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.39
+          args: --config .golangci.yml --timeout 10m0s --skip-dirs ^_tool/

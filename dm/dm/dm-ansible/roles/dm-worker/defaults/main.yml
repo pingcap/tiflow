@@ -1,0 +1,11 @@
+---
+
+# default configuration for dm-worker
+
+dm_worker_log_level: "info"
+dm_worker_log_dir: "{{ deploy_dir }}/log"
+dm_worker_log_file: "dm-worker.log"
+dm_worker_stdout_log_file: "dm-worker-stdout.log"
+dm_worker_stderr_log_file: "dm-worker-stderr.log"
+dm_worker_name_prefix: "dm"
+

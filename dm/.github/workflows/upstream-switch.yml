@@ -1,0 +1,89 @@
+name: Upstream database switch
+
+on:
+  push:
+    branches:
+      - master
+      - release-2.0
+  schedule:
+    - cron: "3 22 * * *" # run at minute 06:03 UTC+8
+
+jobs:
+  upstream-database-switch:
+    name: upstream-database-switch
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Set up Go 1.16
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Cache go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-dm-${{ hashFiles('**/go.sum') }}
+
+      - name: Cache tools
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/tools
+          key: ${{ runner.os }}-dm-tools-${{ hashFiles('**/tools/go.sum') }}
+
+      - name: Build DM binary
+        run: make dm_integration_test_build
+
+      - name: Setup containers
+        run: |
+          docker-compose -f ./tests/upstream_switch/docker-compose.yml up -d
+
+      - name: Run test cases
+        run: |
+          bash ./tests/upstream_switch/case.sh
+
+      - name: Copy logs to hack permission
+        if: ${{ always() }}
+        run: |
+          mkdir ./logs
+          sudo cp -r -L /tmp/dm_test/upstream_switch/master/log ./logs/master
+          sudo cp -r -L /tmp/dm_test/upstream_switch/worker1/log ./logs/worker1
+          sudo cp -r -L /tmp/dm_test/upstream_switch/worker2/log ./logs/worker2
+          sudo chown -R runner ./logs
+
+      # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
+      - name: Upload logs
+        continue-on-error: true
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: upstream-switch-logs
+          path: |
+            ./logs
+
+      # send Slack notify if failed.
+      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
+      - name: Slack notification
+        if: ${{ failure() }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
+        uses: Ilshidur/action-slack@2.1.0
+        with:
+          args: "upstream-switch job failed, see https://github.com/pingcap/dm/actions/runs/{{ GITHUB_RUN_ID }}"
+
+      - name: Feishu notification
+        if: ${{ failure() }}
+        env:
+          FEISHU_BOT_WEBHOOK_URL: ${{ secrets.FEISHU_BOT_WEBHOOK_URL }}
+          GIT_COMMITTER_NAME: ${{ github.event.pusher.name }}
+        run: go run tests/_utils/send_lark_notify.go
+
+      # Debug via SSH if previous steps failed
+      - name: Set up tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30

@@ -1,0 +1,16 @@
+alter table `dmctl`.`t_1` drop column d;
+alter table `dmctl`.`t_2` drop column d;
+UPDATE `dmctl`.`t_1` SET `c` = 'QFEcT' WHERE `id` = 10;
+DELETE FROM `dmctl`.`t_1` WHERE `id` = 11;
+UPDATE `dmctl`.`t_1` SET `c` = 'ZRmjDMtWnZPBZvhSro' WHERE `id` = 6;
+INSERT INTO `dmctl`.`t_2` (`b`,`c`,`id`) VALUES (313784820,'ZkbuUB',13);
+UPDATE `dmctl`.`t_2` SET `c` = 'svFHgFGGyNxhYgVbBQb' WHERE `id` = 11;
+DELETE FROM `dmctl`.`t_1` WHERE `id` = 7;
+UPDATE `dmctl`.`t_1` SET `c` = 'qgS' WHERE `id` = 6;
+UPDATE `dmctl`.`t_2` SET `c` = 'tGkT' WHERE `id` = 6;
+DELETE FROM `dmctl`.`t_1` WHERE `id` = 3;
+UPDATE `dmctl`.`t_2` SET `c` = 'VbHXy' WHERE `id` = 11;
+INSERT INTO `dmctl`.`t_1` (`b`,`c`,`id`) VALUES (1650592031,'zPoGCCQaFWKK',14);
+UPDATE `dmctl`.`t_1` SET `c` = 'FXKXbvEYVFCuohnU' WHERE `id` = 6;
+DELETE FROM `dmctl`.`t_2` WHERE `id` = 2;
+UPDATE `dmctl`.`t_1` SET `c` = 'hZGaWSRlrcmd' WHERE `id` = 5;
