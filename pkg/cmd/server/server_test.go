@@ -181,7 +181,7 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
 		},
-		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
@@ -264,7 +264,7 @@ sort-dir = "/tmp/just_a_test"
 			SortDir:                config.DefaultSortDir,
 		},
 		Security:            &config.SecurityConfig{},
-		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
@@ -372,7 +372,7 @@ cert-allowed-cn = ["dd","ee"]
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
 		},
-		PerTableMemoryQuota: 20 * 1024 * 1024, // 20M
+		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
