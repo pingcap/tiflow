@@ -73,7 +73,7 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
 
-	encoderBuilder := codec.GetEventBatchEncoderBuild(ctx, protocol, credential, opts)
+	encoderBuilder := codec.GetEventBatchEncoderBuild(protocol, credential, opts)
 	// pre-flight verification of encoder parameters
 	if _, err := encoderBuilder.Build(ctx); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
