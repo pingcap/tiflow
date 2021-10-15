@@ -89,10 +89,15 @@ func (s *Credential) getSelfCommonName() (string, error) {
 	return certificate.Subject.CommonName, nil
 }
 
+// AddSelfCommonName add Common Name in certificate that specified by s.CertPath
+// to s.CertAllowedCN
 func (s *Credential) AddSelfCommonName() error {
 	cn, err := s.getSelfCommonName()
 	if err != nil {
 		return err
+	}
+	if cn == "" {
+		return nil
 	}
 	s.CertAllowedCN = append(s.CertAllowedCN, cn)
 	return nil
