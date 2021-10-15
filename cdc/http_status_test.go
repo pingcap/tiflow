@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -59,7 +60,12 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	config.StoreGlobalServerConfig(conf)
 	server, err := NewServer([]string{"http://127.0.0.1:2379"})
 	c.Assert(err, check.IsNil)
-	err = server.startStatusHTTP()
+	lis, err := net.Listen("tcp", conf.Addr)
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = lis.Close()
+	}()
+	err = server.startStatusHTTP(lis)
 	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
