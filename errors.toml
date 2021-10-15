@@ -876,6 +876,11 @@ error = '''
 waiting processor to handle the operation finished timeout
 '''
 
+["CDC:ErrWorkerPoolGracefulUnregisterTimedOut"]
+error = '''
+workerpool handle graceful unregister timed out
+'''
+
 ["CDC:ErrWorkerPoolHandleCancelled"]
 error = '''
 workerpool handle is cancelled
