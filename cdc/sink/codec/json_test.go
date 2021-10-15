@@ -241,8 +241,6 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewJSONEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "256"})
-	c.Check(err, check.IsNil)
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -250,13 +248,30 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
+	// make producer's `max-message-bytes` must less than event, but we should still send it as possible.
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "1"})
+	c.Check(err, check.IsNil)
+	for i := 0; i < 100; i++ {
+		r, err := encoder.AppendRowChangedEvent(testEvent)
+		c.Check(r, check.Equals, EncoderNoOperation)
+		c.Check(err, check.IsNil)
+	}
+
+	// one message per batch, and can be build, which means the producer will try to send it.
+	messages := encoder.Build()
+	c.Assert(len(messages), check.Equals, 100)
+
+	// make sure each batch's `Length` not greater than `max-message-bytes`
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "256"})
+	c.Check(err, check.IsNil)
+
 	for i := 0; i < 10000; i++ {
 		r, err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(r, check.Equals, EncoderNoOperation)
 		c.Check(err, check.IsNil)
 	}
 
-	messages := encoder.Build()
+	messages = encoder.Build()
 	for _, msg := range messages {
 		c.Assert(msg.Length(), check.LessEqual, 256)
 	}
