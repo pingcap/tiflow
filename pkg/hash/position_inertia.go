@@ -23,7 +23,7 @@ import (
 
 const hashMagicNumber = 0
 
-// PositionInertia is a 8-bits hash which is bytes partitions inertia
+// PositionInertia is an 8-bits hash which is bytes partitions inertia
 type PositionInertia struct {
 	hashValue uint32
 	hasher    hash.Hash32

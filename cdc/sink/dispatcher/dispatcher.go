@@ -134,8 +134,3 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		rules: rules,
 	}, nil
 }
-
-// dispatchRuleTSO
-// dispatchRulePK
-// dispatchTableName
-// dispatchColumnName

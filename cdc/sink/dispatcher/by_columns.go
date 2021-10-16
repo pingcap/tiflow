@@ -25,6 +25,8 @@ type columnsDispatcher struct {
 }
 
 func newColumnsDispatcher(partitionNum int32, columnNames string) *columnsDispatcher {
+	// columnsNames should be a string in the form like "[column-1,column-2,..., column-n]"
+	// we cannot know whether the specified columns exist or not, just assume that all target columns exists.
 	var targetColumns map[string]struct{}
 	return &columnsDispatcher{
 		partitionNum: partitionNum,
@@ -33,6 +35,9 @@ func newColumnsDispatcher(partitionNum int32, columnNames string) *columnsDispat
 	}
 }
 
+// Dispatch the row to the target which can be indicated by a number.
+// If no target column found, just send it to 0.
+// todo (Ling Jin): discuss this with other stakeholder.
 func (r *columnsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	r.hasher.Reset()
 	for _, col := range row.Columns {
