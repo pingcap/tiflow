@@ -18,22 +18,28 @@ import (
 	"github.com/pingcap/ticdc/pkg/hash"
 )
 
-type tsoDispatcher struct {
+type columnsDispatcher struct {
 	partitionNum int32
+	columnNames  map[string]struct{}
 	hasher       *hash.PositionInertia
 }
 
-func newTSODispatcher(partitionNum int32) *tsoDispatcher {
-	return &tsoDispatcher{
+func newColumnsDispatcher(partitionNum int32, columnNames string) *columnsDispatcher {
+	var targetColumns map[string]struct{}
+	return &columnsDispatcher{
 		partitionNum: partitionNum,
+		columnNames:  targetColumns,
 		hasher:       hash.NewPositionInertia(),
 	}
 }
 
-func (t *tsoDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	t.hasher.Reset()
-	// distribute partition by tso
-	t.hasher.Write(row.CommitTs)
-	// t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	return int32(t.hasher.Sum32() % uint32(t.partitionNum))
+func (r *columnsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+	r.hasher.Reset()
+	for _, col := range row.Columns {
+		if _, ok := r.columnNames[col.Name]; ok {
+			r.hasher.Write([]byte(model.ColumnValueString(col.Value)))
+		}
+	}
+
+	return int32(r.hasher.Sum32() % uint32(r.partitionNum))
 }
