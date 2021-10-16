@@ -258,6 +258,8 @@ func (m *MessageServer) MustAddHandler(
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
 	case <-doneCh:
+	case <-m.closeCh:
+		return nil, cerror.ErrPeerMessageServerClosed.GenWithStackByArgs()
 	}
 	return errCh, nil
 }
@@ -341,6 +343,10 @@ func (m *MessageServer) MustRemoveHandler(ctx context.Context, topic string) err
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	case <-doneCh:
+	case <-m.closeCh:
+		log.Debug("message server is closed while a handler is being removed",
+			zap.String("topic", topic))
+		return nil
 	}
 
 	return nil
