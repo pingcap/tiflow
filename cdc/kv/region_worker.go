@@ -372,7 +372,6 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							rts.ts.eventTime = time.Now()
 							rts.ts.penalty = 0
 						}
-
 						w.rtsManager.Upsert(rts)
 						continue
 					}
