@@ -13,6 +13,12 @@
 
 package config
 
+import (
+	"time"
+
+	"github.com/pingcap/ticdc/pkg/p2p"
+)
+
 // SchedulerV2Config represents configurations for the new scheduler,
 // i.e. scheduling by peer messages
 type SchedulerV2Config struct {
@@ -26,4 +32,19 @@ type SchedulerV2Config struct {
 	ServerMaxPendingMessageCount int          `toml:"server-max-pending-message-count" json:"server-max-pending-message-count"`
 	ServerAckInterval            TomlDuration `toml:"server-ack-interval" json:"server-ack-interval"`
 	ServerWorkerPoolSize         int          `toml:"server-worker-pool-size" json:"server-worker-pool-size"`
+}
+
+const (
+	defaultClientSendChannelSize = 128
+	defaultClientDialTimeout     = time.Second * 3
+)
+
+func (c *SchedulerV2Config) ToMessageClientConfig() *p2p.MessageClientConfig {
+	return &p2p.MessageClientConfig{
+		SendChannelSize:         defaultClientSendChannelSize,
+		BatchSendInterval:       time.Duration(c.ClientMaxBatchInterval),
+		MaxBatchBytes:           c.ClientMaxBatchSize,
+		RetryRateLimitPerSecond: c.ClientRetryRateLimit,
+		DialTimeout:             defaultClientDialTimeout,
+	}
 }

@@ -442,18 +442,20 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 }
 
 func (c *Capture) InitPeerMessaging(captureID model.CaptureID, credentials *security.Credential) {
-	c.peerMessageServer = p2p.NewMessageServer(p2p.SenderID(captureID))
-	c.peerMessageRouter = p2p.NewMessageRouter(p2p.SenderID(captureID), credentials)
+	c.peerMessageServer = p2p.NewMessageServer(captureID)
+
+	clientConfig := config.GetGlobalServerConfig().SchedulerV2.ToMessageClientConfig()
+	c.peerMessageRouter = p2p.NewMessageRouter(captureID, credentials, clientConfig)
 }
 
 func (c *Capture) MakeGlobalEtcdStateWithCaptureChangeEventHandler() *model.GlobalReactorState {
 	ret := model.NewGlobalState()
 	ret.SetUpdateCaptureFn(func(id model.CaptureID, addr string) {
 		if addr == "" {
-			c.peerMessageRouter.RemovePeer(p2p.SenderID(id))
+			c.peerMessageRouter.RemovePeer(id)
 			return
 		}
-		c.peerMessageRouter.AddPeer(p2p.SenderID(id), addr)
+		c.peerMessageRouter.AddPeer(id, addr)
 	})
 	return ret
 }
