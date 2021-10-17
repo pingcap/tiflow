@@ -546,7 +546,6 @@ func (p *processor) legacyHandleTableOperation(ctx cdcContext.Context) error {
 	return nil
 }
 
-
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}

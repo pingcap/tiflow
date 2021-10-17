@@ -285,7 +285,7 @@ client-retry-rate-limit = 0.2
 		},
 		SchedulerV2: &config.SchedulerV2Config{
 			Enabled:                      true,
-			ProcessorCheckpointInterval:  config.TomlDuration(time.Millisecond*15),
+			ProcessorCheckpointInterval:  config.TomlDuration(time.Millisecond * 15),
 			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
 			ClientMaxBatchSize:           8192,
 			ClientRetryRateLimit:         0.2,
@@ -407,7 +407,7 @@ client-retry-rate-limit = 0.2
 		},
 		SchedulerV2: &config.SchedulerV2Config{
 			Enabled:                      true,
-			ProcessorCheckpointInterval:  config.TomlDuration(time.Millisecond*15),
+			ProcessorCheckpointInterval:  config.TomlDuration(time.Millisecond * 15),
 			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
 			ClientMaxBatchSize:           8192,
 			ClientRetryRateLimit:         0.2,

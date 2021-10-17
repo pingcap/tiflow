@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -103,8 +102,6 @@ type testTopicContent struct {
 
 // TODO refactor these tests to reuse more code
 func TestServerSingleClientSingleTopic(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -197,8 +194,6 @@ func TestServerSingleClientSingleTopic(t *testing.T) {
 }
 
 func TestServerMultiClientSingleTopic(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -300,8 +295,6 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 }
 
 func TestServerSingleClientMultiTopic(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -409,8 +402,6 @@ func TestServerSingleClientMultiTopic(t *testing.T) {
 }
 
 func TestServerDeregisterHandler(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -525,8 +516,6 @@ func TestServerDeregisterHandler(t *testing.T) {
 }
 
 func TestServerSingleClientReconnection(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -643,8 +632,6 @@ func TestServerSingleClientReconnection(t *testing.T) {
 }
 
 func TestServerClosed(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -678,8 +665,6 @@ func TestServerClosed(t *testing.T) {
 }
 
 func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 

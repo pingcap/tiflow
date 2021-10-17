@@ -17,7 +17,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -44,8 +43,6 @@ func (m *msgpackSerializableMessage) Unmarshal(data []byte) error {
 }
 
 func TestJsonSerializable(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	msg := &jsonSerializableMessage{
 		A: 1,
 		B: 2,
@@ -63,8 +60,6 @@ func TestJsonSerializable(t *testing.T) {
 }
 
 func TestMsgpackSerializable(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	msg := &msgpackSerializableMessage{
 		A: 1,
 		B: 2,

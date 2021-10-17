@@ -42,12 +42,13 @@ type MessageRouter interface {
 }
 
 // NewMessageRouter creates a new MessageRouter
-func NewMessageRouter(selfID SenderID, credentials *security.Credential) MessageRouter {
+func NewMessageRouter(selfID SenderID, credentials *security.Credential, clientConfig *MessageClientConfig) MessageRouter {
 	return &messageRouterImpl{
-		addressMap:  make(map[SenderID]string),
-		clients:     make(map[SenderID]clientWrapper),
-		credentials: credentials,
-		selfID:      selfID,
+		addressMap:   make(map[SenderID]string),
+		clients:      make(map[SenderID]clientWrapper),
+		credentials:  credentials,
+		selfID:       selfID,
+		clientConfig: clientConfig,
 	}
 }
 
@@ -61,8 +62,9 @@ type messageRouterImpl struct {
 	isClosed int32
 
 	// read only field
-	credentials *security.Credential
-	selfID      SenderID
+	credentials  *security.Credential
+	selfID       SenderID
+	clientConfig *MessageClientConfig
 }
 
 type clientWrapper struct {
@@ -120,7 +122,7 @@ func (m *messageRouterImpl) GetClient(target SenderID) *MessageClient {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client := NewMessageClient(m.selfID)
+	client := NewMessageClient(m.selfID, m.clientConfig)
 	cliWrapper := clientWrapper{
 		MessageClient: client,
 		cancelFn:      cancel,

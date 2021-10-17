@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
@@ -41,7 +40,10 @@ func newMessageRouterTestSuite() *messageRouterTestSuite {
 	return &messageRouterTestSuite{
 		servers:       map[SenderID]*MessageServer{},
 		cancels:       map[SenderID]context.CancelFunc{},
-		messageRouter: NewMessageRouter("test-client-1", &security.Credential{}),
+		messageRouter: NewMessageRouter(
+			"test-client-1",
+			&security.Credential{},
+			clientConfig4Testing),
 	}
 }
 
@@ -96,8 +98,6 @@ func (s *messageRouterTestSuite) wait() {
 }
 
 func TestMessageRouterBasic(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -172,8 +172,6 @@ func TestMessageRouterBasic(t *testing.T) {
 }
 
 func TestMessageRouterRemovePeer(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 

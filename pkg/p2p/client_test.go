@@ -22,17 +22,24 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/ticdc/proto/p2p"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
+
+// read only
+var clientConfig4Testing = &MessageClientConfig{
+	SendChannelSize:         128,
+	BatchSendInterval:       time.Millisecond * 200,
+	MaxBatchBytes:           8192,
+	RetryRateLimitPerSecond: 1.0,
+	DialTimeout:             time.Second * 3,
+}
 
 func newServerForIntegrationTesting(t *testing.T, serverID string) (server *MessageServer, addr string, cancel func()) {
 	addr = t.TempDir() + "/p2p-testing.sock"
@@ -104,7 +111,7 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 		}()
 	}
 
-	client := NewMessageClient("test-client-1")
+	client := NewMessageClient("test-client-1", clientConfig4Testing)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -146,8 +153,6 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 }
 
 func TestMessageClientBasic(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -155,8 +160,6 @@ func TestMessageClientBasic(t *testing.T) {
 }
 
 func TestMessageClientBasicMultiTopics(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -164,8 +167,6 @@ func TestMessageClientBasicMultiTopics(t *testing.T) {
 }
 
 func TestMessageClientServerRestart(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart", "1%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart")
@@ -178,8 +179,6 @@ func TestMessageClientServerRestart(t *testing.T) {
 }
 
 func TestMessageClientServerRestartMultiTopics(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart", "3%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectServerRestart")
@@ -192,8 +191,6 @@ func TestMessageClientServerRestartMultiTopics(t *testing.T) {
 }
 
 func TestMessageClientRestart(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure", "10%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure")
@@ -206,8 +203,6 @@ func TestMessageClientRestart(t *testing.T) {
 }
 
 func TestMessageClientRestartMultiTopics(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure", "3%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure")
@@ -220,8 +215,6 @@ func TestMessageClientRestartMultiTopics(t *testing.T) {
 }
 
 func TestMessageClientBasicNonblocking(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
@@ -258,7 +251,7 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 		}
 	}()
 
-	client := NewMessageClient("test-client-1")
+	client := NewMessageClient("test-client-1", clientConfig4Testing)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
