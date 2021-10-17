@@ -369,11 +369,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					if rts.ts.penalty < resolveLockPenalty {
 						if lastResolvedTs > rts.ts.resolvedTs {
 							rts.ts.resolvedTs = lastResolvedTs
-							rts.ts.penalty = 0
 							rts.ts.eventTime = time.Now()
-							w.rtsManager.Upsert(rts)
+							rts.ts.penalty = 0
 						}
 
+						w.rtsManager.Upsert(rts)
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
@@ -388,10 +388,10 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						log.Warn("failed to resolve lock", zap.Uint64("regionID", rts.regionID), zap.Error(err))
 						continue
 					}
-				} else {
-					rts.ts.resolvedTs = lastResolvedTs
-					w.rtsManager.Upsert(rts)
+					rts.ts.penalty = 0
 				}
+				rts.ts.resolvedTs = lastResolvedTs
+				w.rtsManager.Upsert(rts)
 			}
 		}
 	}
