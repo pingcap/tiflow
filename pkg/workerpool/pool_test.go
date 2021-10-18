@@ -467,6 +467,7 @@ func TestGracefulUnregister(t *testing.T) {
 	err = handle.AddEvent(ctx, int64(0))
 	require.Error(t, err)
 	require.True(t, cerror.ErrWorkerPoolHandleCancelled.Equal(err))
+	require.Equal(t, handleCancelled, handle.(*defaultEventHandle).status)
 
 	wg.Wait()
 }
