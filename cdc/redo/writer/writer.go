@@ -88,7 +88,7 @@ type LogWriterConfig struct {
 	S3URI *url.URL
 }
 
-// LogWriter ...
+// LogWriter implement the RedoLogWriter interface
 type LogWriter struct {
 	cfg       *LogWriterConfig
 	rowWriter fileWriter

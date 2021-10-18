@@ -22,23 +22,23 @@ import (
 	"go.uber.org/zap"
 )
 
-// blackholeWriter defines a blackhole storage, it receives events and persists
+// blackHoleSink defines a blackHole storage, it receives events and persists
 // without any latency
-type blackholeWriter struct {
+type blackHoleWriter struct {
 	tableRtsMap  map[model.TableID]uint64
 	tableRtsMu   sync.RWMutex
 	resolvedTs   uint64
 	checkpointTs uint64
 }
 
-// NewBlackHoleWriter creates a blackhole writer
-func NewBlackHoleWriter() *blackholeWriter {
-	return &blackholeWriter{
+// NewBlackHoleWriter creates a blackHole writer
+func NewBlackHoleWriter() *blackHoleWriter {
+	return &blackHoleWriter{
 		tableRtsMap: make(map[model.TableID]uint64),
 	}
 }
 
-func (bs *blackholeWriter) WriteLog(ctx context.Context, tableID model.TableID, logs []*model.RedoRowChangedEvent) (resolvedTs uint64, err error) {
+func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, logs []*model.RedoRowChangedEvent) (resolvedTs uint64, err error) {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
 	if len(logs) == 0 {
@@ -52,29 +52,29 @@ func (bs *blackholeWriter) WriteLog(ctx context.Context, tableID model.TableID, 
 	return
 }
 
-func (bs *blackholeWriter) FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error {
+func (bs *blackHoleWriter) FlushLog(_ context.Context, tableID model.TableID, resolvedTs uint64) error {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
 	bs.tableRtsMap[tableID] = resolvedTs
 	return nil
 }
 
-func (bs *blackholeWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error {
+func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) error {
 	log.Debug("send ddl event", zap.Any("ddl", ddl))
 	return nil
 }
 
-func (bs *blackholeWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
+func (bs *blackHoleWriter) EmitResolvedTs(_ context.Context, ts uint64) error {
 	bs.resolvedTs = ts
 	return nil
 }
 
-func (bs *blackholeWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (bs *blackHoleWriter) EmitCheckpointTs(_ context.Context, ts uint64) error {
 	bs.checkpointTs = ts
 	return nil
 }
 
-func (bs *blackholeWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (map[int64]uint64, error) {
+func (bs *blackHoleWriter) GetCurrentResolvedTs(_ context.Context, tableIDs []int64) (map[int64]uint64, error) {
 	bs.tableRtsMu.RLock()
 	defer bs.tableRtsMu.RUnlock()
 	rtsMap := make(map[int64]uint64, len(bs.tableRtsMap))
@@ -84,6 +84,6 @@ func (bs *blackholeWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []
 	return rtsMap, nil
 }
 
-func (bs *blackholeWriter) Close() error {
+func (bs *blackHoleWriter) Close() error {
 	return nil
 }

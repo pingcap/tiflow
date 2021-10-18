@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLogWriter_WriteLog(t *testing.T) {
+func TestLogWriterWriteLog(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
@@ -140,7 +140,7 @@ func TestLogWriter_WriteLog(t *testing.T) {
 	}
 }
 
-func TestLogWriter_SendDDL(t *testing.T) {
+func TestLogWriterSendDDL(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
@@ -235,7 +235,7 @@ func TestLogWriter_SendDDL(t *testing.T) {
 	}
 }
 
-func TestLogWriter_FlushLog(t *testing.T) {
+func TestLogWriterFlushLog(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
@@ -339,7 +339,7 @@ func TestLogWriter_FlushLog(t *testing.T) {
 	}
 }
 
-func TestLogWriter_EmitCheckpointTs(t *testing.T) {
+func TestLogWriterEmitCheckpointTs(t *testing.T) {
 	type arg struct {
 		ctx context.Context
 		ts  uint64
@@ -428,7 +428,7 @@ func TestLogWriter_EmitCheckpointTs(t *testing.T) {
 	}
 }
 
-func TestLogWriter_EmitResolvedTs(t *testing.T) {
+func TestLogWriterEmitResolvedTs(t *testing.T) {
 	type arg struct {
 		ctx context.Context
 
@@ -517,7 +517,7 @@ func TestLogWriter_EmitResolvedTs(t *testing.T) {
 	}
 }
 
-func TestLogWriter_GetCurrentResolvedTs(t *testing.T) {
+func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 	type arg struct {
 		ctx      context.Context
 		ts       map[int64]uint64
@@ -650,7 +650,7 @@ func TestNewLogWriter(t *testing.T) {
 	require.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
 }
 
-func TestWriter_GC(t *testing.T) {
+func TestWriterRedoGC(t *testing.T) {
 	cfg := &LogWriterConfig{
 		Dir:               "dir",
 		ChangeFeedID:      "test-cf",

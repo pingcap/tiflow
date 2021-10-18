@@ -26,7 +26,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/redo/common"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
@@ -39,7 +39,7 @@ func TestMain(m *testing.M) {
 		defaultGCIntervalInMs = originValue
 	}()
 
-	util.SetUpLeakTest(m)
+	leakutil.SetUpLeakTest(m)
 }
 
 func TestWriterWrite(t *testing.T) {
@@ -57,7 +57,7 @@ func TestWriterWrite(t *testing.T) {
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		},
 		uint64buf: make([]byte, 8),
-		state:     *atomic.NewUint32(started),
+		state:     *atomic.NewBool(started),
 	}
 
 	w.eventCommitTS.Store(1)
