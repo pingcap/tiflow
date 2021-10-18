@@ -20,6 +20,7 @@ require (
 	github.com/gin-gonic/gin v1.7.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/golang/mock v1.6.0
+	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.6
@@ -72,6 +73,10 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
-// cloud.google.com/go/storage will upgrade grpc to v1.40.0
-// we need keep the replacement until go.etcd.io supports the higher version of grpc.
-replace google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
+replace (
+	// Fix CVE-2020-26160.
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
+	// cloud.google.com/go/storage will upgrade grpc to v1.40.0
+	// we need keep the replacement until go.etcd.io supports the higher version of grpc.
+	google.golang.org/grpc v1.40.0 => google.golang.org/grpc v1.29.1
+)
