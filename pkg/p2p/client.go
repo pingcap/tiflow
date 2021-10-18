@@ -139,8 +139,11 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 		}
 
 		grpcClient := p2p.NewCDCPeerToPeerClient(conn)
-		clientStream, err := grpcClient.SendMessage(ctx)
+
+		cancelCtx, cancelStream := context.WithCancel(ctx)
+		clientStream, err := grpcClient.SendMessage(cancelCtx)
 		if err != nil {
+			cancelStream()
 			_ = conn.Close()
 			log.Warn("establish stream to peer failed, retrying", zap.Error(err))
 			continue
@@ -153,12 +156,14 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 			Epoch:      epoch,
 		}})
 		if err != nil {
+			cancelStream()
 			_ = conn.Close()
 			log.Warn("send metadata to peer failed, retrying", zap.Error(err))
 			continue
 		}
 
-		if err := c.run(ctx, clientStream); err != nil {
+		if err := c.run(ctx, clientStream, cancelStream); err != nil {
+			cancelStream()
 			_ = conn.Close()
 			if cerrors.ErrPeerMessageClientPermanentFail.Equal(err) {
 				return errors.Trace(err)
@@ -170,14 +175,16 @@ func (c *MessageClient) Run(ctx context.Context, network, addr string, receiverI
 	}
 }
 
-func (c *MessageClient) run(ctx context.Context, stream clientStream) error {
+func (c *MessageClient) run(ctx context.Context, stream clientStream, cancel func()) error {
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
+		defer cancel()
 		return c.runTx(ctx, stream)
 	})
 
 	errg.Go(func() error {
+		defer cancel()
 		return c.runRx(ctx, stream)
 	})
 
@@ -216,6 +223,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 		}
 
 		failpoint.Inject("ClientInjectStreamFailure", func() {
+			log.Info("ClientInjectStreamFailure failpoint triggered")
 			failpoint.Return(io.EOF)
 		})
 

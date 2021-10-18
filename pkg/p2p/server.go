@@ -144,6 +144,9 @@ func (m *MessageServer) run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
+		failpoint.Inject("ServerInjectTaskDelay", func() {
+			log.Info("channel size", zap.Int("len", len(m.taskQueue)))
+		})
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
@@ -497,6 +500,15 @@ func (m *MessageServer) scheduleTask(ctx context.Context, task interface{}) erro
 	return nil
 }
 
+func (m *MessageServer) scheduleTaskBlocking(ctx context.Context, task interface{}) error {
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case m.taskQueue <- task:
+	}
+	return nil
+}
+
 // SendMessage implements the gRPC call SendMessage.
 func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) error {
 	sendCh := make(chan p2p.SendMessageResponse, m.config.SendChannelSize)
@@ -580,11 +592,14 @@ func (m *MessageServer) receive(ctx context.Context, stream p2p.CDCPeerToPeer_Se
 				return cerror.ErrPeerMessageUnexpected.GenWithStackByArgs(clientIP, "no stream-meta")
 			}
 			streamMeta = packet.GetStreamMeta()
-			if streamMeta.ReceiverId != string(m.serverID) {
+			if streamMeta.ReceiverId != m.serverID {
 				return cerror.ErrPeerMessageReceiverMismatch.GenWithStackByArgs(m.serverID /* expected */, streamMeta.ReceiverId /* got */)
 			}
 
-			if err := m.scheduleTask(stream.Context(), taskOnRegisterPeer{
+			// We use scheduleTaskBlocking because blocking here is acceptable.
+			// Blocking here will cause grpc-go to back propagate the pressure
+			// to the client, which is what we want.
+			if err := m.scheduleTaskBlocking(stream.Context(), taskOnRegisterPeer{
 				streamMeta: streamMeta,
 				sender:     sender,
 				clientIP:   clientIP,
@@ -597,7 +612,8 @@ func (m *MessageServer) receive(ctx context.Context, stream p2p.CDCPeerToPeer_Se
 			zap.Int("num-entries", len(packet.GetEntries())))
 
 		if len(packet.GetEntries()) > 0 {
-			if err := m.scheduleTask(ctx, taskOnMessageBatch{
+			// See the comment above on why use scheduleTaskBlocking.
+			if err := m.scheduleTaskBlocking(ctx, taskOnMessageBatch{
 				streamMeta:     streamMeta,
 				messageEntries: packet.GetEntries(),
 			}); err != nil {

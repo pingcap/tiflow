@@ -41,7 +41,9 @@ var clientConfig4Testing = &MessageClientConfig{
 	DialTimeout:             time.Second * 3,
 }
 
-func newServerForIntegrationTesting(t *testing.T, serverID string) (server *MessageServer, addr string, cancel func()) {
+type serverConfigOpt = func(config *MessageServerConfig)
+
+func newServerForIntegrationTesting(t *testing.T, serverID string, configOpts... serverConfigOpt) (server *MessageServer, addr string, cancel func()) {
 	addr = t.TempDir() + "/p2p-testing.sock"
 	lis, err := net.Listen("unix", addr)
 	require.NoError(t, err)
@@ -49,7 +51,12 @@ func newServerForIntegrationTesting(t *testing.T, serverID string) (server *Mess
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 
-	server = NewMessageServer(serverID, defaultServerConfig4Testing)
+	serverConfig := *defaultServerConfig4Testing
+	for _, opt := range configOpts {
+		opt(&serverConfig)
+	}
+
+	server = NewMessageServer(serverID, &serverConfig)
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
@@ -191,7 +198,7 @@ func TestMessageClientServerRestartMultiTopics(t *testing.T) {
 }
 
 func TestMessageClientRestart(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure", "10%return(true)")
+	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure", "50%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ClientInjectStreamFailure")
 	}()
@@ -284,6 +291,72 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 		return seq >= defaultMessageBatchSizeSmall
 	}, time.Second*10, time.Millisecond*20)
 
+	cancel()
+	wg.Wait()
+}
+
+func TestMessageBackPressure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, addr, cancelServer := newServerForIntegrationTesting(t, "test-server-1", func(config *MessageServerConfig) {
+		config.MaxPendingTaskCount = 10
+	})
+	defer cancelServer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		if err != nil {
+			require.Regexp(t, ".*context canceled.*", err.Error())
+		}
+	}()
+
+	// No-op handler. We are only testing for back-pressure.
+	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+		return nil
+	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+		case err := <-errCh:
+			require.NoError(t, err)
+		}
+	}()
+
+	client := NewMessageClient("test-client-1", clientConfig4Testing)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := client.Run(ctx, "unix", addr, "test-server-1", &security.Credential{})
+		require.Error(t, err)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectTaskDelay", "sleep(10)")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/p2p/ServerInjectTaskDelay")
+	}()
+
+	var lastSeq Seq
+	for i := 0; i < 20000; i++ {
+		seq, err := client.SendMessage(ctx, "test-topic-1", &testTopicContent{})
+		require.NoError(t, err)
+		atomic.StoreInt64(&lastSeq, seq)
+	}
+
+	require.Eventually(t, func() bool {
+		latestAck, ok := client.CurrentAck("test-topic-1")
+		if !ok {
+			return false
+		}
+		return latestAck == atomic.LoadInt64(&lastSeq)
+	}, time.Second*10, time.Millisecond*20)
 	cancel()
 	wg.Wait()
 }
