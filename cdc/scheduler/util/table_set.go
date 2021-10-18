@@ -15,7 +15,6 @@ package util
 
 import (
 	"github.com/pingcap/ticdc/cdc/model"
-	"go.uber.org/zap"
 )
 
 type TableSet struct {
@@ -72,6 +71,9 @@ func (s *TableSet) RemoveTableRecord(tableID model.TableID) bool {
 		panic("unreachable")
 	}
 	delete(captureIndexEntry, record.TableID)
+	if len(captureIndexEntry) == 0 {
+		delete(s.captureIndex, record.CaptureID)
+	}
 	return true
 }
 
@@ -114,12 +116,4 @@ func (s *TableSet) CountTableByStatus(status TableStatus) (count int) {
 		}
 	}
 	return
-}
-
-func (s *TableSet) PrintStatus(logger func(msg string, fields ...zap.Field)) {
-	logger("[table record starts] ======================")
-	for _, record := range s.tableIDMap {
-		logger("[table record]", zap.Reflect("record", record))
-	}
-	logger("[table record ends] ======================")
 }
