@@ -25,8 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -35,10 +33,12 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -110,123 +110,6 @@ type mysqlSink struct {
 
 	forceReplicate bool
 	cancel         func()
-}
-
-// newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	sinkURI *url.URL,
-	filter *filter.Filter,
-	replicaConfig *config.ReplicaConfig,
-	opts map[string]string,
-) (Sink, error) {
-	opts[OptChangefeedID] = changefeedID
-	params, err := parseSinkURI(ctx, sinkURI, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	params.enableOldValue = replicaConfig.EnableOldValue
-
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	port := sinkURI.Port()
-	if username == "" {
-		username = "root"
-	}
-	if port == "" {
-		port = "4000"
-	}
-
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
-	dsn, err := dmysql.ParseDSN(dsnStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-
-	// create test db used for parameter detection
-	if dsn.Params == nil {
-		dsn.Params = make(map[string]string, 1)
-	}
-	if params.timezone != "" {
-		dsn.Params["time_zone"] = params.timezone
-	}
-	dsn.Params["readTimeout"] = params.readTimeout
-	dsn.Params["writeTimeout"] = params.writeTimeout
-	dsn.Params["timeout"] = params.dialTimeout
-	testDB, err := getDBConnImpl(ctx, dsn.FormatDSN())
-	if err != nil {
-		return nil, err
-	}
-	defer testDB.Close()
-
-	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	db, err := getDBConnImpl(ctx, dsnStr)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Info("Start mysql sink")
-
-	db.SetMaxIdleConns(params.workerCount)
-	db.SetMaxOpenConns(params.workerCount)
-
-	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
-		params.captureAddr, params.changefeedID)
-	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
-	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
-			params.captureAddr, params.changefeedID, strconv.Itoa(i))
-	}
-
-	sink := &mysqlSink{
-		db:                              db,
-		params:                          params,
-		filter:                          filter,
-		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql", opts),
-		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
-		metricBucketSizeCounters:        metricBucketSizeCounters,
-		errCh:                           make(chan error, 1),
-		forceReplicate:                  replicaConfig.ForceReplicate,
-	}
-
-	if val, ok := opts[mark.OptCyclicConfig]; ok {
-		cfg := new(config.CyclicConfig)
-		err := cfg.Unmarshal([]byte(val))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		sink.cyclic = cyclic.NewCyclic(cfg)
-
-		err = sink.adjustSQLMode(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-
-	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedNotifier = new(notify.Notifier)
-	ctx, cancel := context.WithCancel(ctx)
-	sink.cancel = cancel
-	err = sink.createSinkWorkers(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-	go sink.flushRowChangedEvents(ctx, receiver)
-
-	return sink, nil
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -640,6 +523,125 @@ func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
 	}
 	return db, nil
+}
+
+// newMySQLSink creates a new MySQL sink using schema storage
+func newMySQLSink(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	filter *tifilter.Filter,
+	replicaConfig *config.ReplicaConfig,
+	opts map[string]string,
+) (Sink, error) {
+	opts[OptChangefeedID] = changefeedID
+	params, err := parseSinkURI(ctx, sinkURI, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	params.enableOldValue = replicaConfig.EnableOldValue
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+
+	// create test db used for parameter detection
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	if params.timezone != "" {
+		dsn.Params["time_zone"] = params.timezone
+	}
+	dsn.Params["readTimeout"] = params.readTimeout
+	dsn.Params["writeTimeout"] = params.writeTimeout
+	dsn.Params["timeout"] = params.dialTimeout
+	testDB, err := getDBConnImpl(ctx, dsn.FormatDSN())
+	if err != nil {
+		return nil, err
+	}
+	defer testDB.Close()
+
+	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	db, err := getDBConnImpl(ctx, dsnStr)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("Start mysql sink")
+
+	db.SetMaxIdleConns(params.workerCount)
+	db.SetMaxOpenConns(params.workerCount)
+
+	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
+		params.captureAddr, params.changefeedID)
+	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
+	for i := 0; i < params.workerCount; i++ {
+		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
+			params.captureAddr, params.changefeedID, strconv.Itoa(i))
+	}
+
+	sink := &mysqlSink{
+		db:                              db,
+		params:                          params,
+		filter:                          filter,
+		txnCache:                        common.NewUnresolvedTxnCache(),
+		statistics:                      NewStatistics(ctx, "mysql", opts),
+		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
+		metricBucketSizeCounters:        metricBucketSizeCounters,
+		errCh:                           make(chan error, 1),
+		forceReplicate:                  replicaConfig.ForceReplicate,
+	}
+
+	if val, ok := opts[mark.OptCyclicConfig]; ok {
+		cfg := new(config.CyclicConfig)
+		err := cfg.Unmarshal([]byte(val))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		sink.cyclic = cyclic.NewCyclic(cfg)
+
+		err = sink.adjustSQLMode(ctx)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	sink.execWaitNotifier = new(notify.Notifier)
+	sink.resolvedNotifier = new(notify.Notifier)
+
+	ctx, cancel := context.WithCancel(ctx)
+	sink.cancel = cancel
+	err = sink.createSinkWorkers(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	go sink.flushRowChangedEvents(ctx, receiver)
+
+	return sink, nil
 }
 
 func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
