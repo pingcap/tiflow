@@ -534,6 +534,8 @@ func newMySQLSink(
 	replicaConfig *config.ReplicaConfig,
 	opts map[string]string,
 ) (Sink, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
 	opts[OptChangefeedID] = changefeedID
 	params, err := parseSinkURI(ctx, sinkURI, opts)
 	if err != nil {
@@ -597,7 +599,6 @@ func newMySQLSink(
 		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
 			params.captureAddr, params.changefeedID, strconv.Itoa(i))
 	}
-
 	sink := &mysqlSink{
 		db:                              db,
 		params:                          params,
@@ -608,6 +609,7 @@ func newMySQLSink(
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
+		cancel:                          cancel,
 	}
 
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
@@ -627,8 +629,6 @@ func newMySQLSink(
 	sink.execWaitNotifier = new(notify.Notifier)
 	sink.resolvedNotifier = new(notify.Notifier)
 
-	ctx, cancel := context.WithCancel(ctx)
-	sink.cancel = cancel
 	err = sink.createSinkWorkers(ctx)
 
 	if err != nil {
