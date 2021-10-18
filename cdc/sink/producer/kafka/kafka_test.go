@@ -73,7 +73,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
 		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
-	maxMessageSize := "4194304"
+	maxMessageSize := "4096" // 4kb
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
 
 	sinkURI, err := url.Parse(uri)
@@ -88,7 +88,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
 	c.Assert(cfg.Version, check.Equals, "2.6.0")
-	c.Assert(cfg.MaxMessageBytes, check.Equals, 512*1024*1024)
+	c.Assert(cfg.MaxMessageBytes, check.Equals, 1024*1024)
 
 	expectedOpts := map[string]string{
 		"max-message-bytes": maxMessageSize,
@@ -98,7 +98,7 @@ func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
 		c.Assert(v, check.Equals, expectedOpts[k])
 	}
 
-	a := 512*1024*1024 + 1
+	a := 1024*1024 + 1
 	maxMessageSize = strconv.Itoa(a)
 	uri = fmt.Sprintf(uriTemplate, maxMessageSize)
 
