@@ -26,13 +26,13 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/redo/common"
 	"github.com/pingcap/ticdc/cdc/redo/writer"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
 
 func TestMain(m *testing.M) {
-	util.SetUpLeakTest(m)
+	leakutil.SetUpLeakTest(m)
 }
 
 func TestReader_newReader(t *testing.T) {
