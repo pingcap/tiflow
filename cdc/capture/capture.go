@@ -63,7 +63,7 @@ type Capture struct {
 
 	peerMessageServer    *p2p.MessageServer
 	peerMessageRouter    p2p.MessageRouter
-	grpcResettableServer *p2p.ResettableServer
+	grpcResettableServer *p2p.ServerWrapper
 
 	cancel context.CancelFunc
 
@@ -72,7 +72,7 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, grpcServer *p2p.ResettableServer) *Capture {
+func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient, grpcServer *p2p.ServerWrapper) *Capture {
 	return &Capture{
 		pdClient:             pdClient,
 		kvStorage:            kvStorage,
@@ -442,7 +442,8 @@ func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
 }
 
 func (c *Capture) InitPeerMessaging(captureID model.CaptureID, credentials *security.Credential) {
-	c.peerMessageServer = p2p.NewMessageServer(captureID)
+	serverConfig := config.GetGlobalServerConfig().SchedulerV2.ToMessageServerConfig()
+	c.peerMessageServer = p2p.NewMessageServer(captureID, serverConfig)
 
 	clientConfig := config.GetGlobalServerConfig().SchedulerV2.ToMessageClientConfig()
 	c.peerMessageRouter = p2p.NewMessageRouter(captureID, credentials, clientConfig)

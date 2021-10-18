@@ -57,7 +57,7 @@ func (s *messageRouterTestSuite) addServer(ctx context.Context, t *testing.T, id
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	newServer := NewMessageServer(id)
+	newServer := NewMessageServer(id, defaultServerConfig4Testing)
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, newServer)
 
 	ctx, cancel := context.WithCancel(ctx)

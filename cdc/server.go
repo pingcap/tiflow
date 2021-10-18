@@ -63,7 +63,7 @@ type Server struct {
 	pdEndpoints []string
 
 	tcpServer    tcpserver.TCPServer
-	grpcServer   *p2p.ResettableServer
+	grpcServer   *p2p.ServerWrapper
 	statusServer *http.Server
 }
 

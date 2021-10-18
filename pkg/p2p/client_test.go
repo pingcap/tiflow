@@ -49,7 +49,7 @@ func newServerForIntegrationTesting(t *testing.T, serverID string) (server *Mess
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 
-	server = NewMessageServer(SenderID(serverID))
+	server = NewMessageServer(serverID, defaultServerConfig4Testing)
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
@@ -131,14 +131,14 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 			var oldSeq Seq
 			for i := 0; i < size; i++ {
 				content := &testTopicContent{Index: int64(i + 1)}
-				seq, err := client.SendMessage(ctx, Topic(topicName), content)
+				seq, err := client.SendMessage(ctx, topicName, content)
 				require.NoError(t, err)
 				require.Equal(t, oldSeq+1, seq)
 				oldSeq = seq
 			}
 
 			require.Eventuallyf(t, func() bool {
-				seq, ok := client.CurrentAck(Topic(topicName))
+				seq, ok := client.CurrentAck(topicName)
 				if !ok {
 					return false
 				}

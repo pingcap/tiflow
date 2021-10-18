@@ -24,10 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/proto/p2p"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -43,6 +42,15 @@ const (
 	defaultAddHandlerDelayVariation = time.Millisecond * 100
 )
 
+// read only
+var defaultServerConfig4Testing = &MessageServerConfig{
+	MaxTopicPendingCount: 256,
+	MaxPendingTaskCount:  102400,
+	SendChannelSize:      16,
+	AckInterval:          time.Millisecond * 200,
+	WorkerPoolSize:       4,
+}
+
 func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, newClient func() (p2p.CDCPeerToPeerClient, func()), cancel func()) {
 	addr := t.TempDir() + "/p2p-testing.sock"
 	lis, err := net.Listen("unix", addr)
@@ -51,7 +59,7 @@ func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, 
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 
-	server = NewMessageServer(serverID)
+	server = NewMessageServer(serverID, defaultServerConfig4Testing)
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
@@ -590,7 +598,7 @@ func TestServerSingleClientReconnection(t *testing.T) {
 				require.NoError(t, err)
 			}
 			// Makes sure that some ACKs have been sent
-			time.Sleep(serverTickInterval * 2)
+			time.Sleep(defaultServerConfig4Testing.AckInterval * 2)
 		}()
 
 		subWg.Add(1)
@@ -728,6 +736,102 @@ func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 			return
 		}
 	}
+
+	wg.Wait()
+}
+
+func TestServerExitWhileAddingHandler(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, _, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	serverCtx, cancelServer := context.WithCancel(ctx)
+	defer cancelServer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(serverCtx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	waitCh := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.scheduleTask(ctx, taskDebugDelay{
+			doneCh: waitCh,
+		})
+		require.NoError(t, err)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond*100)
+		_, err := server.MustAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
+			return nil
+		})
+		require.Error(t, err)
+		require.Regexp(t, ".*ErrPeerMessageServerClosed.*", err.Error())
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond*300)
+		cancelServer()
+	}()
+
+	wg.Wait()
+}
+
+func TestServerExitWhileRemovingHandler(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, _, closer := newServerForTesting(t, "test-server-1")
+	defer closer()
+
+	serverCtx, cancelServer := context.WithCancel(ctx)
+	defer cancelServer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(serverCtx)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	waitCh := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := server.MustAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
+			return nil
+		})
+		require.NoError(t, err)
+		err = server.scheduleTask(ctx, taskDebugDelay{
+			doneCh: waitCh,
+		})
+		require.NoError(t, err)
+		time.Sleep(time.Millisecond*100)
+		err = server.MustRemoveHandler(ctx, "test-topic")
+		require.NoError(t, err)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond*500)
+		cancelServer()
+	}()
 
 	wg.Wait()
 }

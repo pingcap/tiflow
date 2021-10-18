@@ -37,6 +37,8 @@ type SchedulerV2Config struct {
 const (
 	defaultClientSendChannelSize = 128
 	defaultClientDialTimeout     = time.Second * 3
+	defaultMaxTopicPendingCount  = 256
+	defaultServerSendChannelSize = 16
 )
 
 func (c *SchedulerV2Config) ToMessageClientConfig() *p2p.MessageClientConfig {
@@ -46,5 +48,15 @@ func (c *SchedulerV2Config) ToMessageClientConfig() *p2p.MessageClientConfig {
 		MaxBatchBytes:           c.ClientMaxBatchSize,
 		RetryRateLimitPerSecond: c.ClientRetryRateLimit,
 		DialTimeout:             defaultClientDialTimeout,
+	}
+}
+
+func (c *SchedulerV2Config) ToMessageServerConfig() *p2p.MessageServerConfig {
+	return &p2p.MessageServerConfig{
+		MaxTopicPendingCount: defaultMaxTopicPendingCount,
+		MaxPendingTaskCount:  c.ServerMaxPendingMessageCount,
+		SendChannelSize:      defaultServerSendChannelSize,
+		AckInterval:          time.Duration(c.ServerAckInterval),
+		WorkerPoolSize:       c.ServerWorkerPoolSize,
 	}
 }

@@ -20,9 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -31,16 +28,24 @@ import (
 	"github.com/pingcap/ticdc/proto/p2p"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
 	gRPCPeer "google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
-const (
-	maxTopicPendingCount = 256
-	maxPendingTaskCount  = 102400
-	sendChSize           = 16
-	serverTickInterval   = time.Millisecond * 200
-	workerPoolSize       = 4 // TODO add a config
-)
+// MessageServerConfig stores configurations for the MessageServer
+type MessageServerConfig struct {
+	// The maximum number of entries to be cached for topics with no handler registered
+	MaxTopicPendingCount int
+	// The maximum number of unhandled internal tasks for the main thread.
+	MaxPendingTaskCount  int
+	// The size of the channel for pending messages before sending them to gRPC.
+	SendChannelSize      int
+	// The interval between ACKs.
+	AckInterval          time.Duration
+	// The size of the goroutine pool for running the handlers.
+	WorkerPoolSize       int
+}
 
 // MessageServer is an implementation of the gRPC server for the peer-to-peer system
 type MessageServer struct {
@@ -61,6 +66,8 @@ type MessageServer struct {
 
 	isRunning int32
 	closeCh   chan struct{}
+
+	config *MessageServerConfig // read only
 }
 
 type taskOnMessageBatch struct {
@@ -90,17 +97,24 @@ type taskOnDeregisterHandler struct {
 	done  chan struct{}
 }
 
+// taskDebugDelay is used in unit tests to artificially block the main
+// goroutine of the server. It is not used in other places.
+type taskDebugDelay struct {
+	doneCh chan struct{}
+}
+
 // NewMessageServer creates a new MessageServer
-func NewMessageServer(serverID SenderID) *MessageServer {
+func NewMessageServer(serverID SenderID, config *MessageServerConfig) *MessageServer {
 	return &MessageServer{
 		serverID:        serverID,
 		handlers:        make(map[string]*handler),
 		peers:           make(map[string]*cdcPeer),
 		pendingMessages: make(map[topicSenderPair][]pendingMessageEntry),
 		acksMap:         make(map[SenderID]map[Topic]Seq),
-		taskQueue:       make(chan interface{}, maxPendingTaskCount),
-		pool:            workerpool.NewDefaultWorkerPool(workerPoolSize),
+		taskQueue:       make(chan interface{}, config.MaxPendingTaskCount),
+		pool:            workerpool.NewDefaultWorkerPool(config.WorkerPoolSize),
 		closeCh:         make(chan struct{}),
+		config:          config,
 	}
 }
 
@@ -126,7 +140,7 @@ func (m *MessageServer) Run(ctx context.Context) error {
 }
 
 func (m *MessageServer) run(ctx context.Context) error {
-	ticker := time.NewTicker(serverTickInterval)
+	ticker := time.NewTicker(m.config.AckInterval)
 	defer ticker.Stop()
 
 	for {
@@ -186,6 +200,15 @@ func (m *MessageServer) run(ctx context.Context) error {
 					}
 					return errors.Trace(err)
 				}
+			case taskDebugDelay:
+				log.Info("taskDebugDelay started")
+				select {
+				case <-ctx.Done():
+					log.Info("taskDebugDelay canceled")
+					return errors.Trace(ctx.Err())
+				case <-task.doneCh:
+				}
+				log.Info("taskDebugDelay ended")
 			}
 		}
 	}
@@ -280,7 +303,7 @@ func (m *MessageServer) AddHandler(
 
 		m.acksMapLock.Lock()
 		lastAck := m.getAck(SenderID(senderID), Topic(entry.GetTopic()))
-		if lastAck >= Seq(entry.Sequence) {
+		if lastAck >= entry.Sequence {
 			// TODO add metrics
 			log.Debug("skipping peer message",
 				zap.String("sender-id", senderID),
@@ -291,7 +314,7 @@ func (m *MessageServer) AddHandler(
 			return nil
 		}
 
-		if lastAck != 0 && Seq(entry.Sequence) > lastAck+1 {
+		if lastAck != 0 && entry.Sequence > lastAck+1 {
 			log.Panic("seq is skipped. Bug?", zap.Int64("last-ack", int64(lastAck)))
 		}
 
@@ -424,7 +447,7 @@ func (m *MessageServer) registerPeer(
 		m.peers[streamMeta.SenderId] = &cdcPeer{
 			PeerID:   streamMeta.SenderId,
 			Epoch:    streamMeta.Epoch,
-			SenderID: SenderID(streamMeta.SenderId),
+			SenderID: streamMeta.SenderId,
 			sender:   sender,
 		}
 		m.peerLock.Unlock()
@@ -446,7 +469,7 @@ func (m *MessageServer) registerPeer(
 			m.peers[streamMeta.SenderId] = &cdcPeer{
 				PeerID:   streamMeta.SenderId,
 				Epoch:    streamMeta.Epoch,
-				SenderID: SenderID(streamMeta.SenderId),
+				SenderID: streamMeta.SenderId,
 				sender:   sender,
 			}
 			m.peerLock.Unlock()
@@ -476,7 +499,7 @@ func (m *MessageServer) scheduleTask(ctx context.Context, task interface{}) erro
 
 // SendMessage implements the gRPC call SendMessage.
 func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) error {
-	sendCh := make(chan p2p.SendMessageResponse, sendChSize)
+	sendCh := make(chan p2p.SendMessageResponse, m.config.SendChannelSize)
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
@@ -594,7 +617,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, senderID string, entr
 	if !ok {
 		// handler not found
 		pendingEntries := m.pendingMessages[pendingMessageKey]
-		if len(pendingEntries) > maxTopicPendingCount {
+		if len(pendingEntries) > m.config.MaxTopicPendingCount {
 			log.Warn("Topic congested because no handler has been registered", zap.String("topic", topic))
 			delete(m.pendingMessages, pendingMessageKey)
 			m.peerLock.RLock()

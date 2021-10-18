@@ -25,16 +25,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type ResettableServer struct {
+// ServerWrapper implements a CDCPeerToPeerServer, and it
+// maintains an inner CDCPeerToPeerServer instance that can
+// be replaced as needed.
+type ServerWrapper struct {
 	rwMu        sync.RWMutex
 	innerServer p2p.CDCPeerToPeerServer
 }
 
-func NewResettableServer() *ResettableServer {
-	return &ResettableServer{}
+func NewResettableServer() *ServerWrapper {
+	return &ServerWrapper{}
 }
 
-func (s *ResettableServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) error {
+func (s *ServerWrapper) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) error {
 	s.rwMu.RLock()
 	innerServer := s.innerServer
 	s.rwMu.RUnlock()
@@ -52,9 +55,12 @@ func (s *ResettableServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServe
 	return s.innerServer.SendMessage(stream)
 }
 
-func (s *ResettableServer) Reset(inner p2p.CDCPeerToPeerServer) {
+func (s *ServerWrapper) Reset(inner p2p.CDCPeerToPeerServer) {
 	s.rwMu.Lock()
 	defer s.rwMu.Unlock()
+	// reflect2.IsNil handles two cases for us:
+	// 1) null value
+	// 2) an interface with a null value but a not-null type info.
 	if reflect2.IsNil(inner) {
 		s.innerServer = nil
 		return
