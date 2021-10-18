@@ -19,7 +19,7 @@
 
 ## Introduction
 
-This document provides a complete design about implementing column selector in TiCDC MQ Sink.
+This document provides a complete design about implementing column selector in TiCDC MQ Sink. This feature is currently only available for the `canal-json` protocol.
 
 ## Motivation or Background
 
@@ -36,7 +36,7 @@ This solution will introduce a new configuration that will specify the columns i
 
 ### Column selector configuration format
 
-This configuration will be added to the TiCDC changefeed configuration file.
+This configuration will be added to the TiCDC changefeed configuration file. This configuration only takes effect when the protocol is `canal-json`. Adding this configuration under other protocols will report an error.
 
 ```toml
 [sink]
