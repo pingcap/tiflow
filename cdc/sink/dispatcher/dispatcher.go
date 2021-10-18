@@ -55,6 +55,8 @@ var (
 	}
 )
 
+// fromString decide which partition dispatcher rule to use by parsing the given `s`.
+// if no one rule matched, use default.
 func (r *dispatchRule) fromString(s string) {
 	s = strings.ToLower(s)
 	rule, ok := rules[s]
