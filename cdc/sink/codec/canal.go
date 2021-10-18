@@ -472,7 +472,6 @@ func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEn
 	return encoder, nil
 }
 
-// NewCanalEventBatchEncoderBuilder return an `EncoderBuilder`
-func NewCanalEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
+func newCanalEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &canalEventBatchEncoderBuilder{opts: opts}
 }

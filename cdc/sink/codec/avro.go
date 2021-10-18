@@ -536,8 +536,7 @@ type avroEventBatchEncoderBuilder struct {
 	initialized *atomic.Bool
 }
 
-// NewAvroEventBatchEncoderBuilder return an `EncoderBuilder`
-func NewAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
+func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[string]string) EncoderBuilder {
 	return &avroEventBatchEncoderBuilder{
 		credential:  credential,
 		opts:        opts,

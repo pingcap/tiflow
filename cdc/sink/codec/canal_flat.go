@@ -55,8 +55,7 @@ func (b *canalFlatEventBatchEncoderBuilder) Build(ctx context.Context) (EventBat
 	return encoder, nil
 }
 
-// NewCanalFlatEventBatchEncoderBuilder return an `EncoderBuilder`
-func NewCanalFlatEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
+func newCanalFlatEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
 	return &canalFlatEventBatchEncoderBuilder{opts: opts}
 }
 
